@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: chamba_pasteles_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_DB: ${DATABASE_NAME:-chamba_pasteles}
+      PGTIMEZONE: UTC
+    ports:
+      - "${DATABASE_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres} -d ${DATABASE_NAME:-chamba_pasteles}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chamba_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chamba_pasteles_backend
+    restart: always
+    ports:
+      - "${BACKEND_HOST_PORT:-4001}:${PORT:-4000}"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - chamba_network
+
+  frontend:
+    build:
+      context: ./catalogo-cs
+      dockerfile: Dockerfile
+    container_name: chamba_pasteles_frontend
+    restart: always
+    ports:
+      - "${FRONTEND_HOST_PORT:-3001}:3000"
+    env_file:
+      - ./catalogo-cs/.env.local
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    networks:
+      - chamba_network
+
+volumes:
+  postgres_data:
+
+networks:
+  chamba_network:
+    driver: bridge

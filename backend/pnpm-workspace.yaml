@@ -1,0 +1,5 @@
+allowBuilds:
+  '@scarf/scarf': true
+  bcrypt: true
+  sqlite3: true
+  unrs-resolver: true

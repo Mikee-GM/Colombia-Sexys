@@ -1,0 +1,16 @@
+{
+  "name": "colombia-sexys-monorepo",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "catalogo-cs"
+  ],
+  "scripts": {
+    "dev:backend": "pnpm --filter backend run start:dev",
+    "dev:frontend": "pnpm --filter catalogo-cs run dev",
+    "build:backend": "pnpm --filter backend run build",
+    "build:frontend": "pnpm --filter catalogo-cs run build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down"
+  }
+}

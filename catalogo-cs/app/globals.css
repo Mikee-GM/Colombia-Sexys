@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@theme {
+  --font-heading: var(--font-cinzel), "Cinzel", serif;
+  --font-body: var(--font-montserrat), "Montserrat", sans-serif;
+  --color-gold: #C5A55A;
+  --color-gold-light: #D4AF37;
+  --color-gold-luminous: #E8D5A3;
+  --color-gold-dark: #8B7635;
+  --color-brand-gold: #C5A55A;
+}
+
+/* Base global */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body), "Montserrat", sans-serif;
+  background-color: #000000;
+  color: #ffffff;
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+::-webkit-scrollbar-thumb {
+  background: #8B7635;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C5A55A;
+}
+
+/* Tabs scroll sin scrollbar visible en movil */
+.tabs-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Animaciones personalizadas */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shimmerGold {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseGold {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.7s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.animate-shimmer-gold {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(197, 165, 90, 0.15) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmerGold 2.5s ease-in-out infinite;
+}
+
+/* Tipografia heading */
+.font-heading {
+  font-family: var(--font-heading), "Cormorant Garamond", serif;
+}
+
+/* Input premium focus */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+}
+
+/* Gradiente dorado para texto */
+.text-gradient-gold {
+  background: linear-gradient(135deg, #C5A55A 0%, #E8D5A3 50%, #D4AF37 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Linea decorativa dorada */
+.line-gold {
+  background: linear-gradient(90deg, transparent, #C5A55A, transparent);
+}
+
+/* Borde dorado sutil */
+.border-gold {
+  border-color: rgba(197, 165, 90, 0.3);
+}
+
+.border-gold-hover:hover {
+  border-color: rgba(197, 165, 90, 0.6);
+}
+
+/* Custom Scrollbar */
+.customized-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.customized-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+.customized-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(197, 165, 90, 0.3);
+  border-radius: 10px;
+}
+.customized-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(197, 165, 90, 0.6);
+}
