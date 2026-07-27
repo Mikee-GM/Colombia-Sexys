@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class RemoveCitasEncadenadas1784329200000
-  implements MigrationInterface
-{
+export class RemoveCitasEncadenadas1784329200000 implements MigrationInterface {
   name = 'RemoveCitasEncadenadas1784329200000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

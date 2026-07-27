@@ -7,7 +7,12 @@ export class TransportSetting {
   @Column('smallint', { primary: true, default: 1 })
   id: number;
 
-  @Column('numeric', { name: 'external_location_fee', precision: 10, scale: 2, transformer: new ColumnNumericTransformer() })
+  @Column('numeric', {
+    name: 'external_location_fee',
+    precision: 10,
+    scale: 2,
+    transformer: new ColumnNumericTransformer(),
+  })
   externalLocationFee: number;
 
   @Column('uuid', { name: 'updated_by_user_id', nullable: true })

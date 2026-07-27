@@ -1,8 +1,21 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Length, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Length,
+  Min,
+} from 'class-validator';
 
 export class UpdateTransportSettingDto {
-  @Type(() => Number) @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) externalLocationFee: number;
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  externalLocationFee: number;
 }
 
 export class SavePresetLocationDto {

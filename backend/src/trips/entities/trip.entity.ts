@@ -57,7 +57,10 @@ export class Viajes {
   tipo: 'ida' | 'regreso';
 
   @Column('smallint', { name: 'unit_number', default: 1 })
-  @ApiProperty({ description: 'Número de unidad dentro del sentido', example: 1 })
+  @ApiProperty({
+    description: 'Número de unidad dentro del sentido',
+    example: 1,
+  })
   unitNumber: number;
 
   @Column('enum', {
@@ -133,10 +136,19 @@ export class Viajes {
   @ApiPropertyOptional({ description: 'File ID de la captura de Uber' })
   telegramUberFileId: string | null;
 
-  @Column('numeric', { name: 'driver_payout', precision: 10, scale: 2, default: 0, transformer: new ColumnNumericTransformer() })
+  @Column('numeric', {
+    name: 'driver_payout',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    transformer: new ColumnNumericTransformer(),
+  })
   driverPayout: number;
 
-  @Column('timestamp with time zone', { name: 'fare_confirmed_at', nullable: true })
+  @Column('timestamp with time zone', {
+    name: 'fare_confirmed_at',
+    nullable: true,
+  })
   fareConfirmedAt: Date | null;
 
   @Column('uuid', { name: 'fare_confirmed_by_user_id', nullable: true })

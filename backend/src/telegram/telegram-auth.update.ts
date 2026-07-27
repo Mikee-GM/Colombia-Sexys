@@ -85,7 +85,7 @@ export class TelegramAuthUpdate {
     const text = (ctx.message as any)?.text || '';
     const startPayload = parseTelegramStartPayload(text);
     if (startPayload.type === 'group_service' && !user && client) {
-      await this.telegramBookingUpdate.startDirectGroupSession(ctx as any);
+      await this.telegramBookingUpdate.startDirectGroupSession(ctx);
       return;
     }
     if (startPayload.type === 'employee_hire') {
@@ -271,8 +271,8 @@ export class TelegramAuthUpdate {
       service.serviceType !== 'grupal' || Boolean(access?.responsible);
     const uberTrips = responsible
       ? await this.viajesRepository.find({
-      where: { servicioId: service.id, proveedorTransporte: 'uber' },
-      order: { horaNotificacion: 'DESC' },
+          where: { servicioId: service.id, proveedorTransporte: 'uber' },
+          order: { horaNotificacion: 'DESC' },
         })
       : [];
     const actionableUberTrip = uberTrips.find((trip) =>
@@ -301,14 +301,12 @@ export class TelegramAuthUpdate {
         ),
       ]);
     }
-    inlineButtons.push(
-      [
-        Markup.button.callback(
-          '➕ Agregar Extra',
-          `agregar_extra_list:${service.id}`,
-        ),
-      ],
-    );
+    inlineButtons.push([
+      Markup.button.callback(
+        '➕ Agregar Extra',
+        `agregar_extra_list:${service.id}`,
+      ),
+    ]);
 
     await ctx.reply(
       `🟢 Servicio activo\n\n` +

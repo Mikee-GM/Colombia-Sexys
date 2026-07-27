@@ -588,7 +588,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ...servicio,
       uberLink,
       viajeId: viajeGuardado.id,
-    } as any;
+    };
   }
 
   async rechazar(id: string, jefeId: string): Promise<Servicios> {

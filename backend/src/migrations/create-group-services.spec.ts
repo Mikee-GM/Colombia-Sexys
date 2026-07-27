@@ -4,8 +4,9 @@ describe('CreateGroupServices migration', () => {
   it('crea reservas, participantes, pagos y transporte múltiple con backfill', async () => {
     const statements: string[] = [];
     const queryRunner = {
-      query: jest.fn(async (sql: string) => {
+      query: jest.fn((sql: string) => {
         statements.push(sql);
+        return Promise.resolve();
       }),
     };
 

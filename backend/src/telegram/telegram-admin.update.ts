@@ -508,7 +508,7 @@ export class TelegramAdminUpdate {
         const res = await this.servicesService.aceptar(
           serviceId,
           user.id,
-          transportType as any,
+          transportType,
         );
         uberLink = res.uberLink;
         viajeId = res.viajeId;

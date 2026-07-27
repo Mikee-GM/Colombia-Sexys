@@ -52,7 +52,9 @@ export class EmployeeOnboardingService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async getCurrentRegulation(targetRole: 'empleada' | 'chofer' | 'jefe' = 'empleada') {
+  async getCurrentRegulation(
+    targetRole: 'empleada' | 'chofer' | 'jefe' = 'empleada',
+  ) {
     const regulation = await this.regulationRepository.findOne({
       where: { targetRole },
       order: { updatedAt: 'DESC' },
@@ -72,7 +74,9 @@ export class EmployeeOnboardingService {
     return { ...regulation, questions };
   }
 
-  async getCurrentRegulationForAdmin(targetRole: 'empleada' | 'chofer' | 'jefe' = 'empleada') {
+  async getCurrentRegulationForAdmin(
+    targetRole: 'empleada' | 'chofer' | 'jefe' = 'empleada',
+  ) {
     const current = await this.getCurrentRegulation(targetRole);
     const questions = await Promise.all(
       current.questions.map(async (question) => {
@@ -658,29 +662,40 @@ export class EmployeeOnboardingService {
       }
       return {
         user: this.sanitizeUser(user),
-        employee: user.empleadas?.[0] ? this.sanitizeEmployee(user.empleadas[0]) : null,
+        employee: user.empleadas?.[0]
+          ? this.sanitizeEmployee(user.empleadas[0])
+          : null,
         attempts: [],
       };
     }
 
-    const mainUser = onboardings[0].user ? this.sanitizeUser(onboardings[0].user) : null;
-    const mainEmployee = onboardings[0].employee ? this.sanitizeEmployee(onboardings[0].employee) : null;
+    const mainUser = onboardings[0].user
+      ? this.sanitizeUser(onboardings[0].user)
+      : null;
+    const mainEmployee = onboardings[0].employee
+      ? this.sanitizeEmployee(onboardings[0].employee)
+      : null;
 
-    const allAttempts = onboardings.flatMap((ob) =>
-      (ob.attempts || []).map((att) => ({
-        id: att.id,
-        onboardingId: ob.id,
-        publicationKey: ob.publicationKey,
-        attemptNumber: att.attemptNumber,
-        status: att.status,
-        correctAnswers: att.correctAnswers,
-        totalQuestions: att.totalQuestions,
-        score: att.score,
-        startedAt: att.startedAt,
-        completedAt: att.completedAt,
-        answersCount: att.answers?.length || 0,
-      })),
-    ).sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+    const allAttempts = onboardings
+      .flatMap((ob) =>
+        (ob.attempts || []).map((att) => ({
+          id: att.id,
+          onboardingId: ob.id,
+          publicationKey: ob.publicationKey,
+          attemptNumber: att.attemptNumber,
+          status: att.status,
+          correctAnswers: att.correctAnswers,
+          totalQuestions: att.totalQuestions,
+          score: att.score,
+          startedAt: att.startedAt,
+          completedAt: att.completedAt,
+          answersCount: att.answers?.length || 0,
+        })),
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+      );
 
     return {
       user: mainUser,
@@ -712,14 +727,17 @@ export class EmployeeOnboardingService {
 
     const onboarding = attempt.onboarding;
     const user = onboarding?.user ? this.sanitizeUser(onboarding.user) : null;
-    const employee = onboarding?.employee ? this.sanitizeEmployee(onboarding.employee) : null;
+    const employee = onboarding?.employee
+      ? this.sanitizeEmployee(onboarding.employee)
+      : null;
 
     const questionBreakdown = await Promise.all(
       (attempt.answers || []).map(async (ans) => {
         const question = ans.question;
         const selectedOption = ans.option;
 
-        const correctOption = question?.options?.find((o) => o.isCorrect) ||
+        const correctOption =
+          question?.options?.find((o) => o.isCorrect) ||
           (await this.optionRepository.findOne({
             where: { questionId: ans.questionId, isCorrect: true },
           }));

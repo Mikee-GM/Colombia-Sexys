@@ -80,7 +80,10 @@ export class TelegramOnboardingUpdate {
               ]),
         );
 
-        if (progress.passed && (user.rol === 'chofer' || user.rol === 'empleada')) {
+        if (
+          progress.passed &&
+          (user.rol === 'chofer' || user.rol === 'empleada')
+        ) {
           const menu =
             user.rol === 'empleada'
               ? Markup.keyboard([

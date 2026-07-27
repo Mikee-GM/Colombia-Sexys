@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { EmployeesService } from './employees/employees.service';
+import { DataSource } from 'typeorm';
 
 describe('AppController', () => {
   let appController: AppController;
@@ -17,6 +18,12 @@ describe('AppController', () => {
             findAllActive: jest.fn(),
           },
         },
+        {
+          provide: DataSource,
+          useValue: {
+            query: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
+          },
+        },
       ],
     }).compile();
 
@@ -26,6 +33,19 @@ describe('AppController', () => {
   describe('root', () => {
     it('should return "Hello World!"', () => {
       expect(appController.getHello()).toBe('Hello World!');
+    });
+  });
+
+  describe('health', () => {
+    it('should report the process as live', () => {
+      expect(appController.healthLive()).toEqual({ status: 'ok' });
+    });
+
+    it('should report the database as ready', async () => {
+      await expect(appController.healthReady()).resolves.toEqual({
+        status: 'ok',
+        database: 'available',
+      });
     });
   });
 });

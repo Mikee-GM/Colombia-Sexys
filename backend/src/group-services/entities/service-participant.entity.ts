@@ -13,11 +13,7 @@ import { Empleadas } from '../../employees/entities/employee.entity';
 import { Servicios } from '../../services/entities/service.entity';
 
 export type ParticipantStatus =
-  | 'reservada'
-  | 'pendiente_pago'
-  | 'activa'
-  | 'retirada'
-  | 'cancelada';
+  'reservada' | 'pendiente_pago' | 'activa' | 'retirada' | 'cancelada';
 
 @Entity('service_participants')
 @Index('uq_service_participant', ['serviceId', 'employeeId'], { unique: true })
@@ -62,7 +58,10 @@ export class ServiceParticipant {
   })
   confirmedSubtotal: number;
 
-  @Column('timestamp with time zone', { name: 'hold_expires_at', nullable: true })
+  @Column('timestamp with time zone', {
+    name: 'hold_expires_at',
+    nullable: true,
+  })
   holdExpiresAt: Date | null;
 
   @Column('timestamp with time zone', { name: 'joined_at', nullable: true })

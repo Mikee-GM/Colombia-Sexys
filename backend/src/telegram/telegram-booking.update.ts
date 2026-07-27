@@ -439,11 +439,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
   async onConfirmGroupCatalog(@Ctx() ctx: BotContext) {
     const match = (ctx as any).match;
     try {
-      const request =
-        await this.groupServicesService.confirmClientCatalog(
-          match[1],
-          Number(match[2]),
-        );
+      const request = await this.groupServicesService.confirmClientCatalog(
+        match[1],
+        Number(match[2]),
+      );
       await ctx.answerCbQuery('Selección reservada');
       await ctx.editMessageText(
         `Tu selección de ${request.selections.filter((item) => item.status === 'reservada').length} empleadas quedó reservada durante 30 minutos. El jefe puede ajustarla antes de enviarte la cotización final.`,
@@ -736,10 +735,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     const match = (ctx as any).match;
     const metodo = match[1] as
-      | 'efectivo'
-      | 'tarjeta'
-      | 'transferencia'
-      | 'mixto';
+      'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
 
     ctx.session.metodoPago = metodo;
 
@@ -752,7 +748,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     try {
       // Remover los botones inline de pago
       await ctx.editMessageReplyMarkup(undefined);
-    } catch (err) {}
+    } catch {
+      // El mensaje puede haber sido editado o eliminado; el flujo continua.
+    }
 
     const {
       locationLat,
@@ -1344,8 +1342,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           })
         : null;
       const photos = (ctx.message as any)?.photo as
-        | Array<{ file_id: string }>
-        | undefined;
+        Array<{ file_id: string }> | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!user || !fileId) {
         await ctx.reply(
@@ -1408,8 +1405,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       Number(groupRequest.service.pendingBalance) > 0.009
     ) {
       const photos = (ctx.message as any)?.photo as
-        | Array<{ file_id: string }>
-        | undefined;
+        Array<{ file_id: string }> | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!fileId) return;
       const pending = Number(groupRequest.service.pendingBalance);
@@ -1522,8 +1518,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       if (!client || !empleada) return;
 
       const photos = (ctx.message as any)?.photo as
-        | Array<{ file_id: string }>
-        | undefined;
+        Array<{ file_id: string }> | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!fileId) {
         await ctx.reply(
@@ -1631,11 +1626,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     if (servicio.serviceType === 'grupal') {
       try {
-        const finished =
-          await this.groupServicesService.finishByResponsible(
-            servicio.id,
-            telegramId,
-          );
+        const finished = await this.groupServicesService.finishByResponsible(
+          servicio.id,
+          telegramId,
+        );
         await ctx.answerCbQuery('Servicio grupal finalizado');
         await ctx.editMessageText(
           `Servicio grupal finalizado\n\nDuración real: ${Number(finished?.duracionFinalHoras ?? 0).toFixed(2)} horas\nTotal del grupo: $${Number(finished?.totalFinal ?? 0).toFixed(2)}\nParticipantes: ${finished?.participantes?.filter((item) => item.status !== 'cancelada').length ?? 0}`,
@@ -2473,7 +2467,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           '⚠️ Ocurrió un error al procesar tu solicitud. Por favor, intenta de nuevo desde el catálogo.',
           Markup.removeKeyboard(),
         );
-      } catch (_) {}
+      } catch {
+        // La sesion ya fue limpiada; no hay otra accion de recuperacion.
+      }
     }
   }
 
@@ -2819,7 +2815,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           '⚠️ Ocurrió un error al procesar tu solicitud.',
           Markup.removeKeyboard(),
         );
-      } catch (_) {}
+      } catch {
+        // La sesion ya fue limpiada; no hay otra accion de recuperacion.
+      }
     }
   }
 
@@ -3404,7 +3402,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
       const normalizedAnswer = userMessage.trim().toLowerCase();
       if (session.groupIntentClarificationPending) {
-        if (/^(s[ií]|claro|correcto|exacto|varias|más de una)\b/.test(normalizedAnswer)) {
+        if (
+          /^(s[ií]|claro|correcto|exacto|varias|más de una)\b/.test(
+            normalizedAnswer,
+          )
+        ) {
           await this.handoffGroupRequest(ctx, empleadaId);
           return;
         }
@@ -3876,12 +3878,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       );
       return;
     }
-    const request =
-      await this.groupServicesService.createFromDetectedIntent(
-        client.id,
-        initialEmployeeId,
-        ctx.session?.bookingSessionId,
-      );
+    const request = await this.groupServicesService.createFromDetectedIntent(
+      client.id,
+      initialEmployeeId,
+      ctx.session?.bookingSessionId,
+    );
     ctx.session = {
       ...(ctx.session ?? {}),
       step: 'GROUP_WITH_BOSS',

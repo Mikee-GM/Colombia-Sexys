@@ -1305,9 +1305,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
       await ctx.editMessageText(messageText, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [
-            1, 2, 3, 4, 5,
-          ].map((stars) =>
+          [1, 2, 3, 4, 5].map((stars) =>
             Markup.button.callback(
               `${stars}`,
               `rate_emp_trip:${trip.id}:${stars}`,
@@ -1548,7 +1546,9 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
       return;
     }
     if (session?.step === 'AWAITING_DRIVER_CONDUCT_DESCRIPTION') {
-      const description = ((ctx.message as { text?: string })?.text || '').trim();
+      const description = (
+        (ctx.message as { text?: string })?.text || ''
+      ).trim();
       if (description.length < 3 || description.length > 2000) {
         await ctx.reply('La descripción debe tener entre 3 y 2000 caracteres.');
         return;

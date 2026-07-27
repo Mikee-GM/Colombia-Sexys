@@ -1,3 +1,8 @@
 packages:
   - 'backend'
   - 'catalogo-cs'
+
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  '@scarf/scarf': false

@@ -42,23 +42,43 @@ import { GroupServicesModule } from './group-services/group-services.module';
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: Joi.object({
+        NODE_ENV: Joi.string()
+          .valid('development', 'test', 'production')
+          .default('development'),
+        PORT: Joi.number().port().default(4000),
+        WEB_URL: Joi.string().uri().required(),
         DATABASE_HOST: Joi.string().required(),
         DATABASE_PORT: Joi.number().default(5432),
         DATABASE_USER: Joi.string().required(),
         DATABASE_PASSWORD: Joi.string().required(),
         DATABASE_NAME: Joi.string().required(),
-        JWT_SECRET: Joi.string().required(),
+        JWT_SECRET: Joi.string().min(32).required(),
         JWT_REFRESH_SECRET: Joi.string()
+          .min(32)
           .required()
           .invalid(Joi.ref('JWT_SECRET')),
         COOKIE_SECRET: Joi.string().min(32).required(),
-        AUTH_COOKIE_DOMAIN: Joi.string().optional(),
+        AUTH_COOKIE_DOMAIN: Joi.string().allow('').optional(),
         AUTH_COOKIE_SAME_SITE: Joi.string().valid('lax', 'none').default('lax'),
         TELEGRAM_BOT_TOKEN: Joi.string().required(),
-        PORT: Joi.number().default(4000),
+        TELEGRAM_PROVIDER_TOKEN: Joi.string().allow('').optional(),
+        DEFAULT_ADMIN_EMAIL: Joi.string().email().required(),
+        DEFAULT_ADMIN_PASSWORD: Joi.string().min(12).required(),
+        R2_ENDPOINT: Joi.string().uri().required(),
+        R2_ACCESS_KEY_ID: Joi.string().required(),
+        R2_SECRET_ACCESS_KEY: Joi.string().required(),
+        R2_BUCKET_NAME: Joi.string().required(),
+        R2_PUBLIC_URL: Joi.string().uri().required(),
+        GROQ_API_KEY: Joi.string().allow('').optional(),
+        BANK_ACCOUNT_DETAILS: Joi.string().allow('').optional(),
         MAX_DAILY_AI_CALLS: Joi.number().default(15),
         SCHEDULE_TRAVEL_SPEED_KMH: Joi.number().positive().default(25),
         SCHEDULE_PREPARATION_MINUTES: Joi.number().min(0).default(10),
+        ONBOARDING_SCAN_INTERVAL_MS: Joi.number()
+          .integer()
+          .min(10_000)
+          .default(60_000),
+        ONBOARDING_REMINDER_HOURS: Joi.number().positive().default(3),
       }),
     }),
     TypeOrmModule.forRootAsync({
@@ -76,7 +96,7 @@ import { GroupServicesModule } from './group-services/group-services.module';
           __dirname + '/**/*.entity.ts',
         ],
         synchronize: false, // Regla Heavy DB: no sincronización automática en producción/desarrollo estructurado, usar migraciones.
-        migrationsRun: true,
+        migrationsRun: false,
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
       }),
     }),

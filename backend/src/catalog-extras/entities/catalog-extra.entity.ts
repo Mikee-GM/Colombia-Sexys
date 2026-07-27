@@ -44,7 +44,7 @@ export class ExtrasCatalogo {
     scale: 2,
     transformer: new ColumnNumericTransformer(),
   })
-  @ApiProperty({ description: 'Precio', example: 1200.00 })
+  @ApiProperty({ description: 'Precio', example: 1200.0 })
   precio: number;
 
   @Column('boolean', { name: 'activo', default: () => 'true' })

@@ -115,7 +115,10 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     });
     try {
       const saved = await this.ratings.save(rating);
-      await this.refreshPublicEmployeeRating(interaction.employeeId, dto.direction);
+      await this.refreshPublicEmployeeRating(
+        interaction.employeeId,
+        dto.direction,
+      );
       await this.evaluateRatingThreshold(
         interaction.subjectType,
         interaction.subjectId,
@@ -223,7 +226,9 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         { bossId: actor.id },
       );
     } else if (actor.rol !== 'admin') {
-      throw new ForbiddenException('No puede consultar reportes disciplinarios');
+      throw new ForbiddenException(
+        'No puede consultar reportes disciplinarios',
+      );
     }
     return query.orderBy('report.createdAt', 'DESC').getMany();
   }
@@ -288,7 +293,11 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       dto.type === 'permanent_ban' &&
       (dto.subjectType === 'employee' || dto.subjectType === 'driver')
     ) {
-      await this.setOperationalUserActive(dto.subjectType, dto.subjectId, false);
+      await this.setOperationalUserActive(
+        dto.subjectType,
+        dto.subjectId,
+        false,
+      );
     }
     this.realtime.emitToJefes({
       type: 'discipline.sanction.applied',
@@ -313,8 +322,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     const saved = await this.sanctions.save(sanction);
     if (
       sanction.type === 'permanent_ban' &&
-      (sanction.subjectType === 'employee' ||
-        sanction.subjectType === 'driver')
+      (sanction.subjectType === 'employee' || sanction.subjectType === 'driver')
     ) {
       const remaining = await this.getActiveSanction(
         sanction.subjectType,
@@ -335,7 +343,11 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     return saved;
   }
 
-  async listSanctions(actor: Actor, subjectType?: PersonType, subjectId?: string) {
+  async listSanctions(
+    actor: Actor,
+    subjectType?: PersonType,
+    subjectId?: string,
+  ) {
     if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
       throw new ForbiddenException('No puede consultar sanciones');
     }
@@ -367,11 +379,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     return query.orderBy('sanction.createdAt', 'DESC').getMany();
   }
 
-  async getDossier(
-    actor: Actor,
-    subjectType: PersonType,
-    subjectId: string,
-  ) {
+  async getDossier(actor: Actor, subjectType: PersonType, subjectId: string) {
     if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
       throw new ForbiddenException('No puede consultar expedientes');
     }
@@ -395,7 +403,9 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   async ownReputation(actor: Actor) {
     const identity = await this.identityForActor(actor);
     if (!identity || identity.type === 'client') {
-      throw new ForbiddenException('No hay reputación interna para este usuario');
+      throw new ForbiddenException(
+        'No hay reputación interna para este usuario',
+      );
     }
     return {
       subjectType: identity.type,
@@ -429,10 +439,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async assertOperationallyAllowed(
-    subjectType: PersonType,
-    subjectId: string,
-  ) {
+  async assertOperationallyAllowed(subjectType: PersonType, subjectId: string) {
     const sanction = await this.getActiveSanction(subjectType, subjectId);
     if (sanction) {
       throw new ForbiddenException({
@@ -473,8 +480,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     targetEmployeeId?: string,
   ): Promise<ResolvedInteraction> {
     const usesTrip =
-      direction === 'driver_to_employee' ||
-      direction === 'employee_to_driver';
+      direction === 'driver_to_employee' || direction === 'employee_to_driver';
     const rows: any[] = usesTrip
       ? await this.dataSource.query(
           `SELECT v.id AS trip_id, v.chofer_id AS driver_id,
@@ -514,8 +520,9 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       }
       row.employee_id = targetEmployeeId;
     }
-    const finished =
-      usesTrip ? row.trip_status === 'finalizado' : row.service_status === 'finalizado';
+    const finished = usesTrip
+      ? row.trip_status === 'finalizado'
+      : row.service_status === 'finalizado';
     if (!finished || !row.finished_at) {
       throw new BadRequestException('La interacción todavía no ha finalizado');
     }
@@ -555,14 +562,12 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       employee: row.employee_id,
       driver: row.driver_id,
     };
-    if (
-      actorType !== definition.reporterType ||
-      ids[actorType] !== actorId
-    ) {
+    if (actorType !== definition.reporterType || ids[actorType] !== actorId) {
       throw new ForbiddenException('No pertenece a esta interacción');
     }
     const subjectId = ids[definition.subjectType];
-    if (!subjectId) throw new BadRequestException('La interacción no tiene sujeto');
+    if (!subjectId)
+      throw new BadRequestException('La interacción no tiene sujeto');
     return {
       serviceId: row.service_id,
       tripId: row.trip_id,
@@ -773,7 +778,9 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
 
   private assertAdmin(actor: Actor) {
     if (actor.rol !== 'admin') {
-      throw new ForbiddenException('Solo un administrador puede realizar esta acción');
+      throw new ForbiddenException(
+        'Solo un administrador puede realizar esta acción',
+      );
     }
   }
 }

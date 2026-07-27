@@ -1,0 +1,8 @@
+services:
+  db:
+    ports:
+      - "127.0.0.1:${DATABASE_HOST_PORT:-5433}:5432"
+
+  backend:
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-4001}:4000"

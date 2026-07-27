@@ -1,45 +1,38 @@
-# Build stage
-FROM node:20-alpine AS builder
+FROM node:20-alpine AS base
 
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@10.34.0 --activate
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
-
-# Copy package.json, pnpm-lock.yaml and workspace configurations if any
-COPY package.json pnpm-lock.yaml* ./
-
-# Install all dependencies (including devDependencies) for building
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY backend/package.json ./backend/package.json
+COPY catalogo-cs/package.json ./catalogo-cs/package.json
 RUN pnpm install --frozen-lockfile
 
-# Copy the rest of the application source code
-COPY . .
+FROM deps AS builder
+COPY backend ./backend
+RUN pnpm --filter backend build
 
-# Build the NestJS application
-RUN pnpm build
+FROM base AS prod-deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY backend/package.json ./backend/package.json
+COPY catalogo-cs/package.json ./catalogo-cs/package.json
+RUN pnpm install --prod --frozen-lockfile --filter backend...
 
-# Production stage
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
-# Install pnpm
-RUN npm install -g pnpm
-
-# Set environment to production
+FROM base AS runner
 ENV NODE_ENV=production
 
-# Copy package.json and lockfile
-COPY package.json pnpm-lock.yaml* ./
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nestjs
 
-# Install only production dependencies
-RUN pnpm install --prod --frozen-lockfile
+COPY --from=prod-deps --chown=nestjs:nodejs /app/node_modules ./node_modules
+COPY --from=prod-deps --chown=nestjs:nodejs /app/backend/node_modules ./backend/node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/backend/dist ./backend/dist
+COPY --from=builder --chown=nestjs:nodejs /app/backend/package.json ./backend/package.json
 
-# Copy built application from the builder stage
-COPY --from=builder /app/dist ./dist
-
-# Expose the application port
+WORKDIR /app/backend
+USER nestjs
 EXPOSE 4000
-
-# Start the application
 CMD ["node", "dist/main"]

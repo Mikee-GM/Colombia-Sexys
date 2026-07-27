@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateDisciplineSystem1785100000000
-  implements MigrationInterface
-{
+export class CreateDisciplineSystem1785100000000 implements MigrationInterface {
   name = 'CreateDisciplineSystem1785100000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

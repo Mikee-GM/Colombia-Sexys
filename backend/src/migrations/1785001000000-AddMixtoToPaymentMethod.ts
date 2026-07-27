@@ -2,7 +2,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddMixtoToPaymentMethod1785001000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TYPE "public"."servicios_metodo_pago_enum" ADD VALUE IF NOT EXISTS 'mixto'`);
+    await queryRunner.query(
+      `ALTER TYPE "public"."servicios_metodo_pago_enum" ADD VALUE IF NOT EXISTS 'mixto'`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

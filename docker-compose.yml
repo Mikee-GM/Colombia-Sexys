@@ -1,68 +1,103 @@
-version: '3.8'
+name: colombia-sexys
 
 services:
   db:
     image: postgres:16-alpine
-    container_name: chamba_pasteles_db
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DATABASE_USER:-postgres}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
-      POSTGRES_DB: ${DATABASE_NAME:-chamba_pasteles}
+      POSTGRES_USER: ${DATABASE_USER:?DATABASE_USER es obligatoria}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD es obligatoria}
+      POSTGRES_DB: ${DATABASE_NAME:?DATABASE_NAME es obligatoria}
       PGTIMEZONE: UTC
-    ports:
-      - "${DATABASE_HOST_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-postgres} -d ${DATABASE_NAME:-chamba_pasteles}"]
-      interval: 5s
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}",
+        ]
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
     networks:
-      - chamba_network
+      - internal
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: chamba_pasteles_backend
-    restart: always
-    ports:
-      - "${BACKEND_HOST_PORT:-4001}:${PORT:-4000}"
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
     env_file:
       - ./backend/.env
     environment:
+      NODE_ENV: production
+      PORT: 4000
       DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      WEB_URL: ${DOCKER_WEB_URL:-http://localhost:3001}
+    expose:
+      - "4000"
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:4000/health/ready",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
-      - chamba_network
+      - internal
 
   frontend:
     build:
-      context: ./catalogo-cs
-      dockerfile: Dockerfile
-    container_name: chamba_pasteles_frontend
-    restart: always
-    ports:
-      - "${FRONTEND_HOST_PORT:-3001}:3000"
+      context: .
+      dockerfile: catalogo-cs/Dockerfile
+      args:
+        NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${NEXT_PUBLIC_TELEGRAM_BOT_USERNAME:-}
+    restart: unless-stopped
     env_file:
       - ./catalogo-cs/.env.local
     environment:
-      - NODE_ENV=production
+      NODE_ENV: production
+      BACKEND_API_URL: http://backend:4000
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-3001}:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://127.0.0.1:3000/api/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
-      - chamba_network
+      - internal
 
 volumes:
   postgres_data:
+    name: colombia_sexys_postgres_data
 
 networks:
-  chamba_network:
+  internal:
+    name: colombia_sexys_internal
     driver: bridge

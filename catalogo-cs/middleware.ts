@@ -10,6 +10,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/") &&
     !pathname.startsWith("/api/assistant") &&
     !pathname.startsWith("/api/auth") &&
+    !pathname.startsWith("/api/health") &&
     !pathname.startsWith("/api/realtime")
   ) {
     const backendUrl = process.env.BACKEND_API_URL || "http://localhost:4000";

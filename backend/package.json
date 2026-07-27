@@ -19,10 +19,11 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts",
-    "migration:show": "pnpm typeorm migration:show",
-    "migration:run": "pnpm typeorm migration:run",
-    "migration:revert": "pnpm typeorm migration:revert",
-    "migration:generate": "pnpm typeorm migration:generate"
+    "migration:show": "corepack pnpm build && node node_modules/typeorm/cli.js migration:show -d dist/data-source.js",
+    "migration:run": "corepack pnpm build && node node_modules/typeorm/cli.js migration:run -d dist/data-source.js",
+    "migration:run:prod": "node node_modules/typeorm/cli.js migration:run -d dist/data-source.js",
+    "migration:revert": "corepack pnpm build && node node_modules/typeorm/cli.js migration:revert -d dist/data-source.js",
+    "migration:generate": "corepack pnpm typeorm migration:generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",
@@ -45,11 +46,12 @@
     "nestjs-telegraf": "^2.9.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
     "telegraf": "^4.16.3",
-    "typeorm": "^1.0.0"
+    "typeorm": "1.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -70,7 +72,6 @@
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^17.0.0",
     "jest": "^30.0.0",
-    "pg": "^8.22.0",
     "prettier": "^3.4.2",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
@@ -78,7 +79,6 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typeorm-model-generator": "^0.4.6",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },

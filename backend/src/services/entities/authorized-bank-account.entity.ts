@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Column, Entity, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity('authorized_bank_accounts')
 export class AuthorizedBankAccounts {
@@ -20,7 +26,9 @@ export class AuthorizedBankAccounts {
   cuenta?: string;
 
   @Column({ name: 'ultimos4', type: 'varchar', length: 4, nullable: true })
-  @ApiPropertyOptional({ description: 'Últimos 4 dígitos de la cuenta o tarjeta' })
+  @ApiPropertyOptional({
+    description: 'Últimos 4 dígitos de la cuenta o tarjeta',
+  })
   ultimos4?: string;
 
   @Column({ name: 'clabe', type: 'varchar', length: 18, nullable: true })
@@ -32,7 +40,9 @@ export class AuthorizedBankAccounts {
   alias?: string;
 
   @Column({ name: 'activa', type: 'boolean', default: true })
-  @ApiProperty({ description: 'Si la cuenta está activa para recibir transferencias' })
+  @ApiProperty({
+    description: 'Si la cuenta está activa para recibir transferencias',
+  })
   activa: boolean;
 
   @CreateDateColumn({ name: 'created_at' })

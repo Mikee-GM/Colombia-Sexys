@@ -40,7 +40,11 @@ export class Servicios {
   })
   id: string;
 
-  @Column('varchar', { name: 'service_type', length: 20, default: 'individual' })
+  @Column('varchar', {
+    name: 'service_type',
+    length: 20,
+    default: 'individual',
+  })
   @ApiProperty({ enum: ['individual', 'grupal'] })
   serviceType: 'individual' | 'grupal';
 
@@ -503,10 +507,7 @@ export class Servicios {
   @ApiProperty({ description: 'Viajes', type: () => [Viajes], example: [] })
   viajes: Viajes[];
 
-  @OneToMany(
-    () => ServiceParticipant,
-    (participant) => participant.service,
-  )
+  @OneToMany(() => ServiceParticipant, (participant) => participant.service)
   @ApiProperty({ type: () => [ServiceParticipant] })
   participantes: ServiceParticipant[];
 

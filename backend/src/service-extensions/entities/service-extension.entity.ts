@@ -41,7 +41,7 @@ export class ExtensionesServicio {
     scale: 2,
     transformer: new ColumnNumericTransformer(),
   })
-  @ApiProperty({ description: 'Monto Agregado', example: 1200.00 })
+  @ApiProperty({ description: 'Monto Agregado', example: 1200.0 })
   montoAgregado: number;
 
   @Column('enum', { name: 'aceptada_por', enum: ['cliente', 'empleada'] })

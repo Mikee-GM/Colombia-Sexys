@@ -266,15 +266,12 @@ export class EmployeesService {
     );
     for (const row of groupRows.filter((item) => item.estado === 'en_curso')) {
       if (!activeByEmployee.has(row.employee_id)) {
-        activeByEmployee.set(
-          row.employee_id,
-          {
-            empleadaId: row.employee_id,
-            horaInicioServicio: row.hora_inicio_servicio,
-            duracionPactadaHoras: Number(row.duracion_pactada_horas),
-            estado: 'en_curso',
-          } as Servicios,
-        );
+        activeByEmployee.set(row.employee_id, {
+          empleadaId: row.employee_id,
+          horaInicioServicio: row.hora_inicio_servicio,
+          duracionPactadaHoras: Number(row.duracion_pactada_horas),
+          estado: 'en_curso',
+        } as Servicios);
       }
     }
     const queuedEmployees = new Set(

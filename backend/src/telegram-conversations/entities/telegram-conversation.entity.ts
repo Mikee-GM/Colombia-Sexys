@@ -88,7 +88,10 @@ export class ConversacionesTelegram {
   @ApiProperty({ description: 'Servicio', type: () => Servicios })
   servicio: Servicios | null;
 
-  @ManyToOne(() => GroupServiceRequest, { onDelete: 'SET NULL', nullable: true })
+  @ManyToOne(() => GroupServiceRequest, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
   @JoinColumn([{ name: 'group_request_id', referencedColumnName: 'id' }])
   groupRequest: GroupServiceRequest | null;
 }

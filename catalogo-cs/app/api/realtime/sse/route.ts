@@ -1,10 +1,9 @@
-import { NextRequest } from "next/server";
 import { getApiBaseUrl } from "@/lib/api-server";
 import { getBackendCookieHeader, getCsrfToken } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const cookie = await getBackendCookieHeader();
   if (!cookie) {
     return new Response("No autorizado", { status: 401 });

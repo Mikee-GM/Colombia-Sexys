@@ -4,7 +4,7 @@ import { TelegramConversationsService } from './telegram-conversations.service';
 describe('TelegramConversationsService', () => {
   const conversations = {
     create: jest.fn((value) => value),
-    save: jest.fn(async (value) => ({ id: 'message-1', ...value })),
+    save: jest.fn((value) => Promise.resolve({ id: 'message-1', ...value })),
     find: jest.fn(),
   };
   const services = { findOne: jest.fn() };

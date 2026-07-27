@@ -1,0 +1,5 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+15 2 * * * root PROJECT_DIR=/opt/colombia-sexys BACKUP_ROOT=/var/backups/colombia-sexys /opt/colombia-sexys/scripts/backup-postgres.sh daily >> /var/log/colombia-sexys-backup.log 2>&1
+15 3 * * 0 root PROJECT_DIR=/opt/colombia-sexys BACKUP_ROOT=/var/backups/colombia-sexys /opt/colombia-sexys/scripts/backup-postgres.sh weekly >> /var/log/colombia-sexys-backup.log 2>&1

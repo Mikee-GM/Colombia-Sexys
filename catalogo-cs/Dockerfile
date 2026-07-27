@@ -1,44 +1,39 @@
 FROM node:20-alpine AS base
 
-# Step 1. Install dependencies only when needed
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@10.34.0 --activate
+WORKDIR /app
+
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY backend/package.json ./backend/package.json
+COPY catalogo-cs/package.json ./catalogo-cs/package.json
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS builder
+COPY catalogo-cs ./catalogo-cs
+ARG NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
+ENV NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=$NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm --filter catalogo-cs build
+
+FROM node:20-alpine AS runner
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
-# Step 2. Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nextjs
 
-ENV NEXT_TELEMETRY_DISABLED 1
-
-RUN npm run build
-
-# Step 3. Production image, copy all the files and run next
-FROM base AS runner
-WORKDIR /app
-
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
-
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
-COPY --from=builder /app/public ./public
-
-# Set correct permissions for Next.js standalone build
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/catalogo-cs/public ./catalogo-cs/public
+COPY --from=builder --chown=nextjs:nodejs /app/catalogo-cs/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/catalogo-cs/.next/static ./catalogo-cs/.next/static
 
 USER nextjs
-
 EXPOSE 3000
-
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
-
-CMD ["node", "server.js"]
+CMD ["node", "catalogo-cs/server.js"]

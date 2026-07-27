@@ -1,9 +1,11 @@
 import { DataSource } from 'typeorm';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import * as fs from 'fs';
 
+const backendRoot = resolve(process.cwd());
+
 // Manually parse .env file if it exists to avoid external dotenv dependency
-const envPath = join(__dirname, '../.env');
+const envPath = join(backendRoot, '.env');
 if (fs.existsSync(envPath)) {
   const envConfig = fs.readFileSync(envPath, 'utf-8');
   for (const line of envConfig.split('\n')) {
@@ -26,7 +28,9 @@ export const AppDataSource = new DataSource({
   database: process.env.DATABASE_NAME || 'chamba_pasteles',
   synchronize: false,
   logging: true,
-  entities: [join(__dirname, '**/*.entity{.ts,.js}')],
-  migrations: [join(__dirname, 'migrations/*{.ts,.js}')],
+  // Migration commands build first and run this DataSource from dist.
+  // Loading src/**/*.ts here would make plain Node parse TypeScript files.
+  entities: [join(backendRoot, 'dist/**/*.entity.js')],
+  migrations: [join(backendRoot, 'dist/migrations/*.js')],
   subscribers: [],
 });

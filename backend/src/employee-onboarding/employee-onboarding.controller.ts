@@ -90,14 +90,18 @@ export class EmployeeOnboardingController {
 
   @Get('user-attempts/:userId')
   @Roles('admin', 'jefe')
-  @ApiOperation({ summary: 'Consultar historial de intentos de examen de un trabajador' })
+  @ApiOperation({
+    summary: 'Consultar historial de intentos de examen de un trabajador',
+  })
   findUserAttempts(@Param('userId') userId: string) {
     return this.onboardingService.findUserAttempts(userId);
   }
 
   @Get('attempts/:attemptId')
   @Roles('admin', 'jefe')
-  @ApiOperation({ summary: 'Consultar el desglose detallado de un intento de examen' })
+  @ApiOperation({
+    summary: 'Consultar el desglose detallado de un intento de examen',
+  })
   findAttemptDetails(@Param('attemptId') attemptId: string) {
     return this.onboardingService.findAttemptDetails(attemptId);
   }

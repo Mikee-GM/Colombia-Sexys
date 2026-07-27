@@ -20,11 +20,12 @@ export class UserSeederService implements OnApplicationBootstrap {
   }
 
   private async seedAdminUser() {
-    const adminEmail =
-      this.configService.get<string>('DEFAULT_ADMIN_EMAIL') ||
-      'admin@chambapasteles.com';
-    const adminPassword =
-      this.configService.get<string>('DEFAULT_ADMIN_PASSWORD') || 'admin12345';
+    const adminEmail = this.configService.getOrThrow<string>(
+      'DEFAULT_ADMIN_EMAIL',
+    );
+    const adminPassword = this.configService.getOrThrow<string>(
+      'DEFAULT_ADMIN_PASSWORD',
+    );
 
     // Verify if an admin user already exists
     const adminExists = await this.usuariosRepository.findOne({
@@ -33,7 +34,7 @@ export class UserSeederService implements OnApplicationBootstrap {
 
     if (adminExists) {
       this.logger.log(
-        'El usuario administrador ya existe en la base de datos. Prueba jeje',
+        'El usuario administrador ya existe en la base de datos.',
       );
       return;
     }

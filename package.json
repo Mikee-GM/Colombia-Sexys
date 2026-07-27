@@ -1,16 +1,25 @@
 {
   "name": "colombia-sexys-monorepo",
   "private": true,
+  "packageManager": "pnpm@10.34.0",
   "workspaces": [
     "backend",
     "catalogo-cs"
   ],
   "scripts": {
-    "dev:backend": "pnpm --filter backend run start:dev",
-    "dev:frontend": "pnpm --filter catalogo-cs run dev",
-    "build:backend": "pnpm --filter backend run build",
-    "build:frontend": "pnpm --filter catalogo-cs run build",
+    "build": "corepack pnpm run build:backend && corepack pnpm run build:frontend",
+    "dev:backend": "corepack pnpm --filter backend run start:dev",
+    "dev:frontend": "corepack pnpm --filter catalogo-cs run dev",
+    "build:backend": "corepack pnpm --filter backend run build",
+    "build:frontend": "corepack pnpm --filter catalogo-cs run build",
+    "lint": "corepack pnpm run lint:backend && corepack pnpm run lint:frontend",
+    "lint:backend": "corepack pnpm --filter backend exec eslint \"{src,test}/**/*.ts\" --quiet",
+    "lint:frontend": "corepack pnpm --filter catalogo-cs exec eslint . --quiet",
+    "test": "corepack pnpm run test:backend",
+    "test:backend": "corepack pnpm --filter backend run test --runInBand",
+    "check": "corepack pnpm run lint && corepack pnpm run test && corepack pnpm run build",
     "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "docker:config": "docker compose config --quiet"
   }
 }

@@ -27,6 +27,8 @@ describe('CreateDisciplineSystem migration', () => {
     expect(sql).toContain('INSERT INTO "interaction_ratings"');
     expect(sql).toContain('INSERT INTO "conduct_reports"');
     expect(sql).toContain("direction = 'client_to_employee'");
-    expect(sql).toContain('DROP TRIGGER IF EXISTS trigger_actualizar_metricas_empleada');
+    expect(sql).toContain(
+      'DROP TRIGGER IF EXISTS trigger_actualizar_metricas_empleada',
+    );
   });
 });

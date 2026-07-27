@@ -61,12 +61,7 @@ export class GroupServiceRequest {
   durationHours: number | null;
 
   @Column('varchar', { name: 'payment_method', length: 20, nullable: true })
-  paymentMethod:
-    | 'efectivo'
-    | 'tarjeta'
-    | 'transferencia'
-    | 'mixto'
-    | null;
+  paymentMethod: 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto' | null;
 
   @Column('numeric', {
     name: 'location_lat',

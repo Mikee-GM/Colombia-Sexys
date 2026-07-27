@@ -5,12 +5,11 @@ describe('TelegramAuthUpdate deep links', () => {
     const usuariosRepository = {
       findOne: jest.fn().mockResolvedValue(options?.user ?? null),
     };
-    const createdClient =
-      options?.client ?? {
-        id: 'client-id',
-        telegramChatId: '123',
-        nombreTelegram: 'Cliente',
-      };
+    const createdClient = options?.client ?? {
+      id: 'client-id',
+      telegramChatId: '123',
+      nombreTelegram: 'Cliente',
+    };
     const clientesRepository = {
       findOne: jest.fn().mockResolvedValue(options?.client ?? null),
       create: jest.fn().mockReturnValue(createdClient),

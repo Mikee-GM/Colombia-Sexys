@@ -93,7 +93,7 @@ export class OfficeLiquidationSyncService {
           ? (service.extrasServicios ?? []).filter(
               (extra) => extra.participantId === participant.id,
             )
-          : service.extrasServicios ?? [];
+          : (service.extrasServicios ?? []);
       const extraAmount =
         service.serviceType === 'grupal'
           ? participantExtras.reduce(
@@ -119,8 +119,7 @@ export class OfficeLiquidationSyncService {
         extraAmount,
         companyTransportExpense: 0,
         customerTransportCharge: responsible ? customerCharge : 0,
-        employeeUberReimbursement:
-          responsible ? employeeUberReimbursement : 0,
+        employeeUberReimbursement: responsible ? employeeUberReimbursement : 0,
         employeeCashDue: responsible ? employeeCashDue : 0,
         electronicExtraAmount: electronicParticipantExtras,
         transportExcess: 0,

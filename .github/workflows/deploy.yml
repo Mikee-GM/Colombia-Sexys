@@ -1,0 +1,44 @@
+name: Deploy production
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: colombia-sexys-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preparar SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Desplegar commit validado
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          ssh -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
+            "cd '$VPS_PROJECT_PATH' && PROJECT_DIR='$VPS_PROJECT_PATH' ./scripts/deploy.sh '$COMMIT_SHA'"

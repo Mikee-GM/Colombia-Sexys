@@ -67,11 +67,7 @@ export class DisciplineController {
     @Param('subjectId', ParseUUIDPipe) subjectId: string,
     @Req() req: any,
   ) {
-    return this.discipline.getDossier(
-      req.user,
-      subjectType,
-      subjectId,
-    );
+    return this.discipline.getDossier(req.user, subjectType, subjectId);
   }
 
   @Get('sanctions')
@@ -86,10 +82,7 @@ export class DisciplineController {
 
   @Post('sanctions')
   @Roles('admin')
-  createSanction(
-    @Body() dto: CreateSanctionDto,
-    @Req() req: any,
-  ) {
+  createSanction(@Body() dto: CreateSanctionDto, @Req() req: any) {
     return this.discipline.createSanction(dto, req.user);
   }
 

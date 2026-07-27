@@ -35,9 +35,7 @@ describe('GroupBossAssignmentService', () => {
       balancedBosses: [{ id: 'balanced-boss' }],
     });
 
-    await expect(service.resolve('employee-id')).resolves.toBe(
-      'assigned-boss',
-    );
+    await expect(service.resolve('employee-id')).resolves.toBe('assigned-boss');
     expect(dataSource.query).not.toHaveBeenCalled();
   });
 

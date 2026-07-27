@@ -166,10 +166,12 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       }),
     );
     if (dto.bookingSessionId) {
-      await this.dataSource.getRepository(ConversacionesTelegram).update(
-        { bookingSessionId: dto.bookingSessionId },
-        { groupRequestId: request.id, iaActiva: false },
-      );
+      await this.dataSource
+        .getRepository(ConversacionesTelegram)
+        .update(
+          { bookingSessionId: dto.bookingSessionId },
+          { groupRequestId: request.id, iaActiva: false },
+        );
     }
     await this.audit(null, request.id, bossId, 'solicitud_creada', null, {
       initialEmployeeId: dto.initialEmployeeId ?? null,
@@ -274,11 +276,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     return employees.filter((employee) => !blocked.has(employee.id));
   }
 
-  async updateRequest(
-    id: string,
-    dto: UpdateGroupRequestDto,
-    actor: Actor,
-  ) {
+  async updateRequest(id: string, dto: UpdateGroupRequestDto, actor: Actor) {
     const request = await this.findRequestForMutation(id, actor);
     if (request.serviceId) {
       throw new ConflictException(
@@ -369,13 +367,17 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       ]);
       if (employee.fotoPerfilUrl) {
         await this.bot.telegram
-          .sendPhoto(fullRequest.client.telegramChatId, employee.fotoPerfilUrl, {
-            caption,
-            ...keyboard,
-          })
+          .sendPhoto(
+            fullRequest.client.telegramChatId,
+            employee.fotoPerfilUrl,
+            {
+              caption,
+              ...keyboard,
+            },
+          )
           .catch(() =>
             this.bot.telegram.sendMessage(
-              fullRequest.client.telegramChatId!,
+              fullRequest.client.telegramChatId,
               caption,
               keyboard,
             ),
@@ -412,9 +414,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     await this.bot.telegram.sendMessage(
       request.client.telegramChatId,
       'El jefe necesita la ubicación del servicio. Compártela usando el botón.',
-      Markup.keyboard([
-        [Markup.button.locationRequest('Compartir ubicación')],
-      ])
+      Markup.keyboard([[Markup.button.locationRequest('Compartir ubicación')]])
         .resize()
         .oneTime(),
     );
@@ -435,7 +435,10 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       });
       if (!request || request.catalogVersion !== catalogVersion)
         throw new ConflictException('Este catálogo ya no está vigente');
-      if (request.serviceId || ['cancelada', 'vencida'].includes(request.status))
+      if (
+        request.serviceId ||
+        ['cancelada', 'vencida'].includes(request.status)
+      )
         throw new ConflictException('La solicitud ya no admite cambios');
       const employee = await manager.findOne(Empleadas, {
         where: { id: employeeId },
@@ -449,10 +452,10 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       )
         throw new ConflictException('La empleada ya no está disponible');
       await this.assertEmployeeFree(manager, employeeId, requestId);
-      const existing = await manager.findOneBy(
-        GroupServiceRequestSelection,
-        { requestId, employeeId },
-      );
+      const existing = await manager.findOneBy(GroupServiceRequestSelection, {
+        requestId,
+        employeeId,
+      });
       const selected = existing?.status !== 'seleccionada';
       await manager.upsert(
         GroupServiceRequestSelection,
@@ -475,10 +478,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async confirmClientCatalog(
-    compactRequestId: string,
-    catalogVersion: number,
-  ) {
+  async confirmClientCatalog(compactRequestId: string, catalogVersion: number) {
     const requestId = this.expandUuid(compactRequestId);
     const request = await this.requests.findOneBy({ id: requestId });
     if (!request || request.catalogVersion !== catalogVersion)
@@ -606,7 +606,10 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           'El catálogo cambió; vuelve a abrirlo antes de confirmar',
         );
       }
-      if (request.serviceId || ['cancelada', 'vencida'].includes(request.status))
+      if (
+        request.serviceId ||
+        ['cancelada', 'vencida'].includes(request.status)
+      )
         throw new ConflictException('La solicitud ya no admite selecciones');
 
       const employees = await manager
@@ -672,7 +675,10 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     });
     return this.findOne(
       id,
-      actor ?? { id: (await this.requests.findOneByOrFail({ id })).bossId, rol: 'jefe' },
+      actor ?? {
+        id: (await this.requests.findOneByOrFail({ id })).bossId,
+        rol: 'jefe',
+      },
     );
   }
 
@@ -724,8 +730,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         );
       if (
         !selections.some(
-          (selection) =>
-            selection.employeeId === dto.responsibleEmployeeId,
+          (selection) => selection.employeeId === dto.responsibleEmployeeId,
         )
       ) {
         throw new BadRequestException(
@@ -799,9 +804,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         }),
       );
 
-      const holdExpiresAt = new Date(
-        Date.now() + GroupServicesService.HOLD_MS,
-      );
+      const holdExpiresAt = new Date(Date.now() + GroupServicesService.HOLD_MS);
       for (const selection of selections) {
         await manager.save(
           ServiceParticipant,
@@ -905,15 +908,15 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           id: dto.receiptValidationId,
         });
         if (!receipt)
-          throw new NotFoundException('Validación de comprobante no encontrada');
+          throw new NotFoundException(
+            'Validación de comprobante no encontrada',
+          );
         if (!receipt.esComprobante || receipt.estado !== 'APROBADO') {
           throw new ConflictException('El comprobante no está aprobado');
         }
       }
       const fingerprint =
-        dto.fingerprint?.trim() ||
-        this.receiptFingerprint(receipt) ||
-        null;
+        dto.fingerprint?.trim() || this.receiptFingerprint(receipt) || null;
       try {
         await manager.save(
           ServicePayment,
@@ -959,10 +962,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       );
     });
     const result = await this.findService(serviceId, actor);
-    if (
-      result.estado === 'en_curso' &&
-      Number(result.pendingBalance) <= 0.009
-    )
+    if (result.estado === 'en_curso' && Number(result.pendingBalance) <= 0.009)
       await this.dispatchPendingTrips(result);
     await this.notifyPendingTransfer(result);
     return result;
@@ -988,15 +988,18 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       if (participants.length < 2)
         throw new ConflictException('El grupo ya no tiene dos participantes');
       if (
-        !participants.some(
-          (participant) => participant.role === 'responsable',
-        )
+        !participants.some((participant) => participant.role === 'responsable')
       )
         throw new ConflictException('El grupo no tiene responsable');
 
       const now = new Date();
       for (const participant of participants) {
-        await this.assertEmployeeFree(manager, participant.employeeId, null, serviceId);
+        await this.assertEmployeeFree(
+          manager,
+          participant.employeeId,
+          null,
+          serviceId,
+        );
         participant.status = 'activa';
         participant.joinedAt = now;
         participant.holdExpiresAt = null;
@@ -1077,147 +1080,154 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     dto: AddGroupParticipantDto,
     actor: Actor,
   ) {
-    await this.discipline.assertOperationallyAllowed('employee', dto.employeeId);
-    const dispatchTripId = await this.dataSource.transaction(async (manager) => {
-      let newInternalTripId: string | null = null;
-      const service = await this.lockGroupService(manager, serviceId, actor);
-      if (!['pendiente', 'en_curso'].includes(service.estado))
-        throw new ConflictException('El servicio ya no admite participantes');
-      if (
-        service.metodoPago === 'transferencia' &&
-        Number(service.pendingBalance) > 0.009
-      )
-        throw new ConflictException(
-          'Resuelve el saldo pendiente antes de otro cambio',
-        );
-      const employee = await manager
-        .getRepository(Empleadas)
-        .createQueryBuilder('employee')
-        .leftJoinAndSelect('employee.usuario', 'user')
-        .setLock('pessimistic_write')
-        .where('employee.id = :employeeId', { employeeId: dto.employeeId })
-        .getOne();
-      if (
-        !employee ||
-        !employee.disponible ||
-        !employee.catalogoActivo ||
-        !employee.usuario?.activo
-      )
-        throw new ConflictException('La empleada no está disponible');
-      await this.assertEmployeeFree(manager, employee.id, null, serviceId);
+    await this.discipline.assertOperationallyAllowed(
+      'employee',
+      dto.employeeId,
+    );
+    const dispatchTripId = await this.dataSource.transaction(
+      async (manager) => {
+        let newInternalTripId: string | null = null;
+        const service = await this.lockGroupService(manager, serviceId, actor);
+        if (!['pendiente', 'en_curso'].includes(service.estado))
+          throw new ConflictException('El servicio ya no admite participantes');
+        if (
+          service.metodoPago === 'transferencia' &&
+          Number(service.pendingBalance) > 0.009
+        )
+          throw new ConflictException(
+            'Resuelve el saldo pendiente antes de otro cambio',
+          );
+        const employee = await manager
+          .getRepository(Empleadas)
+          .createQueryBuilder('employee')
+          .leftJoinAndSelect('employee.usuario', 'user')
+          .setLock('pessimistic_write')
+          .where('employee.id = :employeeId', { employeeId: dto.employeeId })
+          .getOne();
+        if (
+          !employee ||
+          !employee.disponible ||
+          !employee.catalogoActivo ||
+          !employee.usuario?.activo
+        )
+          throw new ConflictException('La empleada no está disponible');
+        await this.assertEmployeeFree(manager, employee.id, null, serviceId);
 
-      const existing = await manager.findOneBy(ServiceParticipant, {
-        serviceId,
-        employeeId: employee.id,
-      });
-      if (existing && existing.status !== 'cancelada')
-        throw new ConflictException('La empleada ya pertenece al servicio');
-
-      const elapsed =
-        service.estado === 'en_curso' && service.horaInicioServicio
-          ? (Date.now() - service.horaInicioServicio.getTime()) / 3_600_000
-          : 0;
-      const remainingHours = Math.max(
-        0,
-        Number(service.duracionPactadaHoras) - elapsed,
-      );
-      if (remainingHours < 0.25)
-        throw new ConflictException('No quedan horas suficientes para incorporarla');
-      const requiresPayment = service.metodoPago === 'transferencia';
-      const holdExpiresAt = new Date(
-        Date.now() + GroupServicesService.HOLD_MS,
-      );
-      const participant = manager.create(ServiceParticipant, {
-        ...(existing ? { id: existing.id } : {}),
-        serviceId,
-        employeeId: employee.id,
-        role: 'participante',
-        status: requiresPayment
-          ? 'pendiente_pago'
-          : service.estado === 'en_curso'
-            ? 'activa'
-            : 'reservada',
-        hourlyRateSnapshot: Number(employee.precioBaseHora),
-        billableHours: Number(remainingHours.toFixed(2)),
-        confirmedSubtotal: Number(
-          (Number(employee.precioBaseHora) * remainingHours).toFixed(2),
-        ),
-        holdExpiresAt: requiresPayment ? holdExpiresAt : null,
-        joinedAt:
-          !requiresPayment && service.estado === 'en_curso'
-            ? new Date()
-            : null,
-        removedAt: null,
-      });
-      await manager.save(ServiceParticipant, participant);
-
-      if (dto.needsNewTransport) {
-        const maxUnitRow = await manager
-          .getRepository(Viajes)
-          .createQueryBuilder('trip')
-          .select('COALESCE(MAX(trip.unitNumber), 0)', 'max')
-          .where('trip.servicioId = :serviceId', { serviceId })
-          .andWhere('trip.tipo = :type', { type: 'ida' })
-          .getRawOne<{ max: string }>();
-        const unitNumber = Number(maxUnitRow?.max ?? 0) + 1;
-        const provider =
-          dto.transportProvider === 'uber' ? 'uber' : 'interno';
-        const trip = await manager.save(
-          Viajes,
-          manager.create(Viajes, {
-            servicioId: serviceId,
-            choferId: null,
-            tipo: 'ida',
-            unitNumber,
-            zona: 'domicilio',
-            tarifa:
-              provider === 'interno'
-                ? service.presetLocationId
-                  ? 60
-                  : Number(service.transportFeeSnapshot) / 2
-                : 0,
-            driverPayout:
-              provider === 'interno'
-                ? service.presetLocationId
-                  ? 60
-                  : Number(service.transportFeeSnapshot) / 2
-                : 0,
-            estado: provider === 'interno' ? 'notificado' : 'aceptado',
-            proveedorTransporte: provider,
-          }),
-        );
-        await manager.save(
-          TripPassenger,
-          manager.create(TripPassenger, {
-            tripId: trip.id,
-            employeeId: employee.id,
-          }),
-        );
-        if (provider === 'interno') newInternalTripId = trip.id;
-        await this.recalculateTransportCharge(manager, service);
-      }
-      if (!requiresPayment && service.estado === 'en_curso')
-        await manager.update(Empleadas, employee.id, { disponible: false });
-      await manager.save(
-        ServiceGroupAudit,
-        manager.create(ServiceGroupAudit, {
+        const existing = await manager.findOneBy(ServiceParticipant, {
           serviceId,
-          requestId: null,
-          actorUserId: actor.id,
-          action: 'participante_agregada',
-          before: null,
-          after: {
-            employeeId: employee.id,
-            remainingHours: participant.billableHours,
-            subtotal: participant.confirmedSubtotal,
-            status: participant.status,
-            needsNewTransport: Boolean(dto.needsNewTransport),
-          },
-          reason: null,
-        }),
-      );
-      return newInternalTripId;
-    });
+          employeeId: employee.id,
+        });
+        if (existing && existing.status !== 'cancelada')
+          throw new ConflictException('La empleada ya pertenece al servicio');
+
+        const elapsed =
+          service.estado === 'en_curso' && service.horaInicioServicio
+            ? (Date.now() - service.horaInicioServicio.getTime()) / 3_600_000
+            : 0;
+        const remainingHours = Math.max(
+          0,
+          Number(service.duracionPactadaHoras) - elapsed,
+        );
+        if (remainingHours < 0.25)
+          throw new ConflictException(
+            'No quedan horas suficientes para incorporarla',
+          );
+        const requiresPayment = service.metodoPago === 'transferencia';
+        const holdExpiresAt = new Date(
+          Date.now() + GroupServicesService.HOLD_MS,
+        );
+        const participant = manager.create(ServiceParticipant, {
+          ...(existing ? { id: existing.id } : {}),
+          serviceId,
+          employeeId: employee.id,
+          role: 'participante',
+          status: requiresPayment
+            ? 'pendiente_pago'
+            : service.estado === 'en_curso'
+              ? 'activa'
+              : 'reservada',
+          hourlyRateSnapshot: Number(employee.precioBaseHora),
+          billableHours: Number(remainingHours.toFixed(2)),
+          confirmedSubtotal: Number(
+            (Number(employee.precioBaseHora) * remainingHours).toFixed(2),
+          ),
+          holdExpiresAt: requiresPayment ? holdExpiresAt : null,
+          joinedAt:
+            !requiresPayment && service.estado === 'en_curso'
+              ? new Date()
+              : null,
+          removedAt: null,
+        });
+        await manager.save(ServiceParticipant, participant);
+
+        if (dto.needsNewTransport) {
+          const maxUnitRow = await manager
+            .getRepository(Viajes)
+            .createQueryBuilder('trip')
+            .select('COALESCE(MAX(trip.unitNumber), 0)', 'max')
+            .where('trip.servicioId = :serviceId', { serviceId })
+            .andWhere('trip.tipo = :type', { type: 'ida' })
+            .getRawOne<{ max: string }>();
+          const unitNumber = Number(maxUnitRow?.max ?? 0) + 1;
+          const provider =
+            dto.transportProvider === 'uber' ? 'uber' : 'interno';
+          const trip = await manager.save(
+            Viajes,
+            manager.create(Viajes, {
+              servicioId: serviceId,
+              choferId: null,
+              tipo: 'ida',
+              unitNumber,
+              zona: 'domicilio',
+              tarifa:
+                provider === 'interno'
+                  ? service.presetLocationId
+                    ? 60
+                    : Number(service.transportFeeSnapshot) / 2
+                  : 0,
+              driverPayout:
+                provider === 'interno'
+                  ? service.presetLocationId
+                    ? 60
+                    : Number(service.transportFeeSnapshot) / 2
+                  : 0,
+              estado: provider === 'interno' ? 'notificado' : 'aceptado',
+              proveedorTransporte: provider,
+            }),
+          );
+          await manager.save(
+            TripPassenger,
+            manager.create(TripPassenger, {
+              tripId: trip.id,
+              employeeId: employee.id,
+            }),
+          );
+          if (provider === 'interno') newInternalTripId = trip.id;
+          await this.recalculateTransportCharge(manager, service);
+        }
+        if (!requiresPayment && service.estado === 'en_curso')
+          await manager.update(Empleadas, employee.id, { disponible: false });
+        await manager.save(
+          ServiceGroupAudit,
+          manager.create(ServiceGroupAudit, {
+            serviceId,
+            requestId: null,
+            actorUserId: actor.id,
+            action: 'participante_agregada',
+            before: null,
+            after: {
+              employeeId: employee.id,
+              remainingHours: participant.billableHours,
+              subtotal: participant.confirmedSubtotal,
+              status: participant.status,
+              needsNewTransport: Boolean(dto.needsNewTransport),
+            },
+            reason: null,
+          }),
+        );
+        return newInternalTripId;
+      },
+    );
     const result = await this.findService(serviceId, actor);
     if (
       dispatchTripId &&
@@ -1534,7 +1544,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
             TripPassenger,
             unit.employeeIds.map((employeeId) =>
               manager.create(TripPassenger, {
-                tripId: trip!.id,
+                tripId: trip.id,
                 employeeId,
               }),
             ),
@@ -1568,10 +1578,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     );
 
     const result = await this.findService(serviceId, actor);
-    if (
-      result.estado === 'en_curso' &&
-      Number(result.pendingBalance) <= 0.009
-    )
+    if (result.estado === 'en_curso' && Number(result.pendingBalance) <= 0.009)
       await Promise.all(
         dispatchTripIds.map((tripId) =>
           this.servicesService.dispatchViaje(tripId),
@@ -1707,9 +1714,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         : Number(service.duracionPactadaHoras);
       service.estadoLiquidacion = 'transporte_pendiente';
       service.recordatoriosRegreso = 0;
-      service.proximoRecordatorioRegresoAt = new Date(
-        Date.now() + 5 * 60_000,
-      );
+      service.proximoRecordatorioRegresoAt = new Date(Date.now() + 5 * 60_000);
       await manager.save(Servicios, service);
 
       const active = await manager.find(ServiceParticipant, {
@@ -1934,10 +1939,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
        GROUP BY tipo`,
       [service.id],
     );
-    const ordinaryUnits = Math.max(
-      ...rows.map((row) => Number(row.count)),
-      0,
-    );
+    const ordinaryUnits = Math.max(...rows.map((row) => Number(row.count)), 0);
     service.customerTransportCharge =
       Number(service.transportFeeSnapshot) * ordinaryUnits +
       Number(service.manualTransportAdjustment);
@@ -2094,7 +2096,10 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         const service = await this.services.findOneBy({
           id: request.serviceId,
         });
-        if (service?.estado === 'pendiente' && Number(service.totalPaid) === 0) {
+        if (
+          service?.estado === 'pendiente' &&
+          Number(service.totalPaid) === 0
+        ) {
           await this.participants.update(
             {
               serviceId: service.id,
