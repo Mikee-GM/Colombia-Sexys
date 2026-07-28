@@ -135,6 +135,11 @@ export class GroupServicesController {
     return this.groupServices.start(serviceId, req.user);
   }
 
+  @Post('services/:serviceId/cancel')
+  cancelService(@Param('serviceId') serviceId: string, @Req() req: any) {
+    return this.groupServices.cancelService(serviceId, req.user);
+  }
+
   @Post('services/:serviceId/participants')
   addParticipant(
     @Param('serviceId') serviceId: string,

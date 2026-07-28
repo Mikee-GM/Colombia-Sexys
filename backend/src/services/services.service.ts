@@ -9,7 +9,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, Repository } from 'typeorm';
+import { In, LessThanOrEqual, Not, Repository } from 'typeorm';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { Servicios } from './entities/service.entity';
@@ -366,6 +366,48 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const servicio = await this.findOne(id);
     await this.serviciosRepository.remove(servicio);
     return { deleted: true };
+  }
+
+  async cancel(id: string, actor: Usuarios): Promise<{ cancelled: boolean }> {
+    const service = await this.findOne(id);
+    this.assertActorCanManageService(service, actor);
+    if (service.serviceType === 'grupal') {
+      throw new ConflictException(
+        'Cancela los servicios grupales desde su organizador',
+      );
+    }
+    if (service.estado === 'cancelado') return { cancelled: true };
+    if (service.estado === 'finalizado') {
+      throw new ConflictException('No se puede cancelar un servicio finalizado');
+    }
+
+    service.estado = 'cancelado';
+    await this.serviciosRepository.save(service);
+    await this.viajesRepository.update(
+      {
+        servicioId: id,
+        estado: Not(In(['finalizado', 'cancelado', 'rechazado'])),
+      },
+      { estado: 'cancelado' },
+    );
+
+    const anotherActiveService = await this.serviciosRepository.exists({
+      where: {
+        id: Not(id),
+        empleadaId: service.empleadaId,
+        estado: In(['pendiente', 'agendado', 'en_curso']),
+      },
+    });
+    if (service.empleadaId && !anotherActiveService) {
+      await this.serviciosRepository.manager
+        .getRepository(Empleadas)
+        .update(service.empleadaId, { disponible: true });
+    }
+    this.realtimeEventsService.emitToBoss(service.jefeId, {
+      type: 'service_cancelled',
+      data: { id: service.id },
+    });
+    return { cancelled: true };
   }
 
   async aceptar(

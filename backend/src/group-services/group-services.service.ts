@@ -1642,6 +1642,73 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     return { cancelled: true };
   }
 
+  async cancelService(serviceId: string, actor: Actor) {
+    const current = await this.findService(serviceId, actor);
+    if (current.estado === 'cancelado') return { cancelled: true };
+    if (current.estado === 'finalizado') {
+      throw new ConflictException(
+        'No se puede cancelar un servicio grupal finalizado',
+      );
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(Servicios, serviceId, { estado: 'cancelado' });
+      await manager.update(
+        Viajes,
+        {
+          servicioId: serviceId,
+          estado: Not(In(['finalizado', 'cancelado', 'rechazado'])),
+        },
+        { estado: 'cancelado' },
+      );
+      const participants = await manager.find(ServiceParticipant, {
+        where: {
+          serviceId,
+          status: In(['reservada', 'pendiente_pago', 'activa']),
+        },
+      });
+      if (participants.length) {
+        await manager.update(
+          ServiceParticipant,
+          { id: In(participants.map((item) => item.id)) },
+          { status: 'cancelada', holdExpiresAt: null, removedAt: new Date() },
+        );
+        for (const participant of participants) {
+          const activeElsewhere = await manager.exists(ServiceParticipant, {
+            where: {
+              employeeId: participant.employeeId,
+              serviceId: Not(serviceId),
+              status: In(['reservada', 'pendiente_pago', 'activa']),
+            },
+          });
+          if (!activeElsewhere) {
+            await manager.update(Empleadas, participant.employeeId, {
+              disponible: true,
+            });
+          }
+        }
+      }
+      await manager.update(
+        GroupServiceRequest,
+        { serviceId },
+        { status: 'cancelada', holdExpiresAt: null },
+      );
+    });
+    await this.audit(
+      serviceId,
+      null,
+      actor.id,
+      'servicio_grupal_cancelado',
+      { estado: current.estado },
+      { estado: 'cancelado' },
+    );
+    this.realtime.emitToBoss(current.jefeId, {
+      type: 'group_service_cancelled',
+      data: { serviceId },
+    });
+    return { cancelled: true };
+  }
+
   async findService(serviceId: string, actor: Actor) {
     const service = await this.services.findOne({
       where: { id: serviceId },

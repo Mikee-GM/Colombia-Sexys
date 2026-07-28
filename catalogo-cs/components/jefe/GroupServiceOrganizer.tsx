@@ -2,12 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Car, Clock3, MapPin, Plus, Send, Trash2, UsersRound } from "lucide-react";
+import { Ban, Car, Clock3, MapPin, Plus, Send, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import {
   addGroupManualTransportCharge,
   addGroupParticipant,
   cancelGroupRequest,
+  cancelGroupService,
   changeGroupDuration,
   changeGroupResponsible,
   configureGroupTransports,
@@ -44,25 +45,34 @@ export default function GroupServiceOrganizer({
 }: {
   initialRequests: GroupServiceRequest[];
 }) {
-  const [requests, setRequests] = useState(initialRequests);
-  const [selectedId, setSelectedId] = useState(initialRequests[0]?.id ?? "");
+  const visibleInitialRequests = initialRequests.filter(
+    (item) => item.status !== "cancelada" && item.service?.estado !== "cancelado",
+  );
+  const [requests, setRequests] = useState(visibleInitialRequests);
+  const [selectedId, setSelectedId] = useState(visibleInitialRequests[0]?.id ?? "");
   const [candidates, setCandidates] = useState<Employee[]>([]);
   const [pending, startTransition] = useTransition();
   const selected = requests.find((item) => item.id === selectedId) ?? null;
 
   useEffect(() => {
-    setRequests(initialRequests);
+    const visible = initialRequests.filter(
+      (item) => item.status !== "cancelada" && item.service?.estado !== "cancelado",
+    );
+    setRequests(visible);
     setSelectedId((current) =>
-      initialRequests.some((item) => item.id === current)
+      visible.some((item) => item.id === current)
         ? current
-        : initialRequests[0]?.id ?? "",
+        : visible[0]?.id ?? "",
     );
   }, [initialRequests]);
 
   async function reload(preferredId?: string) {
-    const next = await getGroupServiceRequests();
+    const next = (await getGroupServiceRequests()).filter(
+      (item) => item.status !== "cancelada" && item.service?.estado !== "cancelado",
+    );
     setRequests(next);
-    if (preferredId) setSelectedId(preferredId);
+    if (preferredId && next.some((item) => item.id === preferredId))
+      setSelectedId(preferredId);
     else if (!next.some((item) => item.id === selectedId))
       setSelectedId(next[0]?.id ?? "");
   }
@@ -613,18 +623,6 @@ function GroupRequestEditor({
               </button>
             </div>
           </section>
-          <button
-            className="text-xs text-zinc-600 hover:text-red-400"
-            disabled={pending}
-            onClick={() =>
-              run(
-                () => cancelGroupRequest(request.id),
-                "Solicitud cancelada",
-              )
-            }
-          >
-            Cancelar solicitud
-          </button>
         </>
       ) : (
         <ActiveGroupEditor
@@ -636,6 +634,21 @@ function GroupRequestEditor({
           run={run}
         />
       )}
+        <button
+          type="button"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/80 bg-red-500/10 px-4 py-4 text-xs font-bold uppercase tracking-wider text-red-300 transition hover:bg-red-500 hover:text-white disabled:opacity-40"
+          disabled={pending}
+          onClick={() => {
+            if (!window.confirm("¿Confirmas que deseas cancelar este servicio grupal? Se quitará del panel operativo.")) return;
+            run(
+              () => service ? cancelGroupService(service.id) : cancelGroupRequest(request.id),
+              "Servicio grupal cancelado",
+            );
+          }}
+        >
+          <Ban size={17} />
+          Cancelar servicio grupal
+        </button>
         </div>
         <aside className="order-first xl:order-last xl:sticky xl:top-4">
           <GroupRequestChat requestId={request.id} />

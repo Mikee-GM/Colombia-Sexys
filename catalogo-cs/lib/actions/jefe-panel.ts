@@ -112,6 +112,20 @@ export async function refreshJefeServices() {
   return getJefeServices();
 }
 
+export async function cancelJefeService(serviceId: string) {
+  try {
+    await assertOwnedService(serviceId);
+    await apiFetch(`/services/${serviceId}/cancel`, { method: "POST" });
+    return { success: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo cancelar el servicio",
+    };
+  }
+}
+
 export async function chooseReturnTransport(serviceId: string, transportType: "chofer" | "uber") {
   try {
     await assertOwnedService(serviceId);
@@ -329,6 +343,13 @@ export async function cancelGroupRequest(requestId: string) {
   return groupMutation<{ cancelled: boolean }>(
     `/group-services/requests/${requestId}`,
     "DELETE",
+  );
+}
+
+export async function cancelGroupService(serviceId: string) {
+  return groupMutation<{ cancelled: boolean }>(
+    `/group-services/services/${serviceId}/cancel`,
+    "POST",
   );
 }
 

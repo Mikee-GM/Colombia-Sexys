@@ -95,6 +95,11 @@ export class ServicesController {
     return this.servicesService.remove(id);
   }
 
+  @Post(':id/cancel')
+  cancel(@Param('id') id: string, @Req() req: any) {
+    return this.servicesService.cancel(id, req.user);
+  }
+
   @Post(':id/aceptar')
   @ApiActionDocs('Aceptar un servicio pendiente', true, 'ID del servicio')
   aceptar(
