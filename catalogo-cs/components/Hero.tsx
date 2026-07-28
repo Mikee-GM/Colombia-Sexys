@@ -161,22 +161,6 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
               </svg>
             </button>
           </div>
-
-          <div className="group relative w-full max-w-xs sm:w-auto">
-            <div className="absolute -inset-0.5 rounded-full bg-[#229ED9]/50 opacity-35 blur transition duration-500 group-hover:opacity-75" />
-            <a
-              href={groupServiceTelegramUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-full border border-[#229ED9]/70 bg-[#229ED9]/15 px-7 py-4 text-white shadow-lg shadow-black/50 backdrop-blur-md transition-all duration-300 hover:border-[#58B9E7] hover:bg-[#229ED9]/25 sm:w-auto sm:px-9"
-              aria-label="Solicitar servicio grupal mediante Telegram"
-            >
-              <FaTelegramPlane className="relative z-10 h-4 w-4 text-[#69C4ED]" />
-              <span className="relative z-10 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-100 sm:text-xs">
-                Solicitar servicio grupal
-              </span>
-            </a>
-          </div>
         </motion.div>
 
         {/* Carrusel de Preview de Modelos */}
