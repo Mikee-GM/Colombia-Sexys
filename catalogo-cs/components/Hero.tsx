@@ -130,7 +130,7 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
           transition={{ duration: 1, delay: 0.6 }}
           className="font-body text-sm sm:text-base lg:text-lg font-light text-zinc-300 leading-relaxed tracking-[0.2em] uppercase max-w-2xl mb-12 drop-shadow-lg"
         >
-          El pináculo de la belleza colombiana
+          El pináculo de la belleza colombiana.
         </motion.p>
 
         {/* Boton Ultra-Premium Elegante */}
