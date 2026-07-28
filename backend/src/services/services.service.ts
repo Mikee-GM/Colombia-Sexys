@@ -378,7 +378,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     if (service.estado === 'cancelado') return { cancelled: true };
     if (service.estado === 'finalizado') {
-      throw new ConflictException('No se puede cancelar un servicio finalizado');
+      throw new ConflictException(
+        'No se puede cancelar un servicio finalizado',
+      );
     }
 
     service.estado = 'cancelado';
