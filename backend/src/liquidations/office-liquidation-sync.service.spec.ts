@@ -2,7 +2,13 @@ import { OfficeLiquidationSyncService } from './office-liquidation-sync.service'
 
 describe('OfficeLiquidationSyncService', () => {
   const services = { findOne: jest.fn() };
-  const records = { upsert: jest.fn(), findOneOrFail: jest.fn() };
+  const records = {
+    findOne: jest.fn(),
+    findOneOrFail: jest.fn(),
+    create: jest.fn((value) => value),
+    merge: jest.fn((record, value) => ({ ...record, ...value })),
+    save: jest.fn(),
+  };
   const cashObligations = { findOneBy: jest.fn(), upsert: jest.fn() };
   const sync = new OfficeLiquidationSyncService(
     services as any,
@@ -10,7 +16,10 @@ describe('OfficeLiquidationSyncService', () => {
     cashObligations as any,
   );
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    records.findOne.mockResolvedValue(null);
+  });
 
   function finalized(overrides: Record<string, unknown> = {}) {
     return {
@@ -37,7 +46,7 @@ describe('OfficeLiquidationSyncService', () => {
     services.findOne.mockResolvedValue(finalized({ estado: 'en_curso' }));
 
     await expect(sync.syncOfficeRecord('service')).resolves.toBeNull();
-    expect(records.upsert).not.toHaveBeenCalled();
+    expect(records.save).not.toHaveBeenCalled();
   });
 
   it('separa el corte semanal de la entrega física de efectivo', async () => {
@@ -46,7 +55,7 @@ describe('OfficeLiquidationSyncService', () => {
 
     await sync.syncOfficeRecord('service');
 
-    expect(records.upsert).toHaveBeenCalledWith(
+    expect(records.save).toHaveBeenCalledWith(
       expect.objectContaining({
         serviceId: 'service',
         serviceTotal: 2500,
@@ -58,9 +67,6 @@ describe('OfficeLiquidationSyncService', () => {
         cardAmounts: [],
         hasOutboundDriver: true,
         hasReturnDriver: false,
-      }),
-      expect.objectContaining({
-        conflictPaths: ['serviceId', 'employeeId'],
       }),
     );
   });
@@ -75,9 +81,8 @@ describe('OfficeLiquidationSyncService', () => {
 
       await sync.syncOfficeRecord('service');
 
-      expect(records.upsert).toHaveBeenCalledWith(
+      expect(records.save).toHaveBeenCalledWith(
         expect.objectContaining({ cashAmount: 0, cardAmounts: [2500] }),
-        expect.anything(),
       );
     },
   );
@@ -148,20 +153,17 @@ describe('OfficeLiquidationSyncService', () => {
     );
   });
 
-  it('repite el upsert por serviceId sin insertar por otra llave', async () => {
+  it('repite la sincronización por servicio y empleada sin depender de ON CONFLICT', async () => {
     services.findOne.mockResolvedValue(finalized());
     records.findOneOrFail.mockResolvedValue({ id: 'record' });
 
     await sync.syncOfficeRecord('service');
     await sync.syncOfficeRecord('service');
 
-    expect(records.upsert).toHaveBeenCalledTimes(2);
-    expect(records.upsert).toHaveBeenNthCalledWith(
+    expect(records.save).toHaveBeenCalledTimes(2);
+    expect(records.save).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ serviceId: 'service' }),
-      expect.objectContaining({
-        conflictPaths: ['serviceId', 'employeeId'],
-      }),
     );
   });
 
@@ -202,7 +204,7 @@ describe('OfficeLiquidationSyncService', () => {
 
     await sync.syncOfficeRecord('service');
 
-    const values = records.upsert.mock.calls[0][0];
+    const values = records.save.mock.calls.map(([value]) => value);
     expect(values).toHaveLength(2);
     expect(values).toEqual(
       expect.arrayContaining([

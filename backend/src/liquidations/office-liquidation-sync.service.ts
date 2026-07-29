@@ -135,10 +135,19 @@ export class OfficeLiquidationSyncService {
       } satisfies Partial<LiquidationRecord>;
     });
 
-    await this.records.upsert(values.length === 1 ? values[0] : values, {
-      conflictPaths: ['serviceId', 'employeeId'],
-      skipUpdateIfNoValuesChanged: true,
-    });
+    for (const value of values) {
+      const existingRecord = await this.records.findOne({
+        where: {
+          serviceId: value.serviceId,
+          employeeId: value.employeeId,
+        },
+      });
+      await this.records.save(
+        existingRecord
+          ? this.records.merge(existingRecord, value)
+          : this.records.create(value),
+      );
+    }
     if (service.metodoPago === 'efectivo') {
       const existing = await this.cashObligations.findOneBy({
         serviceId: service.id,

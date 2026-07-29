@@ -7,6 +7,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThanOrEqual, Not, Repository } from 'typeorm';
@@ -35,6 +36,7 @@ import { SaveBankAccountDto } from './dto/bank-account.dto';
 
 @Injectable()
 export class ServicesService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ServicesService.name);
   private waitTimeouts = new Map<string, NodeJS.Timeout>();
   private dispatchTimeouts = new Map<string, NodeJS.Timeout>();
   private maintenanceInterval?: NodeJS.Timeout;
@@ -1580,7 +1582,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   async requestReturnTransport(servicioId: string): Promise<void> {
     const servicio = await this.serviciosRepository.findOne({
       where: { id: servicioId },
-      relations: { jefe: true, empleada: true },
+      relations: {
+        jefe: true,
+        empleada: { jefe: true, jefeSecundario: true },
+      },
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
 
@@ -1590,8 +1595,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       recordatoriosRegreso: 0,
       proximoRecordatorioRegresoAt: nextReminder,
     });
-    await this.liquidationSync.syncOfficeRecord(servicio.id);
     await this.sendReturnTransportPrompt(servicio, false);
+    await this.liquidationSync
+      .syncOfficeRecord(servicio.id)
+      .catch((error) =>
+        console.error(
+          `[requestReturnTransport] El aviso se envió, pero no se pudo sincronizar la liquidación del servicio ${servicio.id}:`,
+          error,
+        ),
+      );
   }
 
   private async sendReturnTransportPrompt(
@@ -1599,7 +1611,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     reminder: boolean,
   ): Promise<void> {
     const topic = this.getServiceTopic(servicio);
-    const text = `${reminder ? '⏰ *Recordatorio*\n\n' : ''}La empleada *${servicio.empleada?.nombreArtistico || ''}* finalizó el servicio. ¿Cómo será su viaje de regreso?`;
+    const text = `${reminder ? '⏰ Recordatorio\n\n' : ''}La empleada ${servicio.empleada?.nombreArtistico || ''} finalizó el servicio. ¿Cómo será su viaje de regreso?`;
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
@@ -1612,28 +1624,70 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         ),
       ],
     ]);
-    const messages: Array<Promise<unknown>> = [];
+    const messages: Array<{ destination: string; request: Promise<unknown> }> =
+      [];
+    const usedChatIds = new Set<string>();
     if (topic) {
-      messages.push(
-        this.bot.telegram.sendMessage(topic.chatId, text, {
+      usedChatIds.add(String(topic.chatId));
+      messages.push({
+        destination: `hilo ${topic.threadId}`,
+        request: this.bot.telegram.sendMessage(topic.chatId, text, {
           message_thread_id: topic.threadId,
-          parse_mode: 'Markdown',
           ...keyboard,
         }),
-      );
+      });
     }
-    if (
-      servicio.jefe?.telegramChatId &&
-      servicio.jefe.telegramChatId !== topic?.chatId
-    ) {
-      messages.push(
-        this.bot.telegram.sendMessage(servicio.jefe.telegramChatId, text, {
-          parse_mode: 'Markdown',
-          ...keyboard,
-        }),
-      );
+    const bosses = [
+      servicio.jefe,
+      servicio.empleada?.jefe,
+      servicio.empleada?.jefeSecundario,
+    ].filter(
+      (boss, index, rows) =>
+        boss && rows.findIndex((item) => item?.id === boss.id) === index,
+    );
+    for (const boss of bosses) {
+      if (boss!.telegramChatId) {
+        const chatId = String(boss!.telegramChatId);
+        if (!usedChatIds.has(chatId)) {
+          usedChatIds.add(chatId);
+          messages.push({
+            destination: `chat privado del jefe ${boss!.id}`,
+            request: this.bot.telegram.sendMessage(chatId, text, {
+              ...keyboard,
+            }),
+          });
+        }
+      }
+      if (boss!.grupoTelegramId) {
+        const groupId = String(boss!.grupoTelegramId);
+        if (!usedChatIds.has(groupId)) {
+          usedChatIds.add(groupId);
+          messages.push({
+            destination: `grupo del jefe ${boss!.id}`,
+            request: this.bot.telegram.sendMessage(groupId, text, {
+              ...keyboard,
+            }),
+          });
+        }
+      }
     }
-    await Promise.all(messages);
+    if (!messages.length) {
+      this.logger.warn(
+        `El servicio ${servicio.id} no tiene un jefe con Telegram ni un hilo de servicio configurado`,
+      );
+      return;
+    }
+    const results = await Promise.allSettled(
+      messages.map((item) => item.request),
+    );
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.error(
+          `No se pudo enviar la solicitud de regreso a ${messages[index].destination}`,
+          result.reason,
+        );
+      }
+    });
   }
 
   async processReturnTransportReminders(): Promise<void> {
@@ -1642,7 +1696,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         estadoLiquidacion: 'transporte_pendiente',
         proximoRecordatorioRegresoAt: LessThanOrEqual(new Date()),
       },
-      relations: { jefe: true, empleada: true },
+      relations: {
+        jefe: true,
+        empleada: { jefe: true, jefeSecundario: true },
+      },
     });
 
     for (const servicio of pending) {
@@ -2351,20 +2408,29 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         horaInicioViaje: new Date(),
       });
     } else if (action === 'employee_arrived') {
-      if (trip.estado !== 'en_curso')
+      if (!['en_curso', 'finalizado'].includes(trip.estado))
         throw new ConflictException('Primero confirma que vas en camino');
       const now = new Date();
       resultingState = 'finalizado';
-      await this.viajesRepository.update(trip.id, {
-        estado: resultingState,
-        horaFinViaje: now,
-      });
+      if (trip.estado !== 'finalizado') {
+        await this.viajesRepository.update(trip.id, {
+          estado: resultingState,
+          horaFinViaje: now,
+        });
+      }
       if (trip.tipo === 'regreso') {
         await this.serviciosRepository.update(trip.servicioId, {
-          horaLlegadaCasa: now,
+          ...(trip.servicio.horaLlegadaCasa ? {} : { horaLlegadaCasa: now }),
           estadoLiquidacion: 'cerrada',
         });
-        await this.liquidationSync.syncOfficeRecord(trip.servicioId);
+        await this.liquidationSync
+          .syncOfficeRecord(trip.servicioId)
+          .catch((error) =>
+            this.logger.error(
+              `El viaje ${trip.id} finalizó, pero no se pudo sincronizar su liquidación`,
+              error,
+            ),
+          );
       } else if (trip.servicio.estado === 'agendado') {
         await this.serviciosRepository.update(trip.servicioId, {
           estado: 'en_curso',

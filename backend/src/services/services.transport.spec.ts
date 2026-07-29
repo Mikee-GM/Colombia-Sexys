@@ -30,7 +30,9 @@ describe('ServicesService transport settlement', () => {
     },
   };
   const loyalty = { awardForFinalizedService: jest.fn() };
-  const liquidationSync = { syncOfficeRecord: jest.fn() };
+  const liquidationSync = {
+    syncOfficeRecord: jest.fn().mockResolvedValue(null),
+  };
 
   const service = new ServicesService(
     serviciosRepository as any,
@@ -180,6 +182,34 @@ describe('ServicesService transport settlement', () => {
       'service',
       expect.objectContaining({ estadoLiquidacion: 'cerrada' }),
     );
+  });
+
+  it('permite repetir la llegada si el viaje ya se guardó como finalizado', async () => {
+    viajesRepository.findOne.mockResolvedValue({
+      id: 'trip',
+      servicioId: 'service',
+      tipo: 'regreso',
+      estado: 'finalizado',
+      proveedorTransporte: 'uber',
+      servicio: {
+        jefeId: 'boss',
+        clienteId: 'client',
+        empleadaId: 'employee',
+        horaLlegadaCasa: new Date(),
+        empleada: { usuarioId: 'employee-user', usuario: {} },
+      },
+    });
+    usuariosRepository.findOneBy.mockResolvedValue({
+      id: 'employee-user',
+      rol: 'empleada',
+    });
+
+    await expect(
+      service.updateUberStatus('trip', 'employee-user', 'employee_arrived'),
+    ).resolves.toBeUndefined();
+
+    expect(viajesRepository.update).not.toHaveBeenCalled();
+    expect(liquidationSync.syncOfficeRecord).toHaveBeenCalledWith('service');
   });
 
   it('envía la confirmación de la empleada al tema asignado', async () => {

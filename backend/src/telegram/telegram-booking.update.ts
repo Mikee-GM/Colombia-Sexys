@@ -2255,23 +2255,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const parsedLat = parseFloat(lat);
     const parsedLng = parseFloat(lng);
 
-    if (ctx.chat?.type === 'private') {
-      const groupRequest =
-        await this.groupServicesService.findActiveRequestByClientTelegram(
-          telegramId,
-        );
-      if (groupRequest && !groupRequest.serviceId) {
-        await this.groupServicesService.setLocationFromClient(
-          groupRequest.id,
-          parsedLat,
-          parsedLng,
-        );
-        await ctx.reply(
-          'Ubicación recibida. El jefe ya puede verla en el organizador del servicio.',
-          Markup.removeKeyboard(),
-        );
-        return;
-      }
+    if (
+      !Number.isFinite(parsedLat) ||
+      !Number.isFinite(parsedLng) ||
+      parsedLat < -90 ||
+      parsedLat > 90 ||
+      parsedLng < -180 ||
+      parsedLng > 180
+    ) {
+      await ctx.reply('No pude reconocer unas coordenadas válidas.');
+      return;
     }
 
     if (cached) {
@@ -2285,6 +2278,30 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
       // Throttling: Skip database read/write if within 60s AND has moved less than 50 meters
       if (diffMs < 60000 && distanceMeters < 50) {
+        if (cached.rol === 'empleada') {
+          await this.usuariosRepository.manager.update(Empleadas, cached.id, {
+            ubicacionLat: parsedLat,
+            ubicacionLng: parsedLng,
+            ultimaUbicacionAt: new Date(),
+          });
+          cached.lat = parsedLat;
+          cached.lng = parsedLng;
+          cached.lastSaved = nowTime;
+          cached.dirty = false;
+          this.realtimeEventsService.emitToJefes({
+            type: 'EMPLOYEE_LOCATION_UPDATE',
+            empleadaId: cached.id,
+            lat: parsedLat,
+            lng: parsedLng,
+          });
+          if (!isEdited) {
+            await ctx.reply(
+              `📍 Ubicación registrada para la empleada: ${cached.name}.`,
+            );
+          }
+          return;
+        }
+
         // Update ONLY in-memory coordinates in cache
         cached.lat = parsedLat;
         cached.lng = parsedLng;
@@ -2344,6 +2361,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             lat: parsedLat,
             lng: parsedLng,
           });
+          if (!isEdited) {
+            await ctx.reply(
+              `📍 Ubicación registrada para la empleada: ${cached.name}.`,
+            );
+          }
         }
         return;
       } catch (err) {
@@ -2430,6 +2452,25 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }
     } else {
       this.logger.log(`No system user found for telegramChatId=${telegramId}`);
+    }
+
+    if (ctx.chat?.type === 'private') {
+      const groupRequest =
+        await this.groupServicesService.findActiveRequestByClientTelegram(
+          telegramId,
+        );
+      if (groupRequest && !groupRequest.serviceId) {
+        await this.groupServicesService.setLocationFromClient(
+          groupRequest.id,
+          parsedLat,
+          parsedLng,
+        );
+        await ctx.reply(
+          'Ubicación recibida. El jefe ya puede verla en el organizador del servicio.',
+          Markup.removeKeyboard(),
+        );
+        return;
+      }
     }
 
     // Si no es personal, continuar flujo de cliente
