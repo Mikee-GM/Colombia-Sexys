@@ -2106,9 +2106,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       !service.cliente?.telegramChatId
     )
       return;
-    const bankDetails =
-      this.config.get<string>('BANK_ACCOUNT_DETAILS') ||
-      'Consulta con el jefe los datos bancarios autorizados.';
+    const bankDetails = await this.servicesService.bankTransferDetails();
     await this.bot.telegram.sendMessage(
       service.cliente.telegramChatId,
       `Cotización del servicio grupal\nTotal: $${Number(service.totalFinal).toFixed(2)}\nPagado: $${Number(service.totalPaid).toFixed(2)}\nSaldo por transferir: $${Number(service.pendingBalance).toFixed(2)}\n\n${bankDetails}\n\nEnvía una foto del comprobante en este chat. El servicio o incremento se activará después de validarlo.`,

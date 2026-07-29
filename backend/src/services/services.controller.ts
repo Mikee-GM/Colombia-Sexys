@@ -36,6 +36,7 @@ import {
   ApiRemoveDocs,
   ApiUpdateDocs,
 } from '../common/swagger/api-docs.decorators';
+import { SaveBankAccountDto } from './dto/bank-account.dto';
 
 @Controller('services')
 @ApiControllerDocs('services', true)
@@ -63,6 +64,33 @@ export class ServicesController {
   })
   getPending(@Req() req: any) {
     return this.servicesService.getPending(req.user);
+  }
+
+  @Get('bank-accounts')
+  @Roles('admin')
+  bankAccounts() {
+    return this.servicesService.findBankAccounts();
+  }
+
+  @Post('bank-accounts')
+  @Roles('admin')
+  createBankAccount(@Body() dto: SaveBankAccountDto) {
+    return this.servicesService.createBankAccount(dto);
+  }
+
+  @Patch('bank-accounts/:accountId')
+  @Roles('admin')
+  updateBankAccount(
+    @Param('accountId') accountId: string,
+    @Body() dto: SaveBankAccountDto,
+  ) {
+    return this.servicesService.updateBankAccount(accountId, dto);
+  }
+
+  @Delete('bank-accounts/:accountId')
+  @Roles('admin')
+  deleteBankAccount(@Param('accountId') accountId: string) {
+    return this.servicesService.removeBankAccount(accountId);
   }
 
   @Get()

@@ -264,6 +264,64 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }, 300000);
   }
 
+  private async applyDraftPaymentMethod(
+    ctx: BotContext,
+    method: 'efectivo' | 'tarjeta' | 'transferencia',
+  ): Promise<boolean> {
+    const session = ctx.session;
+    if (
+      !session?.locationLat ||
+      !session.locationLng ||
+      !session.empleadaId ||
+      !session.duracionPactadaHoras
+    ) {
+      return false;
+    }
+    session.metodoPago = method;
+    if (method === 'transferencia') {
+      session.step = 'AWAITING_PAYMENT_RECEIPT';
+      const bankDetails = await this.servicesService.bankTransferDetails();
+      await ctx.reply(
+        `🏦 *Cuentas disponibles para transferencia*\n\n${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante para verificar el pago.`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('💵 Cambiar a efectivo', 'pago_efectivo'),
+              Markup.button.callback('💳 Cambiar a tarjeta', 'pago_tarjeta'),
+            ],
+          ]),
+        },
+      );
+      return true;
+    }
+    const [client, employee] = await Promise.all([
+      this.clientesRepository.findOne({
+        where: { telegramChatId: ctx.from!.id.toString() },
+      }),
+      this.empleadasRepository.findOne({
+        where: { id: session.empleadaId },
+        relations: { usuario: true, jefe: true },
+      }),
+    ]);
+    if (!client || !employee) return false;
+    await ctx.reply(`✅ Método de pago cambiado a *${method.toUpperCase()}*.`, {
+      parse_mode: 'Markdown',
+    });
+    await this.finalizeBooking(
+      ctx,
+      client,
+      employee,
+      session.duracionPactadaHoras,
+      method,
+      session.locationLat,
+      session.locationLng,
+      session.locationNotas || null,
+      ctx.from!.id.toString(),
+    );
+    return true;
+  }
+
   // Graceful Shutdown Hook: Flush any dirty/unsaved location updates to DB
   async beforeApplicationShutdown() {
     if (this.locationCleanupInterval) {
@@ -728,7 +786,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
   @Action(/^pago_(efectivo|tarjeta|transferencia|mixto)$/)
   async onSelectPayment(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery();
-    if (ctx.session?.step !== 'AWAITING_PAYMENT_METHOD') {
+    const session = ctx.session;
+    if (
+      !session ||
+      ![
+        'AWAITING_PAYMENT_METHOD',
+        'AWAITING_PAYMENT_RECEIPT',
+        'AWAITING_MIXED_TRANSFER_AMOUNT',
+      ].includes(session.step || '')
+    ) {
       await ctx.reply('No hay ningún proceso de contratación activo.');
       return;
     }
@@ -737,7 +803,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const metodo = match[1] as
       'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
 
-    ctx.session.metodoPago = metodo;
+    session.metodoPago = metodo;
 
     await this.recordDraftConversation(
       ctx,
@@ -758,7 +824,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       locationNotas,
       empleadaId,
       duracionPactadaHoras,
-    } = ctx.session;
+    } = session;
 
     if (!locationLat || !locationLng || !empleadaId || !duracionPactadaHoras) {
       await ctx.reply('❌ Datos incompletos. Por favor inicia nuevamente.');
@@ -766,21 +832,27 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    const bankDetails =
-      this.configService.get<string>('BANK_ACCOUNT_DETAILS') ||
-      '🏦 *Datos para Transferencia:*\nBanco: BBVA\nCuenta: 0123456789\nCLABE: 012345678901234567\nTitular: Agencia Citas';
+    const bankDetails = await this.servicesService.bankTransferDetails();
 
     if (metodo === 'transferencia') {
-      ctx.session.step = 'AWAITING_PAYMENT_RECEIPT';
+      session.step = 'AWAITING_PAYMENT_RECEIPT';
       await ctx.reply(
         `${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante de transferencia para verificar el pago.`,
-        { parse_mode: 'Markdown' },
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('💵 Cambiar a efectivo', 'pago_efectivo'),
+              Markup.button.callback('💳 Cambiar a tarjeta', 'pago_tarjeta'),
+            ],
+          ]),
+        },
       );
       return;
     }
 
     if (metodo === 'mixto') {
-      ctx.session.step = 'AWAITING_MIXED_TRANSFER_AMOUNT';
+      session.step = 'AWAITING_MIXED_TRANSFER_AMOUNT';
       await ctx.reply(
         '¿Cuánto deseas pagar por transferencia bancaria? Ingresa el monto (solo números). El resto, junto con el transporte, se pagará en efectivo.',
       );
@@ -3032,6 +3104,55 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     const text = (ctx.message as { text?: string })?.text || '';
     const cleanText = text.trim().toLowerCase();
+    const requestedPaymentMethod = extractHirePaymentMethod(cleanText);
+    const asksToChangePayment =
+      requestedPaymentMethod &&
+      /\b(cambiar|cambio|prefiero|quiero|pagar|pago|mejor|siempre\s+s[ií])\b/i.test(
+        cleanText,
+      );
+
+    if (
+      requestedPaymentMethod &&
+      ['AWAITING_PAYMENT_RECEIPT', 'AWAITING_MIXED_TRANSFER_AMOUNT'].includes(
+        ctx.session?.step || '',
+      )
+    ) {
+      if (requestedPaymentMethod === 'mixto') return;
+      if (await this.applyDraftPaymentMethod(ctx, requestedPaymentMethod))
+        return;
+    }
+
+    if (asksToChangePayment && ctx.chat?.type === 'private' && ctx.from?.id) {
+      const client = await this.clientesRepository.findOne({
+        where: { telegramChatId: ctx.from.id.toString() },
+      });
+      const service = client
+        ? await this.serviciosRepository.findOne({
+            where: {
+              clienteId: client.id,
+              estado: In(['pendiente', 'agendado', 'en_curso']),
+            },
+            order: { createdAt: 'DESC' },
+          })
+        : null;
+      if (
+        service &&
+        requestedPaymentMethod &&
+        requestedPaymentMethod !== 'mixto'
+      ) {
+        await this.servicesService.changePaymentMethodByClient(
+          service.id,
+          ctx.from.id.toString(),
+          requestedPaymentMethod,
+        );
+        let response = `✅ Cambié el método de pago del servicio a *${requestedPaymentMethod.toUpperCase()}*.`;
+        if (requestedPaymentMethod === 'transferencia') {
+          response += `\n\n🏦 *Cuentas disponibles para transferencia*\n\n${await this.servicesService.bankTransferDetails()}`;
+        }
+        await ctx.reply(response, { parse_mode: 'Markdown' });
+        return;
+      }
+    }
 
     const message = ctx.message as any;
     const threadId = message?.message_thread_id;

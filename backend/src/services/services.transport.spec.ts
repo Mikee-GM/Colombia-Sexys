@@ -38,6 +38,7 @@ describe('ServicesService transport settlement', () => {
     {} as any,
     usuariosRepository as any,
     conversationsRepository as any,
+    {} as any,
     realtime as any,
     bot as any,
     {} as any,
@@ -45,6 +46,7 @@ describe('ServicesService transport settlement', () => {
     loyalty as any,
     liquidationSync as any,
     { get: jest.fn() } as any,
+    {} as any,
   );
 
   beforeEach(() => jest.clearAllMocks());

@@ -64,6 +64,7 @@ describe('Telegram booking session input parsing', () => {
     ['185', 185],
     ['185.50', 185.5],
     ['185,5', 185.5],
+    ['66.64', 66.64],
   ])('parses the Uber fare %s', (text, expected) => {
     expect(parseUberFareInput(text)).toBe(expected);
   });

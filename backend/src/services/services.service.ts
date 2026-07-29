@@ -30,6 +30,8 @@ import {
   estimateTravelMinutes,
 } from './service-scheduling';
 import { DisciplineService } from '../discipline/discipline.service';
+import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entity';
+import { SaveBankAccountDto } from './dto/bank-account.dto';
 
 @Injectable()
 export class ServicesService implements OnModuleInit, OnModuleDestroy {
@@ -59,6 +61,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly usuariosRepository: Repository<Usuarios>,
     @InjectRepository(ConversacionesTelegram)
     private readonly conversationsRepository: Repository<ConversacionesTelegram>,
+    @InjectRepository(AuthorizedBankAccounts)
+    private readonly bankAccountsRepository: Repository<AuthorizedBankAccounts>,
     private readonly realtimeEventsService: RealtimeEventsService,
     @InjectBot() private readonly bot: Telegraf<Context>,
     @Inject(forwardRef(() => TelegramService))
@@ -332,6 +336,102 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   async findOneForActor(id: string, actor: Usuarios): Promise<Servicios> {
     const service = await this.findOne(id);
     this.assertActorCanManageService(service, actor);
+    return service;
+  }
+
+  async findBankAccounts(): Promise<AuthorizedBankAccounts[]> {
+    return this.bankAccountsRepository.find({
+      order: { activa: 'DESC', banco: 'ASC', titular: 'ASC' },
+    });
+  }
+
+  async createBankAccount(
+    dto: SaveBankAccountDto,
+  ): Promise<AuthorizedBankAccounts> {
+    return this.bankAccountsRepository.save(
+      this.bankAccountsRepository.create({
+        ...dto,
+        cuenta: dto.cuenta?.trim() || undefined,
+        clabe: dto.clabe?.trim() || undefined,
+        ultimos4: dto.ultimos4?.trim() || undefined,
+        alias: dto.alias?.trim() || undefined,
+        activa: dto.activa ?? true,
+      }),
+    );
+  }
+
+  async updateBankAccount(
+    id: string,
+    dto: SaveBankAccountDto,
+  ): Promise<AuthorizedBankAccounts> {
+    const account = await this.bankAccountsRepository.findOneBy({ id });
+    if (!account) throw new NotFoundException('Cuenta bancaria no encontrada');
+    Object.assign(account, {
+      ...dto,
+      cuenta: dto.cuenta?.trim() || null,
+      clabe: dto.clabe?.trim() || null,
+      ultimos4: dto.ultimos4?.trim() || null,
+      alias: dto.alias?.trim() || null,
+    });
+    return this.bankAccountsRepository.save(account);
+  }
+
+  async removeBankAccount(id: string): Promise<{ deleted: boolean }> {
+    const result = await this.bankAccountsRepository.delete(id);
+    if (!result.affected)
+      throw new NotFoundException('Cuenta bancaria no encontrada');
+    return { deleted: true };
+  }
+
+  async bankTransferDetails(): Promise<string> {
+    const accounts = (
+      await this.bankAccountsRepository.find({
+        where: { activa: true },
+        order: { banco: 'ASC', titular: 'ASC' },
+      })
+    ).filter((account) => account.cuenta || account.clabe);
+    if (!accounts.length) {
+      return (
+        this.configService.get<string>('BANK_ACCOUNT_DETAILS') ||
+        'Consulta con el equipo los datos bancarios autorizados.'
+      );
+    }
+    return accounts
+      .map((account, index) => {
+        const details = [
+          `${index + 1}. ${account.banco}`,
+          `Titular: ${account.titular}`,
+          account.cuenta ? `Cuenta/tarjeta: ${account.cuenta}` : null,
+          account.clabe ? `CLABE: ${account.clabe}` : null,
+        ].filter(Boolean);
+        return details.join('\n');
+      })
+      .join('\n\n');
+  }
+
+  async changePaymentMethodByClient(
+    serviceId: string,
+    clientTelegramId: string,
+    paymentMethod: 'efectivo' | 'tarjeta' | 'transferencia',
+  ): Promise<Servicios> {
+    const service = await this.serviciosRepository.findOne({
+      where: { id: serviceId },
+      relations: { cliente: true },
+    });
+    if (!service || service.cliente?.telegramChatId !== clientTelegramId) {
+      throw new NotFoundException('Servicio activo no encontrado');
+    }
+    if (!['pendiente', 'agendado', 'en_curso'].includes(service.estado)) {
+      throw new ConflictException(
+        'El método de pago ya no puede cambiarse en este servicio',
+      );
+    }
+    service.metodoPago = paymentMethod;
+    await this.serviciosRepository.save(service);
+    this.realtimeEventsService.emitToBoss(service.jefeId, {
+      type: 'service_payment_method_changed',
+      data: { serviceId: service.id, paymentMethod },
+    });
     return service;
   }
 
@@ -1499,27 +1599,41 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     reminder: boolean,
   ): Promise<void> {
     const topic = this.getServiceTopic(servicio);
-    if (!topic) return;
-    await this.bot.telegram.sendMessage(
-      topic.chatId,
-      `${reminder ? '⏰ *Recordatorio*\n\n' : ''}La empleada *${servicio.empleada?.nombreArtistico || ''}* finalizó el servicio. ¿Cómo será su viaje de regreso?`,
-      {
-        message_thread_id: topic.threadId,
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              '🚗 Regreso con chofer',
-              `regreso_transporte:${servicio.id}:interno`,
-            ),
-            Markup.button.callback(
-              '📱 Regreso con Uber',
-              `regreso_transporte:${servicio.id}:uber`,
-            ),
-          ],
-        ]),
-      },
-    );
+    const text = `${reminder ? '⏰ *Recordatorio*\n\n' : ''}La empleada *${servicio.empleada?.nombreArtistico || ''}* finalizó el servicio. ¿Cómo será su viaje de regreso?`;
+    const keyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          '🚗 Regreso con chofer',
+          `regreso_transporte:${servicio.id}:interno`,
+        ),
+        Markup.button.callback(
+          '📱 Regreso con Uber',
+          `regreso_transporte:${servicio.id}:uber`,
+        ),
+      ],
+    ]);
+    const messages: Array<Promise<unknown>> = [];
+    if (topic) {
+      messages.push(
+        this.bot.telegram.sendMessage(topic.chatId, text, {
+          message_thread_id: topic.threadId,
+          parse_mode: 'Markdown',
+          ...keyboard,
+        }),
+      );
+    }
+    if (
+      servicio.jefe?.telegramChatId &&
+      servicio.jefe.telegramChatId !== topic?.chatId
+    ) {
+      messages.push(
+        this.bot.telegram.sendMessage(servicio.jefe.telegramChatId, text, {
+          parse_mode: 'Markdown',
+          ...keyboard,
+        }),
+      );
+    }
+    await Promise.all(messages);
   }
 
   async processReturnTransportReminders(): Promise<void> {
@@ -1626,11 +1740,40 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         return { trip, servicio };
       },
     );
-    await this.liquidationSync.syncOfficeRecord(result.servicio.id);
+    await this.liquidationSync
+      .syncOfficeRecord(result.servicio.id)
+      .catch((error) =>
+        console.error(
+          `[chooseReturnTransport] El viaje ${result.trip.id} se creó, pero no se pudo sincronizar la liquidación:`,
+          error,
+        ),
+      );
 
     if (provider === 'interno') {
-      await this.dispatchViaje(result.trip.id);
-      await this.sendFinalReceiptAndAward(result.servicio.id);
+      await this.dispatchViaje(result.trip.id).catch((error) =>
+        console.error(
+          `[chooseReturnTransport] El viaje ${result.trip.id} se creó, pero el despacho inicial falló:`,
+          error,
+        ),
+      );
+      const employee = await this.serviciosRepository.findOne({
+        where: { id: result.servicio.id },
+        relations: { empleada: { usuario: true } },
+      });
+      const employeeChatId = employee?.empleada?.usuario?.telegramChatId;
+      if (employeeChatId) {
+        await this.bot.telegram
+          .sendMessage(
+            employeeChatId,
+            '🚗 Tu viaje de regreso con chofer ya fue solicitado. Te avisaremos cuando un chofer lo acepte.',
+          )
+          .catch((error) =>
+            console.error(
+              `[chooseReturnTransport] No se pudo avisar a la empleada del viaje ${result.trip.id}:`,
+              error,
+            ),
+          );
+      }
       this.realtimeEventsService.emitToBoss(result.servicio.jefeId, {
         type: 'return_transport_selected',
         data: { serviceId: result.servicio.id, trip: result.trip },
@@ -1646,30 +1789,35 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relations: { empleada: { usuario: true } },
     });
     const employeeChatId = employee?.empleada?.usuario?.telegramChatId;
-    if (employeeChatId && employee) {
-      await this.bot.telegram.sendMessage(
-        employeeChatId,
-        'Solicita tu viaje de regreso y confirma cada etapa.',
-        {
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.url(
-                'Abrir Uber',
-                this.buildUberLinkForTrip(employee, 'regreso'),
-              ),
-            ],
-            [
-              Markup.button.callback(
-                'Ya estoy en el Uber',
-                `eu:${result.trip.id}:i`,
-              ),
-              Markup.button.callback('Ya llegué', `eu:${result.trip.id}:f`),
-            ],
-          ]),
-        },
-      );
+    const uberLink = employee
+      ? this.buildUberLinkForTrip(employee, 'regreso')
+      : undefined;
+    if (employeeChatId && uberLink) {
+      await this.bot.telegram
+        .sendMessage(
+          employeeChatId,
+          'Solicita tu viaje de regreso y confirma cada etapa.',
+          {
+            ...Markup.inlineKeyboard([
+              [Markup.button.url('Abrir Uber', uberLink)],
+              [
+                Markup.button.callback(
+                  'Ya estoy en el Uber',
+                  `eu:${result.trip.id}:i`,
+                ),
+                Markup.button.callback('Ya llegué', `eu:${result.trip.id}:f`),
+              ],
+            ]),
+          },
+        )
+        .catch((error) =>
+          console.error(
+            `[chooseReturnTransport] No se pudo avisar a la empleada del Uber ${result.trip.id}:`,
+            error,
+          ),
+        );
     }
-    return { trip: result.trip };
+    return { trip: result.trip, uberLink };
   }
 
   private buildUberLink(servicio: Servicios): string {
@@ -1924,7 +2072,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     if (
       !Number.isFinite(amount) ||
       amount <= 0 ||
-      Math.round(amount * 100) !== amount * 100
+      Math.abs(Math.round(amount * 100) - amount * 100) > 1e-8
     ) {
       throw new BadRequestException(
         'El costo debe ser positivo y tener máximo dos decimales',
