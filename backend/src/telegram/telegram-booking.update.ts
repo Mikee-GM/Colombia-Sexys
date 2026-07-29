@@ -119,6 +119,136 @@ export function parseUberFareInput(text: string): number | undefined {
   return Number.isFinite(amount) && amount > 0 ? amount : undefined;
 }
 
+export function parseReceiptAmount(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : undefined;
+  }
+  if (typeof value !== 'string') return undefined;
+  let normalized = value.replace(/[^\d.,-]/g, '').trim();
+  if (!normalized) return undefined;
+  const lastComma = normalized.lastIndexOf(',');
+  const lastDot = normalized.lastIndexOf('.');
+  if (lastComma > lastDot) {
+    normalized = normalized.replace(/\./g, '').replace(',', '.');
+  } else {
+    normalized = normalized.replace(/,/g, '');
+  }
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+}
+
+function normalizedDigits(value: unknown): string {
+  return typeof value === 'string' ? value.replace(/\D/g, '') : '';
+}
+
+function normalizedName(value: unknown): string {
+  return typeof value === 'string'
+    ? value
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+    : '';
+}
+
+export function validateReceiptAnalysis(
+  analysis: any,
+  expectedAmount: number,
+  accounts: AuthorizedBankAccounts[],
+): { valid: boolean; amount?: number; reason?: string } {
+  const isReceipt = Boolean(analysis?.valid ?? analysis?.esComprobante);
+  if (!isReceipt) {
+    return {
+      valid: false,
+      reason: 'La imagen no fue reconocida como comprobante bancario.',
+    };
+  }
+  if (analysis?.analisisIA?.posibleFraude === true) {
+    return {
+      valid: false,
+      reason:
+        analysis.analisisIA.alertas?.join(', ') ||
+        'El comprobante presenta señales de posible edición.',
+    };
+  }
+  if (analysis?.estadoVisual?.textoLegible === false) {
+    return {
+      valid: false,
+      reason: 'El texto del comprobante no es suficientemente legible.',
+    };
+  }
+
+  const amount = parseReceiptAmount(analysis?.amount ?? analysis?.monto);
+  if (!amount) {
+    return { valid: false, reason: 'No se pudo leer el monto transferido.' };
+  }
+  if (amount + 0.009 < expectedAmount) {
+    return {
+      valid: false,
+      amount,
+      reason: `El comprobante muestra $${amount.toFixed(2)}, pero se esperaban $${expectedAmount.toFixed(2)}.`,
+    };
+  }
+
+  const activeAccounts = accounts.filter((account) => account.activa);
+  if (!activeAccounts.length) {
+    return {
+      valid: false,
+      amount,
+      reason: 'No hay cuentas de transferencia activas configuradas.',
+    };
+  }
+  const extractedNumbers = [
+    analysis?.destinationAccount,
+    analysis?.cuentaDestino,
+    analysis?.clabe,
+    analysis?.ultimos4CuentaDestino,
+  ]
+    .map(normalizedDigits)
+    .filter(Boolean);
+  const extractedHolder = normalizedName(
+    analysis?.destinationHolder ?? analysis?.titularDestino,
+  );
+
+  const accountMatches = activeAccounts.some((account) => {
+    const registeredNumbers = [account.cuenta, account.clabe]
+      .map(normalizedDigits)
+      .filter(Boolean);
+    const registeredLast4 =
+      normalizedDigits(account.ultimos4) ||
+      registeredNumbers.find(Boolean)?.slice(-4) ||
+      '';
+    const numberMatches = extractedNumbers.some((extracted) =>
+      extracted.length <= 4
+        ? Boolean(registeredLast4 && extracted === registeredLast4)
+        : registeredNumbers.some(
+            (registered) =>
+              registered === extracted ||
+              registered.endsWith(extracted) ||
+              extracted.endsWith(registered),
+          ),
+    );
+    const registeredHolder = normalizedName(account.titular);
+    const holderMatches = Boolean(
+      extractedHolder &&
+      registeredHolder &&
+      (extractedHolder.includes(registeredHolder) ||
+        registeredHolder.includes(extractedHolder)),
+    );
+    return extractedNumbers.length ? numberMatches : holderMatches;
+  });
+
+  if (!accountMatches) {
+    return {
+      valid: false,
+      amount,
+      reason:
+        'La cuenta, CLABE, últimos cuatro o titular del comprobante no coincide con una cuenta autorizada.',
+    };
+  }
+  return { valid: true, amount };
+}
+
 export function extractHireDuration(text: string): number | undefined {
   if (/\d+[.,]\d+/.test(text)) {
     return undefined;
@@ -1490,16 +1620,20 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           fileUrl.href,
           pending,
         );
+        const accounts = await this.authorizedBankAccountsRepository.find({
+          where: { activa: true },
+        });
+        const receipt = validateReceiptAnalysis(analysis, pending, accounts);
         await ctx.telegram
           .deleteMessage(ctx.chat!.id, processing.message_id)
           .catch(() => undefined);
-        const amount = Number(analysis.amount ?? 0);
-        if (!analysis.valid || amount <= 0) {
+        if (!receipt.valid || !receipt.amount) {
           await ctx.reply(
-            `No se pudo aprobar el comprobante: ${analysis.reason || 'no se identificó un pago válido'}.`,
+            `No se pudo aprobar el comprobante: ${receipt.reason || 'no se identificó un pago válido'}.`,
           );
           return;
         }
+        const amount = receipt.amount;
         const validation = await this.paymentReceiptValidationsRepository.save(
           this.paymentReceiptValidationsRepository.create({
             fechaRecepcion: new Date(),
@@ -1618,26 +1752,22 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           fileUrl.href,
           expectedTransferAmount,
         );
+        const accounts = await this.authorizedBankAccountsRepository.find({
+          where: { activa: true },
+        });
+        const receipt = validateReceiptAnalysis(
+          analysis,
+          expectedTransferAmount,
+          accounts,
+        );
 
         await ctx.telegram
           .deleteMessage(ctx.chat!.id, processingMsg.message_id)
           .catch(() => {});
 
-        if (!analysis.valid) {
+        if (!receipt.valid) {
           await ctx.reply(
-            `⚠️ *Problema con el comprobante:*\n\n${analysis.reason || 'El comprobante no parece ser válido.'}\n\nPor favor intenta enviar otro o avísanos si necesitas ayuda.`,
-            { parse_mode: 'Markdown' },
-          );
-          return;
-        }
-
-        if (
-          analysis.amount !== undefined &&
-          analysis.amount < expectedTransferAmount
-        ) {
-          await ctx.reply(
-            `⚠️ *Monto incompleto:*\n\nEl comprobante muestra un pago por ${analysis.amount}, pero se esperaba ${expectedTransferAmount}. Por favor transfiere el monto restante.`,
-            { parse_mode: 'Markdown' },
+            `⚠️ Problema con el comprobante:\n\n${receipt.reason || 'El comprobante no parece ser válido.'}\n\nPor favor intenta enviar otro o avísanos si necesitas ayuda.`,
           );
           return;
         }

@@ -3,7 +3,9 @@ import {
   extractHireDuration,
   extractHirePaymentMethod,
   isUberAdminInputSession,
+  parseReceiptAmount,
   parseUberFareInput,
+  validateReceiptAnalysis,
 } from './telegram-booking.update';
 
 describe('Telegram booking session input parsing', () => {
@@ -75,4 +77,59 @@ describe('Telegram booking session input parsing', () => {
       expect(parseUberFareInput(text)).toBeUndefined();
     },
   );
+
+  it.each([
+    ['$1,250.00', 1250],
+    ['1.250,00 MXN', 1250],
+    [1250.5, 1250.5],
+  ])('normaliza el monto de comprobante %s', (value, expected) => {
+    expect(parseReceiptAmount(value)).toBe(expected);
+  });
+
+  it('acepta los campos en español devueltos por el analizador visual', () => {
+    const result = validateReceiptAnalysis(
+      {
+        esComprobante: true,
+        monto: '$1,250.00',
+        cuentaDestino: '****9919',
+        titularDestino: 'Omar Pérez',
+        estadoVisual: { textoLegible: true },
+        analisisIA: { posibleFraude: false },
+      },
+      1250,
+      [
+        {
+          activa: true,
+          cuenta: '4152314214309919',
+          ultimos4: '9919',
+          titular: 'Omar Pérez',
+        } as any,
+      ],
+    );
+
+    expect(result).toEqual({ valid: true, amount: 1250 });
+  });
+
+  it('rechaza una cuenta destino que no está autorizada', () => {
+    const result = validateReceiptAnalysis(
+      {
+        esComprobante: true,
+        monto: '1250.00',
+        cuentaDestino: '****0000',
+        titularDestino: 'Persona distinta',
+      },
+      1250,
+      [
+        {
+          activa: true,
+          cuenta: '4152314214309919',
+          ultimos4: '9919',
+          titular: 'Omar Pérez',
+        } as any,
+      ],
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('no coincide');
+  });
 });
