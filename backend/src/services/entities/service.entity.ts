@@ -20,6 +20,7 @@ import { LoyaltyTransaction } from '../../loyalty/entities/loyalty-transaction.e
 import { ColumnNumericTransformer } from '../../common/transformers/column-numeric.transformer';
 import { ServiceParticipant } from '../../group-services/entities/service-participant.entity';
 import { ServicePayment } from '../../group-services/entities/service-payment.entity';
+import { PaymentReceiptValidations } from './payment-receipt-validation.entity';
 
 @Index('idx_servicios_cliente', ['clienteId'], {})
 @Index('idx_servicios_created_at', ['createdAt'], {})
@@ -514,6 +515,10 @@ export class Servicios {
   @OneToMany(() => ServicePayment, (payment) => payment.service)
   @ApiProperty({ type: () => [ServicePayment] })
   pagos: ServicePayment[];
+
+  @OneToMany(() => PaymentReceiptValidations, (receipt) => receipt.servicio)
+  @ApiProperty({ type: () => [PaymentReceiptValidations] })
+  receiptValidations: PaymentReceiptValidations[];
 
   @OneToMany(
     () => LoyaltyTransaction,

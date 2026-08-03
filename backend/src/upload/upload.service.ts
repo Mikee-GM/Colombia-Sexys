@@ -7,6 +7,17 @@ import {
   GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { randomUUID } from 'crypto';
+
+const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
 
 @Injectable()
 export class UploadService {
@@ -102,6 +113,73 @@ export class UploadService {
         'Error al generar URL temporal para el archivo privado',
       );
     }
+  }
+
+  async uploadEvidence(input: {
+    buffer: Buffer;
+    contentType: string;
+    folder: 'uber' | 'transferencias';
+    scopeId?: string;
+  }): Promise<{ url: string; key: string }> {
+    const contentType = input.contentType.split(';')[0].trim().toLowerCase();
+    const extension = IMAGE_EXTENSIONS[contentType];
+    if (!extension) {
+      throw new InternalServerErrorException(
+        'La evidencia recibida no tiene un formato de imagen compatible',
+      );
+    }
+    if (!input.buffer.length || input.buffer.length > EVIDENCE_MAX_BYTES) {
+      throw new InternalServerErrorException(
+        'La evidencia recibida está vacía o supera el límite permitido',
+      );
+    }
+
+    const scope = input.scopeId ? `/${input.scopeId}` : '';
+    const key = `evidencias/${input.folder}${scope}/${randomUUID()}.${extension}`;
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          Body: input.buffer,
+          ContentType: contentType,
+        }),
+      );
+      return { key, url: `${this.publicUrl}/${key}` };
+    } catch (error) {
+      console.error('Error uploading evidence to R2:', error);
+      throw new InternalServerErrorException(
+        'No fue posible almacenar la evidencia en la nube',
+      );
+    }
+  }
+
+  async uploadEvidenceFromUrl(input: {
+    sourceUrl: string;
+    folder: 'uber' | 'transferencias';
+    scopeId?: string;
+  }): Promise<{ url: string; key: string }> {
+    let response: Response;
+    try {
+      response = await fetch(input.sourceUrl);
+    } catch (error) {
+      console.error('Error downloading evidence:', error);
+      throw new InternalServerErrorException(
+        'No fue posible descargar la evidencia recibida',
+      );
+    }
+    if (!response.ok) {
+      throw new InternalServerErrorException(
+        'No fue posible descargar la evidencia recibida',
+      );
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return this.uploadEvidence({
+      buffer,
+      contentType: response.headers.get('content-type') ?? '',
+      folder: input.folder,
+      scopeId: input.scopeId,
+    });
   }
 
   async deleteFile(url: string): Promise<{ success: boolean }> {

@@ -136,6 +136,17 @@ export class Viajes {
   @ApiPropertyOptional({ description: 'File ID de la captura de Uber' })
   telegramUberFileId: string | null;
 
+  @Column('text', { name: 'uber_screenshot_url', nullable: true })
+  @ApiPropertyOptional({ description: 'URL permanente de la captura de Uber' })
+  uberScreenshotUrl: string | null;
+
+  @Column('timestamp with time zone', {
+    name: 'uber_screenshot_uploaded_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({ description: 'Fecha de almacenamiento en R2' })
+  uberScreenshotUploadedAt: Date | null;
+
   @Column('numeric', {
     name: 'driver_payout',
     precision: 10,

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Ban, Car, Clock3, MapPin, Plus, Send, Trash2, UsersRound } from "lucide-react";
+import { Ban, Car, Clock3, ExternalLink, FileCheck2, ImageIcon, MapPin, Plus, Send, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import {
   addGroupManualTransportCharge,
@@ -882,6 +882,29 @@ function ActiveGroupEditor({
           </div>
         ))}
       </section>
+
+      {((service.receiptValidations ?? []).some((item) => item.imageUrl) ||
+        (service.viajes ?? []).some((trip) => trip.uberScreenshotUrl)) && (
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+          <h3 className="font-heading text-2xl">Evidencias</h3>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(service.receiptValidations ?? []).filter((item) => item.imageUrl).map((receipt, index) => (
+              <a key={receipt.id} href={receipt.imageUrl!} target="_blank" rel="noopener noreferrer" className={buttonClass}>
+                <FileCheck2 size={14} className="mr-1 inline" />
+                Comprobante {index + 1} · {(receipt.estado ?? "sin estado").replaceAll("_", " ")}
+                <ExternalLink size={12} className="ml-1 inline" />
+              </a>
+            ))}
+            {(service.viajes ?? []).filter((trip) => trip.uberScreenshotUrl).map((trip) => (
+              <a key={trip.id} href={trip.uberScreenshotUrl!} target="_blank" rel="noopener noreferrer" className={buttonClass}>
+                <ImageIcon size={14} className="mr-1 inline" />
+                Uber de {trip.tipo}
+                <ExternalLink size={12} className="ml-1 inline" />
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
 
       {service.estado === "pendiente" && (
         <button

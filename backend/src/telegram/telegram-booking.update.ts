@@ -47,6 +47,7 @@ import { TransportOperationsService } from '../transport-operations/transport-op
 import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
 import { GroupServicesService } from '../group-services/group-services.service';
+import { UploadService } from '../upload/upload.service';
 
 interface SessionData {
   step?:
@@ -375,6 +376,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly disciplineService: DisciplineService,
     private readonly groupServicesService: GroupServicesService,
     private readonly configService: ConfigService,
+    private readonly uploadService: UploadService,
   ) {
     // TTL / Inactivity Cleanup: run every 5 minutes to clean up users inactive for > 1 hour
     this.locationCleanupInterval = setInterval(() => {
@@ -392,6 +394,78 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         );
       }
     }, 300000);
+  }
+
+  private async createReceiptEvidence(
+    ctx: BotContext,
+    fileId: string,
+    clientName?: string | null,
+    serviceId?: string,
+  ): Promise<{ validation: PaymentReceiptValidations; sourceUrl: string }> {
+    const fileUrl = await ctx.telegram.getFileLink(fileId);
+    const evidence = await this.uploadService.uploadEvidenceFromUrl({
+      sourceUrl: fileUrl.href,
+      folder: 'transferencias',
+    });
+    const now = new Date();
+    const validation = await this.paymentReceiptValidationsRepository.save(
+      this.paymentReceiptValidationsRepository.create({
+        fechaRecepcion: now,
+        horaRecepcion: now.toISOString().slice(11, 19),
+        clienteTelegram: clientName ?? undefined,
+        chatId: ctx.from?.id.toString(),
+        imageUrl: evidence.url,
+        telegramFileId: fileId,
+        esComprobante: false,
+        estado: 'PROCESANDO',
+        servicioId: serviceId,
+      }),
+    );
+    return { validation, sourceUrl: fileUrl.href };
+  }
+
+  private async finishReceiptValidation(
+    validation: PaymentReceiptValidations,
+    analysis: any,
+    result: { valid: boolean; amount?: number; reason?: string },
+  ): Promise<PaymentReceiptValidations> {
+    Object.assign(validation, {
+      esComprobante: Boolean(analysis?.valid ?? analysis?.esComprobante),
+      bancoOrigen: analysis?.bankOrigin ?? analysis?.bancoOrigen,
+      bancoDestino: analysis?.bankDestination ?? analysis?.bancoDestino,
+      titularDestino: analysis?.destinationHolder ?? analysis?.titularDestino,
+      cuentaDestino: analysis?.destinationAccount ?? analysis?.cuentaDestino,
+      clabe: analysis?.clabe,
+      monto:
+        result.amount ??
+        parseReceiptAmount(analysis?.amount ?? analysis?.monto),
+      fechaTransferencia:
+        analysis?.transferDate ?? analysis?.fechaTransferencia,
+      horaTransferencia: analysis?.transferTime ?? analysis?.horaTransferencia,
+      referencia: analysis?.reference ?? analysis?.referencia,
+      folio: analysis?.folio,
+      idSpei:
+        analysis?.trackingKey ?? analysis?.idSpei ?? analysis?.claveRastreo,
+      concepto: analysis?.concept ?? analysis?.concepto,
+      confianza: analysis?.confidence ?? analysis?.confianza,
+      estado: result.valid ? 'APROBADO' : 'RECHAZADO',
+      observaciones: result.reason ?? analysis?.reason ?? null,
+      jsonIA: analysis,
+    });
+    return this.paymentReceiptValidationsRepository.save(validation);
+  }
+
+  private async markReceiptValidationError(
+    validation: PaymentReceiptValidations | undefined,
+    error: unknown,
+  ): Promise<void> {
+    if (!validation || validation.estado !== 'PROCESANDO') return;
+    validation.estado = 'ERROR_VALIDACION';
+    validation.observaciones =
+      error instanceof Error ? error.message : 'Error inesperado de validación';
+    await this.paymentReceiptValidationsRepository
+      .save(validation)
+      .catch(() => undefined);
   }
 
   private async applyDraftPaymentMethod(
@@ -1614,16 +1688,28 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const processing = await ctx.reply(
         'Verificando el comprobante del servicio grupal...',
       );
+      let validation: PaymentReceiptValidations | undefined;
       try {
-        const fileUrl = await ctx.telegram.getFileLink(fileId);
+        const stored = await this.createReceiptEvidence(
+          ctx,
+          fileId,
+          groupRequest.client.nombreTelegram,
+          groupRequest.service.id,
+        );
+        validation = stored.validation;
         const analysis = await this.aiMessageService.analyzeReceipt(
-          fileUrl.href,
+          stored.sourceUrl,
           pending,
         );
         const accounts = await this.authorizedBankAccountsRepository.find({
           where: { activa: true },
         });
         const receipt = validateReceiptAnalysis(analysis, pending, accounts);
+        validation = await this.finishReceiptValidation(
+          validation,
+          analysis,
+          receipt,
+        );
         await ctx.telegram
           .deleteMessage(ctx.chat!.id, processing.message_id)
           .catch(() => undefined);
@@ -1634,37 +1720,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           return;
         }
         const amount = receipt.amount;
-        const validation = await this.paymentReceiptValidationsRepository.save(
-          this.paymentReceiptValidationsRepository.create({
-            fechaRecepcion: new Date(),
-            horaRecepcion: new Date().toISOString().slice(11, 19),
-            clienteTelegram: groupRequest.client.nombreTelegram ?? undefined,
-            chatId: senderTelegramId,
-            esComprobante: true,
-            bancoOrigen: analysis.bankOrigin ?? analysis.bancoOrigen,
-            bancoDestino: analysis.bankDestination ?? analysis.bancoDestino,
-            titularDestino:
-              analysis.destinationHolder ?? analysis.titularDestino,
-            cuentaDestino:
-              analysis.destinationAccount ?? analysis.cuentaDestino,
-            clabe: analysis.clabe,
-            monto: amount,
-            fechaTransferencia:
-              analysis.transferDate ?? analysis.fechaTransferencia,
-            horaTransferencia:
-              analysis.transferTime ?? analysis.horaTransferencia,
-            referencia: analysis.reference ?? analysis.referencia,
-            folio: analysis.folio,
-            idSpei:
-              analysis.trackingKey ?? analysis.idSpei ?? analysis.claveRastreo,
-            concepto: analysis.concept ?? analysis.concepto,
-            confianza: analysis.confidence ?? analysis.confianza,
-            estado: 'APROBADO',
-            observaciones: analysis.reason ?? null,
-            jsonIA: analysis,
-            servicioId: groupRequest.service.id,
-          }),
-        );
         const updated = await this.groupServicesService.registerPayment(
           groupRequest.service.id,
           {
@@ -1683,6 +1738,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           );
         }
       } catch (error: any) {
+        await this.markReceiptValidationError(validation, error);
         await ctx.telegram
           .deleteMessage(ctx.chat!.id, processing.message_id)
           .catch(() => undefined);
@@ -1737,8 +1793,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         '🔍 Verificando comprobante, por favor espera un momento...',
       );
 
+      let validation: PaymentReceiptValidations | undefined;
       try {
-        const fileUrl = await ctx.telegram.getFileLink(fileId);
+        const stored = await this.createReceiptEvidence(
+          ctx,
+          fileId,
+          client.nombreTelegram,
+        );
+        validation = stored.validation;
         const totalBase =
           duracionPactadaHoras * Number(empleada.precioBaseHora);
 
@@ -1749,7 +1811,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             : totalBase;
 
         const analysis = await this.aiMessageService.analyzeReceipt(
-          fileUrl.href,
+          stored.sourceUrl,
           expectedTransferAmount,
         );
         const accounts = await this.authorizedBankAccountsRepository.find({
@@ -1759,6 +1821,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           analysis,
           expectedTransferAmount,
           accounts,
+        );
+        validation = await this.finishReceiptValidation(
+          validation,
+          analysis,
+          receipt,
         );
 
         await ctx.telegram
@@ -1784,8 +1851,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           locationLng,
           locationNotas || null,
           ctx.from!.id.toString(),
+          validation.id,
         );
       } catch (err) {
+        await this.markReceiptValidationError(validation, err);
         console.error('Error procesando comprobante:', err);
         await ctx.reply(
           'Ocurrió un error verificando el comprobante. Intentaremos revisarlo manualmente.',
@@ -2726,7 +2795,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     lng: string,
     notasUbicacion: string | null,
     telegramId: string,
-    comprobanteFileId?: string,
+    receiptValidationId?: string,
   ) {
     try {
       const escapeMd = (text: string): string =>
@@ -2802,6 +2871,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         } as any);
         // 1. SAVE INICIAL (INSERT)
         await this.serviciosRepository.save(nuevoServicioEnc);
+        if (receiptValidationId) {
+          await this.paymentReceiptValidationsRepository.update(
+            receiptValidationId,
+            { servicioId: nuevoServicioEnc.id },
+          );
+        }
 
         const jefeUser = await this.usuariosRepository.findOne({
           where: { id: jefeId },
@@ -2938,6 +3013,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         customerTransportCharge: ctx.session?.customerTransportCharge ?? 0,
         totalTransporte: ctx.session?.customerTransportCharge ?? 0,
       });
+      if (receiptValidationId) {
+        await this.paymentReceiptValidationsRepository.update(
+          receiptValidationId,
+          { servicioId: nuevoServicio.id },
+        );
+      }
 
       const jefeUser = await this.usuariosRepository.findOne({
         where: { id: jefeId },
@@ -3225,6 +3306,32 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             ],
           ]),
         },
+      );
+      return;
+    }
+    if (ctx.session?.step === 'AWAITING_MIXED_TRANSFER_AMOUNT') {
+      const amount = parseReceiptAmount(
+        (ctx.message as { text?: string })?.text,
+      );
+      const employee = ctx.session.empleadaId
+        ? await this.empleadasRepository.findOne({
+            where: { id: ctx.session.empleadaId },
+          })
+        : null;
+      const totalBase =
+        employee && ctx.session.duracionPactadaHoras
+          ? Number(employee.precioBaseHora) * ctx.session.duracionPactadaHoras
+          : 0;
+      if (!amount || !totalBase || amount > totalBase) {
+        await ctx.reply(
+          'Escribe un monto de transferencia válido que no supere el costo base del servicio.',
+        );
+        return;
+      }
+      ctx.session.mixedTransferAmount = amount;
+      ctx.session.step = 'AWAITING_PAYMENT_RECEIPT';
+      await ctx.reply(
+        `${await this.servicesService.bankTransferDetails()}\n\nEnvía una FOTO del comprobante por $${amount.toFixed(2)}. El resto y el transporte se pagarán en efectivo.`,
       );
       return;
     }

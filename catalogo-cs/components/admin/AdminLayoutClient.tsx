@@ -107,6 +107,16 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
             Servicios
           </Link>
           <Link
+            href="/admin/evidence"
+            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
+              isActive("/admin/evidence")
+                ? "text-black bg-[#C5A55A]"
+                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
+            }`}
+          >
+            Evidencias
+          </Link>
+          <Link
             href="/admin/map"
             className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
               isActive("/admin/map")
@@ -300,6 +310,17 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
               }`}
             >
               Servicios
+            </Link>
+            <Link
+              href="/admin/evidence"
+              onClick={() => setMenuOpen(false)}
+              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
+                isActive("/admin/evidence")
+                  ? "text-[#C5A55A] bg-zinc-900/50"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              Evidencias
             </Link>
             <Link
               href="/admin/map"

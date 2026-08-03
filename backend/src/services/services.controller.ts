@@ -13,6 +13,7 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ServicesService } from './services.service';
@@ -97,6 +98,22 @@ export class ServicesController {
   @ApiFindAllDocs({ tag: 'services', entity: Servicios, protected: true })
   findAll(@Req() req: any) {
     return this.servicesService.findAll(req.user);
+  }
+
+  @Get('evidence')
+  findEvidence(
+    @Req() req: any,
+    @Query('kind') kind?: string,
+    @Query('status') status?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.servicesService.findEvidence(req.user, {
+      kind,
+      status,
+      cursor,
+      limit,
+    });
   }
 
   @Get(':id')
