@@ -225,9 +225,12 @@ export default function ModelModal({
 
       let uploadedUrls: string[] = [];
       if (filesToUpload.length > 0) {
+        // Comprimir todas las fotos en paralelo
+        const compressedFiles = await Promise.all(
+          filesToUpload.map((file) => compressImage(file))
+        );
         const formData = new FormData();
-        for (const file of filesToUpload) {
-          const compressed = await compressImage(file);
+        for (const compressed of compressedFiles) {
           formData.append("files", compressed);
         }
         uploadedUrls = await uploadImagesAction(formData);
