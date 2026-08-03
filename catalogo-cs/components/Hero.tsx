@@ -11,14 +11,14 @@ function GoldParticles() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
       {[...Array(25)].map((_, i) => {
-        // Valores fijos para la generacion inicial (evita desajustes de hidratacion)
-        const left = Math.random() * 100;
-        const top = Math.random() * 100;
-        const size = Math.random() * 3 + 1;
-        const duration = Math.random() * 15 + 15;
-        const delay = Math.random() * 5;
-        const yOffset = -(Math.random() * 150 + 50);
-        const xOffset = (Math.random() - 0.5) * 100;
+        // Valores deterministas basados en el índice i para evitar desajustes de hidratación (hydration mismatch) en Next.js SSR
+        const left = ((i * 37 + 13) % 95) + 2;
+        const top = ((i * 53 + 17) % 90) + 5;
+        const size = ((i * 19) % 3) + 1.5;
+        const duration = ((i * 23) % 15) + 15;
+        const delay = ((i * 29) % 50) / 10;
+        const yOffset = -(((i * 41) % 150) + 50);
+        const xOffset = ((i * 47) % 100) - 50;
 
         return (
           <motion.div

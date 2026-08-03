@@ -75,6 +75,12 @@ import { GroupServicesModule } from '../group-services/group-services.module';
         }
         return {
           token,
+          launchOptions:
+            token.includes('dummy') ||
+            token.includes('fake') ||
+            token.startsWith('123456789')
+              ? false
+              : undefined,
           middlewares: [
             session({
               store: {
