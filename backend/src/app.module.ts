@@ -98,6 +98,11 @@ import { GroupServicesModule } from './group-services/group-services.module';
         synchronize: false, // Regla Heavy DB: no sincronización automática en producción/desarrollo estructurado, usar migraciones.
         migrationsRun: false,
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
+        extra: {
+          max: 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 5000,
+        },
       }),
     }),
     ThrottlerModule.forRoot([

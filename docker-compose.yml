@@ -1,6 +1,15 @@
 name: colombia-sexys
 
 services:
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: unless-stopped
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=all
+      - AUTOHEAL_INTERVAL=10
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -21,6 +30,11 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal
 
@@ -37,6 +51,7 @@ services:
       DATABASE_HOST: db
       DATABASE_PORT: 5432
       WEB_URL: ${DOCKER_WEB_URL:-http://localhost:3001}
+      NODE_OPTIONS: "--max-old-space-size=512"
     expose:
       - "4000"
     depends_on:
@@ -56,6 +71,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal
 
@@ -71,6 +91,7 @@ services:
     environment:
       NODE_ENV: production
       BACKEND_API_URL: http://backend:4000
+      NODE_OPTIONS: "--max-old-space-size=512"
     ports:
       - "127.0.0.1:${FRONTEND_HOST_PORT:-3001}:3000"
     depends_on:
@@ -90,6 +111,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal
 
