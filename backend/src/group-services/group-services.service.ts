@@ -195,7 +195,8 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         service: {
           participantes: { employee: true },
           viajes: { passengers: { employee: true } },
-          pagos: true,
+          pagos: { receiptValidation: true },
+          receiptValidations: true,
         },
       },
       order: { createdAt: 'DESC' },
@@ -215,7 +216,8 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           cliente: true,
           participantes: { employee: { usuario: true } },
           viajes: { passengers: { employee: true }, chofer: true },
-          pagos: true,
+          pagos: { receiptValidation: true },
+          receiptValidations: true,
         },
       },
     });
@@ -1719,6 +1721,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         participantes: { employee: { usuario: true, jefe: true } },
         viajes: { passengers: { employee: true }, chofer: true },
         pagos: { receiptValidation: true },
+        receiptValidations: true,
         extrasServicios: { extraCatalogo: true, participant: true },
       },
     });

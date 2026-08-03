@@ -44,6 +44,19 @@ export class PaymentReceiptValidations {
   @ApiPropertyOptional({ description: 'Chat ID de Telegram del cliente' })
   chatId?: string;
 
+  @Column({ name: 'image_url', type: 'text', nullable: true })
+  @ApiPropertyOptional({ description: 'URL permanente del comprobante' })
+  imageUrl?: string;
+
+  @Column({
+    name: 'telegram_file_id',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  @ApiPropertyOptional({ description: 'File ID original de Telegram' })
+  telegramFileId?: string;
+
   @Column({ name: 'es_comprobante', type: 'boolean', default: false })
   @ApiProperty({
     description: 'Si la IA identificó que la imagen es un comprobante de pago',
@@ -170,7 +183,10 @@ export class PaymentReceiptValidations {
   })
   jsonIA?: any;
 
-  @ManyToOne(() => Servicios, { nullable: true, onDelete: 'SET NULL' })
+  @ManyToOne(() => Servicios, (servicio) => servicio.receiptValidations, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'servicio_id' })
   servicio?: Servicios;
 

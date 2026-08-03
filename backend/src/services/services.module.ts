@@ -15,6 +15,7 @@ import { ConversacionesTelegram } from '../telegram-conversations/entities/teleg
 import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entity';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
 import { DisciplineModule } from '../discipline/discipline.module';
+import { UploadModule } from '../upload/upload.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { DisciplineModule } from '../discipline/discipline.module';
     LiquidationsModule,
     TransportOperationsModule,
     DisciplineModule,
+    UploadModule,
   ],
   controllers: [ServicesController],
   providers: [ServicesService],

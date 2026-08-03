@@ -25,6 +25,8 @@ describe('ServicesService transport settlement', () => {
   const bot = {
     telegram: {
       sendMessage: jest.fn(),
+      sendPhoto: jest.fn(),
+      getFileLink: jest.fn(),
       editMessageText: jest.fn(),
       deleteForumTopic: jest.fn(),
     },
@@ -32,6 +34,10 @@ describe('ServicesService transport settlement', () => {
   const loyalty = { awardForFinalizedService: jest.fn() };
   const liquidationSync = {
     syncOfficeRecord: jest.fn().mockResolvedValue(null),
+  };
+  const uploadService = {
+    uploadEvidence: jest.fn(),
+    uploadEvidenceFromUrl: jest.fn(),
   };
 
   const service = new ServicesService(
@@ -41,6 +47,7 @@ describe('ServicesService transport settlement', () => {
     usuariosRepository as any,
     conversationsRepository as any,
     {} as any,
+    {} as any,
     realtime as any,
     bot as any,
     {} as any,
@@ -49,6 +56,7 @@ describe('ServicesService transport settlement', () => {
     liquidationSync as any,
     { get: jest.fn() } as any,
     {} as any,
+    uploadService as any,
   );
 
   beforeEach(() => jest.clearAllMocks());
@@ -57,6 +65,79 @@ describe('ServicesService transport settlement', () => {
     await expect(
       service.confirmUberFare('trip', 'boss', 0),
     ).rejects.toBeInstanceOf(BadRequestException);
+    expect(viajesRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('almacena en R2 antes de enviar una captura cargada desde el panel', async () => {
+    viajesRepository.findOne.mockResolvedValue({
+      id: 'trip',
+      tipo: 'ida',
+      proveedorTransporte: 'uber',
+      servicio: {
+        jefeId: 'boss',
+        empleada: { usuario: { telegramChatId: '123' } },
+      },
+    });
+    usuariosRepository.findOneBy.mockResolvedValue({ id: 'boss', rol: 'jefe' });
+    uploadService.uploadEvidence.mockResolvedValue({
+      url: 'https://media.example.com/evidencias/uber/trip/image.jpg',
+    });
+    bot.telegram.sendPhoto.mockResolvedValue({
+      photo: [{ file_id: 'telegram-photo' }],
+    });
+
+    const result = await service.saveUberScreenshotFromDashboard(
+      'trip',
+      'boss',
+      {
+        buffer: Buffer.from('image'),
+        mimetype: 'image/jpeg',
+        originalname: 'uber.jpg',
+      },
+    );
+
+    expect(uploadService.uploadEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({ folder: 'uber', scopeId: 'trip' }),
+    );
+    expect(
+      uploadService.uploadEvidence.mock.invocationCallOrder[0],
+    ).toBeLessThan(viajesRepository.update.mock.invocationCallOrder[0]);
+    expect(viajesRepository.update.mock.invocationCallOrder[0]).toBeLessThan(
+      bot.telegram.sendPhoto.mock.invocationCallOrder[0],
+    );
+    expect(viajesRepository.update).toHaveBeenLastCalledWith(
+      'trip',
+      expect.objectContaining({
+        telegramUberFileId: 'telegram-photo',
+        uberScreenshotUrl:
+          'https://media.example.com/evidencias/uber/trip/image.jpg',
+      }),
+    );
+    expect(result.imageUrl).toContain('/evidencias/uber/');
+  });
+
+  it('no envía ni registra la captura si falla R2', async () => {
+    viajesRepository.findOne.mockResolvedValue({
+      id: 'trip',
+      tipo: 'ida',
+      proveedorTransporte: 'uber',
+      servicio: {
+        jefeId: 'boss',
+        empleada: { usuario: { telegramChatId: '123' } },
+      },
+    });
+    usuariosRepository.findOneBy.mockResolvedValue({ id: 'boss', rol: 'jefe' });
+    uploadService.uploadEvidence.mockRejectedValue(new Error('R2 unavailable'));
+
+    await expect(
+      service.saveUberScreenshotFromDashboard('trip', 'boss', {
+        buffer: Buffer.from('image'),
+        mimetype: 'image/jpeg',
+        originalname: 'uber.jpg',
+      }),
+    ).rejects.toThrow('R2 unavailable');
+
+    expect(bot.telegram.sendPhoto).not.toHaveBeenCalled();
     expect(viajesRepository.update).not.toHaveBeenCalled();
   });
 

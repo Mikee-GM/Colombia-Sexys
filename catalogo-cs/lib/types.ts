@@ -85,7 +85,7 @@ export type Service = {
   empleadaId: string;
   clienteId: string;
   jefeId: string;
-  metodoPago: "efectivo" | "tarjeta" | "transferencia";
+  metodoPago: "efectivo" | "tarjeta" | "transferencia" | "mixto";
   duracionPactadaHoras: string;
   duracionFinalHoras: string | null;
   ubicacionClienteLat: string;
@@ -129,6 +129,7 @@ export type Service = {
   viajes?: Trip[];
   participantes?: ServiceParticipant[];
   pagos?: ServicePayment[];
+  receiptValidations?: PaymentReceiptValidation[];
   cliente?: Client;
   empleada?: Employee;
 };
@@ -143,6 +144,8 @@ export type Trip = {
   proveedorTransporte: "interno" | "uber";
   tarifa: string | number;
   telegramUberFileId?: string | null;
+  uberScreenshotUrl?: string | null;
+  uberScreenshotUploadedAt?: string | null;
   driverPayout?: number;
   fareConfirmedAt?: string | null;
   fareConfirmationOverride?: boolean;
@@ -173,6 +176,38 @@ export type ServicePayment = {
   fingerprint: string | null;
   notes: string | null;
   createdAt: string;
+  receiptValidation?: PaymentReceiptValidation | null;
+};
+
+export type PaymentReceiptValidation = {
+  id: string;
+  servicioId?: string | null;
+  imageUrl?: string | null;
+  telegramFileId?: string | null;
+  estado?: string | null;
+  monto?: number | null;
+  observaciones?: string | null;
+  clienteTelegram?: string | null;
+  createdAt: string;
+};
+
+export type EvidenceItem = {
+  id: string;
+  kind: "uber" | "transferencia";
+  url: string;
+  status: string;
+  createdAt: string;
+  serviceId: string | null;
+  tripId?: string;
+  tripType?: "ida" | "regreso";
+  clientName?: string | null;
+  amount?: number | null;
+  observations?: string | null;
+};
+
+export type EvidencePage = {
+  items: EvidenceItem[];
+  nextCursor: string | null;
 };
 
 export type TripPassenger = {

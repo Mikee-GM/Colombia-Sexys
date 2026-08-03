@@ -33,6 +33,22 @@ import {
 import { DisciplineService } from '../discipline/discipline.service';
 import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entity';
 import { SaveBankAccountDto } from './dto/bank-account.dto';
+import { UploadService } from '../upload/upload.service';
+import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
+
+export type EvidenceItem = {
+  id: string;
+  kind: 'uber' | 'transferencia';
+  url: string;
+  status: string;
+  createdAt: string;
+  serviceId: string | null;
+  tripId?: string;
+  tripType?: 'ida' | 'regreso';
+  clientName?: string | null;
+  amount?: number | null;
+  observations?: string | null;
+};
 
 @Injectable()
 export class ServicesService implements OnModuleInit, OnModuleDestroy {
@@ -65,6 +81,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly conversationsRepository: Repository<ConversacionesTelegram>,
     @InjectRepository(AuthorizedBankAccounts)
     private readonly bankAccountsRepository: Repository<AuthorizedBankAccounts>,
+    @InjectRepository(PaymentReceiptValidations)
+    private readonly paymentReceiptValidationsRepository: Repository<PaymentReceiptValidations>,
     private readonly realtimeEventsService: RealtimeEventsService,
     @InjectBot() private readonly bot: Telegraf<Context>,
     @Inject(forwardRef(() => TelegramService))
@@ -74,6 +92,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly liquidationSync: OfficeLiquidationSyncService,
     private readonly configService: ConfigService,
     private readonly disciplineService: DisciplineService,
+    private readonly uploadService: UploadService,
   ) {}
 
   private estimatedEnd(service: Servicios): Date | null {
@@ -291,7 +310,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         empleada: true,
         participantes: { employee: true },
         viajes: { passengers: { employee: true } },
-        pagos: true,
+        pagos: { receiptValidation: true },
+        receiptValidations: true,
       },
       order: { createdAt: 'DESC' },
     });
@@ -312,7 +332,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         empleada: true,
         participantes: { employee: true },
         viajes: { passengers: { employee: true } },
-        pagos: true,
+        pagos: { receiptValidation: true },
+        receiptValidations: true,
       },
       order: { createdAt: 'DESC' },
     });
@@ -326,7 +347,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         empleada: true,
         participantes: { employee: true },
         viajes: { passengers: { employee: true } },
-        pagos: true,
+        pagos: { receiptValidation: true },
+        receiptValidations: true,
       },
     });
     if (!servicio) {
@@ -339,6 +361,148 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const service = await this.findOne(id);
     this.assertActorCanManageService(service, actor);
     return service;
+  }
+
+  async findEvidence(
+    actor: Usuarios,
+    query: {
+      kind?: string;
+      status?: string;
+      cursor?: string;
+      limit?: string | number;
+    },
+  ): Promise<{ items: EvidenceItem[]; nextCursor: string | null }> {
+    const kind =
+      query.kind === 'uber' || query.kind === 'transferencia'
+        ? query.kind
+        : undefined;
+    const status = query.status?.trim().toUpperCase() || undefined;
+    const requestedLimit = Number(query.limit ?? 50);
+    const limit = Number.isInteger(requestedLimit)
+      ? Math.min(100, Math.max(1, requestedLimit))
+      : 50;
+    const cursor = this.decodeEvidenceCursor(query.cursor);
+    const results: EvidenceItem[] = [];
+
+    if (!kind || kind === 'transferencia') {
+      const receipts = this.paymentReceiptValidationsRepository
+        .createQueryBuilder('receipt')
+        .leftJoinAndSelect('receipt.servicio', 'service')
+        .leftJoinAndSelect('service.cliente', 'client')
+        .leftJoin('service.empleada', 'employee')
+        .where('receipt.imageUrl IS NOT NULL');
+      if (actor.rol === 'jefe') {
+        receipts.andWhere(
+          '(service.jefeId = :actorId OR employee.jefeId = :actorId OR employee.jefeSecundarioId = :actorId)',
+          { actorId: actor.id },
+        );
+      }
+      if (status)
+        receipts.andWhere('UPPER(receipt.estado) = :status', { status });
+      if (cursor) {
+        receipts.andWhere(
+          '(receipt.createdAt < :cursorAt OR (receipt.createdAt = :cursorAt AND receipt.id < :cursorId))',
+          cursor,
+        );
+      }
+      const rows = await receipts
+        .orderBy('receipt.createdAt', 'DESC')
+        .addOrderBy('receipt.id', 'DESC')
+        .take(limit + 1)
+        .getMany();
+      results.push(
+        ...rows.map((receipt) => ({
+          id: receipt.id,
+          kind: 'transferencia' as const,
+          url: receipt.imageUrl!,
+          status: receipt.estado ?? 'SIN_ESTADO',
+          createdAt: receipt.createdAt.toISOString(),
+          serviceId: receipt.servicioId ?? null,
+          clientName:
+            receipt.servicio?.cliente?.nombreTelegram ??
+            receipt.clienteTelegram ??
+            null,
+          amount: receipt.monto == null ? null : Number(receipt.monto),
+          observations: receipt.observaciones ?? null,
+        })),
+      );
+    }
+
+    if ((!kind || kind === 'uber') && (!status || status === 'ALMACENADA')) {
+      const trips = this.viajesRepository
+        .createQueryBuilder('trip')
+        .innerJoinAndSelect('trip.servicio', 'service')
+        .leftJoinAndSelect('service.cliente', 'client')
+        .leftJoin('service.empleada', 'employee')
+        .where('trip.uberScreenshotUrl IS NOT NULL')
+        .andWhere('trip.uberScreenshotUploadedAt IS NOT NULL');
+      if (actor.rol === 'jefe') {
+        trips.andWhere(
+          '(service.jefeId = :actorId OR employee.jefeId = :actorId OR employee.jefeSecundarioId = :actorId)',
+          { actorId: actor.id },
+        );
+      }
+      if (cursor) {
+        trips.andWhere(
+          '(trip.uberScreenshotUploadedAt < :cursorAt OR (trip.uberScreenshotUploadedAt = :cursorAt AND trip.id < :cursorId))',
+          cursor,
+        );
+      }
+      const rows = await trips
+        .orderBy('trip.uberScreenshotUploadedAt', 'DESC')
+        .addOrderBy('trip.id', 'DESC')
+        .take(limit + 1)
+        .getMany();
+      results.push(
+        ...rows.map((trip) => ({
+          id: trip.id,
+          kind: 'uber' as const,
+          url: trip.uberScreenshotUrl!,
+          status: 'ALMACENADA',
+          createdAt: trip.uberScreenshotUploadedAt!.toISOString(),
+          serviceId: trip.servicioId,
+          tripId: trip.id,
+          tripType: trip.tipo,
+          clientName: trip.servicio?.cliente?.nombreTelegram ?? null,
+        })),
+      );
+    }
+
+    results.sort((left, right) => {
+      const byDate = right.createdAt.localeCompare(left.createdAt);
+      return byDate || right.id.localeCompare(left.id);
+    });
+    const page = results.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      items: page,
+      nextCursor:
+        results.length > limit && last
+          ? Buffer.from(`${last.createdAt}|${last.id}`).toString('base64url')
+          : null,
+    };
+  }
+
+  private decodeEvidenceCursor(
+    value?: string,
+  ): { cursorAt: string; cursorId: string } | null {
+    if (!value) return null;
+    try {
+      const decoded = Buffer.from(value, 'base64url').toString('utf8');
+      const separator = decoded.lastIndexOf('|');
+      const cursorAt = decoded.slice(0, separator);
+      const cursorId = decoded.slice(separator + 1);
+      if (
+        separator < 1 ||
+        Number.isNaN(Date.parse(cursorAt)) ||
+        !/^[0-9a-f-]{36}$/i.test(cursorId)
+      ) {
+        throw new Error('invalid cursor');
+      }
+      return { cursorAt, cursorId };
+    } catch {
+      throw new BadRequestException('Cursor de evidencias inválido');
+    }
   }
 
   async findBankAccounts(): Promise<AuthorizedBankAccounts[]> {
@@ -1931,6 +2095,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         trip.choferesNotificados = [];
         trip.telegramChoferMsgOfertaId = null;
         trip.telegramUberFileId = null;
+        trip.uberScreenshotUrl = null;
+        trip.uberScreenshotUploadedAt = null;
         trip.horaNotificacion = new Date();
         trip.horaAceptacion = provider === 'uber' ? new Date() : null;
         trip.horaInicioViaje = null;
@@ -2038,7 +2204,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     fileId: string,
   ): Promise<void> {
     const trip = await this.getAuthorizedUberTrip(tripId, actorId);
-    await this.viajesRepository.update(trip.id, { telegramUberFileId: fileId });
+    const fileUrl = await this.bot.telegram.getFileLink(fileId);
+    const evidence = await this.uploadService.uploadEvidenceFromUrl({
+      sourceUrl: fileUrl.href,
+      folder: 'uber',
+      scopeId: trip.id,
+    });
+    await this.viajesRepository.update(trip.id, {
+      telegramUberFileId: fileId,
+      uberScreenshotUrl: evidence.url,
+      uberScreenshotUploadedAt: new Date(),
+    });
     const chatId = trip.servicio.empleada?.usuario?.telegramChatId;
     if (chatId) {
       await this.bot.telegram.sendPhoto(chatId, fileId, {
@@ -2071,7 +2247,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     if (trip.estado !== 'finalizado') {
       throw new ConflictException('Primero confirma tu llegada al destino');
     }
-    await this.viajesRepository.update(trip.id, { telegramUberFileId: fileId });
+    const fileUrl = await this.bot.telegram.getFileLink(fileId);
+    const evidence = await this.uploadService.uploadEvidenceFromUrl({
+      sourceUrl: fileUrl.href,
+      folder: 'uber',
+      scopeId: trip.id,
+    });
+    await this.viajesRepository.update(trip.id, {
+      telegramUberFileId: fileId,
+      uberScreenshotUrl: evidence.url,
+      uberScreenshotUploadedAt: new Date(),
+    });
     const topic = this.getServiceTopic(trip.servicio);
     if (topic) {
       await this.bot.telegram.sendPhoto(topic.chatId, fileId, {
@@ -2094,7 +2280,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     tripId: string,
     actorId: string,
     file: any,
-  ): Promise<{ fileId: string }> {
+  ): Promise<{ fileId: string; imageUrl: string }> {
     const trip = await this.getAuthorizedUberTrip(tripId, actorId);
     const chatId = trip.servicio.empleada?.usuario?.telegramChatId;
     if (!chatId) {
@@ -2103,6 +2289,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    const evidence = await this.uploadService.uploadEvidence({
+      buffer: file.buffer,
+      contentType: file.mimetype,
+      folder: 'uber',
+      scopeId: trip.id,
+    });
+    const uploadedAt = new Date();
+    await this.viajesRepository.update(trip.id, {
+      uberScreenshotUrl: evidence.url,
+      uberScreenshotUploadedAt: uploadedAt,
+    });
     const message = await this.bot.telegram.sendPhoto(
       chatId,
       { source: file.buffer, filename: file.originalname },
@@ -2117,8 +2314,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     await this.viajesRepository.update(trip.id, {
       telegramUberFileId: fileId,
+      uberScreenshotUrl: evidence.url,
+      uberScreenshotUploadedAt: uploadedAt,
     });
-    return { fileId };
+    return { fileId, imageUrl: evidence.url };
   }
 
   async confirmUberFare(
@@ -2158,8 +2357,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'La entrega de efectivo ya fue saldada; la corrección requiere un ajuste administrativo independiente',
       );
     }
-    const override = !trip.telegramUberFileId && actor.rol === 'admin';
-    if (!trip.telegramUberFileId && !override) {
+    const hasScreenshot = Boolean(
+      trip.uberScreenshotUrl || trip.telegramUberFileId,
+    );
+    const override = !hasScreenshot && actor.rol === 'admin';
+    if (!hasScreenshot && !override) {
       throw new ConflictException(
         'La empleada debe enviar la captura antes de confirmar el costo',
       );
