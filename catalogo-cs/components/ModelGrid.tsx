@@ -62,25 +62,10 @@ function ModelCard({ modelo, index, onSelect }: ModelCardProps) {
         {/* Borde dorado sutil al hover */}
         <div className="absolute inset-0 border border-[#C5A55A]/0 group-hover:border-[#C5A55A]/30 transition-all duration-500" />
 
-        <div className="absolute left-3 top-3 z-10 max-w-[calc(100%-1.5rem)]">
-          <span
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] backdrop-blur-md shadow-lg transition-all duration-300 ${
-              available
-                ? "border border-[#C5A55A]/40 bg-gradient-to-r from-[#C5A55A]/20 via-black/40 to-black/60 text-[#F3E5AB] shadow-[0_4px_20px_rgba(197,165,90,0.25)]"
-                : "border border-zinc-700/60 bg-gradient-to-r from-zinc-900/70 via-black/50 to-black/70 text-zinc-300"
-            }`}
-          >
-            {available ? (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-              </span>
-            ) : (
-              <span className="relative flex h-2 w-2">
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400/80 shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
-              </span>
-            )}
-            <span>{status}</span>
+        {/* Estado discreto y elegante sin recuadro ni circulos */}
+        <div className="absolute left-4 top-4 z-10">
+          <span className="text-[10px] font-light tracking-[0.25em] uppercase text-zinc-300/85 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+            {status}
           </span>
         </div>
 
