@@ -36,10 +36,7 @@ export class UploadController {
     if (!file) {
       throw new BadRequestException('No se proporcionó ningún archivo');
     }
-    return this.uploadService.uploadPrivateFile(
-      file,
-      folder || 'comprobantes',
-    );
+    return this.uploadService.uploadPrivateFile(file, folder || 'comprobantes');
   }
 
   @Get('private-url')

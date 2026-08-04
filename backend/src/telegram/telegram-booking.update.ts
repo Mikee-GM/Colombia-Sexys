@@ -517,7 +517,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       .catch(() => undefined);
   }
 
-  private async findAssignedJefe(empleada: Empleadas): Promise<Usuarios | null> {
+  private async findAssignedJefe(
+    empleada: Empleadas,
+  ): Promise<Usuarios | null> {
     if (empleada.jefeId) {
       const mainJefe = await this.usuariosRepository.findOne({
         where: { id: empleada.jefeId, activo: true },
@@ -3296,9 +3298,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const validationId = match[1];
     const approve = match[2] === '1';
 
-    const validation = await this.paymentReceiptValidationsRepository.findOne(
-      { where: { id: validationId } },
-    );
+    const validation = await this.paymentReceiptValidationsRepository.findOne({
+      where: { id: validationId },
+    });
     if (!validation) {
       await ctx.answerCbQuery('❌ Comprobante no encontrado.', {
         show_alert: true,
@@ -3362,7 +3364,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       this.empleadasRepository.findOne({ where: { id: draft.empleadaId } }),
     ]);
     if (!client || !empleada) {
-      await ctx.reply('❌ No fue posible completar la reserva: datos faltantes.');
+      await ctx.reply(
+        '❌ No fue posible completar la reserva: datos faltantes.',
+      );
       return;
     }
 

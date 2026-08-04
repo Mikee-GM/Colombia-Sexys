@@ -196,7 +196,9 @@ export class PaymentReceiptValidations {
 
   @ManyToOne(() => Usuarios, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'jefe_id' })
-  @ApiPropertyOptional({ description: 'Jefe asignado para revisar el comprobante' })
+  @ApiPropertyOptional({
+    description: 'Jefe asignado para revisar el comprobante',
+  })
   jefe?: Usuarios;
 
   @Column({ name: 'jefe_id', type: 'uuid', nullable: true })
@@ -204,7 +206,9 @@ export class PaymentReceiptValidations {
 
   @ManyToOne(() => Usuarios, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'revisado_por_user_id' })
-  @ApiPropertyOptional({ description: 'Usuario que revisó manualmente el comprobante' })
+  @ApiPropertyOptional({
+    description: 'Usuario que revisó manualmente el comprobante',
+  })
   revisadoPorUser?: Usuarios;
 
   @Column({ name: 'revisado_por_user_id', type: 'uuid', nullable: true })
