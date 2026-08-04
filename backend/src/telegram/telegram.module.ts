@@ -77,6 +77,12 @@ import { UploadModule } from '../upload/upload.module';
         }
         return {
           token,
+          launchOptions:
+            token.includes('dummy') ||
+            token.includes('fake') ||
+            token.startsWith('123456789')
+              ? false
+              : undefined,
           middlewares: [
             session({
               store: {

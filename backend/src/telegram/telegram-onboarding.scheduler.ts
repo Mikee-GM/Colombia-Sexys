@@ -23,6 +23,18 @@ export class TelegramOnboardingScheduler
   ) {}
 
   onModuleInit() {
+    const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN', '');
+    if (
+      !token ||
+      token.includes('dummy') ||
+      token.includes('fake') ||
+      token.startsWith('123456789')
+    ) {
+      this.logger.log(
+        'Bot de Telegram deshabilitado en local; omitiendo programador de onboarding.',
+      );
+      return;
+    }
     const intervalMs = this.configService.get<number>(
       'ONBOARDING_SCAN_INTERVAL_MS',
       60_000,

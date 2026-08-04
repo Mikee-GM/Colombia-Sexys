@@ -4,6 +4,11 @@ import path from "node:path";
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, ".."),
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "20mb",
+    },
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },

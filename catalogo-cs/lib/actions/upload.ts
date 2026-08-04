@@ -35,20 +35,20 @@ export async function deleteImageAction(url: string) {
 export async function uploadImagesAction(formData: FormData) {
   try {
     const files = formData.getAll("files") as File[];
-    const urls: string[] = [];
 
-    for (const file of files) {
+    // Subir todas las fotos en paralelo para reducir el tiempo total
+    const uploadPromises = files.map((file) => {
       const singleFormData = new FormData();
       singleFormData.append("file", file);
-      
-      const data = await apiFetch<any>("/upload", {
+
+      return apiFetch<any>("/upload", {
         method: "POST",
         body: singleFormData,
         authenticated: true,
-      });
-      urls.push(data.url as string);
-    }
-    return urls;
+      }).then((data) => data.url as string);
+    });
+
+    return await Promise.all(uploadPromises);
   } catch (error: any) {
     if (isRedirectError(error)) throw error;
     console.error("uploadImagesAction error:", error);
