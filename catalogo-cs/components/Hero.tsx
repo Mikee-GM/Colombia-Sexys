@@ -11,7 +11,7 @@ import { getGroupServiceTelegramUrl } from "@/lib/telegram-links";
 function GoldParticles() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-      {[...Array(25)].map((_, i) => {
+      {[...Array(15)].map((_, i) => {
         // Valores deterministas basados en el índice i para evitar desajustes de hidratación (hydration mismatch) en Next.js SSR
         const left = ((i * 37 + 13) % 95) + 2;
         const top = ((i * 53 + 17) % 90) + 5;
@@ -31,6 +31,7 @@ function GoldParticles() {
               width: `${size}px`,
               height: `${size}px`,
               boxShadow: "0 0 10px rgba(197, 165, 90, 0.5)",
+              willChange: "transform, opacity",
             }}
             initial={{ opacity: 0, y: 0, x: 0 }}
             animate={{
@@ -99,26 +100,27 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
       id="hero"
       className="min-h-[100dvh] w-full flex flex-col items-center justify-center relative overflow-hidden bg-black"
     >
-      {/* Video Background */}
-      <div className="absolute inset-0 z-0">
+      {/* Video Background - Optimizado con aceleración por GPU para eliminar lag/stutter en Desktop */}
+      <div className="absolute inset-0 z-0 overflow-hidden" style={{ transform: "translateZ(0)" }}>
         <video
           src="/Colombia-Slider-1.mp4"
           autoPlay
           loop
           muted
           playsInline
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover transform-gpu"
+          style={{ willChange: "transform" }}
         />
       </div>
 
-      {/* Capas de oscurecimiento y gradientes */}
-      <div className="absolute inset-0 z-0 bg-black/30 sm:bg-black/50" />
+      {/* Capas de oscurecimiento y gradientes (sin mix-blend-overlay para evitar lag de pintura por píxel) */}
+      <div className="absolute inset-0 z-0 bg-black/40 sm:bg-black/50" />
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/30 sm:via-black/40 to-transparent" />
       <div className="absolute inset-0 z-0 bg-gradient-to-b from-black via-black/10 sm:via-black/20 to-transparent opacity-80" />
       <div
-        className="absolute inset-0 z-0 opacity-20 sm:opacity-30 mix-blend-overlay"
+        className="absolute inset-0 z-0 opacity-25"
         style={{
-          background: "radial-gradient(circle at center, rgba(197, 165, 90, 0.2) 0%, transparent 60%)",
+          background: "radial-gradient(circle at center, rgba(197, 165, 90, 0.25) 0%, transparent 65%)",
         }}
       />
 
@@ -239,7 +241,7 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
               <button
                 key={m._id}
                 onClick={() => onSelectModelo?.(m)}
-                className="relative flex-shrink-0 w-36 h-48 sm:w-48 sm:h-64 md:w-56 md:h-72 lg:w-64 lg:h-80 xl:w-72 xl:h-96 snap-center overflow-hidden rounded-xl border border-zinc-800 hover:border-[#C5A55A] transition-all duration-500 group cursor-pointer shadow-2xl shadow-black/80"
+                className="relative flex-shrink-0 w-36 h-48 sm:w-48 sm:h-64 md:w-56 md:h-72 lg:w-64 lg:h-80 xl:w-72 xl:h-96 snap-center overflow-hidden rounded-xl border border-zinc-800 hover:border-[#C5A55A] transition-all duration-500 group cursor-pointer shadow-2xl shadow-black/80 transform-gpu"
                 aria-label={`Ver perfil de ${m.nombre}`}
               >
                 <Image
