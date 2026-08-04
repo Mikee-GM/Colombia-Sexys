@@ -23,6 +23,15 @@ interface ModelModalProps {
   apartments: { id: string; name: string }[];
 }
 
+const PREDEFINED_EXTRAS = [
+  { nombre: "Oral natural", precio: 500 },
+  { nombre: "Oral natural terminado en cara", precio: 1000 },
+  { nombre: "Oral natural con terminado en boca", precio: 1500 },
+  { nombre: "Trío", precio: 1500 },
+  { nombre: "Atención a parejas", precio: 2500 },
+  { nombre: "Córrete donde quieras", precio: 12000 },
+];
+
 export default function ModelModal({
   modelo,
   onClose,
@@ -46,6 +55,7 @@ export default function ModelModal({
           contactLink: modelo.contactLink,
           contactLabel: modelo.contactLabel,
           disponible: modelo.disponible,
+          catalogoActivo: (modelo as any).catalogoActivo !== false && modelo.availabilityStatus !== "inactiva",
           precioBaseHora: modelo.precioBaseHora,
           jefeId: modelo.jefeId,
           jefeSecundarioId: modelo.jefeSecundarioId,
@@ -62,7 +72,8 @@ export default function ModelModal({
           contactLink: "",
           contactLabel: "Contacto",
           disponible: true,
-          precioBaseHora: 100,
+          catalogoActivo: true,
+          precioBaseHora: 2500,
           jefeId: "",
           jefeSecundarioId: "",
           apartmentId: "",
@@ -192,6 +203,32 @@ export default function ModelModal({
     setForm((prev) => {
       const newExtras = [...(prev.extras || [])];
       newExtras.splice(index, 1);
+      return { ...prev, extras: newExtras };
+    });
+  };
+
+  const togglePredefinedExtra = (item: { nombre: string; precio: number }) => {
+    setForm((prev) => {
+      const existingIndex = (prev.extras || []).findIndex(
+        (e) => e.nombre.toLowerCase().trim() === item.nombre.toLowerCase().trim()
+      );
+      if (existingIndex >= 0) {
+        const updated = [...(prev.extras || [])];
+        updated.splice(existingIndex, 1);
+        return { ...prev, extras: updated };
+      } else {
+        return {
+          ...prev,
+          extras: [...(prev.extras || []), { nombre: item.nombre, precio: item.precio }],
+        };
+      }
+    });
+  };
+
+  const updateExtraPrecio = (index: number, newPrecio: number) => {
+    setForm((prev) => {
+      const newExtras = [...(prev.extras || [])];
+      newExtras[index] = { ...newExtras[index], precio: newPrecio };
       return { ...prev, extras: newExtras };
     });
   };
@@ -370,7 +407,7 @@ export default function ModelModal({
                   type="number"
                   value={form.precioBaseHora}
                   onChange={(e) => setForm({ ...form, precioBaseHora: parseFloat(e.target.value) || 0 })}
-                  placeholder="Ej: 100"
+                  placeholder="Ej: 2500"
                   required
                   min={0}
                 />
@@ -393,62 +430,156 @@ export default function ModelModal({
                 />
               </div>
 
-              <div className="flex items-center gap-6">
-                <div className="flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-zinc-800 pt-5">
+                <div>
                   <label className="block text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase mb-2">
-                    Visibilidad
+                    Estado en la Agencia
                   </label>
                   <button
                     type="button"
-                    onClick={() => setForm({ ...form, disponible: !form.disponible })}
+                    onClick={() => setForm({ ...form, catalogoActivo: form.catalogoActivo === false ? true : false })}
                     className={`relative w-12 h-6 transition-colors duration-300 rounded-full ${
-                      form.disponible ? "bg-[#C5A55A]" : "bg-zinc-800"
+                      form.catalogoActivo !== false ? "bg-[#C5A55A]" : "bg-red-900"
                     }`}
                   >
                     <span
                       className={`absolute top-1 h-4 w-4 rounded-full transition-all duration-300 ${
-                        form.disponible ? "left-7 bg-black" : "left-1 bg-zinc-500"
+                        form.catalogoActivo !== false ? "left-7 bg-black" : "left-1 bg-white"
                       }`}
                     />
                   </button>
-                  <span className="ml-3 text-xs text-zinc-400">
-                    {form.disponible ? "Visible en catalogo" : "Oculta"}
+                  <span className="ml-3 text-xs text-zinc-300 font-medium">
+                    {form.catalogoActivo !== false ? "Activa en Agencia" : "Inactiva / Baja (Oculta)"}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase mb-2">
+                    Disponibilidad Actual
+                  </label>
+                  <button
+                    type="button"
+                    disabled={form.catalogoActivo === false}
+                    onClick={() => setForm({ ...form, disponible: !form.disponible })}
+                    className={`relative w-12 h-6 transition-colors duration-300 rounded-full ${
+                      form.catalogoActivo === false
+                        ? "bg-zinc-800 opacity-50 cursor-not-allowed"
+                        : form.disponible
+                        ? "bg-[#C5A55A]"
+                        : "bg-amber-700"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 h-4 w-4 rounded-full transition-all duration-300 ${
+                        form.disponible ? "left-7 bg-black" : "left-1 bg-white"
+                      }`}
+                    />
+                  </button>
+                  <span className="ml-3 text-xs text-zinc-300 font-medium">
+                    {form.catalogoActivo === false
+                      ? "Inactiva (Baja)"
+                      : form.disponible
+                      ? "Disponible"
+                      : "En Servicio (Ocupada)"}
                   </span>
                 </div>
               </div>
 
               {/* Servicios Extra */}
               <div className="border-t border-zinc-800 pt-5 space-y-4">
-                <label className="block text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase">
-                  Servicios Extra
-                </label>
-                
-                {/* Inputs para agregar nuevo */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                  <div className="sm:col-span-2 space-y-1">
-                    <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">
-                      Nombre del Servicio
-                    </span>
-                    <input
-                      type="text"
-                      value={newExtraNombre}
-                      onChange={(e) => setNewExtraNombre(e.target.value)}
-                      placeholder="Ej: Masaje Terapeutico"
-                      className={inputClass}
-                    />
+                <div>
+                  <label className="block text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase mb-1">
+                    Servicios Extra Rápidos (Clic para agregar o quitar)
+                  </label>
+                  <p className="text-[11px] text-zinc-400 font-light mb-2.5">
+                    Selecciona de la lista predefinida para agregarlo a la modelo. Puedes modificar el costo individualmente abajo.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {PREDEFINED_EXTRAS.map((item, idx) => {
+                      const selected = (form.extras || []).some(
+                        (e) => e.nombre.toLowerCase().trim() === item.nombre.toLowerCase().trim()
+                      );
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => togglePredefinedExtra(item)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 border flex items-center gap-1.5 ${
+                            selected
+                              ? "bg-[#C5A55A]/20 border-[#C5A55A] text-[#E8D5A3] shadow-sm"
+                              : "bg-zinc-900/80 border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white"
+                          }`}
+                        >
+                          <span>{selected ? "✓" : "+"}</span>
+                          <span>{item.nombre}</span>
+                          <span className="text-[10px] opacity-70">(${item.precio})</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">
-                      Precio (MXN)
-                    </span>
+                </div>
+
+                {/* Lista de extras agregados */}
+                {form.extras && form.extras.length > 0 ? (
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1 border border-zinc-800/80 p-2.5 rounded bg-black/40">
+                    <div className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase mb-2 px-1">
+                      Servicios asignados a esta modelo ({form.extras.length})
+                    </div>
+                    {form.extras.map((extra, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between bg-zinc-950 border border-zinc-800 px-3 py-2 rounded text-xs gap-3"
+                      >
+                        <div className="font-semibold text-white truncate flex-1">{extra.nombre}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-zinc-500 text-[11px]">$</span>
+                          <input
+                            type="number"
+                            value={extra.precio}
+                            onChange={(e) => updateExtraPrecio(idx, parseFloat(e.target.value) || 0)}
+                            min={0}
+                            className="w-20 bg-zinc-900 border border-zinc-700 px-2 py-1 text-right text-white font-mono rounded text-xs focus:border-[#C5A55A]"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeExtra(idx)}
+                          className="text-zinc-500 hover:text-red-400 font-bold uppercase tracking-wider text-[10px] transition-colors ml-1"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-500 font-light italic">
+                    No hay servicios extra asignados. Clic arriba para agregar uno o usa el campo personalizado abajo.
+                  </p>
+                )}
+
+                {/* Inputs para agregar personalizado */}
+                <div className="pt-2">
+                  <span className="block text-[10px] font-bold tracking-widest text-zinc-500 uppercase mb-2">
+                    ¿Otro servicio no en la lista? Agrégalo aquí
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div className="sm:col-span-2 space-y-1">
+                      <input
+                        type="text"
+                        value={newExtraNombre}
+                        onChange={(e) => setNewExtraNombre(e.target.value)}
+                        placeholder="Nombre del servicio personalizado..."
+                        className={inputClass}
+                      />
+                    </div>
                     <div className="flex gap-2">
                       <input
                         type="number"
                         value={newExtraPrecio}
                         onChange={(e) => setNewExtraPrecio(e.target.value)}
-                        placeholder="Ej: 50"
+                        placeholder="Costo"
                         min="0"
-                        className={inputClass}
+                        className={`${inputClass} w-full`}
                       />
                       <button
                         type="button"
@@ -460,34 +591,6 @@ export default function ModelModal({
                     </div>
                   </div>
                 </div>
-
-                {/* Lista de extras agregados */}
-                {form.extras && form.extras.length > 0 ? (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {form.extras.map((extra, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between bg-zinc-950 border border-zinc-900 px-4 py-3 text-xs"
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="font-semibold text-white">{extra.nombre}</span>
-                          <span className="text-zinc-500 font-mono">${extra.precio}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeExtra(idx)}
-                          className="text-zinc-500 hover:text-red-500 font-semibold uppercase tracking-wider transition-colors"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-600 font-light italic">
-                    No se han configurado servicios extra.
-                  </p>
-                )}
               </div>
             </div>
 

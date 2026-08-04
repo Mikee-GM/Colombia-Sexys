@@ -162,40 +162,40 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
             </button>
           </div>
         </motion.div>
-
-        {/* Carrusel de Preview de Modelos */}
-        {modelos && modelos.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 1.2 }}
-            className="w-full mt-12 sm:mt-16 mb-4"
-          >
-            <div className="flex items-center gap-3 sm:gap-4 overflow-x-auto snap-x snap-mandatory customized-scrollbar pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 justify-start sm:justify-center">
-              {modelos.slice(0, 5).map((m) => (
-                <button
-                  key={m._id}
-                  onClick={() => onSelectModelo?.(m)}
-                  className="relative flex-shrink-0 w-36 h-48 sm:w-48 sm:h-64 lg:w-56 lg:h-[300px] snap-center overflow-hidden rounded-xl border border-zinc-800 hover:border-[#C5A55A] transition-all duration-500 group cursor-pointer shadow-xl shadow-black/60"
-                  aria-label={`Ver perfil de ${m.nombre}`}
-                >
-                  <Image
-                    src={m.fotoPrincipal}
-                    alt={m.nombre}
-                    fill
-                    sizes="(max-width: 640px) 144px, (max-width: 1024px) 192px, 224px"
-                    className="object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-500" />
-                  <span className="absolute bottom-4 inset-x-0 text-center text-[10px] sm:text-xs font-bold tracking-[0.2em] uppercase text-zinc-300 group-hover:text-[#E8D5A3] drop-shadow-md transition-colors duration-500">
-                    {m.nombre}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
       </motion.div>
+
+      {/* Carrusel de Preview de Modelos - Full Width en Computadora, Mobile First */}
+      {modelos && modelos.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 1.2 }}
+          className="relative z-10 w-full max-w-[1500px] mx-auto mt-12 sm:mt-16 mb-6 px-4 sm:px-8"
+        >
+          <div className="flex items-center gap-3.5 sm:gap-5 overflow-x-auto snap-x snap-mandatory customized-scrollbar pb-6 justify-start lg:justify-center">
+            {modelos.slice(0, 12).map((m) => (
+              <button
+                key={m._id}
+                onClick={() => onSelectModelo?.(m)}
+                className="relative flex-shrink-0 w-36 h-48 sm:w-48 sm:h-64 md:w-56 md:h-72 lg:w-64 lg:h-80 xl:w-72 xl:h-96 snap-center overflow-hidden rounded-xl border border-zinc-800 hover:border-[#C5A55A] transition-all duration-500 group cursor-pointer shadow-2xl shadow-black/80"
+                aria-label={`Ver perfil de ${m.nombre}`}
+              >
+                <Image
+                  src={m.fotoPrincipal}
+                  alt={m.nombre}
+                  fill
+                  sizes="(max-width: 640px) 144px, (max-width: 1024px) 224px, 288px"
+                  className="object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/15 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-500" />
+                <span className="absolute bottom-4 inset-x-0 text-center text-[11px] sm:text-xs font-bold tracking-[0.2em] uppercase text-zinc-300 group-hover:text-[#E8D5A3] drop-shadow-md transition-colors duration-500">
+                  {m.nombre}
+                </span>
+              </button>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Gradiente inferior para fusionar con el fondo negro del catalogo */}
       <div className="absolute bottom-0 inset-x-0 h-32 bg-gradient-to-t from-black to-transparent z-10 pointer-events-none" />
