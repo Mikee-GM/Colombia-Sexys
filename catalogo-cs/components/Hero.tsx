@@ -170,31 +170,35 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
           El pináculo de la belleza colombiana.
         </motion.p>
 
-        {/* Boton Ultra-Premium Elegante */}
+        {/* Boton Ultra-Premium de Lujo */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.9 }}
-          className="mt-4 flex w-full flex-col items-center justify-center gap-3 sm:flex-row"
+          className="mt-6 flex w-full flex-col items-center justify-center sm:flex-row"
         >
           <div className="group relative w-full max-w-xs sm:w-auto">
-            <div className="absolute -inset-0.5 rounded-full bg-gradient-to-r from-[#C5A55A]/40 to-[#E8D5A3]/40 opacity-30 blur transition duration-500 group-hover:opacity-70" />
+            {/* Aura de resplandor dorado escultural */}
+            <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-[#D4AF37] via-[#F3E5AB] to-[#AA771C] opacity-50 blur-md transition-all duration-700 group-hover:opacity-90 group-hover:scale-105" />
             <button
               onClick={onViewCatalog}
-              className="relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-full border border-[#C5A55A]/50 bg-black/60 px-10 py-4 text-white shadow-lg shadow-black/50 backdrop-blur-md transition-all duration-300 hover:border-[#C5A55A] hover:bg-black/80 sm:w-auto sm:px-12"
+              className="relative flex w-full items-center justify-center gap-4 overflow-hidden rounded-full border border-[#D4AF37]/80 bg-gradient-to-b from-[#1a1814] via-[#0c0a08] to-[#050505] px-10 py-5 shadow-[0_0_35px_rgba(212,175,55,0.25)] backdrop-blur-xl transition-all duration-500 group-hover:border-[#F3E5AB] group-hover:shadow-[0_0_50px_rgba(212,175,55,0.45)] sm:w-auto sm:px-14"
             >
-              <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[#C5A55A]/10 to-transparent transition-transform duration-1000 ease-in-out group-hover:translate-x-full" />
-              <span className="relative z-10 text-[11px] font-semibold uppercase tracking-[0.25em] text-zinc-100 transition-colors duration-300 group-hover:text-[#E8D5A3] sm:text-xs">
+              {/* Brillo especular dinámico al pasar el cursor */}
+              <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[#F3E5AB]/20 to-transparent transition-transform duration-1000 ease-in-out group-hover:translate-x-full" />
+              
+              <span className="relative z-10 font-heading text-xs sm:text-sm font-semibold uppercase tracking-[0.35em] text-[#E8D5A3] transition-colors duration-500 group-hover:text-white">
                 Ver catálogo
               </span>
+              
               <svg
-                className="relative z-10 h-4 w-4 text-zinc-300 transition-all duration-300 group-hover:translate-x-1 group-hover:text-[#E8D5A3]"
+                className="relative z-10 h-4 w-4 text-[#D4AF37] transition-all duration-500 group-hover:translate-y-1 group-hover:text-white"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
-                strokeWidth="1.5"
+                strokeWidth="2"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
               </svg>
             </button>
           </div>

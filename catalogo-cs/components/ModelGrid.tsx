@@ -64,13 +64,23 @@ function ModelCard({ modelo, index, onSelect }: ModelCardProps) {
 
         <div className="absolute left-3 top-3 z-10 max-w-[calc(100%-1.5rem)]">
           <span
-            className={`inline-flex border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] backdrop-blur-sm ${
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] backdrop-blur-md shadow-lg transition-all duration-300 ${
               available
-                ? "border-[#C5A55A]/50 bg-black/70 text-[#E8D5A3]"
-                : "border-zinc-700 bg-black/80 text-zinc-300"
+                ? "border border-[#C5A55A]/40 bg-gradient-to-r from-[#C5A55A]/20 via-black/40 to-black/60 text-[#F3E5AB] shadow-[0_4px_20px_rgba(197,165,90,0.25)]"
+                : "border border-zinc-700/60 bg-gradient-to-r from-zinc-900/70 via-black/50 to-black/70 text-zinc-300"
             }`}
           >
-            {status}
+            {available ? (
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+              </span>
+            ) : (
+              <span className="relative flex h-2 w-2">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400/80 shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
+              </span>
+            )}
+            <span>{status}</span>
           </span>
         </div>
 
