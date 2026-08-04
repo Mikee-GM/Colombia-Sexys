@@ -209,32 +209,16 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
                 />
               </div>
             )}
-            <div className="mb-6 flex flex-col items-start gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+            <div className="mb-6">
+              <span className="text-[9px] font-light uppercase tracking-[0.25em] text-zinc-500 block mb-1">
                 Disponibilidad
               </span>
-              <div
-                className={`inline-flex items-center gap-2.5 rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] backdrop-blur-md shadow-lg ${
-                  effectiveStatus === "disponible"
-                    ? "border border-[#C5A55A]/40 bg-gradient-to-r from-[#C5A55A]/20 via-black/40 to-black/60 text-[#F3E5AB] shadow-[0_4px_20px_rgba(197,165,90,0.25)]"
-                    : "border border-zinc-700/60 bg-gradient-to-r from-zinc-900/70 via-black/50 to-black/70 text-zinc-300"
-                }`}
-              >
-                {effectiveStatus === "disponible" ? (
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                  </span>
-                ) : (
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400/80 shadow-[0_0_6px_rgba(251,191,36,0.5)]" />
-                  </span>
-                )}
-                <span>{status}</span>
-              </div>
+              <span className="text-xs font-light tracking-[0.2em] uppercase text-[#E8D5A3]">
+                {status}
+              </span>
               {effectiveStatus === "ocupada" &&
                 modelo.canScheduleNext !== false && (
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                  <p className="mt-1.5 text-xs font-light text-zinc-500">
                     Puedes solicitar el siguiente turno desde Telegram.
                   </p>
                 )}

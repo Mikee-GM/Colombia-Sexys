@@ -170,38 +170,20 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
           El pináculo de la belleza colombiana.
         </motion.p>
 
-        {/* Boton Ultra-Premium de Lujo */}
+        {/* Botón Editorial Minimalista y Elegante */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.9 }}
           className="mt-6 flex w-full flex-col items-center justify-center sm:flex-row"
         >
-          <div className="group relative w-full max-w-xs sm:w-auto">
-            {/* Aura de resplandor dorado escultural */}
-            <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-[#D4AF37] via-[#F3E5AB] to-[#AA771C] opacity-50 blur-md transition-all duration-700 group-hover:opacity-90 group-hover:scale-105" />
-            <button
-              onClick={onViewCatalog}
-              className="relative flex w-full items-center justify-center gap-4 overflow-hidden rounded-full border border-[#D4AF37]/80 bg-gradient-to-b from-[#1a1814] via-[#0c0a08] to-[#050505] px-10 py-5 shadow-[0_0_35px_rgba(212,175,55,0.25)] backdrop-blur-xl transition-all duration-500 group-hover:border-[#F3E5AB] group-hover:shadow-[0_0_50px_rgba(212,175,55,0.45)] sm:w-auto sm:px-14"
-            >
-              {/* Brillo especular dinámico al pasar el cursor */}
-              <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[#F3E5AB]/20 to-transparent transition-transform duration-1000 ease-in-out group-hover:translate-x-full" />
-              
-              <span className="relative z-10 font-heading text-xs sm:text-sm font-semibold uppercase tracking-[0.35em] text-[#E8D5A3] transition-colors duration-500 group-hover:text-white">
-                Ver catálogo
-              </span>
-              
-              <svg
-                className="relative z-10 h-4 w-4 text-[#D4AF37] transition-all duration-500 group-hover:translate-y-1 group-hover:text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                strokeWidth="2"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
-              </svg>
-            </button>
-          </div>
+          <button
+            onClick={onViewCatalog}
+            className="group inline-flex items-center justify-center gap-4 border border-[#C5A55A]/50 bg-black/60 px-10 py-4 text-xs font-light uppercase tracking-[0.3em] text-[#E8D5A3] backdrop-blur-md transition-all duration-300 hover:border-[#C5A55A] hover:bg-[#C5A55A] hover:text-black sm:px-12"
+          >
+            <span>Ver catálogo</span>
+            <span className="transition-transform duration-300 group-hover:translate-y-0.5">↓</span>
+          </button>
         </motion.div>
       </motion.div>
 
