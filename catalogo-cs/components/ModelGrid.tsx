@@ -62,11 +62,20 @@ function ModelCard({ modelo, index, onSelect }: ModelCardProps) {
         {/* Borde dorado sutil al hover */}
         <div className="absolute inset-0 border border-[#C5A55A]/0 group-hover:border-[#C5A55A]/30 transition-all duration-500" />
 
-        {/* Estado discreto y elegante sin recuadro ni circulos */}
+        {/* Etiqueta editorial de cristal ahumado de alta costura */}
         <div className="absolute left-4 top-4 z-10">
-          <span className="text-[10px] font-light tracking-[0.25em] uppercase text-zinc-300/85 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-            {status}
-          </span>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#C5A55A]/35 bg-black/65 px-3.5 py-1.5 backdrop-blur-md shadow-md">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                available
+                  ? "bg-[#E8D5A3] shadow-[0_0_6px_rgba(232,213,163,0.8)]"
+                  : "bg-zinc-500"
+              }`}
+            />
+            <span className="text-[10px] font-medium tracking-[0.25em] uppercase text-zinc-100">
+              {status}
+            </span>
+          </div>
         </div>
 
         {/* Nombre sobre la imagen */}

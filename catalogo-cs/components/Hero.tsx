@@ -170,19 +170,27 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
           El pináculo de la belleza colombiana.
         </motion.p>
 
-        {/* Botón Editorial Minimalista y Elegante */}
+        {/* Botón de Alta Costura Invisible con Línea de Oro */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.9 }}
-          className="mt-6 flex w-full flex-col items-center justify-center sm:flex-row"
+          className="mt-8 flex w-full flex-col items-center justify-center sm:flex-row"
         >
           <button
             onClick={onViewCatalog}
-            className="group inline-flex items-center justify-center gap-4 border border-[#C5A55A]/50 bg-black/60 px-10 py-4 text-xs font-light uppercase tracking-[0.3em] text-[#E8D5A3] backdrop-blur-md transition-all duration-300 hover:border-[#C5A55A] hover:bg-[#C5A55A] hover:text-black sm:px-12"
+            className="group relative inline-flex flex-col items-center justify-center py-3 px-8 text-center transition-all duration-500 focus:outline-none"
           >
-            <span>Ver catálogo</span>
-            <span className="transition-transform duration-300 group-hover:translate-y-0.5">↓</span>
+            {/* Aura difusa sutil e invisible hasta hover */}
+            <span className="absolute inset-0 rounded-full bg-[#C5A55A]/0 blur-xl transition-all duration-700 group-hover:bg-[#C5A55A]/15" />
+
+            {/* Typography editorial impecable sin flechas */}
+            <span className="relative z-10 font-heading text-xs sm:text-sm font-light tracking-[0.45em] uppercase text-[#E8D5A3] transition-all duration-500 group-hover:text-white group-hover:tracking-[0.55em]">
+              Ver catálogo
+            </span>
+
+            {/* Línea de oro fina bajo el texto que se expande elegantemente */}
+            <span className="mt-3 h-[1px] w-12 bg-gradient-to-r from-transparent via-[#C5A55A] to-transparent transition-all duration-700 ease-out group-hover:w-full group-hover:via-[#E8D5A3] group-hover:shadow-[0_0_12px_rgba(232,213,163,0.8)]" />
           </button>
         </motion.div>
       </motion.div>

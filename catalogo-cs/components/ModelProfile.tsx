@@ -210,15 +210,24 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
               </div>
             )}
             <div className="mb-6">
-              <span className="text-[9px] font-light uppercase tracking-[0.25em] text-zinc-500 block mb-1">
+              <span className="text-[9px] font-light uppercase tracking-[0.25em] text-zinc-500 block mb-2">
                 Disponibilidad
               </span>
-              <span className="text-xs font-light tracking-[0.2em] uppercase text-[#E8D5A3]">
-                {status}
-              </span>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#C5A55A]/35 bg-black/50 px-4 py-1.5 backdrop-blur-md">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    effectiveStatus === "disponible"
+                      ? "bg-[#E8D5A3] shadow-[0_0_8px_rgba(232,213,163,0.8)]"
+                      : "bg-zinc-500"
+                  }`}
+                />
+                <span className="text-xs font-medium tracking-[0.22em] uppercase text-[#E8D5A3]">
+                  {status}
+                </span>
+              </div>
               {effectiveStatus === "ocupada" &&
                 modelo.canScheduleNext !== false && (
-                  <p className="mt-1.5 text-xs font-light text-zinc-500">
+                  <p className="mt-2 text-xs font-light text-zinc-400">
                     Puedes solicitar el siguiente turno desde Telegram.
                   </p>
                 )}
