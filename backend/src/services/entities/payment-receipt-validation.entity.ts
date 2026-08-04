@@ -9,6 +9,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Servicios } from './service.entity';
+import { Usuarios } from '../../users/entities/user.entity';
 
 @Entity('payment_receipt_validations')
 export class PaymentReceiptValidations {
@@ -192,6 +193,33 @@ export class PaymentReceiptValidations {
 
   @Column({ name: 'servicio_id', type: 'uuid', nullable: true })
   servicioId?: string;
+
+  @ManyToOne(() => Usuarios, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'jefe_id' })
+  @ApiPropertyOptional({ description: 'Jefe asignado para revisar el comprobante' })
+  jefe?: Usuarios;
+
+  @Column({ name: 'jefe_id', type: 'uuid', nullable: true })
+  jefeId?: string;
+
+  @ManyToOne(() => Usuarios, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'revisado_por_user_id' })
+  @ApiPropertyOptional({ description: 'Usuario que revisó manualmente el comprobante' })
+  revisadoPorUser?: Usuarios;
+
+  @Column({ name: 'revisado_por_user_id', type: 'uuid', nullable: true })
+  revisadoPorUserId?: string;
+
+  @Column({ name: 'revisado_at', type: 'timestamptz', nullable: true })
+  @ApiPropertyOptional({ description: 'Fecha/hora de la revisión manual' })
+  revisadoAt?: Date;
+
+  @Column({ name: 'draft_payload', type: 'jsonb', nullable: true })
+  @ApiPropertyOptional({
+    description:
+      'Snapshot de los datos de la reserva individual necesarios para completarla tras una revisión manual',
+  })
+  draftPayload?: any;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

@@ -156,7 +156,12 @@ export function validateReceiptAnalysis(
   analysis: any,
   expectedAmount: number,
   accounts: AuthorizedBankAccounts[],
-): { valid: boolean; amount?: number; reason?: string } {
+): {
+  valid: boolean;
+  amount?: number;
+  reason?: string;
+  needsManualReview?: boolean;
+} {
   const isReceipt = Boolean(analysis?.valid ?? analysis?.esComprobante);
   if (!isReceipt) {
     return {
@@ -211,7 +216,9 @@ export function validateReceiptAnalysis(
     analysis?.destinationHolder ?? analysis?.titularDestino,
   );
 
-  const accountMatches = activeAccounts.some((account) => {
+  let strongMatch = false;
+  let weakMatch = false;
+  for (const account of activeAccounts) {
     const registeredNumbers = [account.cuenta, account.clabe]
       .map(normalizedDigits)
       .filter(Boolean);
@@ -236,15 +243,45 @@ export function validateReceiptAnalysis(
       (extractedHolder.includes(registeredHolder) ||
         registeredHolder.includes(extractedHolder)),
     );
-    return extractedNumbers.length ? numberMatches : holderMatches;
-  });
+    // Coincidencia parcial: mismo titular con últimos 4 dígitos con un solo
+    // dígito distinto (posible error de OCR), útil para no rechazar de golpe
+    // comprobantes legítimos con datos ligeramente mal leídos.
+    const near4 =
+      registeredLast4.length === 4 &&
+      extractedNumbers.some((extracted) => {
+        const last4 = extracted.length >= 4 ? extracted.slice(-4) : extracted;
+        if (last4.length !== 4) return false;
+        let shared = 0;
+        for (let i = 0; i < 4; i++) {
+          if (last4[i] === registeredLast4[i]) shared++;
+        }
+        return shared >= 3;
+      });
 
-  if (!accountMatches) {
+    if (extractedNumbers.length ? numberMatches : holderMatches) {
+      strongMatch = true;
+      break;
+    }
+    if (holderMatches || near4) {
+      weakMatch = true;
+    }
+  }
+
+  if (!strongMatch && !weakMatch) {
     return {
       valid: false,
       amount,
       reason:
         'La cuenta, CLABE, últimos cuatro o titular del comprobante no coincide con una cuenta autorizada.',
+    };
+  }
+  if (!strongMatch) {
+    return {
+      valid: false,
+      amount,
+      needsManualReview: true,
+      reason:
+        'La cuenta destino no coincide con certeza con ninguna cuenta autorizada; requiere revisión manual.',
     };
   }
   return { valid: true, amount };
@@ -427,7 +464,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
   private async finishReceiptValidation(
     validation: PaymentReceiptValidations,
     analysis: any,
-    result: { valid: boolean; amount?: number; reason?: string },
+    result: {
+      valid: boolean;
+      amount?: number;
+      reason?: string;
+      needsManualReview?: boolean;
+    },
+    extra?: { jefeId?: string; draftPayload?: any },
   ): Promise<PaymentReceiptValidations> {
     Object.assign(validation, {
       esComprobante: Boolean(analysis?.valid ?? analysis?.esComprobante),
@@ -448,9 +491,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         analysis?.trackingKey ?? analysis?.idSpei ?? analysis?.claveRastreo,
       concepto: analysis?.concept ?? analysis?.concepto,
       confianza: analysis?.confidence ?? analysis?.confianza,
-      estado: result.valid ? 'APROBADO' : 'RECHAZADO',
+      estado: result.valid
+        ? 'APROBADO'
+        : result.needsManualReview
+          ? 'PENDIENTE_REVISION'
+          : 'RECHAZADO',
       observaciones: result.reason ?? analysis?.reason ?? null,
       jsonIA: analysis,
+      jefeId: extra?.jefeId,
+      draftPayload: extra?.draftPayload ?? null,
     });
     return this.paymentReceiptValidationsRepository.save(validation);
   }
@@ -466,6 +515,40 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     await this.paymentReceiptValidationsRepository
       .save(validation)
       .catch(() => undefined);
+  }
+
+  private async findAssignedJefe(empleada: Empleadas): Promise<Usuarios | null> {
+    if (empleada.jefeId) {
+      const mainJefe = await this.usuariosRepository.findOne({
+        where: { id: empleada.jefeId, activo: true },
+      });
+      if (mainJefe && mainJefe.disponible) {
+        return mainJefe;
+      }
+      if (empleada.jefeSecundarioId) {
+        const secJefe = await this.usuariosRepository.findOne({
+          where: { id: empleada.jefeSecundarioId, activo: true },
+        });
+        if (secJefe && secJefe.disponible) {
+          return secJefe;
+        }
+      }
+    }
+    let jefe = await this.usuariosRepository.findOne({
+      where: [
+        { rol: 'jefe', activo: true, disponible: true },
+        { rol: 'admin', activo: true, disponible: true },
+      ],
+    });
+    if (!jefe) {
+      jefe = await this.usuariosRepository.findOne({
+        where: [
+          { rol: 'jefe', activo: true },
+          { rol: 'admin', activo: true },
+        ],
+      });
+    }
+    return jefe;
   }
 
   private async applyDraftPaymentMethod(
@@ -1709,10 +1792,29 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           validation,
           analysis,
           receipt,
+          { jefeId: groupRequest.bossId },
         );
         await ctx.telegram
           .deleteMessage(ctx.chat!.id, processing.message_id)
           .catch(() => undefined);
+        if (receipt.needsManualReview) {
+          await ctx.reply(
+            'Tu comprobante quedó en revisión manual. El jefe lo validará en breve.',
+          );
+          const bossUser = await this.usuariosRepository.findOne({
+            where: { id: groupRequest.bossId },
+          });
+          const target = bossUser?.grupoTelegramId || bossUser?.telegramChatId;
+          if (target) {
+            await ctx.telegram
+              .sendMessage(
+                target,
+                `Hay un comprobante del servicio grupal en revisión manual. Revísalo en el panel de Evidencias.`,
+              )
+              .catch(() => undefined);
+          }
+          return;
+        }
         if (!receipt.valid || !receipt.amount) {
           await ctx.reply(
             `No se pudo aprobar el comprobante: ${receipt.reason || 'no se identificó un pago válido'}.`,
@@ -1822,15 +1924,71 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           expectedTransferAmount,
           accounts,
         );
+        const telegramId = ctx.from!.id.toString();
+        const jefe = await this.findAssignedJefe(empleada);
         validation = await this.finishReceiptValidation(
           validation,
           analysis,
           receipt,
+          {
+            jefeId: jefe?.id,
+            draftPayload: receipt.needsManualReview
+              ? {
+                  clientId: client.id,
+                  empleadaId,
+                  duracionPactadaHoras,
+                  metodoPago,
+                  locationLat,
+                  locationLng,
+                  locationNotas: locationNotas || null,
+                  telegramId,
+                }
+              : null,
+          },
         );
 
         await ctx.telegram
           .deleteMessage(ctx.chat!.id, processingMsg.message_id)
           .catch(() => {});
+
+        if (receipt.needsManualReview) {
+          await ctx.reply(
+            'Tu comprobante quedó en revisión manual. En breve un asesor lo validará y te avisamos.',
+          );
+          if (jefe) {
+            const caption =
+              `Comprobante en revisión manual\n\n` +
+              `Cliente: ${client.nombreTelegram || 'Desconocido'}\n` +
+              `Monto esperado: $${expectedTransferAmount.toFixed(2)}\n` +
+              `Monto leído: $${receipt.amount != null ? receipt.amount.toFixed(2) : 'N/D'}\n` +
+              `Banco destino: ${validation.bancoDestino || 'N/D'}\n` +
+              `Titular destino: ${validation.titularDestino || 'N/D'}\n` +
+              `Motivo: ${receipt.reason}`;
+            const target = jefe.grupoTelegramId || jefe.telegramChatId;
+            if (target) {
+              await ctx.telegram
+                .sendPhoto(target, validation.telegramFileId || fileId, {
+                  caption,
+                  ...Markup.inlineKeyboard([
+                    [
+                      Markup.button.callback(
+                        '🟢 Aprobar',
+                        `receipt_autorizar:${validation.id}:1`,
+                      ),
+                      Markup.button.callback(
+                        '🔴 Rechazar',
+                        `receipt_autorizar:${validation.id}:0`,
+                      ),
+                    ],
+                  ]),
+                })
+                .catch((err) =>
+                  this.logger.error('No se pudo notificar al jefe:', err),
+                );
+            }
+          }
+          return;
+        }
 
         if (!receipt.valid) {
           await ctx.reply(
@@ -1850,7 +2008,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           locationLat,
           locationLng,
           locationNotas || null,
-          ctx.from!.id.toString(),
+          telegramId,
           validation.id,
         );
       } catch (err) {
@@ -2796,7 +2954,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     notasUbicacion: string | null,
     telegramId: string,
     receiptValidationId?: string,
-  ) {
+  ): Promise<Servicios | undefined> {
     try {
       const escapeMd = (text: string): string =>
         text.replace(/\n/g, ' ').replace(/([_*[`])/g, '\\$1');
@@ -2804,38 +2962,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ? escapeMd(notasUbicacion)
         : null;
 
-      let jefe: Usuarios | null = null;
-      if (empleada.jefeId) {
-        const mainJefe = await this.usuariosRepository.findOne({
-          where: { id: empleada.jefeId, activo: true },
-        });
-        if (mainJefe && mainJefe.disponible) {
-          jefe = mainJefe;
-        } else if (empleada.jefeSecundarioId) {
-          const secJefe = await this.usuariosRepository.findOne({
-            where: { id: empleada.jefeSecundarioId, activo: true },
-          });
-          if (secJefe && secJefe.disponible) {
-            jefe = secJefe;
-          }
-        }
-      }
-      if (!jefe) {
-        jefe = await this.usuariosRepository.findOne({
-          where: [
-            { rol: 'jefe', activo: true, disponible: true },
-            { rol: 'admin', activo: true, disponible: true },
-          ],
-        });
-        if (!jefe) {
-          jefe = await this.usuariosRepository.findOne({
-            where: [
-              { rol: 'jefe', activo: true },
-              { rol: 'admin', activo: true },
-            ],
-          });
-        }
-      }
+      const jefe = await this.findAssignedJefe(empleada);
 
       if (!jefe) {
         await ctx.reply(
@@ -3121,28 +3248,136 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         'Listo, dame un momentico y miro si puedo ir contigo',
       );
 
-      const msg = await ctx.reply(msgExito, {
+      const msg = await ctx.telegram.sendMessage(telegramId, msgExito, {
         ...Markup.removeKeyboard(),
       });
       await this.recordConversation(nuevoServicio, 'ia', msgExito);
-      ctx.session = {};
+      if (ctx.from?.id.toString() === telegramId) ctx.session = {};
 
       // Acumulamos en memoria
       nuevoServicio.telegramClienteMensajeId = msg.message_id.toString();
       // 2. SAVE FINAL CON TODOS LOS CAMBIOS ACUMULADOS
       await this.serviciosRepository.save(nuevoServicio);
+      return nuevoServicio;
     } catch (bookingErr) {
       this.logger.error('Error crítico al finalizar reserva:', bookingErr);
-      if (ctx.session) ctx.session = {};
+      if (ctx.from?.id.toString() === telegramId && ctx.session)
+        ctx.session = {};
       try {
-        await ctx.reply(
+        await ctx.telegram.sendMessage(
+          telegramId,
           '⚠️ Ocurrió un error al procesar tu solicitud.',
           Markup.removeKeyboard(),
         );
       } catch {
         // La sesion ya fue limpiada; no hay otra accion de recuperacion.
       }
+      return undefined;
     }
+  }
+
+  @Action(/^receipt_autorizar:([0-9a-f-]{36}):(0|1)$/)
+  async onReceiptAutorizar(@Ctx() ctx: BotContext) {
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
+
+    const jefeUser = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+    if (!jefeUser || (jefeUser.rol !== 'jefe' && jefeUser.rol !== 'admin')) {
+      await ctx.answerCbQuery(
+        '❌ No tienes permisos para realizar esta acción.',
+        { show_alert: true },
+      );
+      return;
+    }
+
+    const match = (ctx as any).match;
+    const validationId = match[1];
+    const approve = match[2] === '1';
+
+    const validation = await this.paymentReceiptValidationsRepository.findOne(
+      { where: { id: validationId } },
+    );
+    if (!validation) {
+      await ctx.answerCbQuery('❌ Comprobante no encontrado.', {
+        show_alert: true,
+      });
+      return;
+    }
+    if (validation.estado !== 'PENDIENTE_REVISION') {
+      await ctx.answerCbQuery('Este comprobante ya fue resuelto.', {
+        show_alert: true,
+      });
+      return;
+    }
+
+    await ctx.answerCbQuery();
+    validation.revisadoPorUserId = jefeUser.id;
+    validation.revisadoAt = new Date();
+
+    try {
+      await ctx.editMessageReplyMarkup(undefined);
+    } catch {
+      // El mensaje puede haber sido editado o eliminado; el flujo continua.
+    }
+
+    if (!approve) {
+      validation.estado = 'RECHAZADO';
+      await this.paymentReceiptValidationsRepository.save(validation);
+      if (validation.chatId) {
+        await ctx.telegram
+          .sendMessage(
+            validation.chatId,
+            '⚠️ Tu comprobante fue rechazado tras revisión manual. Por favor envía un nuevo comprobante.',
+          )
+          .catch(() => undefined);
+      }
+      return;
+    }
+
+    const draft = validation.draftPayload as
+      | {
+          clientId: string;
+          empleadaId: string;
+          duracionPactadaHoras: number;
+          metodoPago: 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
+          locationLat: string;
+          locationLng: string;
+          locationNotas: string | null;
+          telegramId: string;
+        }
+      | undefined;
+
+    if (!draft) {
+      await ctx.reply('❌ No fue posible recuperar los datos de la reserva.');
+      return;
+    }
+
+    validation.estado = 'APROBADO';
+    await this.paymentReceiptValidationsRepository.save(validation);
+
+    const [client, empleada] = await Promise.all([
+      this.clientesRepository.findOne({ where: { id: draft.clientId } }),
+      this.empleadasRepository.findOne({ where: { id: draft.empleadaId } }),
+    ]);
+    if (!client || !empleada) {
+      await ctx.reply('❌ No fue posible completar la reserva: datos faltantes.');
+      return;
+    }
+
+    await this.finalizeBooking(
+      ctx,
+      client,
+      empleada,
+      draft.duracionPactadaHoras,
+      draft.metodoPago,
+      draft.locationLat,
+      draft.locationLng,
+      draft.locationNotas,
+      draft.telegramId,
+      validation.id,
+    );
   }
 
   @Action(/^extender_servicio:(.+):(.+)$/)

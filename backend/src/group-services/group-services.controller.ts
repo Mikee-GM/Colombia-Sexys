@@ -25,6 +25,7 @@ import {
   RegisterGroupPaymentDto,
   RemoveGroupParticipantDto,
   ReserveGroupSelectionDto,
+  ReviewReceiptDto,
   UpdateGroupRequestDto,
 } from './dto/group-service.dto';
 import { GroupServicesService } from './group-services.service';
@@ -128,6 +129,20 @@ export class GroupServicesController {
     @Req() req: any,
   ) {
     return this.groupServices.registerPayment(serviceId, dto, req.user);
+  }
+
+  @Patch('receipts/:validationId/review')
+  reviewReceipt(
+    @Param('validationId') validationId: string,
+    @Body() dto: ReviewReceiptDto,
+    @Req() req: any,
+  ) {
+    return this.groupServices.reviewReceipt(
+      validationId,
+      dto.decision,
+      req.user,
+      dto.reason,
+    );
   }
 
   @Post('services/:serviceId/start')

@@ -14,3 +14,14 @@ export async function getEvidence(params?: {
   if (params?.cursor) query.set("cursor", params.cursor);
   return apiFetch<EvidencePage>(`/services/evidence?${query.toString()}`);
 }
+
+export async function reviewGroupReceipt(
+  validationId: string,
+  decision: "aprobado" | "rechazado",
+  reason?: string,
+) {
+  return apiFetch(`/group-services/receipts/${validationId}/review`, {
+    method: "PATCH",
+    body: JSON.stringify({ decision, reason }),
+  });
+}

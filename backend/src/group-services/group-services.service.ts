@@ -970,6 +970,69 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
+  async reviewReceipt(
+    validationId: string,
+    decision: 'aprobado' | 'rechazado',
+    actor: Actor,
+    reason?: string,
+  ) {
+    let serviceId = '';
+    let amount = 0;
+    await this.dataSource.transaction(async (manager) => {
+      const validation = await manager.findOneBy(PaymentReceiptValidations, {
+        id: validationId,
+      });
+      if (!validation) throw new NotFoundException('Comprobante no encontrado');
+      if (validation.estado !== 'PENDIENTE_REVISION')
+        throw new ConflictException('Este comprobante ya fue resuelto');
+      if (!validation.servicioId)
+        throw new ConflictException(
+          'Este comprobante no está asociado a un servicio grupal',
+        );
+      serviceId = validation.servicioId;
+      amount = Number(validation.monto ?? 0);
+      await this.lockGroupService(manager, serviceId, actor);
+      validation.revisadoPorUserId = actor.id;
+      validation.revisadoAt = new Date();
+      validation.estado = decision === 'aprobado' ? 'APROBADO' : 'RECHAZADO';
+      await manager.save(PaymentReceiptValidations, validation);
+      await manager.save(
+        ServiceGroupAudit,
+        manager.create(ServiceGroupAudit, {
+          serviceId,
+          requestId: null,
+          actorUserId: actor.id,
+          action:
+            decision === 'aprobado'
+              ? 'comprobante_revisado_aprobado'
+              : 'comprobante_revisado_rechazado',
+          before: { estado: 'PENDIENTE_REVISION' },
+          after: { estado: validation.estado },
+          reason: reason ?? null,
+        }),
+      );
+    });
+
+    if (decision === 'aprobado') {
+      return this.registerPayment(
+        serviceId,
+        { amount, receiptValidationId: validationId },
+        actor,
+      );
+    }
+
+    const result = await this.findService(serviceId, actor);
+    if (result.cliente?.telegramChatId) {
+      await this.bot.telegram
+        .sendMessage(
+          result.cliente.telegramChatId,
+          `Tu comprobante fue rechazado tras revisión manual${reason ? `: ${reason}` : ''}. Por favor envía un nuevo comprobante.`,
+        )
+        .catch(() => undefined);
+    }
+    return result;
+  }
+
   async start(serviceId: string, actor: Actor) {
     await this.dataSource.transaction(async (manager) => {
       const service = await this.lockGroupService(manager, serviceId, actor);

@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -127,6 +128,16 @@ export class RegisterGroupPaymentDto {
   @IsString()
   @MaxLength(300)
   notes?: string;
+}
+
+export class ReviewReceiptDto {
+  @IsIn(['aprobado', 'rechazado'])
+  decision: 'aprobado' | 'rechazado';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
 }
 
 export class AddGroupParticipantDto {

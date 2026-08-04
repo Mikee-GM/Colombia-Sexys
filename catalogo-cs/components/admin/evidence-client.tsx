@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { ExternalLink, FileCheck2, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
-import { getEvidence } from "@/lib/actions/evidence";
+import { getEvidence, reviewGroupReceipt } from "@/lib/actions/evidence";
 import type { EvidenceItem, EvidencePage } from "@/lib/types";
 
 const inputClass =
@@ -60,6 +60,7 @@ export default function EvidenceClient({ initialPage }: { initialPage: EvidenceP
             <option value="ALMACENADA">Almacenada</option>
             <option value="PROCESANDO">Procesando</option>
             <option value="APROBADO">Aprobado</option>
+            <option value="PENDIENTE_REVISION">Pendiente de revisión</option>
             <option value="RECHAZADO">Rechazado</option>
             <option value="ERROR_VALIDACION">Error de validación</option>
           </select>
@@ -68,7 +69,14 @@ export default function EvidenceClient({ initialPage }: { initialPage: EvidenceP
 
       {page.items.length ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          {page.items.map((item) => <EvidenceCard key={`${item.kind}-${item.id}`} item={item} />)}
+          {page.items.map((item) => (
+            <EvidenceCard
+              key={`${item.kind}-${item.id}`}
+              item={item}
+              pending={pending}
+              onReviewed={() => load({ kind: kind || undefined, status: status || undefined })}
+            />
+          ))}
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-zinc-800 py-20 text-center text-sm text-zinc-500">No hay evidencias con estos filtros.</div>
@@ -83,8 +91,29 @@ export default function EvidenceClient({ initialPage }: { initialPage: EvidenceP
   );
 }
 
-function EvidenceCard({ item }: { item: EvidenceItem }) {
+function EvidenceCard({
+  item,
+  pending,
+  onReviewed,
+}: {
+  item: EvidenceItem;
+  pending: boolean;
+  onReviewed: () => void;
+}) {
   const Icon = item.kind === "uber" ? ImageIcon : FileCheck2;
+  const canReview =
+    item.kind === "transferencia" && item.status === "PENDIENTE_REVISION" && Boolean(item.serviceId);
+
+  async function review(decision: "aprobado" | "rechazado") {
+    try {
+      await reviewGroupReceipt(item.id, decision);
+      toast.success(decision === "aprobado" ? "Comprobante aprobado" : "Comprobante rechazado");
+      onReviewed();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo revisar el comprobante");
+    }
+  }
+
   return (
     <article className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
       <div className="flex items-start justify-between gap-4">
@@ -103,9 +132,31 @@ function EvidenceCard({ item }: { item: EvidenceItem }) {
         {item.amount != null && <p>Monto: {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(item.amount)}</p>}
         {item.observations && <p className="line-clamp-2 text-zinc-400">{item.observations}</p>}
       </div>
-      <a href={item.url} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex items-center gap-2 rounded-xl border border-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A]">
-        Abrir imagen <ExternalLink size={14} />
-      </a>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A]">
+          Abrir imagen <ExternalLink size={14} />
+        </a>
+        {canReview && (
+          <>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => void review("aprobado")}
+              className="rounded-xl border border-emerald-600 px-4 py-3 text-xs font-bold uppercase tracking-wider text-emerald-500 disabled:opacity-50"
+            >
+              Aprobar
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => void review("rechazado")}
+              className="rounded-xl border border-red-600 px-4 py-3 text-xs font-bold uppercase tracking-wider text-red-500 disabled:opacity-50"
+            >
+              Rechazar
+            </button>
+          </>
+        )}
+      </div>
     </article>
   );
 }
