@@ -14,11 +14,7 @@ export default function CustomerRating({
   className = "",
 }: CustomerRatingProps) {
   if (average == null || count === 0) {
-    return (
-      <p className={`text-[11px] text-zinc-500 ${className}`}>
-        Sin opiniones de clientes
-      </p>
-    );
+    return null;
   }
 
   return (

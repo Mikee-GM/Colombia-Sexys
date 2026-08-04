@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { AnimatePresence } from "framer-motion";
 import Hero from "@/components/Hero";
 import ModelGrid from "@/components/ModelGrid";
@@ -15,6 +15,29 @@ export default function Home() {
   const [modelos, setModelos] = useState<Modelo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedModelo, setSelectedModelo] = useState<Modelo | null>(null);
+
+  const carouselModelos = useMemo(() => {
+    if (modelos.length <= 1) return modelos;
+    const copy = [...modelos];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }, [modelos]);
+
+  const catalogModelos = useMemo(() => {
+    if (modelos.length <= 1) return modelos;
+    const copy = [...modelos];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    if (copy.length > 2 && carouselModelos.length > 0 && copy[0]?._id === carouselModelos[0]?._id) {
+      copy.push(copy.shift()!);
+    }
+    return copy;
+  }, [modelos, carouselModelos]);
 
   const scrollToCatalog = () => {
     catalogRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -67,7 +90,7 @@ export default function Home() {
       <main className="relative">
         <Hero 
           onViewCatalog={scrollToCatalog} 
-          modelos={modelos} 
+          modelos={carouselModelos} 
           onSelectModelo={setSelectedModelo} 
         />
 
@@ -115,7 +138,7 @@ export default function Home() {
                 </div>
               ) : (
                 <ModelGrid
-                  modelos={modelos}
+                  modelos={catalogModelos}
                   onSelectModelo={setSelectedModelo}
                 />
               )}
