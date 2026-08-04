@@ -44,7 +44,7 @@ export function availabilityLabel(input: {
     input.availabilityStatus ??
     (input.disponible ? "disponible" : "ocupada");
   if (status === "disponible") return "Disponible";
-  if (status === "inactiva") return "No disponible";
+  if (status === "inactiva") return "Baja de Agencia";
   if (input.canScheduleNext === false) return "Siguiente turno reservado";
   const eta = formatAvailabilityTime(input.estimatedAvailableAt);
   return eta ? `Ocupada hasta ${eta}` : "Ocupada";

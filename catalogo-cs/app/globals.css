@@ -140,3 +140,13 @@ textarea:focus {
 .customized-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(197, 165, 90, 0.6);
 }
+
+/* Ocultar flechas en campos de número (Chrome, Safari, Edge, Opera, Firefox) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}

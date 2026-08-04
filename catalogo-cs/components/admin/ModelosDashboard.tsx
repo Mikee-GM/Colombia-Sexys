@@ -103,8 +103,12 @@ export default function ModelosDashboard({
     m.nombre.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const activeModels = filtered.filter((m) => m.disponible !== false);
-  const inactiveModels = filtered.filter((m) => m.disponible === false);
+  const activeModels = filtered.filter(
+    (m) => m.availabilityStatus !== "inactiva" && m.catalogoActivo !== false
+  );
+  const inactiveModels = filtered.filter(
+    (m) => m.availabilityStatus === "inactiva" || m.catalogoActivo === false
+  );
 
   const renderModelCard = (modelo: Modelo, index: number) => (
     <div
@@ -127,10 +131,22 @@ export default function ModelosDashboard({
             </span>
           </div>
         )}
-        {!modelo.disponible && (
-          <div className="absolute top-2 left-2 bg-black/80 px-2 py-1 border border-zinc-700">
-            <span className="text-[9px] text-zinc-400 font-bold tracking-widest uppercase">
-              Oculta
+        {modelo.availabilityStatus === "inactiva" || modelo.catalogoActivo === false ? (
+          <div className="absolute top-2 left-2 bg-red-950/90 px-2.5 py-1 border border-red-500/50">
+            <span className="text-[9px] text-red-300 font-bold tracking-widest uppercase">
+              Inactiva (Baja)
+            </span>
+          </div>
+        ) : !modelo.disponible || modelo.availabilityStatus === "ocupada" ? (
+          <div className="absolute top-2 left-2 bg-amber-950/90 px-2.5 py-1 border border-amber-500/50">
+            <span className="text-[9px] text-amber-300 font-bold tracking-widest uppercase">
+              Ocupada
+            </span>
+          </div>
+        ) : (
+          <div className="absolute top-2 left-2 bg-black/80 px-2.5 py-1 border border-[#C5A55A]/50">
+            <span className="text-[9px] text-[#E8D5A3] font-bold tracking-widest uppercase">
+              Disponible
             </span>
           </div>
         )}
@@ -327,7 +343,7 @@ export default function ModelosDashboard({
               <div className="flex items-center gap-3 mb-6">
                 <span className="w-2 h-2 rounded-full bg-zinc-500"></span>
                 <h3 className="font-heading text-sm font-bold text-zinc-400 tracking-widest uppercase">
-                  Modelos Ocultas / Inactivas ({inactiveModels.length})
+                  Modelos Inactivas / Baja de Agencia ({inactiveModels.length})
                 </h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 opacity-75 hover:opacity-100 transition-opacity">

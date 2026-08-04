@@ -20,10 +20,11 @@ function mapToModelo(emp: any): Modelo {
     contactLink: getEmployeeHireTelegramUrl(emp.id),
     contactLabel: emp.contactLabel || "Contacto",
     disponible: emp.disponible,
+    catalogoActivo: emp.catalogoActivo !== false,
     availabilityStatus: emp.availabilityStatus,
     estimatedAvailableAt: emp.estimatedAvailableAt ?? null,
     canScheduleNext: emp.canScheduleNext,
-    precioBaseHora: emp.precioBaseHora ? parseFloat(emp.precioBaseHora) : 100,
+    precioBaseHora: emp.precioBaseHora ? parseFloat(emp.precioBaseHora) : 2500,
     // TODO: el campo `tipo` fue eliminado del backend — verificar si sigue siendo necesario
     jefeId: emp.jefeId || null,
     jefeSecundarioId: emp.jefeSecundarioId || null,
@@ -53,7 +54,9 @@ export async function getCatalogModelosAction(
     const data = await apiFetch<any[]>("/catalog/employees", {
       authenticated: false,
     });
-    let list = data.map(mapToModelo);
+    let list = data
+      .map(mapToModelo)
+      .filter((m: Modelo) => m.availabilityStatus !== "inactiva" && m.catalogoActivo !== false);
     if (onlyAvailable) {
       list = list.filter((m: Modelo) => m.disponible);
     }
@@ -68,20 +71,25 @@ export async function getModelosAction(
   onlyAvailable = false,
 ): Promise<Modelo[]> {
   try {
-    const data = await apiFetch<any[]>("/employees", { authenticated: true });
+    const data = await apiFetch<any[]>("/employees", {
+      authenticated: true,
+    });
     let list = data.map(mapToModelo);
-
     if (onlyAvailable) {
       list = list.filter((m: Modelo) => m.disponible);
     }
-
-    // Aleatorizar el catálogo para el frontend
-    return list.sort(() => 0.5 - Math.random());
+    return list;
   } catch (error) {
-    if (isRedirectError(error)) throw error;
     console.error("getModelosAction error:", error);
     return [];
   }
+}
+
+export async function getModeloAction(id: string): Promise<Modelo> {
+  const data = await apiFetch<any>(`/employees/${id}`, {
+    authenticated: false,
+  });
+  return mapToModelo(data);
 }
 
 export async function createModeloAction(
@@ -102,7 +110,7 @@ export async function createModeloAction(
     descripcion: payload.descripcion,
     precioBaseHora: payload.precioBaseHora,
     disponible: payload.disponible ?? true,
-    catalogoActivo: true,
+    catalogoActivo: payload.catalogoActivo ?? true,
     jefeId: payload.jefeId || null,
     jefeSecundarioId: payload.jefeSecundarioId || null,
     apartmentId: payload.apartmentId || null,
@@ -137,6 +145,7 @@ export async function updateModeloAction(
     descripcion: payload.descripcion,
     precioBaseHora: payload.precioBaseHora,
     disponible: payload.disponible,
+    catalogoActivo: payload.catalogoActivo,
     jefeId: payload.jefeId || null,
     jefeSecundarioId: payload.jefeSecundarioId || null,
     apartmentId: payload.apartmentId || null,

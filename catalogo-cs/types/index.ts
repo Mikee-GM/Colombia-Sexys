@@ -17,6 +17,7 @@ export interface Modelo {
   contactLink: string;
   contactLabel: string;
   disponible: boolean;
+  catalogoActivo?: boolean;
   availabilityStatus?: "disponible" | "ocupada" | "inactiva";
   estimatedAvailableAt?: string | null;
   canScheduleNext?: boolean;
@@ -43,6 +44,7 @@ export interface ModeloPayload {
   contactLink: string;
   contactLabel: string;
   disponible?: boolean;
+  catalogoActivo?: boolean;
   precioBaseHora: number;
   jefeId?: string | null;
   jefeSecundarioId?: string | null;
