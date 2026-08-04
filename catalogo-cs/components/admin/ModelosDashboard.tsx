@@ -103,6 +103,125 @@ export default function ModelosDashboard({
     m.nombre.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const activeModels = filtered.filter((m) => m.disponible !== false);
+  const inactiveModels = filtered.filter((m) => m.disponible === false);
+
+  const renderModelCard = (modelo: Modelo, index: number) => (
+    <div
+      key={modelo._id}
+      className="bg-zinc-900/30 border border-zinc-800 group hover:border-zinc-700 transition-colors flex flex-col"
+    >
+      <div className="aspect-[3/4] relative bg-black border-b border-zinc-800">
+        {modelo.fotoPrincipal ? (
+          <Image
+            src={modelo.fotoPrincipal}
+            alt={modelo.nombre}
+            fill
+            className="object-cover"
+            unoptimized
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">
+              Sin Foto
+            </span>
+          </div>
+        )}
+        {!modelo.disponible && (
+          <div className="absolute top-2 left-2 bg-black/80 px-2 py-1 border border-zinc-700">
+            <span className="text-[9px] text-zinc-400 font-bold tracking-widest uppercase">
+              Oculta
+            </span>
+          </div>
+        )}
+        <div className="absolute top-2 right-2 bg-black/80 px-2 py-1 border border-[#C5A55A]/30">
+          <span className="text-[9px] text-[#C5A55A] font-bold">
+            #{index + 1}
+          </span>
+        </div>
+      </div>
+
+      <div className="p-4 flex-1 flex flex-col">
+        <h3 className="font-heading text-lg font-semibold text-white mb-2">
+          {modelo.nombre}
+        </h3>
+        <ReliabilityRating
+          score={modelo.trustScore}
+          compact
+          className="mb-3"
+        />
+        {modelo.usuarioId && (
+          <div className="mb-3">
+            {otpCodes[modelo.usuarioId!] ? (
+              <div className="flex items-center gap-2">
+                <div className="inline-block bg-[#C5A55A]/10 text-[#C5A55A] border border-[#C5A55A]/30 px-3 py-1 rounded text-xs font-mono font-bold">
+                  OTP: {otpCodes[modelo.usuarioId!]}
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      `/vincular ${otpCodes[modelo.usuarioId!]}`,
+                    );
+                    toast.success("Copiado al portapapeles");
+                  }}
+                  title="Copiar comando de vinculacion"
+                  className="text-[#C5A55A] hover:text-[#E8D5A3] transition-colors p-1"
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleGenerateOtp(modelo.usuarioId!)}
+                className="text-[10px] font-bold tracking-widest text-[#C5A55A] hover:text-[#E8D5A3] transition-colors uppercase"
+              >
+                Generar OTP
+              </button>
+            )}
+          </div>
+        )}
+        <div className="mt-auto flex gap-3 pt-3 border-t border-zinc-800/60">
+          <button
+            onClick={() => {
+              setEditingModelo(modelo);
+              setShowModal(true);
+            }}
+            className="text-[10px] font-bold tracking-widest text-[#E8D5A3] uppercase hover:text-white transition-colors"
+          >
+            Editar
+          </button>
+          <button
+            onClick={() =>
+              setSelectedEvaluationUser({
+                id: modelo.usuarioId || modelo._id,
+                name: modelo.nombre,
+              })
+            }
+            className="text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase hover:text-white transition-colors"
+          >
+            Exámenes
+          </button>
+          <button
+            onClick={() => setConfirmDelete(modelo)}
+            className="text-[10px] font-bold tracking-widest text-zinc-600 uppercase hover:text-red-400 transition-colors ml-auto"
+          >
+            Eliminar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="w-full">
       {/* Dialogo de confirmacion */}
@@ -178,113 +297,46 @@ export default function ModelosDashboard({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((modelo, index) => (
-            <div
-              key={modelo._id}
-              className="bg-zinc-900/30 border border-zinc-800 group hover:border-zinc-700 transition-colors flex flex-col"
-            >
-              <div className="aspect-[3/4] relative bg-black border-b border-zinc-800">
-                {modelo.fotoPrincipal ? (
-                  <Image
-                    src={modelo.fotoPrincipal}
-                    alt={modelo.nombre}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest">
-                      Sin Foto
-                    </span>
-                  </div>
-                )}
-                {!modelo.disponible && (
-                  <div className="absolute top-2 left-2 bg-black/80 px-2 py-1 border border-zinc-700">
-                    <span className="text-[9px] text-zinc-400 font-bold tracking-widest uppercase">
-                      Oculta
-                    </span>
-                  </div>
-                )}
-                <div className="absolute top-2 right-2 bg-black/80 px-2 py-1 border border-[#C5A55A]/30">
-                  <span className="text-[9px] text-[#C5A55A] font-bold">
-                    #{index + 1}
-                  </span>
-                </div>
+        <div className="space-y-12">
+          {/* Sección de Modelos Activas */}
+          <div>
+            <div className="flex items-center gap-3 mb-6">
+              <span className="w-2 h-2 rounded-full bg-[#C5A55A]"></span>
+              <h3 className="font-heading text-sm font-bold text-white tracking-widest uppercase">
+                Modelos Activas ({activeModels.length})
+              </h3>
+            </div>
+            {activeModels.length === 0 ? (
+              <div className="border border-zinc-800/60 border-dashed py-12 text-center">
+                <p className="text-xs text-zinc-500 font-light">
+                  No hay modelos activas que coincidan con la búsqueda.
+                </p>
               </div>
-              
-              <div className="p-4 flex-1 flex flex-col">
-                <h3 className="font-heading text-lg font-semibold text-white mb-2">
-                  {modelo.nombre}
-                </h3>
-                <ReliabilityRating
-                  score={modelo.trustScore}
-                  compact
-                  className="mb-3"
-                />
-                {modelo.usuarioId && (
-                  <div className="mb-3">
-                    {otpCodes[modelo.usuarioId!] ? (
-                      <div className="flex items-center gap-2">
-                        <div className="inline-block bg-[#C5A55A]/10 text-[#C5A55A] border border-[#C5A55A]/30 px-3 py-1 rounded text-xs font-mono font-bold">
-                          OTP: {otpCodes[modelo.usuarioId!]}
-                        </div>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(`/vincular ${otpCodes[modelo.usuarioId!]}`);
-                            toast.success("Copiado al portapapeles");
-                          }}
-                          title="Copiar comando de vinculacion"
-                          className="text-[#C5A55A] hover:text-[#E8D5A3] transition-colors p-1"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleGenerateOtp(modelo.usuarioId!)}
-                        className="text-[10px] font-bold tracking-widest text-[#C5A55A] hover:text-[#E8D5A3] transition-colors uppercase"
-                      >
-                        Generar OTP
-                      </button>
-                    )}
-                  </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {activeModels.map((modelo, index) =>
+                  renderModelCard(modelo, index),
                 )}
-                <div className="mt-auto flex gap-3 pt-3 border-t border-zinc-800/60">
-                  <button
-                    onClick={() => {
-                      setEditingModelo(modelo);
-                      setShowModal(true);
-                    }}
-                    className="text-[10px] font-bold tracking-widest text-[#E8D5A3] uppercase hover:text-white transition-colors"
-                  >
-                    Editar
-                  </button>
-                  <button
-                    onClick={() =>
-                      setSelectedEvaluationUser({
-                        id: modelo.usuarioId || modelo._id,
-                        name: modelo.nombre,
-                      })
-                    }
-                    className="text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase hover:text-white transition-colors"
-                  >
-                    Exámenes
-                  </button>
-                  <button
-                    onClick={() => setConfirmDelete(modelo)}
-                    className="text-[10px] font-bold tracking-widest text-zinc-600 uppercase hover:text-red-400 transition-colors ml-auto"
-                  >
-                    Eliminar
-                  </button>
-                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sección de Modelos Inactivas / Ocultas */}
+          {inactiveModels.length > 0 && (
+            <div className="pt-8 border-t border-zinc-800/80">
+              <div className="flex items-center gap-3 mb-6">
+                <span className="w-2 h-2 rounded-full bg-zinc-500"></span>
+                <h3 className="font-heading text-sm font-bold text-zinc-400 tracking-widest uppercase">
+                  Modelos Ocultas / Inactivas ({inactiveModels.length})
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 opacity-75 hover:opacity-100 transition-opacity">
+                {inactiveModels.map((modelo, index) =>
+                  renderModelCard(modelo, index),
+                )}
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
 
