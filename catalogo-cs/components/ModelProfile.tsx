@@ -15,6 +15,9 @@ interface ModelProfileProps {
 export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
   const allPhotos = [modelo.fotoPrincipal, ...modelo.fotos].filter(Boolean);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+
   const status = availabilityLabel(modelo);
   const effectiveStatus =
     modelo.availabilityStatus ??
@@ -33,6 +36,35 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
 
   const goNext = () => {
     goTo(activeIndex === allPhotos.length - 1 ? 0 : activeIndex + 1);
+  };
+
+  const minSwipeDistance = 40;
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEndX(null);
+    setTouchStartX(e.targetTouches[0].clientX);
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+  };
+  const onTouchEnd = () => {
+    if (!touchStartX || !touchEndX) return;
+    const distance = touchStartX - touchEndX;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    if (isLeftSwipe && allPhotos.length > 1) {
+      goNext();
+    }
+    if (isRightSwipe && allPhotos.length > 1) {
+      goPrev();
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (allPhotos.length <= 1) return;
+    if (Math.abs(e.deltaX) > 40) {
+      if (e.deltaX > 0) goNext();
+      else goPrev();
+    }
   };
 
   return (
@@ -75,8 +107,14 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
           </svg>
         </button>
 
-        {/* Galeria de fotos */}
-        <div className="w-full md:w-1/2 flex-shrink-0 relative aspect-[3/4] md:aspect-auto bg-zinc-950">
+        {/* Galeria de fotos con soporte tactil/scroll */}
+        <div
+          className="w-full md:w-1/2 flex-shrink-0 relative aspect-[3/4] md:aspect-auto bg-zinc-950 select-none cursor-grab active:cursor-grabbing"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onWheel={handleWheel}
+        >
           {/* Mapeamos todas las fotos para pre-cargarlas en el DOM */}
           {allPhotos.map((url, i) => (
             <div
@@ -160,23 +198,36 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
             <h2 className="font-heading text-3xl sm:text-4xl font-semibold text-white tracking-wide mb-2 pr-10">
               {modelo.nombre}
             </h2>
-            <div className="mb-5">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                Calificación de clientes
-              </p>
-              <CustomerRating
-                average={modelo.clientRatingAverage}
-                count={modelo.clientRatingCount}
-              />
-            </div>
-            <div className="mb-5 border border-[#C5A55A]/30 bg-[#C5A55A]/5 px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#C5A55A]">
+            {modelo.clientRatingAverage != null && (modelo.clientRatingCount ?? 0) > 0 && (
+              <div className="mb-5">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                  Calificación de clientes
+                </p>
+                <CustomerRating
+                  average={modelo.clientRatingAverage}
+                  count={modelo.clientRatingCount}
+                />
+              </div>
+            )}
+            <div className="mb-6">
+              <span className="text-[9px] font-light uppercase tracking-[0.25em] text-zinc-500 block mb-1.5">
                 Disponibilidad
-              </p>
-              <p className="mt-1 text-sm text-zinc-200">{status}</p>
-              {modelo.availabilityStatus === "ocupada" &&
+              </span>
+              <div className="inline-flex items-center gap-2">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    effectiveStatus === "disponible"
+                      ? "bg-[#E8D5A3] shadow-[0_0_8px_rgba(232,213,163,0.8)]"
+                      : "bg-zinc-500"
+                  }`}
+                />
+                <span className="text-xs font-light tracking-[0.25em] uppercase text-[#E8D5A3]">
+                  {status}
+                </span>
+              </div>
+              {effectiveStatus === "ocupada" &&
                 modelo.canScheduleNext !== false && (
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                  <p className="mt-1.5 text-xs font-light text-zinc-400">
                     Puedes solicitar el siguiente turno desde Telegram.
                   </p>
                 )}
@@ -209,10 +260,41 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
                 </div>
               </div>
             )}
+
+            {/* Barra flotante inferior de contacto fija en móvil para que siempre esté visible */}
+            <div className="sticky bottom-0 inset-x-0 z-40 mt-6 -mx-6 -mb-6 p-4 bg-gradient-to-t from-black via-black/95 to-black/80 backdrop-blur-lg border-t border-zinc-800/80 sm:hidden">
+              {modelo.contactLink && canContact ? (
+                <a
+                  href={modelo.contactLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2.5 w-full py-4 bg-gradient-to-r from-[#C5A55A] via-[#E8D5A3] to-[#C5A55A] text-black font-extrabold text-xs tracking-[0.25em] uppercase transition-all duration-300 rounded-lg shadow-[0_0_20px_rgba(197,165,90,0.4)]"
+                >
+                  <svg
+                    className="w-4 h-4 flex-shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                  </svg>
+                  {modelo.contactLabel || "Contacto"}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="flex w-full cursor-not-allowed items-center justify-center border border-zinc-800 bg-zinc-950 py-4 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-600 rounded-lg"
+                >
+                  {status}
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Links */}
-          <div className="space-y-3 mt-8">
+          {/* Links para escritorio / dentro del flujo en desktop */}
+          <div className="space-y-3 mt-8 hidden sm:block">
             {/* Link de X */}
             {modelo.linkX && (
               <a

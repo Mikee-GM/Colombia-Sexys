@@ -16,41 +16,53 @@ const montserrat = Montserrat({
   display: "swap",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://rvcs-pruebas.com.mx";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://colombiasexys.com"),
-  title: "Colombia Sexys | Catalogo Premium de Modelos",
+  metadataBase: new URL(siteUrl),
+  title: "Colombia Sexys | Catálogo Premium de Modelos",
   description:
-    "Descubre nuestro exclusivo catalogo de modelos premium. Elegancia, sofisticacion y belleza colombiana.",
+    "Descubre el pináculo de la belleza colombiana. Nuestro exclusivo catálogo de modelos premium con elegancia, discreción y sofisticación de alta costura.",
   keywords:
-    "modelos, colombia, catalogo premium, modelos colombianas, colombia sexys",
+    "modelos, colombia, catalogo premium, modelos colombianas, colombia sexys, agencia premium",
   openGraph: {
-    title: "Colombia Sexys | Catalogo Premium de Modelos",
+    title: "Colombia Sexys | Catálogo Premium de Modelos",
     description:
-      "Descubre nuestro exclusivo catalogo de modelos premium. Elegancia, sofisticacion y belleza colombiana.",
-    url: "https://colombiasexys.com",
+      "Descubre el pináculo de la belleza colombiana. Nuestro exclusivo catálogo de modelos premium con elegancia, discreción y sofisticación de alta costura.",
+    url: siteUrl,
     siteName: "Colombia Sexys",
     type: "website",
     locale: "es_CO",
     images: [
       {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Colombia Sexys - Catálogo Premium",
+        type: "image/jpeg",
+      },
+      {
         url: "/logo-horizontal.webp",
         width: 1200,
         height: 630,
-        alt: "Colombia Sexys -- Catalogo Premium",
+        alt: "Colombia Sexys - Catálogo Premium",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Colombia Sexys | Catalogo Premium de Modelos",
+    title: "Colombia Sexys | Catálogo Premium de Modelos",
     description:
-      "Descubre nuestro exclusivo catalogo de modelos premium. Elegancia, sofisticacion y belleza colombiana.",
-    images: ["/logo-horizontal.webp"],
+      "Descubre el pináculo de la belleza colombiana. Nuestro exclusivo catálogo de modelos premium con elegancia, discreción y sofisticación de alta costura.",
+    images: ["/og-image.jpg"],
   },
   icons: {
-    icon: "/logo-icono.webp",
-    shortcut: "/logo-icono.webp",
-    apple: "/logo-icono.webp",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/logo-icono.png", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
 };
 

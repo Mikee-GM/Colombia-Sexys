@@ -11,7 +11,7 @@ import { getGroupServiceTelegramUrl } from "@/lib/telegram-links";
 function GoldParticles() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-      {[...Array(25)].map((_, i) => {
+      {[...Array(15)].map((_, i) => {
         // Valores deterministas basados en el índice i para evitar desajustes de hidratación (hydration mismatch) en Next.js SSR
         const left = ((i * 37 + 13) % 95) + 2;
         const top = ((i * 53 + 17) % 90) + 5;
@@ -31,6 +31,7 @@ function GoldParticles() {
               width: `${size}px`,
               height: `${size}px`,
               boxShadow: "0 0 10px rgba(197, 165, 90, 0.5)",
+              willChange: "transform, opacity",
             }}
             initial={{ opacity: 0, y: 0, x: 0 }}
             animate={{
@@ -99,26 +100,27 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
       id="hero"
       className="min-h-[100dvh] w-full flex flex-col items-center justify-center relative overflow-hidden bg-black"
     >
-      {/* Video Background */}
-      <div className="absolute inset-0 z-0">
+      {/* Video Background - Optimizado con aceleración por GPU para eliminar lag/stutter en Desktop */}
+      <div className="absolute inset-0 z-0 overflow-hidden" style={{ transform: "translateZ(0)" }}>
         <video
           src="/Colombia-Slider-1.mp4"
           autoPlay
           loop
           muted
           playsInline
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover transform-gpu"
+          style={{ willChange: "transform" }}
         />
       </div>
 
-      {/* Capas de oscurecimiento y gradientes */}
-      <div className="absolute inset-0 z-0 bg-black/30 sm:bg-black/50" />
+      {/* Capas de oscurecimiento y gradientes (sin mix-blend-overlay para evitar lag de pintura por píxel) */}
+      <div className="absolute inset-0 z-0 bg-black/40 sm:bg-black/50" />
       <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/30 sm:via-black/40 to-transparent" />
       <div className="absolute inset-0 z-0 bg-gradient-to-b from-black via-black/10 sm:via-black/20 to-transparent opacity-80" />
       <div
-        className="absolute inset-0 z-0 opacity-20 sm:opacity-30 mix-blend-overlay"
+        className="absolute inset-0 z-0 opacity-25"
         style={{
-          background: "radial-gradient(circle at center, rgba(197, 165, 90, 0.2) 0%, transparent 60%)",
+          background: "radial-gradient(circle at center, rgba(197, 165, 90, 0.25) 0%, transparent 65%)",
         }}
       />
 
@@ -168,34 +170,28 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
           El pináculo de la belleza colombiana.
         </motion.p>
 
-        {/* Boton Ultra-Premium Elegante */}
+        {/* Botón de Alta Costura Invisible con Línea de Oro */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.9 }}
-          className="mt-4 flex w-full flex-col items-center justify-center gap-3 sm:flex-row"
+          className="mt-8 flex w-full flex-col items-center justify-center sm:flex-row"
         >
-          <div className="group relative w-full max-w-xs sm:w-auto">
-            <div className="absolute -inset-0.5 rounded-full bg-gradient-to-r from-[#C5A55A]/40 to-[#E8D5A3]/40 opacity-30 blur transition duration-500 group-hover:opacity-70" />
-            <button
-              onClick={onViewCatalog}
-              className="relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-full border border-[#C5A55A]/50 bg-black/60 px-10 py-4 text-white shadow-lg shadow-black/50 backdrop-blur-md transition-all duration-300 hover:border-[#C5A55A] hover:bg-black/80 sm:w-auto sm:px-12"
-            >
-              <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-[#C5A55A]/10 to-transparent transition-transform duration-1000 ease-in-out group-hover:translate-x-full" />
-              <span className="relative z-10 text-[11px] font-semibold uppercase tracking-[0.25em] text-zinc-100 transition-colors duration-300 group-hover:text-[#E8D5A3] sm:text-xs">
-                Ver catálogo
-              </span>
-              <svg
-                className="relative z-10 h-4 w-4 text-zinc-300 transition-all duration-300 group-hover:translate-x-1 group-hover:text-[#E8D5A3]"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                strokeWidth="1.5"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-              </svg>
-            </button>
-          </div>
+          <button
+            onClick={onViewCatalog}
+            className="group relative inline-flex flex-col items-center justify-center py-3 px-8 text-center transition-all duration-500 focus:outline-none"
+          >
+            {/* Aura difusa sutil e invisible hasta hover */}
+            <span className="absolute inset-0 rounded-full bg-[#C5A55A]/0 blur-xl transition-all duration-700 group-hover:bg-[#C5A55A]/15" />
+
+            {/* Typography editorial impecable sin flechas */}
+            <span className="relative z-10 font-heading text-xs sm:text-sm font-light tracking-[0.45em] uppercase text-[#E8D5A3] transition-all duration-500 group-hover:text-white group-hover:tracking-[0.55em]">
+              Ver catálogo
+            </span>
+
+            {/* Línea de oro fina bajo el texto que se expande elegantemente */}
+            <span className="mt-3 h-[1px] w-12 bg-gradient-to-r from-transparent via-[#C5A55A] to-transparent transition-all duration-700 ease-out group-hover:w-full group-hover:via-[#E8D5A3] group-hover:shadow-[0_0_12px_rgba(232,213,163,0.8)]" />
+          </button>
         </motion.div>
       </motion.div>
 
@@ -239,7 +235,7 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
               <button
                 key={m._id}
                 onClick={() => onSelectModelo?.(m)}
-                className="relative flex-shrink-0 w-36 h-48 sm:w-48 sm:h-64 md:w-56 md:h-72 lg:w-64 lg:h-80 xl:w-72 xl:h-96 snap-center overflow-hidden rounded-xl border border-zinc-800 hover:border-[#C5A55A] transition-all duration-500 group cursor-pointer shadow-2xl shadow-black/80"
+                className="relative flex-shrink-0 w-36 h-48 sm:w-48 sm:h-64 md:w-56 md:h-72 lg:w-64 lg:h-80 xl:w-72 xl:h-96 snap-center overflow-hidden rounded-xl border border-zinc-800 hover:border-[#C5A55A] transition-all duration-500 group cursor-pointer shadow-2xl shadow-black/80 transform-gpu"
                 aria-label={`Ver perfil de ${m.nombre}`}
               >
                 <Image
