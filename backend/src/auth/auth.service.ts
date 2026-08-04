@@ -79,13 +79,23 @@ export class AuthService {
         lock: { mode: 'pessimistic_write' },
       });
 
+      const isRecentlyReplaced =
+        current &&
+        current.revokedAt !== null &&
+        current.replacedBySessionId !== null &&
+        Date.now() - current.revokedAt.getTime() < 30000;
+
       const compromised =
         !current ||
         current.userId !== payload.sub ||
         current.familyId !== payload.familyId ||
-        current.revokedAt !== null ||
+        (current.revokedAt !== null && !isRecentlyReplaced) ||
         current.expiresAt.getTime() <= Date.now() ||
         current.refreshTokenHash !== this.hashToken(refreshToken);
+
+      if (isRecentlyReplaced) {
+        throw new UnauthorizedException('Sesión recién renovada');
+      }
 
       if (compromised) {
         await sessions
