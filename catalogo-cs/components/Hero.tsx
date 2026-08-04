@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import type { Modelo } from "@/types";
@@ -58,6 +59,40 @@ interface HeroProps {
 
 export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroProps) {
   const groupServiceTelegramUrl = getGroupServiceTelegramUrl();
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Desplazamiento automático del carrusel cada 12 segundos para mayor dinamismo
+  useEffect(() => {
+    if (!modelos || modelos.length <= 1) return;
+    const interval = setInterval(() => {
+      if (isHovered) return;
+      const el = carouselRef.current;
+      if (!el) return;
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      if (maxScroll <= 5) return; // Si todo cabe en pantalla, no desplazar
+
+      const cardWidth = 280; // Ancho aproximado de tarjeta + espacio
+      if (el.scrollLeft + cardWidth >= maxScroll - 20) {
+        // Al llegar al final, regresar suavemente al inicio (ciclo continuo)
+        el.scrollTo({ left: 0, behavior: "smooth" });
+      } else {
+        el.scrollBy({ left: cardWidth, behavior: "smooth" });
+      }
+    }, 12000);
+
+    return () => clearInterval(interval);
+  }, [modelos, isHovered]);
+
+  const scrollCarousel = (direction: "left" | "right") => {
+    const el = carouselRef.current;
+    if (!el) return;
+    const cardWidth = 300;
+    el.scrollBy({
+      left: direction === "left" ? -cardWidth : cardWidth,
+      behavior: "smooth",
+    });
+  };
 
   return (
     <section
@@ -170,9 +205,36 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 1.2 }}
-          className="relative z-10 w-full max-w-[1500px] mx-auto mt-12 sm:mt-16 mb-6 px-4 sm:px-8"
+          className="relative z-10 w-full max-w-[1500px] mx-auto mt-12 sm:mt-16 mb-6 px-4 sm:px-8 group/carousel"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onTouchStart={() => setIsHovered(true)}
+          onTouchEnd={() => setIsHovered(false)}
         >
-          <div className="flex items-center gap-3.5 sm:gap-5 overflow-x-auto snap-x snap-mandatory customized-scrollbar pb-6 justify-start lg:justify-center">
+          {/* Botón Navegación Izquierda (Desktop) */}
+          <button
+            type="button"
+            onClick={() => scrollCarousel("left")}
+            className="hidden md:flex absolute left-1 lg:left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/80 border border-[#C5A55A]/40 text-[#E8D5A3] items-center justify-center shadow-lg backdrop-blur-md opacity-0 group-hover/carousel:opacity-100 hover:bg-[#C5A55A] hover:text-black transition-all duration-300"
+            aria-label="Modelo anterior"
+          >
+            ←
+          </button>
+
+          {/* Botón Navegación Derecha (Desktop) */}
+          <button
+            type="button"
+            onClick={() => scrollCarousel("right")}
+            className="hidden md:flex absolute right-1 lg:right-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-black/80 border border-[#C5A55A]/40 text-[#E8D5A3] items-center justify-center shadow-lg backdrop-blur-md opacity-0 group-hover/carousel:opacity-100 hover:bg-[#C5A55A] hover:text-black transition-all duration-300"
+            aria-label="Modelo siguiente"
+          >
+            →
+          </button>
+
+          <div
+            ref={carouselRef}
+            className="flex items-center gap-3.5 sm:gap-5 overflow-x-auto snap-x snap-mandatory customized-scrollbar pb-6 justify-start"
+          >
             {modelos.slice(0, 12).map((m) => (
               <button
                 key={m._id}
