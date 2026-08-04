@@ -62,24 +62,22 @@ function ModelCard({ modelo, index, onSelect }: ModelCardProps) {
         {/* Borde dorado sutil al hover */}
         <div className="absolute inset-0 border border-[#C5A55A]/0 group-hover:border-[#C5A55A]/30 transition-all duration-500" />
 
-        {/* Etiqueta editorial de cristal ahumado de alta costura */}
-        <div className="absolute left-4 top-4 z-10">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#C5A55A]/35 bg-black/65 px-3.5 py-1.5 backdrop-blur-md shadow-md">
+        {/* Nombre y disponibilidad en el pie de la tarjeta para no tapar la foto */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 z-10">
+          {/* Indicador de disponibilidad discreto y elegante arriba del nombre */}
+          <div className="flex items-center gap-2 mb-1.5">
             <span
               className={`h-1.5 w-1.5 rounded-full ${
                 available
-                  ? "bg-[#E8D5A3] shadow-[0_0_6px_rgba(232,213,163,0.8)]"
+                  ? "bg-[#E8D5A3] shadow-[0_0_6px_rgba(232,213,163,0.9)]"
                   : "bg-zinc-500"
               }`}
             />
-            <span className="text-[10px] font-medium tracking-[0.25em] uppercase text-zinc-100">
+            <span className="text-[9px] sm:text-[10px] font-light tracking-[0.28em] uppercase text-[#E8D5A3]/95">
               {status}
             </span>
           </div>
-        </div>
 
-        {/* Nombre sobre la imagen */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
           <h3 className="font-heading text-lg sm:text-xl lg:text-2xl font-semibold text-white tracking-wide leading-tight">
             {modelo.nombre}
           </h3>
@@ -89,7 +87,7 @@ function ModelCard({ modelo, index, onSelect }: ModelCardProps) {
             compact
             className="mt-2"
           />
-          <div className="w-8 h-px bg-[#C5A55A]/60 mt-2 group-hover:w-12 transition-all duration-500" />
+          <div className="w-8 h-px bg-[#C5A55A]/60 mt-2.5 group-hover:w-12 transition-all duration-500" />
         </div>
 
         {/* Indicador "Ver perfil" al hover */}
