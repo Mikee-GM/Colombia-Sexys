@@ -5,6 +5,8 @@ import { apiFetch } from "@/lib/api-server";
 import type {
   CreateDebtInput,
   CreatePaymentInput,
+  DriverLiquidationDriver,
+  DriverLiquidationReport,
   LiquidationDebt,
   LiquidationEmployee,
   LiquidationRecord,
@@ -120,4 +122,34 @@ export async function deleteDebtPayment(
     { method: "DELETE" },
   );
   revalidatePath("/admin/liquidations");
+}
+
+export async function getActiveDrivers(startDate: string, endDate: string) {
+  return await apiFetch<DriverLiquidationDriver[]>(
+    `/transport-operations/driver-settlements/active-drivers?${periodParams(startDate, endDate)}`,
+  );
+}
+
+export async function getDriverReport(
+  startDate: string,
+  endDate: string,
+  driverId: string,
+) {
+  const params = new URLSearchParams({ startDate, endDate, driverId });
+  return await apiFetch<DriverLiquidationReport>(
+    `/transport-operations/driver-settlements/report?${params.toString()}`,
+  );
+}
+
+export async function confirmDriverSettlement(
+  startDate: string,
+  endDate: string,
+  driverId: string,
+) {
+  const result = await apiFetch(
+    `/transport-operations/driver-settlements/${driverId}/pay`,
+    { method: "POST", body: JSON.stringify({ startDate, endDate }) },
+  );
+  revalidatePath("/admin/liquidations");
+  return result;
 }

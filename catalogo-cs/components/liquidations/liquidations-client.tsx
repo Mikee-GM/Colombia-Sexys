@@ -6,21 +6,35 @@ import {
   getLiquidationEmployees,
   getLiquidationReport,
   confirmWeeklySettlement,
+  getActiveDrivers,
+  getDriverReport,
 } from "@/app/admin/liquidations/actions";
 import { getStartAndEndOfWeek } from "@/lib/calculations";
 import PageHeader from "@/components/ui/page-header";
 import CutComparison from "./cut-comparison";
 import DebtManager from "./debt-manager";
+import DriverSettlementPanel from "./driver-settlement-panel";
 import LiquidationBreakdown from "./liquidation-breakdown";
 import LiquidationSummary from "./liquidation-summary";
-import type { LiquidationEmployee, LiquidationReport } from "./types";
+import type {
+  DriverLiquidationDriver,
+  DriverLiquidationReport,
+  LiquidationEmployee,
+  LiquidationReport,
+} from "./types";
 import WeekSelector from "./week-selector";
 
+type Mode = "empleada" | "chofer";
+
 export default function LiquidationsClient() {
+  const [mode, setMode] = useState<Mode>("empleada");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [employees, setEmployees] = useState<LiquidationEmployee[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [report, setReport] = useState<LiquidationReport | null>(null);
+  const [drivers, setDrivers] = useState<DriverLiquidationDriver[]>([]);
+  const [selectedDriverId, setSelectedDriverId] = useState("");
+  const [driverReport, setDriverReport] = useState<DriverLiquidationReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingReport, setLoadingReport] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -47,12 +61,33 @@ export default function LiquidationsClient() {
     }
   }, [period]);
 
-  useEffect(() => {
-    void loadEmployees();
-  }, [loadEmployees]);
+  const loadDrivers = useCallback(async () => {
+    setLoading(true);
+    setDriverReport(null);
+    try {
+      const data = await getActiveDrivers(
+        period.start.toISOString().slice(0, 10),
+        period.end.toISOString().slice(0, 10),
+      );
+      setDrivers(data ?? []);
+      setSelectedDriverId((current) =>
+        data?.some((driver) => driver.id === current) ? current : "",
+      );
+    } catch (error) {
+      setDrivers([]);
+      toast.error(error instanceof Error ? error.message : "No fue posible cargar los choferes");
+    } finally {
+      setLoading(false);
+    }
+  }, [period]);
 
   useEffect(() => {
-    if (!selectedEmployeeId) {
+    if (mode === "empleada") void loadEmployees();
+    else void loadDrivers();
+  }, [mode, loadEmployees, loadDrivers]);
+
+  useEffect(() => {
+    if (mode !== "empleada" || !selectedEmployeeId) {
       setReport(null);
       return;
     }
@@ -80,7 +115,34 @@ export default function LiquidationsClient() {
     return () => {
       active = false;
     };
-  }, [period, selectedEmployeeId]);
+  }, [mode, period, selectedEmployeeId]);
+
+  const loadDriverReport = useCallback(() => {
+    if (!selectedDriverId) {
+      setDriverReport(null);
+      return;
+    }
+    setLoadingReport(true);
+    getDriverReport(
+      period.start.toISOString().slice(0, 10),
+      period.end.toISOString().slice(0, 10),
+      selectedDriverId,
+    )
+      .then((data) => setDriverReport(data))
+      .catch((error) => {
+        setDriverReport(null);
+        toast.error(error instanceof Error ? error.message : "No fue posible calcular la liquidación");
+      })
+      .finally(() => setLoadingReport(false));
+  }, [period, selectedDriverId]);
+
+  useEffect(() => {
+    if (mode !== "chofer" || !selectedDriverId) {
+      setDriverReport(null);
+      return;
+    }
+    loadDriverReport();
+  }, [mode, selectedDriverId, loadDriverReport]);
 
   const employeeGroups = useMemo(() => {
     const groups = new Map<string, { id: string; name: string; employees: LiquidationEmployee[] }>();
@@ -111,6 +173,7 @@ export default function LiquidationsClient() {
   const selectedEmployee = employees.find(
     (employee) => employee.id === selectedEmployeeId,
   );
+  const selectedDriver = drivers.find((driver) => driver.id === selectedDriverId);
 
   const changeWeek = (days: number) => {
     setCurrentDate((current) => {
@@ -129,6 +192,23 @@ export default function LiquidationsClient() {
         )}
       </div>
 
+      <div className="flex w-full justify-center gap-2">
+        {(["empleada", "chofer"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setMode(option)}
+            className={`rounded-full border px-5 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
+              mode === option
+                ? "border-brand-gold bg-brand-gold text-black"
+                : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-brand-gold/50"
+            }`}
+          >
+            {option === "empleada" ? "Empleadas" : "Choferes"}
+          </button>
+        ))}
+      </div>
+
       <div className="flex w-full justify-center">
         <WeekSelector
           currentDate={currentDate}
@@ -137,7 +217,7 @@ export default function LiquidationsClient() {
         />
       </div>
 
-      {!loading && (
+      {!loading && mode === "empleada" && (
         <div className="space-y-6">
           <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-md sm:p-6">
             <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-400">
@@ -196,6 +276,43 @@ export default function LiquidationsClient() {
               </div>
               <DebtManager employeeId={selectedEmployee.id} employeeName={selectedEmployee.name} />
             </div>
+          )}
+        </div>
+      )}
+
+      {!loading && mode === "chofer" && (
+        <div className="space-y-6">
+          <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 shadow-md sm:p-6">
+            <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-400">
+              Choferes activos esta semana
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {drivers.map((driver) => (
+                <button
+                  key={driver.id}
+                  type="button"
+                  onClick={() => setSelectedDriverId(driver.id)}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                    selectedDriverId === driver.id
+                      ? "border-brand-gold bg-brand-gold text-black"
+                      : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-brand-gold/50"
+                  }`}
+                >
+                  {driver.name}
+                </button>
+              ))}
+              {drivers.length === 0 && (
+                <p className="text-sm text-zinc-500">No hay actividad esta semana.</p>
+              )}
+            </div>
+          </section>
+
+          {driverReport && selectedDriver && (
+            <DriverSettlementPanel
+              report={driverReport}
+              period={period}
+              onConfirmed={loadDriverReport}
+            />
           )}
         </div>
       )}

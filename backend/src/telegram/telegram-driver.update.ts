@@ -1,4 +1,9 @@
-import { Inject, forwardRef, BeforeApplicationShutdown } from '@nestjs/common';
+import {
+  Inject,
+  forwardRef,
+  BeforeApplicationShutdown,
+  Logger,
+} from '@nestjs/common';
 import { Update, Ctx, Action, On, Hears } from 'nestjs-telegraf';
 import { Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -18,6 +23,7 @@ import {
   parseReportCategoryCode,
 } from '../employee-reports/report-callback';
 import { DisciplineService } from '../discipline/discipline.service';
+import { SettlementsService } from '../transport-operations/settlements.service';
 
 interface DriverCacheEntry {
   userId: string;
@@ -35,6 +41,7 @@ interface DriverCacheEntry {
 
 @Update()
 export class TelegramDriverUpdate implements BeforeApplicationShutdown {
+  private readonly logger = new Logger(TelegramDriverUpdate.name);
   private readonly driverIdentityCache = new Map<string, DriverCacheEntry>();
 
   private readonly cacheCleanupInterval: NodeJS.Timeout;
@@ -51,6 +58,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     private readonly aiMessageService: AiMessageService,
     private readonly employeeReportsService: EmployeeReportsService,
     private readonly disciplineService: DisciplineService,
+    private readonly settlementsService: SettlementsService,
   ) {
     this.cacheCleanupInterval = setInterval(() => {
       const now = Date.now();
@@ -1309,6 +1317,14 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
 
     // Ejecutar todas las promesas en paralelo
     await Promise.all(promises);
+    await this.settlementsService
+      .syncDriverSettlement(trip.id)
+      .catch((error) =>
+        this.logger.error(
+          `El viaje ${trip.id} finalizó, pero no se pudo sincronizar su liquidación`,
+          error,
+        ),
+      );
     if (trip.tipo === 'ida' && wasScheduled) {
       await this.servicesService.notifyScheduledServiceStarted(
         trip.servicio.id,

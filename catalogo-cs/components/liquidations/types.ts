@@ -111,3 +111,27 @@ export interface CreatePaymentInput {
   amount: number;
   note?: string;
 }
+
+export interface DriverLiquidationTrip {
+  id: string;
+  tipo: "ida" | "regreso";
+  zona: string;
+  driverPayout: number;
+  horaFinViaje: string | null;
+}
+
+export interface DriverLiquidationDriver {
+  id: string;
+  name: string;
+}
+
+export interface DriverLiquidationReport {
+  driver: { id: string; name: string };
+  period: { startDate: string; endDate: string };
+  trips: DriverLiquidationTrip[];
+  weeklySettlement: {
+    status: "preview" | "pending" | "paid";
+    totalPay: number;
+    confirmedAt: string | null;
+  };
+}

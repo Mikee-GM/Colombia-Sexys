@@ -20,7 +20,11 @@ import {
   UpdateTransportSettingDto,
 } from './dto/transport-operation.dto';
 import { TransportOperationsService } from './transport-operations.service';
-import { CashPaymentDto, SettlementPeriodDto } from './dto/settlement.dto';
+import {
+  CashPaymentDto,
+  DriverReportQueryDto,
+  SettlementPeriodDto,
+} from './dto/settlement.dto';
 import { SettlementsService } from './settlements.service';
 
 @Controller('transport-operations')
@@ -91,6 +95,20 @@ export class TransportOperationsController {
       period.startDate,
       period.endDate,
       req.user.id,
+    );
+  }
+  @Get('driver-settlements/active-drivers') activeDrivers(
+    @Query() period: SettlementPeriodDto,
+  ) {
+    return this.settlements.getActiveDrivers(period.startDate, period.endDate);
+  }
+  @Get('driver-settlements/report') driverIndividualReport(
+    @Query() query: DriverReportQueryDto,
+  ) {
+    return this.settlements.getDriverReport(
+      query.driverId,
+      query.startDate,
+      query.endDate,
     );
   }
 }

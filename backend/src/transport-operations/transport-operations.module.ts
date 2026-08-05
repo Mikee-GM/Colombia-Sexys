@@ -13,6 +13,7 @@ import { DriverSettlement } from './entities/driver-settlement.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { SettlementsService } from './settlements.service';
 import { Empleadas } from '../employees/entities/employee.entity';
+import { Choferes } from '../drivers/entities/driver.entity';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { Empleadas } from '../employees/entities/employee.entity';
       DriverSettlement,
       Viajes,
       Empleadas,
+      Choferes,
     ]),
   ],
   controllers: [TransportOperationsController],

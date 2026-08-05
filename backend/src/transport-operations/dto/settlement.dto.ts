@@ -21,3 +21,6 @@ export class SettlementPeriodDto {
   @IsDateString() startDate: string;
   @IsDateString() endDate: string;
 }
+export class DriverReportQueryDto extends SettlementPeriodDto {
+  @IsUUID() driverId: string;
+}

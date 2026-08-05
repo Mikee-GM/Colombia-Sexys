@@ -14,6 +14,7 @@ import {
 } from './entities/employee-cash-payment.entity';
 import { DriverSettlement } from './entities/driver-settlement.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
+import { Choferes } from '../drivers/entities/driver.entity';
 import { Usuarios } from '../users/entities/user.entity';
 
 @Injectable()
@@ -27,7 +28,24 @@ export class SettlementsService {
     @InjectRepository(Viajes) private readonly trips: Repository<Viajes>,
     @InjectRepository(Empleadas)
     private readonly employees: Repository<Empleadas>,
+    @InjectRepository(Choferes)
+    private readonly drivers: Repository<Choferes>,
   ) {}
+
+  private getWeekBounds(date: Date): { weekStart: string; weekEnd: string } {
+    const d = new Date(date);
+    const day = d.getDay();
+    const adjustedDay = day === 0 ? 7 : day;
+    const diff = d.getDate() - adjustedDay + 1;
+    const start = new Date(d);
+    start.setDate(diff);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    const toDateOnly = (value: Date) => value.toISOString().slice(0, 10);
+    return { weekStart: toDateOnly(start), weekEnd: toDateOnly(end) };
+  }
 
   private async allowedEmployeeIds(actor: Usuarios): Promise<string[] | null> {
     if (actor.rol === 'admin') return null;
@@ -215,5 +233,110 @@ export class SettlementsService {
         );
       return settlement;
     });
+  }
+
+  async syncDriverSettlement(tripId: string): Promise<void> {
+    const trip = await this.trips.findOneBy({ id: tripId });
+    if (
+      !trip ||
+      trip.proveedorTransporte !== 'interno' ||
+      trip.estado !== 'finalizado' ||
+      !trip.choferId ||
+      !trip.horaFinViaje
+    ) {
+      return;
+    }
+    const { weekStart, weekEnd } = this.getWeekBounds(trip.horaFinViaje);
+    const existing = await this.driverSettlements.findOneBy({
+      driverId: trip.choferId,
+      weekStart,
+    });
+    if (existing?.status === 'paid') return;
+    const trips = await this.trips.find({
+      where: {
+        choferId: trip.choferId,
+        proveedorTransporte: 'interno',
+        estado: 'finalizado',
+        driverSettlementId: IsNull(),
+        horaFinViaje: Between(
+          new Date(`${weekStart}T00:00:00Z`),
+          new Date(`${weekEnd}T23:59:59.999Z`),
+        ),
+      },
+    });
+    const total = trips.reduce(
+      (sum, item) => sum + Number(item.driverPayout),
+      0,
+    );
+    await this.driverSettlements.save({
+      ...(existing ?? {}),
+      driverId: trip.choferId,
+      weekStart,
+      weekEnd,
+      total,
+      status: 'pending',
+      updatedAt: new Date(),
+    });
+  }
+
+  async getActiveDrivers(startDate: string, endDate: string) {
+    const trips = await this.trips.find({
+      where: {
+        proveedorTransporte: 'interno',
+        estado: 'finalizado',
+        horaFinViaje: Between(
+          new Date(`${startDate}T00:00:00Z`),
+          new Date(`${endDate}T23:59:59.999Z`),
+        ),
+      },
+    });
+    const driverIds = [
+      ...new Set(
+        trips.map((trip) => trip.choferId).filter((id): id is string => !!id),
+      ),
+    ];
+    if (!driverIds.length) return [];
+    const drivers = await this.drivers.findBy({ id: In(driverIds) });
+    return drivers.map((driver) => ({ id: driver.id, name: driver.nombre }));
+  }
+
+  async getDriverReport(driverId: string, startDate: string, endDate: string) {
+    const driver = await this.drivers.findOneBy({ id: driverId });
+    if (!driver) throw new NotFoundException('Chofer no encontrado');
+    const trips = await this.trips.find({
+      where: {
+        choferId: driverId,
+        proveedorTransporte: 'interno',
+        estado: 'finalizado',
+        horaFinViaje: Between(
+          new Date(`${startDate}T00:00:00Z`),
+          new Date(`${endDate}T23:59:59.999Z`),
+        ),
+      },
+      order: { horaFinViaje: 'ASC' },
+    });
+    const existing = await this.driverSettlements.findOneBy({
+      driverId,
+      weekStart: startDate,
+    });
+    const totalPay = existing
+      ? Number(existing.total)
+      : trips.reduce((sum, trip) => sum + Number(trip.driverPayout), 0);
+    return {
+      driver: { id: driver.id, name: driver.nombre },
+      period: { startDate, endDate },
+      trips: trips.map((trip) => ({
+        id: trip.id,
+        tipo: trip.tipo,
+        zona: trip.zona,
+        driverPayout: Number(trip.driverPayout),
+        horaFinViaje: trip.horaFinViaje,
+      })),
+      weeklySettlement: {
+        status: existing ? existing.status : ('preview' as const),
+        totalPay,
+        confirmedAt: existing?.paidAt ?? null,
+      },
+    };
   }
 }
