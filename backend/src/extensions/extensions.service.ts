@@ -20,8 +20,8 @@ export class ExtensionsService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!service) throw new NotFoundException('Servicio no encontrado');
-      if (service.estado !== 'en_curso') {
-        throw new ConflictException('El servicio ya no está en curso');
+      if (!['pendiente', 'agendado', 'en_curso'].includes(service.estado)) {
+        throw new ConflictException('El servicio ya no está activo');
       }
       if (service.prorrogasUsadas >= 3) {
         throw new ConflictException('Ya se usaron las 3 prórrogas permitidas');

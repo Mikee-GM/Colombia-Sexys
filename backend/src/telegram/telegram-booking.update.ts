@@ -2213,15 +2213,41 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ]),
     );
 
-    // 2. Limpieza de chat del cliente (Eliminar mensaje anterior)
-    if (servicio.cliente?.telegramChatId && servicio.telegramClienteMensajeId) {
+    // 2. Limpieza de chat del cliente (Eliminar mensaje anterior) y enviar solicitud de calificación
+    if (servicio.cliente?.telegramChatId) {
+      if (servicio.telegramClienteMensajeId) {
+        try {
+          await ctx.telegram.deleteMessage(
+            servicio.cliente.telegramChatId,
+            parseInt(servicio.telegramClienteMensajeId, 10),
+          );
+        } catch (err) {
+          console.error('Error al eliminar mensaje del cliente:', err);
+        }
+      }
+
       try {
-        await ctx.telegram.deleteMessage(
+        const ratingKeyboard = Markup.inlineKeyboard([
+          ...[1, 2, 3, 4, 5].map((rating) => [
+            Markup.button.callback(
+              `${rating} - ${'⭐'.repeat(rating)}`,
+              `calificar_servicio:${servicio.id}:${rating}`,
+            ),
+          ]),
+          [
+            Markup.button.callback(
+              '⚠️ Reportar empleada',
+              `er_client_start:${servicio.id}`,
+            ),
+          ],
+        ]);
+        await ctx.telegram.sendMessage(
           servicio.cliente.telegramChatId,
-          parseInt(servicio.telegramClienteMensajeId, 10),
+          `✨ *El servicio con ${servicio.empleada?.nombreArtistico || 'la empleada'} ha finalizado.*\n\nPor favor, tómate un momento para calificar tu experiencia:`,
+          { parse_mode: 'Markdown', ...ratingKeyboard },
         );
       } catch (err) {
-        console.error('Error al eliminar mensaje del cliente:', err);
+        console.error('Error al enviar la solicitud de calificación al cliente:', err);
       }
     }
 
@@ -4431,9 +4457,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    if (servicio.estado !== 'en_curso') {
+    if (!['pendiente', 'agendado', 'en_curso'].includes(servicio.estado)) {
       await ctx.answerCbQuery(
-        '⚠️ Este servicio ya no está en curso o fue cancelado.',
+        '⚠️ Este servicio ya no está activo o fue cancelado.',
         { show_alert: true },
       );
       return;

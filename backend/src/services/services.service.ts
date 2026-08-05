@@ -1095,22 +1095,29 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         }
         const employeeChatId = next.empleada?.usuario?.telegramChatId;
         if (employeeChatId) {
-          await this.bot.telegram.sendMessage(
-            employeeChatId,
-            'Tu siguiente servicio está listo. Usa este enlace para solicitar el Uber.',
-            {
-              ...Markup.inlineKeyboard([
-                [Markup.button.url('📱 Abrir Uber', uberLink)],
-                [
-                  Markup.button.callback(
-                    'Ya estoy en el Uber',
-                    `eu:${trip.id}:i`,
-                  ),
-                  Markup.button.callback('Ya llegué', `eu:${trip.id}:f`),
-                ],
-              ]),
-            },
-          );
+          if (trip.proveedorTransporte === 'uber') {
+            await this.bot.telegram.sendMessage(
+              employeeChatId,
+              'Tu siguiente servicio está listo. Usa este enlace para solicitar el Uber.',
+              {
+                ...Markup.inlineKeyboard([
+                  [Markup.button.url('📱 Abrir Uber', uberLink)],
+                  [
+                    Markup.button.callback(
+                      'Ya estoy en el Uber',
+                      `eu:${trip.id}:i`,
+                    ),
+                    Markup.button.callback('Ya llegué', `eu:${trip.id}:f`),
+                  ],
+                ]),
+              },
+            );
+          } else {
+            await this.bot.telegram.sendMessage(
+              employeeChatId,
+              'Tu siguiente servicio está listo. Te notificaremos cuando tu chofer esté en camino.',
+            );
+          }
         }
       }
       if (next.cliente?.telegramChatId) {
@@ -1644,7 +1651,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    if (!servicio || servicio.estado !== 'en_curso') return;
+    if (!servicio || !['pendiente', 'agendado', 'en_curso'].includes(servicio.estado)) return;
 
     servicio.estado = 'cancelado';
     await this.serviciosRepository.save(servicio);
@@ -2649,7 +2656,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
 
     const employeeChatId = trip.servicio.empleada?.usuario?.telegramChatId;
-    if (bossAction && employeeChatId) {
+    if (bossAction && employeeChatId && trip.proveedorTransporte === 'uber') {
       const message =
         action === 'uber_arrived'
           ? '📍 Tu Uber ya llegó. Cuando subas, presiona “Ya estoy en el Uber”.'
@@ -2691,14 +2698,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       });
     }
     if (action === 'employee_arrived' && trip.tipo === 'regreso') {
-      if (trip.servicio.cliente?.telegramChatId) {
-        await this.bot.telegram
-          .sendMessage(
-            trip.servicio.cliente.telegramChatId,
-            'El servicio quedó completado: la empleada llegó a su destino.',
-          )
-          .catch(() => undefined);
-      }
+      // No notificar al cliente que la empleada llegó a su casa en viaje de regreso
       this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
         type: 'service_fully_completed',
         data: { serviceId: trip.servicioId, tripId: trip.id },

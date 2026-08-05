@@ -308,7 +308,13 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
 
       const trip = await this.dataSource.getRepository(Viajes).findOne({
         where: { id: viajeId },
-        relations: { servicio: { empleada: { usuario: true }, cliente: true } },
+        relations: {
+          servicio: {
+            empleada: { usuario: true, jefe: true },
+            cliente: true,
+            jefe: true,
+          },
+        },
       });
 
       if (trip && trip.servicio) {
@@ -334,6 +340,14 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
             serviceId: trip.servicio.id,
           },
         });
+
+        await this.notifyBossTripTopic(
+          ctx,
+          trip,
+          chofer,
+          'Chofer aceptó el viaje',
+          `El chofer *${driverName}* aceptó el viaje de *${trip.tipo}*.`,
+        );
 
         // Notificaciones en paralelo usando Promise.allSettled
         const notifyEmployeePromise = (async () => {
@@ -574,7 +588,13 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
 
     const trip = await this.dataSource.getRepository(Viajes).findOne({
       where: { id: viajeId },
-      relations: { servicio: { cliente: true, empleada: { usuario: true } } },
+      relations: {
+        servicio: {
+          empleada: { usuario: true, jefe: true },
+          cliente: true,
+          jefe: true,
+        },
+      },
     });
 
     if (!trip) {
@@ -603,6 +623,14 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     trip.estado = 'llegado';
 
     await ctx.answerCbQuery('📍 Has llegado con la empleada.');
+
+    await this.notifyBossTripTopic(
+      ctx,
+      trip,
+      chofer,
+      'Chofer llegó al punto de recogida',
+      `El chofer *${chofer.nombre}* ya llegó a la ubicación para recoger a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}*.`,
+    );
 
     // Notificar a la empleada que el chofer ha llegado con la info de identificación
     const empUserArrived = trip.servicio?.empleada?.usuario;
@@ -861,7 +889,13 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
 
     const trip = await this.dataSource.getRepository(Viajes).findOne({
       where: { id: viajeId },
-      relations: { servicio: { cliente: true, empleada: { usuario: true } } },
+      relations: {
+        servicio: {
+          empleada: { usuario: true, jefe: true },
+          cliente: true,
+          jefe: true,
+        },
+      },
     });
 
     if (!trip) {
@@ -897,6 +931,14 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
 
     await ctx.answerCbQuery(
       '🟢 Pasajera a bordo. Iniciando trayecto al cliente.',
+    );
+
+    await this.notifyBossTripTopic(
+      ctx,
+      trip,
+      chofer,
+      'Empleada recogida',
+      `El chofer *${chofer.nombre}* ya recogió a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* e inició el trayecto al destino.`,
     );
 
     // Borrar mensajes previos del chat de la empleada ("chofer va en camino" y "chofer ha llegado")
@@ -1184,6 +1226,14 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     const horaFin = new Date();
     trip.estado = 'finalizado';
     trip.horaFinViaje = horaFin;
+
+    await this.notifyBossTripTopic(
+      ctx,
+      trip,
+      chofer,
+      'Viaje finalizado',
+      `El chofer *${chofer.nombre}* ha dejado a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* en su destino y finalizó el viaje.`,
+    );
 
     // Preparar promesas de escritura paralela
     const promises: Promise<any>[] = [];
@@ -1712,5 +1762,60 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     await ctx.reply(
       '🔴 Ahora estás INACTIVO. No se te asignarán solicitudes de viaje hasta que te pongas disponible.',
     );
+  }
+
+  private async notifyBossTripTopic(
+    ctx: Context,
+    trip: Viajes,
+    chofer: DriverCacheEntry,
+    updateTitle: string,
+    updateDetail: string,
+  ) {
+    const servicio = trip.servicio;
+    if (!servicio) return;
+
+    const jefeGrupoId =
+      servicio.jefe?.grupoTelegramId ||
+      servicio.empleada?.jefe?.grupoTelegramId;
+    const telegramThreadId = servicio.telegramThreadId;
+
+    const targetChatId =
+      jefeGrupoId ||
+      servicio.jefe?.telegramChatId ||
+      servicio.empleada?.jefe?.telegramChatId;
+
+    if (!targetChatId) return;
+
+    const vehiculoInfo = [
+      chofer.vehiculoMarca ? `• *Marca:* ${chofer.vehiculoMarca}` : null,
+      chofer.vehiculoModelo ? `• *Modelo:* ${chofer.vehiculoModelo}` : null,
+      chofer.vehiculoColor ? `• *Color:* ${chofer.vehiculoColor}` : null,
+      chofer.vehiculoPlaca ? `• *Placa:* ${chofer.vehiculoPlaca}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const msgText =
+      `🚗 *Actualización de Chofer:* ${updateTitle}\n\n` +
+      `${updateDetail}\n\n` +
+      `• *Chofer:* ${chofer.nombre}\n` +
+      `• *Teléfono:* ${chofer.telefono || 'No registrado'}\n` +
+      `• *Empleada:* ${servicio.empleada?.nombreArtistico || 'N/A'}\n` +
+      `• *Tipo de Viaje:* ${trip.tipo === 'ida' ? 'Ida (hacia cliente)' : 'Regreso (hacia domicilio)'}\n` +
+      (vehiculoInfo ? `\n*Datos del Vehículo:*\n${vehiculoInfo}` : '');
+
+    try {
+      await ctx.telegram.sendMessage(targetChatId, msgText, {
+        parse_mode: 'Markdown',
+        ...(jefeGrupoId && telegramThreadId
+          ? { message_thread_id: parseInt(telegramThreadId, 10) }
+          : {}),
+      });
+    } catch (err) {
+      console.error(
+        `Error al notificar al jefe en Telegram sobre actualización de chofer (targetChatId: ${targetChatId}):`,
+        err,
+      );
+    }
   }
 }

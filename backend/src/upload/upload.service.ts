@@ -100,7 +100,7 @@ export class UploadService {
         Bucket: this.privateBucketName,
         Key: key,
       });
-      const url = await getSignedUrl(this.s3Client as any, command, {
+      const url = await getSignedUrl(this.s3Client as any, command as any, {
         expiresIn: expiresInSeconds,
       });
       return { url };
