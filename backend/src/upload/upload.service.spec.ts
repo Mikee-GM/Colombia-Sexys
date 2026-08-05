@@ -12,17 +12,19 @@ jest.mock('@aws-sdk/client-s3', () => {
 
 describe('UploadService evidence storage', () => {
   const send = jest.fn().mockResolvedValue({});
+  const values: Record<string, string> = {
+    R2_ENDPOINT: 'https://account.r2.cloudflarestorage.com',
+    R2_ACCESS_KEY_ID: 'access',
+    R2_SECRET_ACCESS_KEY: 'secret',
+    R2_BUCKET_NAME: 'bucket',
+    R2_PRIVATE_BUCKET_NAME: 'private-bucket',
+    R2_PUBLIC_URL: 'https://media.example.com',
+  };
   const config = {
-    getOrThrow: jest.fn((key: string) => {
-      const values: Record<string, string> = {
-        R2_ENDPOINT: 'https://account.r2.cloudflarestorage.com',
-        R2_ACCESS_KEY_ID: 'access',
-        R2_SECRET_ACCESS_KEY: 'secret',
-        R2_BUCKET_NAME: 'bucket',
-        R2_PUBLIC_URL: 'https://media.example.com',
-      };
-      return values[key];
-    }),
+    get: jest.fn(
+      (key: string, defaultValue?: string) => values[key] ?? defaultValue,
+    ),
+    getOrThrow: jest.fn((key: string) => values[key]),
   } as unknown as ConfigService;
 
   beforeEach(() => {
