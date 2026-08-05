@@ -1651,7 +1651,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    if (!servicio || !['pendiente', 'agendado', 'en_curso'].includes(servicio.estado)) return;
+    if (
+      !servicio ||
+      !['pendiente', 'agendado', 'en_curso'].includes(servicio.estado)
+    )
+      return;
 
     servicio.estado = 'cancelado';
     await this.serviciosRepository.save(servicio);

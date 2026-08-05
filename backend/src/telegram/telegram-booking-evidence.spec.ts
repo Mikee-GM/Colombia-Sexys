@@ -13,7 +13,7 @@ describe('TelegramBookingUpdate receipt evidence', () => {
   const uploadService = {
     uploadEvidenceFromUrl: jest.fn(),
   };
-  const update = Object.create(TelegramBookingUpdate.prototype) as any;
+  const update = Object.create(TelegramBookingUpdate.prototype);
   update.paymentReceiptValidationsRepository = repository;
   update.uploadService = uploadService;
 

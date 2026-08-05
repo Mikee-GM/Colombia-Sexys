@@ -27,7 +27,8 @@ export class EmployeeCashObligation {
   })
   paidAmount: number;
   @Column('varchar', { length: 20, default: 'pending' }) status:
-    'pending' | 'paid';
+    | 'pending'
+    | 'paid';
   @Column('varchar', {
     name: 'calculation_status',
     length: 20,

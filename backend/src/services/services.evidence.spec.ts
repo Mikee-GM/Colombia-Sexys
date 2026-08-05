@@ -38,7 +38,7 @@ describe('ServicesService evidence listing', () => {
     take: jest.fn(() => queryBuilder),
     getMany: jest.fn(() => Promise.resolve(rows)),
   };
-  const service = Object.create(ServicesService.prototype) as any;
+  const service = Object.create(ServicesService.prototype);
   service.paymentReceiptValidationsRepository = {
     createQueryBuilder: jest.fn(() => queryBuilder),
   };
