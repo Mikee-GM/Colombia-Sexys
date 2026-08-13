@@ -21,8 +21,7 @@ export class CsrfGuard implements CanActivate {
     }
 
     const signedCookies = request.signedCookies as
-      | Record<string, string>
-      | undefined;
+      Record<string, string> | undefined;
     if (!signedCookies?.[ACCESS_COOKIE] && !signedCookies?.[REFRESH_COOKIE]) {
       return true;
     }
