@@ -234,13 +234,14 @@ describe('ServicesService transport settlement', () => {
     expect(viajesRepository.update).not.toHaveBeenCalled();
   });
 
-  it('cierra el regreso solamente cuando la empleada confirma su llegada', async () => {
+  it('no cierra el regreso en Uber hasta que se confirme la tarifa', async () => {
     viajesRepository.findOne.mockResolvedValue({
       id: 'trip',
       servicioId: 'service',
       tipo: 'regreso',
       estado: 'en_curso',
       proveedorTransporte: 'uber',
+      fareConfirmedAt: null,
       servicio: {
         jefeId: 'boss',
         clienteId: 'client',
@@ -259,6 +260,34 @@ describe('ServicesService transport settlement', () => {
       'trip',
       expect.objectContaining({ estado: 'finalizado' }),
     );
+    expect(serviciosRepository.update).toHaveBeenCalledWith(
+      'service',
+      expect.not.objectContaining({ estadoLiquidacion: 'cerrada' }),
+    );
+  });
+
+  it('cierra el regreso en Uber si la tarifa ya estaba confirmada al llegar', async () => {
+    viajesRepository.findOne.mockResolvedValue({
+      id: 'trip',
+      servicioId: 'service',
+      tipo: 'regreso',
+      estado: 'en_curso',
+      proveedorTransporte: 'uber',
+      fareConfirmedAt: new Date(),
+      servicio: {
+        jefeId: 'boss',
+        clienteId: 'client',
+        empleadaId: 'employee',
+        empleada: { usuarioId: 'employee-user', usuario: {} },
+      },
+    });
+    usuariosRepository.findOneBy.mockResolvedValue({
+      id: 'employee-user',
+      rol: 'empleada',
+    });
+
+    await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
+
     expect(serviciosRepository.update).toHaveBeenCalledWith(
       'service',
       expect.objectContaining({ estadoLiquidacion: 'cerrada' }),
