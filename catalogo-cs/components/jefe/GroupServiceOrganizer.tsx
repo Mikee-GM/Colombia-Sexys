@@ -24,9 +24,10 @@ import {
   sendGroupRequestMessage,
   startGroupService,
   updateGroupRequest,
+  uploadUberScreenshot,
   type GroupTransportUnitInput,
 } from "@/lib/actions/jefe-panel";
-import type { ConversationMessage, Employee, GroupServiceRequest } from "@/lib/types";
+import type { ConversationMessage, Employee, GroupServiceRequest, Trip } from "@/lib/types";
 
 const LocationMap = dynamic(
   () => import("@/components/admin/transport-location-map"),
@@ -884,7 +885,7 @@ function ActiveGroupEditor({
       </section>
 
       {((service.receiptValidations ?? []).some((item) => item.imageUrl) ||
-        (service.viajes ?? []).some((trip) => trip.uberScreenshotUrl)) && (
+        (service.viajes ?? []).some((trip) => trip.proveedorTransporte === "uber")) && (
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
           <h3 className="font-heading text-2xl">Evidencias</h3>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -895,12 +896,15 @@ function ActiveGroupEditor({
                 <ExternalLink size={12} className="ml-1 inline" />
               </a>
             ))}
-            {(service.viajes ?? []).filter((trip) => trip.uberScreenshotUrl).map((trip) => (
+            {(service.viajes ?? []).filter((trip) => trip.proveedorTransporte === "uber" && trip.uberScreenshotUrl).map((trip) => (
               <a key={trip.id} href={trip.uberScreenshotUrl!} target="_blank" rel="noopener noreferrer" className={buttonClass}>
                 <ImageIcon size={14} className="mr-1 inline" />
                 Uber de {trip.tipo}
                 <ExternalLink size={12} className="ml-1 inline" />
               </a>
+            ))}
+            {(service.viajes ?? []).filter((trip) => trip.proveedorTransporte === "uber" && !trip.uberScreenshotUrl).map((trip) => (
+              <UberScreenshotUpload key={trip.id} trip={trip} pending={pending} run={run} />
             ))}
           </div>
         </section>
@@ -1244,6 +1248,43 @@ function ActiveGroupEditor({
         </div>
       </section>
     </>
+  );
+}
+
+function UberScreenshotUpload({
+  trip,
+  pending,
+  run,
+}: {
+  trip: Trip;
+  pending: boolean;
+  run: (
+    action: () => Promise<{ success: boolean; error?: string }>,
+    success: string,
+  ) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <label className={`${buttonClass} cursor-pointer ${pending ? "opacity-40" : ""}`}>
+      <ImageIcon size={14} className="mr-1 inline" />
+      Subir captura Uber de {trip.tipo}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        disabled={pending}
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          const formData = new FormData();
+          formData.append("tripId", trip.id);
+          formData.append("file", file);
+          run(() => uploadUberScreenshot(formData), "Captura enviada");
+          if (inputRef.current) inputRef.current.value = "";
+        }}
+      />
+    </label>
   );
 }
 

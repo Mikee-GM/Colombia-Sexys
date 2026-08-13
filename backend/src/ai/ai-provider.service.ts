@@ -151,6 +151,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
         this.logger.error('Failed to parse Groq response as JSON', content);
         return {
           esComprobante: false,
+          aiCallFailed: true,
           analisisIA: {
             posibleFraude: true,
             alertas: ['Error al procesar JSON'],
@@ -162,6 +163,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
       this.logger.error('Failed to call Groq Vision API:', err.message);
       return {
         esComprobante: false,
+        aiCallFailed: true,
         analisisIA: {
           posibleFraude: true,
           alertas: ['Error de conexión con IA'],

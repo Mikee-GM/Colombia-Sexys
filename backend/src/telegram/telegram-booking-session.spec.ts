@@ -49,13 +49,12 @@ describe('Telegram booking session input parsing', () => {
     expect(extractHirePaymentMethod('luego te digo')).toBeUndefined();
   });
 
-  it.each([
-    'AWAITING_UBER_SCREENSHOT',
-    'AWAITING_UBER_FARE_ACTION',
-    'AWAITING_UBER_FARE',
-  ])('reserves %s for the administrative Uber flow', (step) => {
-    expect(isUberAdminInputSession({ step })).toBe(true);
-  });
+  it.each(['AWAITING_UBER_FARE_ACTION', 'AWAITING_UBER_FARE'])(
+    'reserves %s for the administrative Uber flow',
+    (step) => {
+      expect(isUberAdminInputSession({ step })).toBe(true);
+    },
+  );
 
   it('allows ordinary messages through the conversation router', () => {
     expect(isUberAdminInputSession({ step: 'CHAT_CON_EMPLEADA' })).toBe(false);

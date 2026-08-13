@@ -1821,18 +1821,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         boss && rows.findIndex((item) => item?.id === boss.id) === index,
     );
     for (const boss of bosses) {
-      if (boss!.telegramChatId) {
-        const chatId = String(boss!.telegramChatId);
-        if (!usedChatIds.has(chatId)) {
-          usedChatIds.add(chatId);
-          messages.push({
-            destination: `chat privado del jefe ${boss!.id}`,
-            request: this.bot.telegram.sendMessage(chatId, text, {
-              ...keyboard,
-            }),
-          });
-        }
-      }
       if (boss!.grupoTelegramId) {
         const groupId = String(boss!.grupoTelegramId);
         if (!usedChatIds.has(groupId)) {
@@ -2234,59 +2222,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async saveEmployeeUberScreenshot(
-    tripId: string,
-    actorId: string,
-    fileId: string,
-  ): Promise<Viajes> {
-    const trip = await this.viajesRepository.findOne({
-      where: { id: tripId },
-      relations: { servicio: { cliente: true, empleada: true, jefe: true } },
-    });
-    if (!trip || trip.proveedorTransporte !== 'uber') {
-      throw new NotFoundException('Viaje Uber no encontrado');
-    }
-    const actor = await this.usuariosRepository.findOneBy({ id: actorId });
-    if (
-      actor?.rol !== 'empleada' ||
-      trip.servicio.empleada?.usuarioId !== actor.id
-    ) {
-      throw new ConflictException(
-        'Solo la empleada asignada puede enviar la captura',
-      );
-    }
-    if (trip.estado !== 'finalizado') {
-      throw new ConflictException('Primero confirma tu llegada al destino');
-    }
-    const fileUrl = await this.bot.telegram.getFileLink(fileId);
-    const evidence = await this.uploadService.uploadEvidenceFromUrl({
-      sourceUrl: fileUrl.href,
-      folder: 'uber',
-      scopeId: trip.id,
-    });
-    await this.viajesRepository.update(trip.id, {
-      telegramUberFileId: fileId,
-      uberScreenshotUrl: evidence.url,
-      uberScreenshotUploadedAt: new Date(),
-    });
-    const topic = this.getServiceTopic(trip.servicio);
-    if (topic) {
-      await this.bot.telegram.sendPhoto(topic.chatId, fileId, {
-        message_thread_id: topic.threadId,
-        caption: `Resumen del Uber de ${trip.tipo}. Revisa la captura y registra el costo final.`,
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              'Introducir tarifa',
-              `uber_fare_enter:${trip.id}`,
-            ),
-          ],
-        ]),
-      });
-    }
-    return trip;
-  }
-
   async saveUberScreenshotFromDashboard(
     tripId: string,
     actorId: string,
@@ -2387,6 +2322,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     if (trip.tipo === 'regreso') {
       await this.sendFinalReceiptAndAward(trip.servicioId);
       if (trip.estado === 'finalizado') {
+        await this.serviciosRepository.update(trip.servicioId, {
+          estadoLiquidacion: 'cerrada',
+        });
         setTimeout(() => {
           this.deleteServiceTopic(trip.servicio).catch((error) =>
             console.error(
@@ -2634,7 +2572,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       if (trip.tipo === 'regreso') {
         await this.serviciosRepository.update(trip.servicioId, {
           ...(trip.servicio.horaLlegadaCasa ? {} : { horaLlegadaCasa: now }),
-          estadoLiquidacion: 'cerrada',
+          // El servicio solo se cierra aquí si ya no falta que el jefe suba
+          // la captura ni confirme la tarifa del Uber de regreso; si sigue
+          // pendiente, se cierra en confirmUberFare para no desaparecer del
+          // panel de "Activos" antes de tiempo.
+          ...(trip.fareConfirmedAt ? { estadoLiquidacion: 'cerrada' } : {}),
         });
         await this.liquidationSync
           .syncOfficeRecord(trip.servicioId)

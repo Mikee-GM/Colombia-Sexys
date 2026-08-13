@@ -60,7 +60,6 @@ interface SessionData {
     | 'AWAITING_EMPLOYEE_DRIVER_RATING_COMMENT'
     | 'AWAITING_EMPLOYEE_CONDUCT_DESCRIPTION'
     | 'AWAITING_CLIENT_REPORT_DESCRIPTION'
-    | 'AWAITING_UBER_SCREENSHOT'
     | 'AWAITING_UBER_FARE_ACTION'
     | 'AWAITING_UBER_FARE'
     | 'CHAT_CON_EMPLEADA'
@@ -107,7 +106,6 @@ interface BotContext extends Context {
 
 export function isUberAdminInputSession(session?: { step?: string }): boolean {
   return (
-    session?.step === 'AWAITING_UBER_SCREENSHOT' ||
     session?.step === 'AWAITING_UBER_FARE_ACTION' ||
     session?.step === 'AWAITING_UBER_FARE'
   );
@@ -162,6 +160,14 @@ export function validateReceiptAnalysis(
   reason?: string;
   needsManualReview?: boolean;
 } {
+  if (analysis?.aiCallFailed === true) {
+    return {
+      valid: false,
+      needsManualReview: true,
+      reason:
+        'No fue posible verificar automáticamente el comprobante; un asesor lo revisará en breve.',
+    };
+  }
   const isReceipt = Boolean(analysis?.valid ?? analysis?.esComprobante);
   if (!isReceipt) {
     return {
@@ -385,6 +391,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly empleadasRepository: Repository<Empleadas>,
     @InjectRepository(Servicios)
     private readonly serviciosRepository: Repository<Servicios>,
+    @InjectRepository(Viajes)
+    private readonly viajesRepository: Repository<Viajes>,
     @InjectRepository(AuthorizedBankAccounts)
     private readonly authorizedBankAccountsRepository: Repository<AuthorizedBankAccounts>,
     @InjectRepository(PaymentReceiptValidations)
@@ -1700,53 +1708,18 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           },
         );
       } else {
-        (ctx as any).session = {
-          ...(ctx.session ?? {}),
-          step: 'AWAITING_UBER_SCREENSHOT',
-          uberTripId: match[1],
-        };
         await ctx
           .editMessageText('Tu llegada quedó registrada.')
           .catch(() => undefined);
-        await ctx.reply(
-          'Ahora necesito que me envíes una captura de pantalla del resumen del viaje de Uber, donde se vea el costo final.',
-        );
-      }
-    } catch (error: any) {
-      await ctx.answerCbQuery(error.message, { show_alert: true });
-    }
-  }
-
-  @On('photo')
-  async onPhotoUpload(@Ctx() ctx: BotContext) {
-    if (
-      ctx.session?.step === 'AWAITING_UBER_SCREENSHOT' &&
-      ctx.session.uberTripId
-    ) {
-      const telegramId = ctx.from?.id.toString();
-      const user = telegramId
-        ? await this.usuariosRepository.findOne({
-            where: { telegramChatId: telegramId },
-          })
-        : null;
-      const photos = (ctx.message as any)?.photo as
-        Array<{ file_id: string }> | undefined;
-      const fileId = photos?.[photos.length - 1]?.file_id;
-      if (!user || !fileId) {
-        await ctx.reply(
-          'No fue posible procesar la captura. Intenta nuevamente.',
-        );
-        return;
-      }
-      try {
-        const trip = await this.servicesService.saveEmployeeUberScreenshot(
-          ctx.session.uberTripId,
-          user.id,
-          fileId,
-        );
-        ctx.session = {};
-        await ctx.reply('Captura enviada para validación.');
-        if (trip.tipo === 'ida' && trip.servicio.estado === 'en_curso') {
+        const trip = await this.viajesRepository.findOne({
+          where: { id: match[1] },
+          relations: { servicio: { cliente: true } },
+        });
+        if (
+          trip &&
+          trip.tipo === 'ida' &&
+          trip.servicio.estado === 'en_curso'
+        ) {
           const serviceMessage = await ctx.reply(
             `*Servicio en curso*\n\n` +
               `• *Cliente:* ${trip.servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
@@ -1775,12 +1748,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             telegramEmpleadaMensajeId: serviceMessage.message_id.toString(),
           });
         }
-      } catch (error: any) {
-        await ctx.reply(error.message || 'No fue posible guardar la captura.');
       }
-      return;
+    } catch (error: any) {
+      await ctx.answerCbQuery(error.message, { show_alert: true });
     }
+  }
 
+  @On('photo')
+  async onPhotoUpload(@Ctx() ctx: BotContext) {
     const senderTelegramId = ctx.from?.id.toString();
     const groupRequest = senderTelegramId
       ? await this.groupServicesService.findActiveRequestByClientTelegram(
