@@ -124,7 +124,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama-3.2-90b-vision-preview',
+            model: 'qwen/qwen3.6-27b',
             messages,
             response_format: { type: 'json_object' },
             temperature: 0.1,
