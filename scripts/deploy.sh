@@ -28,4 +28,6 @@ docker compose up -d --wait --remove-orphans backend frontend
 
 curl --fail --silent --show-error http://127.0.0.1:3001/api/health >/dev/null
 docker compose ps
+docker image prune -f
+docker builder prune -f --keep-storage 2GB
 echo "Despliegue completado en ${COMMIT_SHA}."

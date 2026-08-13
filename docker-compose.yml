@@ -9,6 +9,11 @@ services:
       - AUTOHEAL_INTERVAL=10
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db:
     image: postgres:16-alpine
