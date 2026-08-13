@@ -73,10 +73,7 @@ export class TelegramOnboardingUpdate {
           progress.passed
             ? undefined
             : Markup.inlineKeyboard([
-                Markup.button.callback(
-                  'Volver a intentar',
-                  'onboarding_retry',
-                ),
+                Markup.button.callback('Volver a intentar', 'onboarding_retry'),
               ]),
         );
 

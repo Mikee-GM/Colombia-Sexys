@@ -702,7 +702,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       // Calculate realistic reading + typing delay based on message length (3.5s to 7.5s)
       const baseReadingMs = 1800 + Math.floor(Math.random() * 800);
       const typingMs = Math.min(Math.max((text.length || 20) * 45, 1500), 5000);
-      const totalDelayMs = Math.min(Math.max(baseReadingMs + typingMs, 3500), 7500);
+      const totalDelayMs = Math.min(
+        Math.max(baseReadingMs + typingMs, 3500),
+        7500,
+      );
 
       // Enviar la acción de "escribiendo" de inmediato
       await ctx.sendChatAction('typing').catch(() => {});
@@ -712,7 +715,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         const halfMs = Math.floor(totalDelayMs / 2);
         await new Promise((resolve) => setTimeout(resolve, halfMs));
         await ctx.sendChatAction('typing').catch(() => {});
-        await new Promise((resolve) => setTimeout(resolve, totalDelayMs - halfMs));
+        await new Promise((resolve) =>
+          setTimeout(resolve, totalDelayMs - halfMs),
+        );
       } else {
         await new Promise((resolve) => setTimeout(resolve, totalDelayMs));
       }
@@ -1108,7 +1113,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     const match = (ctx as any).match;
     const metodo = match[1] as
-      'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
+      | 'efectivo'
+      | 'tarjeta'
+      | 'transferencia'
+      | 'mixto';
 
     session.metodoPago = metodo;
 
@@ -1725,7 +1733,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           })
         : null;
       const photos = (ctx.message as any)?.photo as
-        Array<{ file_id: string }> | undefined;
+        | Array<{ file_id: string }>
+        | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!user || !fileId) {
         await ctx.reply(
@@ -1788,7 +1797,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       Number(groupRequest.service.pendingBalance) > 0.009
     ) {
       const photos = (ctx.message as any)?.photo as
-        Array<{ file_id: string }> | undefined;
+        | Array<{ file_id: string }>
+        | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!fileId) return;
       const pending = Number(groupRequest.service.pendingBalance);
@@ -1906,7 +1916,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       if (!client || !empleada) return;
 
       const photos = (ctx.message as any)?.photo as
-        Array<{ file_id: string }> | undefined;
+        | Array<{ file_id: string }>
+        | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!fileId) {
         await ctx.reply(

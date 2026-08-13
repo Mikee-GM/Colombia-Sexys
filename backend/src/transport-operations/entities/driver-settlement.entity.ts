@@ -17,11 +17,13 @@ export class DriverSettlement {
   })
   total: number;
   @Column('varchar', { length: 20, default: 'pending' }) status:
-    'pending' | 'paid';
+    | 'pending'
+    | 'paid';
   @Column('timestamptz', { name: 'paid_at', nullable: true })
   paidAt: Date | null;
   @Column('uuid', { name: 'paid_by_user_id', nullable: true }) paidByUserId:
-    string | null;
+    | string
+    | null;
   @Column('timestamptz', { name: 'created_at', default: () => 'now()' })
   createdAt: Date;
   @Column('timestamptz', { name: 'updated_at', default: () => 'now()' })
