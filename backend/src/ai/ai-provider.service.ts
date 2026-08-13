@@ -128,6 +128,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
             messages,
             response_format: { type: 'json_object' },
             temperature: 0.1,
+            reasoning_effort: 'none',
           }),
           signal: controller.signal,
         },
