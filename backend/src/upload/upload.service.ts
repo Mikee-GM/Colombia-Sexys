@@ -12,9 +12,38 @@ import { randomUUID } from 'crypto';
 const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
 };
+
+function sniffImageContentType(buffer: Buffer): string | null {
+  if (
+    buffer.length >= 3 &&
+    buffer[0] === 0xff &&
+    buffer[1] === 0xd8 &&
+    buffer[2] === 0xff
+  ) {
+    return 'image/jpeg';
+  }
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  return null;
+}
 
 @Injectable()
 export class UploadService {
@@ -118,16 +147,24 @@ export class UploadService {
     folder: 'uber' | 'transferencias';
     scopeId?: string;
   }): Promise<{ url: string; key: string }> {
-    const contentType = input.contentType.split(';')[0].trim().toLowerCase();
-    const extension = IMAGE_EXTENSIONS[contentType];
-    if (!extension) {
-      throw new InternalServerErrorException(
-        'La evidencia recibida no tiene un formato de imagen compatible',
-      );
-    }
     if (!input.buffer.length || input.buffer.length > EVIDENCE_MAX_BYTES) {
       throw new InternalServerErrorException(
         'La evidencia recibida está vacía o supera el límite permitido',
+      );
+    }
+
+    let contentType = input.contentType.split(';')[0].trim().toLowerCase();
+    let extension = IMAGE_EXTENSIONS[contentType];
+    if (!extension) {
+      const sniffed = sniffImageContentType(input.buffer);
+      if (sniffed) {
+        contentType = sniffed;
+        extension = IMAGE_EXTENSIONS[sniffed];
+      }
+    }
+    if (!extension) {
+      throw new InternalServerErrorException(
+        'La evidencia recibida no tiene un formato de imagen compatible',
       );
     }
 
