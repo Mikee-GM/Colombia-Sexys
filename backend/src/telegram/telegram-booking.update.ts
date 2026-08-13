@@ -555,7 +555,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
   private async applyDraftPaymentMethod(
     ctx: BotContext,
-    method: 'efectivo' | 'tarjeta' | 'transferencia',
+    method: 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto',
   ): Promise<boolean> {
     const session = ctx.session;
     if (
@@ -571,16 +571,23 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       session.step = 'AWAITING_PAYMENT_RECEIPT';
       const bankDetails = await this.servicesService.bankTransferDetails();
       await ctx.reply(
-        `🏦 *Cuentas disponibles para transferencia*\n\n${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante para verificar el pago.`,
+        `*Cuentas disponibles para transferencia*\n\n${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante para verificar el pago.`,
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
             [
-              Markup.button.callback('💵 Cambiar a efectivo', 'pago_efectivo'),
-              Markup.button.callback('💳 Cambiar a tarjeta', 'pago_tarjeta'),
+              Markup.button.callback('Cambiar a efectivo', 'pago_efectivo'),
+              Markup.button.callback('Cambiar a tarjeta', 'pago_tarjeta'),
             ],
           ]),
         },
+      );
+      return true;
+    }
+    if (method === 'mixto') {
+      session.step = 'AWAITING_MIXED_TRANSFER_AMOUNT';
+      await ctx.reply(
+        '¿Cuánto deseas pagar por transferencia bancaria? Ingresa el monto (solo números). El resto, junto con el transporte, se pagará en efectivo.',
       );
       return true;
     }
@@ -594,7 +601,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }),
     ]);
     if (!client || !employee) return false;
-    await ctx.reply(`✅ Método de pago cambiado a *${method.toUpperCase()}*.`, {
+    await ctx.reply(`Método de pago: *${method.toUpperCase()}*.`, {
       parse_mode: 'Markdown',
     });
     await this.finalizeBooking(
@@ -692,12 +699,23 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
   async sendDelayedReply(ctx: BotContext, text: string) {
     try {
-      const delayMs = 1000;
+      // Calculate realistic reading + typing delay based on message length (3.5s to 7.5s)
+      const baseReadingMs = 1800 + Math.floor(Math.random() * 800);
+      const typingMs = Math.min(Math.max((text.length || 20) * 45, 1500), 5000);
+      const totalDelayMs = Math.min(Math.max(baseReadingMs + typingMs, 3500), 7500);
 
       // Enviar la acción de "escribiendo" de inmediato
       await ctx.sendChatAction('typing').catch(() => {});
 
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      // Si la espera es mayor a 4s, refrescar la acción 'typing' a la mitad para mantenerla activa en Telegram
+      if (totalDelayMs > 4000) {
+        const halfMs = Math.floor(totalDelayMs / 2);
+        await new Promise((resolve) => setTimeout(resolve, halfMs));
+        await ctx.sendChatAction('typing').catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, totalDelayMs - halfMs));
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, totalDelayMs));
+      }
 
       try {
         await ctx.reply(text, { parse_mode: 'Markdown' });
@@ -1053,7 +1071,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     try {
       await ctx.editMessageText(
-        `⏱️ Duración registrada: *${duracion} horas*.\n\n` +
+        `Duración registrada: *${duracion} horas*.\n\n` +
           clientMessages.locationRequest(),
         {
           parse_mode: 'Markdown',
@@ -1061,7 +1079,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       );
     } catch (err) {
       await ctx.reply(
-        `⏱️ Duración registrada: *${duracion} horas*.\n\n` +
+        `Duración registrada: *${duracion} horas*.\n\n` +
           clientMessages.locationRequest(),
         {
           parse_mode: 'Markdown',
@@ -1116,7 +1134,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     } = session;
 
     if (!locationLat || !locationLng || !empleadaId || !duracionPactadaHoras) {
-      await ctx.reply('❌ Datos incompletos. Por favor inicia nuevamente.');
+      await ctx.reply('Datos incompletos. Por favor inicia nuevamente.');
       ctx.session = {};
       return;
     }
@@ -1131,8 +1149,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
             [
-              Markup.button.callback('💵 Cambiar a efectivo', 'pago_efectivo'),
-              Markup.button.callback('💳 Cambiar a tarjeta', 'pago_tarjeta'),
+              Markup.button.callback('Cambiar a efectivo', 'pago_efectivo'),
+              Markup.button.callback('Cambiar a tarjeta', 'pago_tarjeta'),
             ],
           ]),
         },
@@ -1219,7 +1237,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     await ctx.reply(text, {
       parse_mode: 'Markdown',
       ...Markup.keyboard([
-        [Markup.button.locationRequest('📍 Compartir mi Ubicación')],
+        [Markup.button.locationRequest('Compartir mi Ubicación')],
       ])
         .oneTime()
         .resize(),
@@ -1228,8 +1246,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
   private async replyWithServiceLocationOptions(
     ctx: BotContext,
-    introduction = 'Oye, mira: te voy a mostrar unas opciones para que me digas dónde quieres que nos encontremos. Elige la que te quede mejor y, si ninguna te sirve, selecciona “Otra ubicación”.',
+    introduction = '¡De una mi amor! Dime en qué lugar prefieres que nos encontremos. Elige una de nuestras opciones o selecciona "Otra ubicación" para enviarme tu pin:',
   ): Promise<void> {
+    await ctx.sendChatAction('typing').catch(() => {});
+    const delayMs = 2500 + Math.floor(Math.random() * 1500);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+
     const locations = await this.transportOperations.activeLocations();
     const rows = locations.map((location) => [
       Markup.button.callback(location.name, `service_location:${location.id}`),
@@ -1255,7 +1277,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     });
 
     if (!servicio) {
-      await ctx.reply('❌ Servicio no encontrado.');
+      await ctx.reply('Servicio no encontrado.');
       return;
     }
 
@@ -2929,30 +2951,39 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const total = totalBase + transportCharge;
 
       if (!ctx.session) ctx.session = {};
-      ctx.session.step = 'AWAITING_PAYMENT_METHOD';
       const formatoMoneda = new Intl.NumberFormat('es-MX', {
         style: 'currency',
         currency: 'MXN',
       });
 
-      let priceMsg = `💰 *Resumen del Costo:*\n`;
+      let priceMsg = `*Resumen del Costo:*\n`;
       priceMsg += `• Servicio (${duracionPactadaHoras}h): ${formatoMoneda.format(totalBase)}\n`;
       if (transportCharge > 0) {
         priceMsg += `• Cargo de transporte: ${formatoMoneda.format(transportCharge)}\n`;
       }
-      priceMsg += `\n*TOTAL A PAGAR: ${formatoMoneda.format(total)}*\n\n`;
-      priceMsg += `💳 Por favor, selecciona cómo deseas pagar:`;
+      priceMsg += `\n*TOTAL A PAGAR: ${formatoMoneda.format(total)}*`;
+
+      if (ctx.session.metodoPago) {
+        const metodoPrevio = ctx.session.metodoPago;
+        priceMsg += `\n*Método de pago:* ${metodoPrevio.toUpperCase()}\n`;
+        await ctx.reply(priceMsg, { parse_mode: 'Markdown' });
+        await this.applyDraftPaymentMethod(ctx, metodoPrevio);
+        return;
+      }
+
+      ctx.session.step = 'AWAITING_PAYMENT_METHOD';
+      priceMsg += `\n\nPor favor, selecciona cómo deseas pagar:`;
 
       await ctx.reply(priceMsg, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
-            Markup.button.callback('💵 Efectivo', 'pago_efectivo'),
-            Markup.button.callback('💳 Tarjeta', 'pago_tarjeta'),
+            Markup.button.callback('Efectivo', 'pago_efectivo'),
+            Markup.button.callback('Tarjeta', 'pago_tarjeta'),
           ],
           [
-            Markup.button.callback('🏦 Transferencia', 'pago_transferencia'),
-            Markup.button.callback('🌗 Mixto (Efecti+Digital)', 'pago_mixto'),
+            Markup.button.callback('Transferencia', 'pago_transferencia'),
+            Markup.button.callback('Mixto (Efectivo y Digital)', 'pago_mixto'),
           ],
         ]),
       });
@@ -4234,7 +4265,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         this.logger.error('Error in LLM booking chat flow:', err);
         await this.sendDelayedReply(
           ctx,
-          '¿Me podrías repetir la duración que necesitas y tu método de pago preferido (efectivo, tarjeta o transferencia)?',
+          'Oye lindo, se me cortó un segundo la señal 🙈 ¿Me recuerdas cuántas horitas querías y cómo vas a pagar (efectivo, tarjeta o transferencia)?',
         );
       }
       return;
@@ -4251,7 +4282,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         /\d+[.,]\d+/.test(text)
       ) {
         await ctx.reply(
-          '❌ La duración debe ser un número entero válido de horas (ejemplo: 1, 2, 3 entre 1 y 24).\n' +
+          'La duración debe ser un número entero válido de horas (ejemplo: 1, 2, 3 entre 1 y 24).\n' +
             'Por favor, intenta nuevamente:',
         );
         return;
@@ -4261,16 +4292,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ctx.session!.step = 'AWAITING_PAYMENT_METHOD';
 
       await ctx.reply(
-        `⏱️ Duración registrada: *${duracion} horas*.\n\n` +
-          `💳 Ahora, selecciona el método de pago:`,
+        `Duración registrada: *${duracion} horas*.\n\n` +
+          `Ahora, selecciona el método de pago:`,
         {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
             [
-              Markup.button.callback('💵 Efectivo', 'pago_efectivo'),
-              Markup.button.callback('💳 Tarjeta', 'pago_tarjeta'),
+              Markup.button.callback('Efectivo', 'pago_efectivo'),
+              Markup.button.callback('Tarjeta', 'pago_tarjeta'),
             ],
-            [Markup.button.callback('🏦 Transferencia', 'pago_transferencia')],
+            [Markup.button.callback('Transferencia', 'pago_transferencia')],
           ]),
         },
       );

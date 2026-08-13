@@ -29,21 +29,21 @@ export class TelegramOnboardingService {
           const menu =
             rol === 'empleada'
               ? Markup.keyboard([
-                  ['📋 Servicios de hoy', '🟢 Servicio activo'],
-                  ['🚗 Estatus del chofer'],
+                  ['Servicios de hoy', 'Servicio activo'],
+                  ['Estatus del chofer'],
                 ]).resize()
               : Markup.keyboard([
-                  ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
+                  ['Quedar Disponible', 'Quedar Inactivo'],
                 ]).resize();
 
           await this.bot.telegram.sendMessage(
             chatId,
-            `📍 *IMPORTANTE: Compartir Ubicación en Tiempo Real*\n\n` +
+            `*IMPORTANTE: Compartir Ubicación en Tiempo Real*\n\n` +
               `Para recibir y gestionar servicios correctamente, debes compartir tu *Ubicación en tiempo real* (Live Location):\n\n` +
               `1. Toca el botón de adjuntar (📎).\n` +
               `2. Selecciona *Ubicación*.\n` +
               `3. Elige *Compartir mi ubicación en tiempo real...* (selecciona la duración deseada, ej. 8 horas).\n\n` +
-              `⚠️ *Atención:* NO envíes la ubicación actual estática (un solo pin), ya que el sistema requiere rastreo continuo en tiempo real.`,
+              `*Atención:* NO envíes la ubicación actual estática (un solo pin), ya que el sistema requiere rastreo continuo en tiempo real.`,
             {
               parse_mode: 'Markdown',
               ...menu,
@@ -67,7 +67,7 @@ export class TelegramOnboardingService {
       if (!assignment.welcomeSentAt) {
         await this.bot.telegram.sendMessage(
           chatId,
-          '🎉 ¡Te damos la bienvenida al equipo!\n\nTu cuenta ha sido vinculada correctamente. A continuación recibirás el reglamento básico de trabajo. Léelo con atención porque después deberás responder un breve cuestionario.',
+          '¡Te damos la bienvenida al equipo!\n\nTu cuenta ha sido vinculada correctamente. A continuación recibirás el reglamento básico de trabajo. Léelo con atención porque después deberás responder un breve cuestionario.',
         );
         await this.onboardingService.markWelcomeSent(assignment.id);
       }
@@ -76,10 +76,10 @@ export class TelegramOnboardingService {
         const regulation =
           await this.onboardingService.getRegulationForAssignment(assignment);
         const publicationNotice = assignment.isRenewal
-          ? '📢 El reglamento de trabajo fue actualizado. Debes leerlo y realizar nuevamente el cuestionario.\n\n'
+          ? 'El reglamento de trabajo fue actualizado. Debes leerlo y realizar nuevamente el cuestionario.\n\n'
           : '';
         const chunks = this.splitMessage(
-          `${publicationNotice}📋 ${regulation.title}\n\n${regulation.content}`,
+          `${publicationNotice}${regulation.title}\n\n${regulation.content}`,
         );
         for (let index = 0; index < chunks.length; index += 1) {
           const isLast = index === chunks.length - 1;
@@ -87,7 +87,7 @@ export class TelegramOnboardingService {
             ...(isLast
               ? Markup.inlineKeyboard([
                   Markup.button.callback(
-                    '✅ Ya leí el reglamento',
+                    'Ya leí el reglamento',
                     'onboarding_read',
                   ),
                 ])
@@ -119,9 +119,9 @@ export class TelegramOnboardingService {
     try {
       await this.bot.telegram.sendMessage(
         chatId,
-        '⏰ Recordatorio\n\nAún tienes pendiente el cuestionario del reglamento. Presiona el botón para comenzar o continuar.',
+        'Recordatorio\n\nAún tienes pendiente el cuestionario del reglamento. Presiona el botón para comenzar o continuar.',
         Markup.inlineKeyboard([
-          Markup.button.callback('📝 Hacer cuestionario', 'onboarding_read'),
+          Markup.button.callback('Hacer cuestionario', 'onboarding_read'),
         ]),
       );
       await this.onboardingService.markReminderSent(assignment.id);

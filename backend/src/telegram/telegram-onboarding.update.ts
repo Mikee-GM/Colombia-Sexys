@@ -66,15 +66,15 @@ export class TelegramOnboardingUpdate {
 
       if (progress.completed) {
         const resultMessage = progress.passed
-          ? `✅ Cuestionario aprobado\n\nAciertos: ${progress.correctAnswers} de ${progress.totalQuestions}.`
-          : `❌ Cuestionario no aprobado\n\nAciertos: ${progress.correctAnswers} de ${progress.totalQuestions}.`;
+          ? `Cuestionario aprobado\n\nAciertos: ${progress.correctAnswers} de ${progress.totalQuestions}.`
+          : `Cuestionario no aprobado\n\nAciertos: ${progress.correctAnswers} de ${progress.totalQuestions}.`;
         await ctx.reply(
           resultMessage,
           progress.passed
             ? undefined
             : Markup.inlineKeyboard([
                 Markup.button.callback(
-                  '🔄 Volver a intentar',
+                  'Volver a intentar',
                   'onboarding_retry',
                 ),
               ]),
@@ -87,20 +87,20 @@ export class TelegramOnboardingUpdate {
           const menu =
             user.rol === 'empleada'
               ? Markup.keyboard([
-                  ['📋 Servicios de hoy', '🟢 Servicio activo'],
-                  ['🚗 Estatus del chofer'],
+                  ['Servicios de hoy', 'Servicio activo'],
+                  ['Estatus del chofer'],
                 ]).resize()
               : Markup.keyboard([
-                  ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
+                  ['Quedar Disponible', 'Quedar Inactivo'],
                 ]).resize();
 
           await ctx.reply(
-            `📍 *IMPORTANTE: Compartir Ubicación en Tiempo Real*\n\n` +
+            `*IMPORTANTE: Compartir Ubicación en Tiempo Real*\n\n` +
               `Para recibir y gestionar servicios correctamente, debes compartir tu *Ubicación en tiempo real* (Live Location):\n\n` +
               `1. Toca el botón de adjuntar (📎).\n` +
               `2. Selecciona *Ubicación*.\n` +
               `3. Elige *Compartir mi ubicación en tiempo real...* (selecciona la duración deseada, ej. 8 horas).\n\n` +
-              `⚠️ *Atención:* NO envíes la ubicación actual estática (un solo pin), ya que el sistema requiere rastreo continuo en tiempo real.`,
+              `*Atención:* NO envíes la ubicación actual estática (un solo pin), ya que el sistema requiere rastreo continuo en tiempo real.`,
             {
               parse_mode: 'Markdown',
               ...menu,

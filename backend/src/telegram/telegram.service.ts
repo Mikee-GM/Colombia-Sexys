@@ -22,7 +22,7 @@ export class TelegramService {
         console.error('Global Telegram Bot Error:', err);
         ctx
           .reply(
-            '⚠️ Ocurrió un error inesperado al procesar tu solicitud. Por favor, intenta de nuevo.',
+            'Ocurrió un error inesperado al procesar tu solicitud. Por favor, intenta de nuevo.',
           )
           .catch((e: any) =>
             console.error('Failed to send error notification:', e),

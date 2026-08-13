@@ -1,10 +1,10 @@
 export const clientMessages = {
   locationRequest: () =>
-    `📍 *Listo, ya casi terminamos.*\n\nMándame tu ubicación como pin con el botón de abajo. Necesito la ubicación de Telegram, no una dirección escrita.`,
+    `*¡Ya casi estamos mi amor!*\n\nCompárteme tu ubicación como pin usando el botón de abajo (debe ser la ubicación exacta de Telegram, no la escribas como texto).`,
   paymentAndLocation: (hours: number, paymentMethod: string) =>
-    `Tu servicio de ${hours} horas con pago por ${paymentMethod.toUpperCase()} ya quedó anotado. Ahora compárteme tu ubicación.`,
+    `¡De una lindo! Tu servicio de ${hours} ${hours === 1 ? 'hora' : 'horas'} con pago por ${paymentMethod.toUpperCase()} ya quedó anotado. Ahora compárteme tu ubicación.`,
   onTheWay: (employeeName: string, driverName: string) =>
-    `Ya voy en camino contigo. Soy *${employeeName}* y me acompaña el chofer *${driverName}*.`,
+    `Ya voy en camino contigo mi amor. Soy *${employeeName}* y me acompaña el chofer *${driverName}*.`,
   arrived: (employeeName: string) =>
-    `Ya llegué. Soy *${employeeName}* y estoy en el punto acordado.`,
+    `Ya llegué lindo. Soy *${employeeName}* y estoy en el punto acordado.`,
 };
