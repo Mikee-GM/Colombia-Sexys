@@ -114,10 +114,7 @@ export class TelegramAdminUpdate {
         ]
       : [
           [
-            Markup.button.callback(
-              'Sí, confirmar',
-              `conf_ja:${serviceId}:0`,
-            ),
+            Markup.button.callback('Sí, confirmar', `conf_ja:${serviceId}:0`),
             Markup.button.callback('Cancelar', `canc_ja:${serviceId}`),
           ],
         ];
@@ -232,9 +229,7 @@ export class TelegramAdminUpdate {
       if (res.viajeId) {
         inlineButtons.push([
           Markup.button.callback(
-            transportType === 'uber'
-              ? 'Cambiar a chofer'
-              : 'Cambiar a Uber',
+            transportType === 'uber' ? 'Cambiar a chofer' : 'Cambiar a Uber',
             `cambiar_transporte:${res.viajeId}:${transportType === 'uber' ? 'interno' : 'uber'}`,
           ),
         ]);
@@ -600,9 +595,7 @@ export class TelegramAdminUpdate {
       if (accept && viajeId) {
         inlineButtons.push([
           Markup.button.callback(
-            transportType === 'uber'
-              ? 'Cambiar a chofer'
-              : 'Cambiar a Uber',
+            transportType === 'uber' ? 'Cambiar a chofer' : 'Cambiar a Uber',
             `cambiar_transporte:${viajeId}:${transportType === 'uber' ? 'interno' : 'uber'}`,
           ),
         ]);

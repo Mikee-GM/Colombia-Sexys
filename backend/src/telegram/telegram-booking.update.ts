@@ -4253,7 +4253,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               session.duracionPactadaHoras = parsedDuracion;
               if (userProvidedPayment) {
                 session.metodoPago = userProvidedPayment;
-              } else if (parsedData.pago && extractHirePaymentMethod(userMessage)) {
+              } else if (
+                parsedData.pago &&
+                extractHirePaymentMethod(userMessage)
+              ) {
                 session.metodoPago = parsedData.pago;
               }
 
