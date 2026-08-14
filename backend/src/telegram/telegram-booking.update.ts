@@ -1765,8 +1765,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ctx.session.uberTripId
     ) {
       const photos = (ctx.message as any)?.photo as
-        | Array<{ file_id: string }>
-        | undefined;
+        Array<{ file_id: string }> | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!fileId) {
         await ctx.reply(
@@ -1780,7 +1779,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           })
         : null;
       if (!actor || (actor.rol !== 'admin' && actor.rol !== 'jefe')) {
-        await ctx.reply('No estás autorizado para adjuntar la captura del Uber.');
+        await ctx.reply(
+          'No estás autorizado para adjuntar la captura del Uber.',
+        );
         return;
       }
       try {
