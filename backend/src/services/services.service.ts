@@ -1080,7 +1080,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             {
               message_thread_id: topic.threadId,
               ...Markup.inlineKeyboard([
-                [Markup.button.url('📱 Pedir Uber', uberLink)],
+                [Markup.button.url('Pedir Uber', uberLink)],
               ]),
             },
           );
@@ -1777,15 +1777,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     reminder: boolean,
   ): Promise<void> {
     const topic = this.getServiceTopic(servicio);
-    const text = `${reminder ? '⏰ Recordatorio\n\n' : ''}La empleada ${servicio.empleada?.nombreArtistico || ''} finalizó el servicio. ¿Cómo será su viaje de regreso?`;
+    const text = `${reminder ? 'Recordatorio\n\n' : ''}La empleada ${servicio.empleada?.nombreArtistico || ''} finalizó el servicio. ¿Cómo será su viaje de regreso?`;
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
-          '🚗 Regreso con chofer',
+          'Regreso con chofer',
           `regreso_transporte:${servicio.id}:interno`,
         ),
         Markup.button.callback(
-          '📱 Regreso con Uber',
+          'Regreso con Uber',
           `regreso_transporte:${servicio.id}:uber`,
         ),
       ],
@@ -1879,7 +1879,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             .map((user) =>
               this.bot.telegram.sendMessage(
                 user.grupoTelegramId || user.telegramChatId!,
-                `🚨 El servicio ${servicio.id} sigue sin transporte de regreso después de tres recordatorios.`,
+                `El servicio ${servicio.id} sigue sin transporte de regreso después de tres recordatorios.`,
               ),
             ),
         );

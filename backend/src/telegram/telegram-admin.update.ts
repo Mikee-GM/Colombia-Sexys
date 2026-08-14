@@ -89,36 +89,36 @@ export class TelegramAdminUpdate {
             ...(samePresetLocation
               ? [
                   Markup.button.callback(
-                    '📍 Sin notas, misma ubicación',
+                    'Sin notas, misma ubicación',
                     `conf_ja:${serviceId}:1:same`,
                   ),
                 ]
               : [
                   Markup.button.callback(
-                    '🚗 Sin notas, Chofer',
+                    'Sin notas, Chofer',
                     `conf_ja:${serviceId}:1:chofer`,
                   ),
                   Markup.button.callback(
-                    '📱 Sin notas, Uber',
+                    'Sin notas, Uber',
                     `conf_ja:${serviceId}:1:uber`,
                   ),
                 ]),
           ],
           [
             Markup.button.callback(
-              '📝 Agregar notas',
+              'Agregar notas',
               `add_boss_notes:${serviceId}`,
             ),
           ],
-          [Markup.button.callback('❌ Cancelar', `canc_ja:${serviceId}`)],
+          [Markup.button.callback('Cancelar', `canc_ja:${serviceId}`)],
         ]
       : [
           [
             Markup.button.callback(
-              '✅ Sí, confirmar',
+              'Sí, confirmar',
               `conf_ja:${serviceId}:0`,
             ),
-            Markup.button.callback('❌ Cancelar', `canc_ja:${serviceId}`),
+            Markup.button.callback('Cancelar', `canc_ja:${serviceId}`),
           ],
         ];
 
@@ -176,17 +176,17 @@ export class TelegramAdminUpdate {
           ...(pending.sameLocation
             ? [
                 Markup.button.callback(
-                  '📍 Misma ubicación',
+                  'Misma ubicación',
                   `accept_with_notes:${serviceId}:same`,
                 ),
               ]
             : [
                 Markup.button.callback(
-                  '🚗 Chofer',
+                  'Chofer',
                   `accept_with_notes:${serviceId}:chofer`,
                 ),
                 Markup.button.callback(
-                  '📱 Uber',
+                  'Uber',
                   `accept_with_notes:${serviceId}:uber`,
                 ),
               ]),
@@ -219,11 +219,11 @@ export class TelegramAdminUpdate {
 
       const inlineButtons: any[] = [];
       if (transportType === 'uber' && res.uberLink) {
-        inlineButtons.push([Markup.button.url('📱 Pedir Uber', res.uberLink)]);
+        inlineButtons.push([Markup.button.url('Pedir Uber', res.uberLink)]);
         if (res.viajeId) {
           inlineButtons.push([
             Markup.button.callback(
-              '📸 Adjuntar captura',
+              'Adjuntar captura',
               `uber_attach:${res.viajeId}`,
             ),
           ]);
@@ -233,15 +233,15 @@ export class TelegramAdminUpdate {
         inlineButtons.push([
           Markup.button.callback(
             transportType === 'uber'
-              ? '🚗 Cambiar a chofer'
-              : '📱 Cambiar a Uber',
+              ? 'Cambiar a chofer'
+              : 'Cambiar a Uber',
             `cambiar_transporte:${res.viajeId}:${transportType === 'uber' ? 'interno' : 'uber'}`,
           ),
         ]);
       }
 
       await ctx.editMessageText(
-        `🟢 Servicio aceptado.\n📝 Notas internas: ${pending.notes}`,
+        `Servicio aceptado.\nNotas internas: ${pending.notes}`,
         inlineButtons.length > 0
           ? Markup.inlineKeyboard(inlineButtons)
           : undefined,
@@ -276,12 +276,12 @@ export class TelegramAdminUpdate {
       await ctx.answerCbQuery('Transporte de regreso registrado');
       if (match[2] === 'interno') {
         await ctx.editMessageText(
-          '🚗 Regreso con chofer seleccionado. Buscando chofer disponible…',
+          'Regreso con chofer seleccionado. Buscando chofer disponible…',
           {
             ...Markup.inlineKeyboard([
               [
                 Markup.button.callback(
-                  '📱 Cambiar a Uber',
+                  'Cambiar a Uber',
                   `cambiar_transporte:${result.trip.id}:uber`,
                 ),
               ],
@@ -289,18 +289,18 @@ export class TelegramAdminUpdate {
           },
         );
       } else {
-        await ctx.editMessageText('📱 Regreso con Uber seleccionado.', {
+        await ctx.editMessageText('Regreso con Uber seleccionado.', {
           ...Markup.inlineKeyboard([
-            [Markup.button.url('📱 Pedir Uber', result.uberLink!)],
+            [Markup.button.url('Pedir Uber', result.uberLink!)],
             [
               Markup.button.callback(
-                '📸 Adjuntar captura',
+                'Adjuntar captura',
                 `uber_attach:${result.trip.id}`,
               ),
             ],
             [
               Markup.button.callback(
-                '🚗 Cambiar a chofer',
+                'Cambiar a chofer',
                 `cambiar_transporte:${result.trip.id}:interno`,
               ),
             ],
@@ -336,10 +336,10 @@ export class TelegramAdminUpdate {
       const buttons =
         provider === 'uber'
           ? [
-              [Markup.button.url('📱 Pedir Uber', result.uberLink!)],
+              [Markup.button.url('Pedir Uber', result.uberLink!)],
               [
                 Markup.button.callback(
-                  '🚗 Cambiar a chofer',
+                  'Cambiar a chofer',
                   `cambiar_transporte:${result.trip.id}:interno`,
                 ),
               ],
@@ -347,15 +347,15 @@ export class TelegramAdminUpdate {
           : [
               [
                 Markup.button.callback(
-                  '📱 Cambiar a Uber',
+                  'Cambiar a Uber',
                   `cambiar_transporte:${result.trip.id}:uber`,
                 ),
               ],
             ];
       await ctx.editMessageText(
         provider === 'uber'
-          ? '📱 Viaje cambiado a Uber.'
-          : '🚗 Viaje cambiado a chofer. Buscando disponibilidad…',
+          ? 'Viaje cambiado a Uber.'
+          : 'Viaje cambiado a chofer. Buscando disponibilidad…',
         { ...Markup.inlineKeyboard(buttons) },
       );
     } catch (error: any) {
@@ -578,19 +578,19 @@ export class TelegramAdminUpdate {
 
       const statusLabel = accept
         ? transportType === 'uber'
-          ? '🟢 ACEPTADO con Uber'
-          : '🟢 ACEPTADO con Chofer'
-        : '🔴 RECHAZADO';
+          ? 'ACEPTADO con Uber'
+          : 'ACEPTADO con Chofer'
+        : 'RECHAZADO';
 
       const options: any = { parse_mode: 'Markdown' };
       const inlineButtons: any[] = [];
 
       if (accept && transportType === 'uber' && uberLink) {
-        inlineButtons.push([Markup.button.url('📱 Pedir Uber', uberLink)]);
+        inlineButtons.push([Markup.button.url('Pedir Uber', uberLink)]);
         if (viajeId) {
           inlineButtons.push([
             Markup.button.callback(
-              '📸 Adjuntar captura',
+              'Adjuntar captura',
               `uber_attach:${viajeId}`,
             ),
           ]);
@@ -601,8 +601,8 @@ export class TelegramAdminUpdate {
         inlineButtons.push([
           Markup.button.callback(
             transportType === 'uber'
-              ? '🚗 Cambiar a chofer'
-              : '📱 Cambiar a Uber',
+              ? 'Cambiar a chofer'
+              : 'Cambiar a Uber',
             `cambiar_transporte:${viajeId}:${transportType === 'uber' ? 'interno' : 'uber'}`,
           ),
         ]);
@@ -611,7 +611,7 @@ export class TelegramAdminUpdate {
       if (accept && servicio.cliente?.telegramChatId) {
         inlineButtons.push([
           Markup.button.url(
-            '💬 Contactar Cliente',
+            'Contactar Cliente',
             `tg://user?id=${servicio.cliente.telegramChatId}`,
           ),
         ]);

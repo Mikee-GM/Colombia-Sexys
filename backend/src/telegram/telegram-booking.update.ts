@@ -1436,18 +1436,18 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     const inlineButtons = [
       [
-        Markup.button.callback('💳 Tarjeta', `agregar_extra_pay:tarjeta`),
+        Markup.button.callback('Tarjeta', `agregar_extra_pay:tarjeta`),
         Markup.button.callback(
-          '📱 Transferencia',
+          'Transferencia',
           `agregar_extra_pay:transferencia`,
         ),
       ],
-      [Markup.button.callback('💵 Efectivo', `agregar_extra_pay:efectivo`)],
-      [Markup.button.callback('🔙 Volver', `agregar_extra_list:${servicioId}`)],
+      [Markup.button.callback('Efectivo', `agregar_extra_pay:efectivo`)],
+      [Markup.button.callback('Volver', `agregar_extra_list:${servicioId}`)],
     ];
 
     await ctx.editMessageText(
-      `💳 *Selecciona el método de pago* para el extra *${extra.nombre}* ($${extra.precio}):\n\n` +
+      `*Selecciona el método de pago* para el extra *${extra.nombre}* ($${extra.precio}):\n\n` +
         `Las ganancias de los extras van directamente a ti.`,
       {
         parse_mode: 'Markdown',
@@ -4238,32 +4238,44 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           try {
             const parsedData = JSON.parse(dataMatch[1]);
             const parsedDuracion = parseInt(parsedData.duracion, 10);
+            const userProvidedPayment =
+              extractHirePaymentMethod(userMessage) ||
+              history
+                .filter((h) => h.role === 'user')
+                .map((h) => extractHirePaymentMethod(h.parts[0]?.text || ''))
+                .find((method) => Boolean(method));
+
             if (
               Number.isInteger(parsedDuracion) &&
               parsedDuracion >= 1 &&
-              parsedDuracion <= 24 &&
-              parsedData.pago
+              parsedDuracion <= 24
             ) {
               session.duracionPactadaHoras = parsedDuracion;
-              session.metodoPago = parsedData.pago;
+              if (userProvidedPayment) {
+                session.metodoPago = userProvidedPayment;
+              } else if (parsedData.pago && extractHirePaymentMethod(userMessage)) {
+                session.metodoPago = parsedData.pago;
+              }
 
-              // Transition step to AWAITING_LOCATION
-              session.step = 'AWAITING_LOCATION';
+              if (session.duracionPactadaHoras && session.metodoPago) {
+                // Transition step to AWAITING_LOCATION
+                session.step = 'AWAITING_LOCATION';
 
-              // Push final response to history
-              history.push({ role: 'model', parts: [{ text: cleanText }] });
-              session.chatHistory = history;
+                // Push final response to history
+                history.push({ role: 'model', parts: [{ text: cleanText }] });
+                session.chatHistory = history;
 
-              await this.replyWithServiceLocationOptions(
-                ctx,
-                cleanText || 'Selecciona la ubicación del servicio.',
-              );
-              await this.recordDraftConversation(
-                ctx,
-                'ia',
-                cleanText || 'Selecciona la ubicación del servicio.',
-              );
-              return;
+                await this.replyWithServiceLocationOptions(
+                  ctx,
+                  cleanText || 'Selecciona la ubicación del servicio.',
+                );
+                await this.recordDraftConversation(
+                  ctx,
+                  'ia',
+                  cleanText || 'Selecciona la ubicación del servicio.',
+                );
+                return;
+              }
             }
           } catch (jsonErr) {
             this.logger.error(
