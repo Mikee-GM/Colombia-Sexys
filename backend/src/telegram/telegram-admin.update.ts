@@ -206,17 +206,45 @@ export class TelegramAdminUpdate {
       await ctx.answerCbQuery('Las notas expiraron.', { show_alert: true });
       return;
     }
+    const transportType = match[2] === 'same' ? 'chofer' : match[2];
     try {
-      await this.servicesService.aceptar(
+      const res = await this.servicesService.aceptar(
         pending.serviceId,
         actor.id,
-        match[2] === 'same' ? 'chofer' : match[2],
+        transportType,
         pending.notes,
       );
       this.pendingBossNotes.delete(key);
       await ctx.answerCbQuery('Servicio aceptado con notas.');
+
+      const inlineButtons: any[] = [];
+      if (transportType === 'uber' && res.uberLink) {
+        inlineButtons.push([Markup.button.url('📱 Pedir Uber', res.uberLink)]);
+        if (res.viajeId) {
+          inlineButtons.push([
+            Markup.button.callback(
+              '📸 Adjuntar captura',
+              `uber_attach:${res.viajeId}`,
+            ),
+          ]);
+        }
+      }
+      if (res.viajeId) {
+        inlineButtons.push([
+          Markup.button.callback(
+            transportType === 'uber'
+              ? '🚗 Cambiar a chofer'
+              : '📱 Cambiar a Uber',
+            `cambiar_transporte:${res.viajeId}:${transportType === 'uber' ? 'interno' : 'uber'}`,
+          ),
+        ]);
+      }
+
       await ctx.editMessageText(
         `🟢 Servicio aceptado.\n📝 Notas internas: ${pending.notes}`,
+        inlineButtons.length > 0
+          ? Markup.inlineKeyboard(inlineButtons)
+          : undefined,
       );
     } catch (error: any) {
       await ctx.answerCbQuery(error.message || 'No se pudo aceptar', {

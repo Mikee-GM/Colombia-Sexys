@@ -874,7 +874,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     // 5. Iniciar despacho de choferes por proximidad
     let uberLink: string | undefined;
     if (tipoTransporte === 'uber') {
-      uberLink = undefined;
+      uberLink = this.buildUberLinkForTrip(servicio, 'ida');
     } else {
       try {
         await this.dispatchViaje(viajeGuardado.id);
