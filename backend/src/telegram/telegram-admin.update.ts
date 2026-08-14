@@ -338,6 +338,25 @@ export class TelegramAdminUpdate {
     }
   }
 
+  @Action(/^uber_attach:(.+)$/)
+  async onUberAttach(@Ctx() ctx: Context) {
+    const actor = await this.getActor(ctx);
+    if (!actor) {
+      await ctx.answerCbQuery('Usuario no autorizado', { show_alert: true });
+      return;
+    }
+    const tripId = (ctx as any).match[1];
+    (ctx as any).session = {
+      ...(ctx as any).session,
+      step: 'AWAITING_UBER_SCREENSHOT',
+      uberTripId: tripId,
+    };
+    await ctx.answerCbQuery();
+    await ctx.reply(
+      '📸 Por favor, envía ahora una fotografía (captura de pantalla) del Uber.',
+    );
+  }
+
   @Action(/^uber_fare_enter:(.+)$/)
   async onUberFareEnter(@Ctx() ctx: Context) {
     const actor = await this.getActor(ctx);

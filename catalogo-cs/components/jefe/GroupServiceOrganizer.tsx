@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Ban, Car, Clock3, ExternalLink, FileCheck2, ImageIcon, MapPin, Plus, Send, Trash2, UsersRound } from "lucide-react";
+import { Ban, Car, Clock3, ExternalLink, FileCheck2, ImageIcon, MapPin, Plus, Send, Smartphone, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import {
   addGroupManualTransportCharge,
@@ -896,6 +896,29 @@ function ActiveGroupEditor({
                 <ExternalLink size={12} className="ml-1 inline" />
               </a>
             ))}
+            {(service.viajes ?? []).filter((trip) => trip.proveedorTransporte === "uber").map((trip) => {
+              const isIda = trip.tipo === "ida";
+              const pickupLat = isIda ? service.empleada?.ubicacionLat : service.ubicacionClienteLat;
+              const pickupLng = isIda ? service.empleada?.ubicacionLng : service.ubicacionClienteLng;
+              const dropoffLat = isIda ? service.ubicacionClienteLat : service.empleada?.ubicacionLat;
+              const dropoffLng = isIda ? service.ubicacionClienteLng : service.empleada?.ubicacionLng;
+              let deeplink = "https://m.uber.com/ul/?action=setPickup";
+              if (pickupLat && pickupLng) {
+                deeplink += `&pickup[latitude]=${pickupLat}&pickup[longitude]=${pickupLng}`;
+              } else {
+                deeplink += "&pickup=my_location";
+              }
+              if (dropoffLat && dropoffLng) {
+                deeplink += `&dropoff[latitude]=${dropoffLat}&dropoff[longitude]=${dropoffLng}`;
+              }
+              return (
+                <a key={`deeplink-${trip.id}`} href={deeplink} target="_blank" rel="noopener noreferrer" className={buttonClass}>
+                  <Smartphone size={14} className="mr-1 inline" />
+                  📱 Pedir Uber ({trip.tipo})
+                  <ExternalLink size={12} className="ml-1 inline" />
+                </a>
+              );
+            })}
             {(service.viajes ?? []).filter((trip) => trip.proveedorTransporte === "uber" && trip.uberScreenshotUrl).map((trip) => (
               <a key={trip.id} href={trip.uberScreenshotUrl!} target="_blank" rel="noopener noreferrer" className={buttonClass}>
                 <ImageIcon size={14} className="mr-1 inline" />

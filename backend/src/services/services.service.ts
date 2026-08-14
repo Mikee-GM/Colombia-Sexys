@@ -815,21 +815,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           ]);
 
           if (tipoTransporte === 'uber') {
-            inlineButtons.unshift(
-              [
-                Markup.button.url(
-                  'Abrir Uber',
-                  this.buildUberLinkForTrip(servicio, 'ida'),
-                ),
-              ],
-              [
-                Markup.button.callback(
-                  'Ya estoy en el Uber',
-                  `eu:${viajeGuardado.id}:i`,
-                ),
-                Markup.button.callback('Ya llegué', `eu:${viajeGuardado.id}:f`),
-              ],
-            );
+            inlineButtons.unshift([
+              Markup.button.callback(
+                'Ya estoy en el Uber',
+                `eu:${viajeGuardado.id}:i`,
+              ),
+              Markup.button.callback('Ya llegué', `eu:${viajeGuardado.id}:f`),
+            ]);
           }
 
           const empMsg = await this.bot.telegram.sendMessage(
@@ -1098,10 +1090,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           if (trip.proveedorTransporte === 'uber') {
             await this.bot.telegram.sendMessage(
               employeeChatId,
-              'Tu siguiente servicio está listo. Usa este enlace para solicitar el Uber.',
+              'Tu siguiente servicio está listo. Tu transporte será en Uber. Usa los botones para confirmar cada etapa de tu trayecto.',
               {
                 ...Markup.inlineKeyboard([
-                  [Markup.button.url('📱 Abrir Uber', uberLink)],
                   [
                     Markup.button.callback(
                       'Ya estoy en el Uber',
@@ -1884,10 +1875,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         });
         await Promise.allSettled(
           admins
-            .filter((user) => user.telegramChatId)
+            .filter((user) => user.grupoTelegramId || user.telegramChatId)
             .map((user) =>
               this.bot.telegram.sendMessage(
-                user.telegramChatId!,
+                user.grupoTelegramId || user.telegramChatId!,
                 `🚨 El servicio ${servicio.id} sigue sin transporte de regreso después de tres recordatorios.`,
               ),
             ),
@@ -2012,14 +2003,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const uberLink = employee
       ? this.buildUberLinkForTrip(employee, 'regreso')
       : undefined;
-    if (employeeChatId && uberLink) {
+    if (employeeChatId) {
       await this.bot.telegram
         .sendMessage(
           employeeChatId,
-          'Solicita tu viaje de regreso y confirma cada etapa.',
+          'Tu transporte de regreso será en Uber. Confirma cada etapa cuando abordes y llegues.',
           {
             ...Markup.inlineKeyboard([
-              [Markup.button.url('Abrir Uber', uberLink)],
               [
                 Markup.button.callback(
                   'Ya estoy en el Uber',
@@ -2078,7 +2068,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             'El transporte no puede cambiarse cuando el viaje está en curso o finalizado',
           );
         }
-        if (trip.choferId) {
+        if (trip.choferId && trip.estado !== 'notificado') {
           throw new ConflictException(
             'El transporte no puede cambiarse porque el viaje ya tiene un chofer asignado',
           );
@@ -2141,12 +2131,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             {
               ...Markup.inlineKeyboard([
                 [
-                  Markup.button.url(
-                    'Abrir Uber',
-                    this.buildUberLinkForTrip(servicio, result.trip.tipo),
-                  ),
-                ],
-                [
                   Markup.button.callback(
                     'Ya estoy en el Uber',
                     `eu:${result.trip.id}:i`,
@@ -2176,17 +2160,29 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     tripType: 'ida' | 'regreso',
   ): string {
     const ida = tripType === 'ida';
+    const pickupLat = ida
+      ? servicio.empleada?.ubicacionLat
+      : servicio.ubicacionClienteLat;
+    const pickupLng = ida
+      ? servicio.empleada?.ubicacionLng
+      : servicio.ubicacionClienteLng;
     const dropoffLat = ida
       ? servicio.ubicacionClienteLat
       : servicio.empleada?.ubicacionLat;
     const dropoffLng = ida
       ? servicio.ubicacionClienteLng
       : servicio.empleada?.ubicacionLng;
-    return (
-      'https://m.uber.com/ul/?action=setPickup' +
-      '&pickup=my_location' +
-      `&dropoff[latitude]=${dropoffLat}&dropoff[longitude]=${dropoffLng}`
-    );
+
+    let url = 'https://m.uber.com/ul/?action=setPickup';
+    if (pickupLat && pickupLng) {
+      url += `&pickup[latitude]=${pickupLat}&pickup[longitude]=${pickupLng}`;
+    } else {
+      url += '&pickup=my_location';
+    }
+    if (dropoffLat && dropoffLng) {
+      url += `&dropoff[latitude]=${dropoffLat}&dropoff[longitude]=${dropoffLng}`;
+    }
+    return url;
   }
 
   private driverPayoutFor(service: Servicios): number {
@@ -2309,7 +2305,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const override = !hasScreenshot && actor.rol === 'admin';
     if (!hasScreenshot && !override) {
       throw new ConflictException(
-        'La empleada debe enviar la captura antes de confirmar el costo',
+        'El jefe debe adjuntar la captura del Uber antes de confirmar la tarifa',
       );
     }
     await this.viajesRepository.update(trip.id, {

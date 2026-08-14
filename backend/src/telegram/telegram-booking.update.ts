@@ -62,6 +62,7 @@ interface SessionData {
     | 'AWAITING_CLIENT_REPORT_DESCRIPTION'
     | 'AWAITING_UBER_FARE_ACTION'
     | 'AWAITING_UBER_FARE'
+    | 'AWAITING_UBER_SCREENSHOT'
     | 'CHAT_CON_EMPLEADA'
     | 'GROUP_WITH_BOSS';
   empleadaId?: string;
@@ -107,7 +108,8 @@ interface BotContext extends Context {
 export function isUberAdminInputSession(session?: { step?: string }): boolean {
   return (
     session?.step === 'AWAITING_UBER_FARE_ACTION' ||
-    session?.step === 'AWAITING_UBER_FARE'
+    session?.step === 'AWAITING_UBER_FARE' ||
+    session?.step === 'AWAITING_UBER_SCREENSHOT'
   );
 }
 
@@ -1757,6 +1759,48 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
   @On('photo')
   async onPhotoUpload(@Ctx() ctx: BotContext) {
     const senderTelegramId = ctx.from?.id.toString();
+
+    if (
+      ctx.session?.step === 'AWAITING_UBER_SCREENSHOT' &&
+      ctx.session.uberTripId
+    ) {
+      const photos = (ctx.message as any)?.photo as
+        | Array<{ file_id: string }>
+        | undefined;
+      const fileId = photos?.[photos.length - 1]?.file_id;
+      if (!fileId) {
+        await ctx.reply(
+          'Por favor, envía una FOTO (captura de pantalla) del Uber.',
+        );
+        return;
+      }
+      const actor = senderTelegramId
+        ? await this.usuariosRepository.findOneBy({
+            telegramChatId: senderTelegramId,
+          })
+        : null;
+      if (!actor || (actor.rol !== 'admin' && actor.rol !== 'jefe')) {
+        await ctx.reply('No estás autorizado para adjuntar la captura del Uber.');
+        return;
+      }
+      try {
+        await this.servicesService.saveUberScreenshot(
+          ctx.session.uberTripId,
+          actor.id,
+          fileId,
+        );
+        ctx.session.step = 'AWAITING_UBER_FARE';
+        await ctx.reply(
+          '📸 Captura de Uber guardada exitosamente.\n\nEscribe ahora el costo final del Uber, por ejemplo: 185.50',
+        );
+      } catch (error: any) {
+        await ctx.reply(
+          error.message || 'No fue posible guardar la captura del Uber.',
+        );
+      }
+      return;
+    }
+
     const groupRequest = senderTelegramId
       ? await this.groupServicesService.findActiveRequestByClientTelegram(
           senderTelegramId,

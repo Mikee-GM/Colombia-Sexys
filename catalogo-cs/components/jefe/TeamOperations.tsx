@@ -52,8 +52,22 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   }, [chatService]);
 
   const visibleEmployees = useMemo(() => employees.filter((employee) => employee.nombreArtistico.toLowerCase().includes(query.toLowerCase())), [employees, query]);
-  const active = services.filter((service) => ["pendiente", "agendado", "en_curso"].includes(service.estado) || (service.estado === "finalizado" && service.estadoLiquidacion === "transporte_pendiente"));
-  const history = services.filter((service) => service.estado === "finalizado" && service.estadoLiquidacion === "cerrada");
+  const active = services.filter(
+    (service) =>
+      ["pendiente", "agendado", "en_curso"].includes(service.estado) ||
+      (service.estado === "finalizado" &&
+        (service.estadoLiquidacion === "transporte_pendiente" ||
+          (service.viajes ?? []).some(
+            (trip) =>
+              trip.proveedorTransporte === "uber" &&
+              (!trip.uberScreenshotUrl || !trip.fareConfirmedAt),
+          ))),
+  );
+  const history = services.filter(
+    (service) =>
+      service.estado === "finalizado" &&
+      !active.some((item) => item.id === service.id),
+  );
   const filteredHistory = historyEmployeeId === "all" ? history : history.filter((service) => service.empleadaId === historyEmployeeId);
 
   async function reloadServices() {
@@ -238,14 +252,34 @@ function ServiceRating({ service }: { service: Service }) {
 function TransportPanel({ service, onRefresh }: { service: Service; onRefresh: () => Promise<void> }) {
   const trips = service.viajes || [];
   async function run(action: () => Promise<{ success: boolean; error?: string }>, success: string): Promise<void> { const result = await action(); if (!result.success) { toast.error(result.error); return; } toast.success(success); await onRefresh(); }
-  return <section className="mt-6 space-y-4 border-t border-zinc-800 pt-6"><header><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Transporte del servicio</p><p className="mt-1 text-sm text-zinc-500">Gestiona por separado los viajes de ida y regreso.</p></header><div className="grid gap-4 xl:grid-cols-2">{trips.map((trip) => <TripCard key={trip.id} trip={trip} onRefresh={onRefresh} onRun={run} />)}</div>{service.estadoLiquidacion === "transporte_pendiente" && !trips.some((trip) => trip.tipo === "regreso") && <div className="rounded-xl border border-[#C5A55A]/35 bg-[#C5A55A]/5 p-4"><p className="text-sm font-semibold text-[#E8D5A3]">Transporte de regreso pendiente</p><p className="mt-1 text-xs text-zinc-500">Selecciona cómo regresará la empleada al finalizar el servicio.</p><div className="mt-4 flex flex-wrap gap-2"><ActionButton onClick={() => run(() => chooseReturnTransport(service.id, "chofer"), "Chofer solicitado")}>Regreso con chofer</ActionButton><ActionButton outline onClick={() => run(() => chooseReturnTransport(service.id, "uber"), "Uber seleccionado")}>Regreso con Uber</ActionButton></div></div>}</section>;
+  return <section className="mt-6 space-y-4 border-t border-zinc-800 pt-6"><header><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Transporte del servicio</p><p className="mt-1 text-sm text-zinc-500">Gestiona por separado los viajes de ida y regreso.</p></header><div className="grid gap-4 xl:grid-cols-2">{trips.map((trip) => <TripCard key={trip.id} trip={trip} service={service} onRefresh={onRefresh} onRun={run} />)}</div>{service.estadoLiquidacion === "transporte_pendiente" && !trips.some((trip) => trip.tipo === "regreso") && <div className="rounded-xl border border-[#C5A55A]/35 bg-[#C5A55A]/5 p-4"><p className="text-sm font-semibold text-[#E8D5A3]">Transporte de regreso pendiente</p><p className="mt-1 text-xs text-zinc-500">Selecciona cómo regresará la empleada al finalizar el servicio.</p><div className="mt-4 flex flex-wrap gap-2"><ActionButton onClick={() => run(() => chooseReturnTransport(service.id, "chofer"), "Chofer solicitado")}>Regreso con chofer</ActionButton><ActionButton outline onClick={() => run(() => chooseReturnTransport(service.id, "uber"), "Uber seleccionado")}>Regreso con Uber</ActionButton></div></div>}</section>;
 }
 
-function TripCard({ trip, onRefresh, onRun }: { trip: Trip; onRefresh: () => Promise<void>; onRun: (action: () => Promise<{ success: boolean; error?: string }>, success: string) => Promise<void> }) {
-  const canChangeTransport = !trip.choferId && ["notificado", "aceptado", "llegado"].includes(trip.estado);
+function getUberDeeplink(trip: Trip, service?: Service): string {
+  const isIda = trip.tipo === "ida";
+  const pickupLat = isIda ? service?.empleada?.ubicacionLat : service?.ubicacionClienteLat;
+  const pickupLng = isIda ? service?.empleada?.ubicacionLng : service?.ubicacionClienteLng;
+  const dropoffLat = isIda ? service?.ubicacionClienteLat : service?.empleada?.ubicacionLat;
+  const dropoffLng = isIda ? service?.ubicacionClienteLng : service?.empleada?.ubicacionLng;
+
+  let url = "https://m.uber.com/ul/?action=setPickup";
+  if (pickupLat && pickupLng) {
+    url += `&pickup[latitude]=${pickupLat}&pickup[longitude]=${pickupLng}`;
+  } else {
+    url += "&pickup=my_location";
+  }
+  if (dropoffLat && dropoffLng) {
+    url += `&dropoff[latitude]=${dropoffLat}&dropoff[longitude]=${dropoffLng}`;
+  }
+  return url;
+}
+
+function TripCard({ trip, service, onRefresh, onRun }: { trip: Trip; service?: Service; onRefresh: () => Promise<void>; onRun: (action: () => Promise<{ success: boolean; error?: string }>, success: string) => Promise<void> }) {
+  const canChangeTransport = (!trip.choferId || trip.estado === "notificado") && ["notificado", "aceptado", "llegado"].includes(trip.estado);
   const hasScreenshot = Boolean(trip.uberScreenshotUrl || trip.telegramUberFileId);
+  const uberDeeplink = getUberDeeplink(trip, service);
   const changeButton = canChangeTransport && <button type="button" onClick={() => onRun(() => changeTripTransport(trip.id, trip.proveedorTransporte === "uber" ? "chofer" : "uber"), "Método de transporte actualizado")} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#C5A55A] px-3 py-3 text-xs font-semibold text-[#C5A55A]"><Repeat2 size={15} />Cambiar a {trip.proveedorTransporte === "uber" ? "chofer" : "Uber"}</button>;
-  return <article className="overflow-hidden rounded-xl border border-zinc-800 bg-black"><header className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3"><div className="flex items-center gap-2"><span className="rounded-lg bg-[#C5A55A]/10 p-2 text-[#C5A55A]"><Car size={17} /></span><div><p className="text-sm font-semibold capitalize">Viaje de {trip.tipo}</p><p className="text-[10px] uppercase tracking-wider text-zinc-600">{trip.proveedorTransporte}</p></div></div><span className="rounded-full border border-zinc-800 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-400">{trip.estado}</span></header>{trip.proveedorTransporte === "uber" ? <div className="space-y-5 p-4">{hasScreenshot ? <div className="rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3 text-xs text-[#E8D5A3]">Captura recibida{trip.uberScreenshotUrl && <a href={trip.uberScreenshotUrl} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 font-semibold text-[#C5A55A]">Ver captura <ExternalLink size={12} /></a>}</div> : <UberScreenshotUploader tripId={trip.id} onRefresh={onRefresh} />}<UberFareEditor trip={trip} onRefresh={onRefresh} />{changeButton}</div> : <div className="space-y-4 p-4"><p className="text-sm text-zinc-500">El viaje será gestionado por un chofer interno.</p>{changeButton}</div>}</article>;
+  return <article className="overflow-hidden rounded-xl border border-zinc-800 bg-black"><header className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3"><div className="flex items-center gap-2"><span className="rounded-lg bg-[#C5A55A]/10 p-2 text-[#C5A55A]"><Car size={17} /></span><div><p className="text-sm font-semibold capitalize">Viaje de {trip.tipo}</p><p className="text-[10px] uppercase tracking-wider text-zinc-600">{trip.proveedorTransporte}</p></div></div><span className="rounded-full border border-zinc-800 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-400">{trip.estado}</span></header>{trip.proveedorTransporte === "uber" ? <div className="space-y-5 p-4"><a href={uberDeeplink} target="_blank" rel="noopener noreferrer" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black"><Smartphone size={16} />📱 Pedir Uber</a>{hasScreenshot ? <div className="rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3 text-xs text-[#E8D5A3]">Captura recibida{trip.uberScreenshotUrl && <a href={trip.uberScreenshotUrl} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 font-semibold text-[#C5A55A]">Ver captura <ExternalLink size={12} /></a>}</div> : <UberScreenshotUploader tripId={trip.id} onRefresh={onRefresh} />}<UberFareEditor trip={trip} onRefresh={onRefresh} />{changeButton}</div> : <div className="space-y-4 p-4"><p className="text-sm text-zinc-500">El viaje será gestionado por un chofer interno.</p>{changeButton}</div>}</article>;
 }
 
 function UberFareEditor({ trip, onRefresh }: { trip: Trip; onRefresh: () => Promise<void> }) {

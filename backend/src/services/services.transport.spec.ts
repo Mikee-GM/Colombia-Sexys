@@ -463,12 +463,12 @@ describe('ServicesService transport settlement', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('impide cambiar el transporte si ya existe un chofer asignado', async () => {
+  it('impide cambiar el transporte si ya existe un chofer asignado que aceptó el viaje', async () => {
     const manager = {
       findOne: jest.fn().mockResolvedValue({
         id: 'trip',
         servicioId: 'service',
-        estado: 'notificado',
+        estado: 'aceptado',
         proveedorTransporte: 'interno',
         choferId: 'driver',
       }),
