@@ -7,13 +7,22 @@ export class AiProviderService {
 
   constructor(private readonly configService: ConfigService) {}
 
+  private getApiKey(): string | undefined {
+    return (
+      this.configService.get<string>('XAI_API_KEY') ||
+      this.configService.get<string>('GROQ_API_KEY') ||
+      process.env.XAI_API_KEY ||
+      process.env.GROQ_API_KEY
+    );
+  }
+
   async generateChatResponse(
     systemPrompt: string,
     history: { role: string; content: string }[],
   ): Promise<string> {
-    const apiKey = this.configService.get<string>('GROQ_API_KEY');
+    const apiKey = this.getApiKey();
     if (!apiKey) {
-      throw new Error('GROQ_API_KEY is not defined in environment variables');
+      throw new Error('XAI_API_KEY is not defined in environment variables');
     }
 
     const messages = [{ role: 'system', content: systemPrompt }, ...history];
@@ -24,7 +33,7 @@ export class AiProviderService {
 
     try {
       const response = await fetch(
-        'https://api.groq.com/openai/v1/chat/completions',
+        'https://api.x.ai/v1/chat/completions',
         {
           method: 'POST',
           headers: {
@@ -32,7 +41,7 @@ export class AiProviderService {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+            model: 'grok-4.20-0309-non-reasoning',
             messages,
           }),
           signal: controller.signal,
@@ -43,7 +52,7 @@ export class AiProviderService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+        throw new Error(`xAI API error: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -51,20 +60,20 @@ export class AiProviderService {
     } catch (err: any) {
       clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
-        this.logger.error('Groq API call timed out after 30 seconds');
+        this.logger.error('xAI API call timed out after 30 seconds');
         throw new Error(
           'La llamada a la API de IA superó el tiempo límite de espera.',
         );
       }
-      this.logger.error('Failed to call Groq API:', err.message);
+      this.logger.error('Failed to call xAI API:', err.message);
       throw err;
     }
   }
 
   async analyzeReceipt(imageUrl: string, expectedAmount: number): Promise<any> {
-    const apiKey = this.configService.get<string>('GROQ_API_KEY');
+    const apiKey = this.getApiKey();
     if (!apiKey) {
-      throw new Error('GROQ_API_KEY is not defined in environment variables');
+      throw new Error('XAI_API_KEY is not defined in environment variables');
     }
 
     const systemPrompt = `Eres un auditor financiero especializado en comprobantes bancarios mexicanos.
@@ -116,7 +125,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
 
     try {
       const response = await fetch(
-        'https://api.groq.com/openai/v1/chat/completions',
+        'https://api.x.ai/v1/chat/completions',
         {
           method: 'POST',
           headers: {
@@ -124,11 +133,10 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'qwen/qwen3.6-27b',
+            model: 'grok-4.20-0309-non-reasoning',
             messages,
             response_format: { type: 'json_object' },
             temperature: 0.1,
-            reasoning_effort: 'none',
           }),
           signal: controller.signal,
         },
@@ -138,7 +146,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+        throw new Error(`xAI API error: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
@@ -148,7 +156,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
         const parsed = JSON.parse(content);
         return parsed;
       } catch (e) {
-        this.logger.error('Failed to parse Groq response as JSON', content);
+        this.logger.error('Failed to parse xAI response as JSON', content);
         return {
           esComprobante: false,
           aiCallFailed: true,
@@ -160,7 +168,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
       }
     } catch (err: any) {
       clearTimeout(timeoutId);
-      this.logger.error('Failed to call Groq Vision API:', err.message);
+      this.logger.error('Failed to call xAI Vision API:', err.message);
       return {
         esComprobante: false,
         aiCallFailed: true,

@@ -914,10 +914,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         })
       : null;
 
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.XAI_API_KEY || process.env.GROQ_API_KEY;
     if (!apiKey) {
       await ctx.reply(
-        '⚠️ El sistema de IA no está configurado (falta GROQ_API_KEY en el servidor). Por favor contacta al administrador.',
+        '⚠️ El sistema de IA no está configurado (falta XAI_API_KEY en el servidor). Por favor contacta al administrador.',
       );
       return;
     }

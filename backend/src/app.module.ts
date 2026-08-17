@@ -70,6 +70,7 @@ import { GroupServicesModule } from './group-services/group-services.module';
         R2_BUCKET_NAME: Joi.string().required(),
         R2_PUBLIC_URL: Joi.string().uri().required(),
         GROQ_API_KEY: Joi.string().allow('').optional(),
+        XAI_API_KEY: Joi.string().allow('').optional(),
         BANK_ACCOUNT_DETAILS: Joi.string().allow('').optional(),
         MAX_DAILY_AI_CALLS: Joi.number().default(15),
         SCHEDULE_TRAVEL_SPEED_KMH: Joi.number().positive().default(25),
