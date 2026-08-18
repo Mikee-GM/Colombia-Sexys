@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { CreateEmployeePhotoDto } from './dto/create-employee-photo.dto';
 import { UpdateEmployeePhotoDto } from './dto/update-employee-photo.dto';
 import { EmpleadaFotos } from './entities/employee-photo.entity';
+import { EmpleadaFotosExclusivas } from './entities/employee-private-photo.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 
 @Injectable()
@@ -11,6 +12,8 @@ export class EmployeePhotosService {
   constructor(
     @InjectRepository(EmpleadaFotos)
     private readonly empleadaFotosRepository: Repository<EmpleadaFotos>,
+    @InjectRepository(EmpleadaFotosExclusivas)
+    private readonly fotosExclusivasRepository: Repository<EmpleadaFotosExclusivas>,
     @InjectRepository(Empleadas)
     private readonly empleadasRepository: Repository<Empleadas>,
   ) {}
@@ -86,6 +89,46 @@ export class EmployeePhotosService {
   async remove(id: string): Promise<{ deleted: boolean }> {
     await this.findOne(id);
     await this.empleadaFotosRepository.delete(id);
+    return { deleted: true };
+  }
+
+  // --- MÉTODOS PARA FOTOS EXCLUSIVAS (CLIENTES TELEGRAM) ---
+
+  async findPrivatePhotosByEmployee(
+    empleadaId: string,
+  ): Promise<EmpleadaFotosExclusivas[]> {
+    return await this.fotosExclusivasRepository.find({
+      where: { empleadaId },
+      order: { orden: 'ASC', createdAt: 'DESC' },
+    });
+  }
+
+  async createPrivatePhoto(
+    empleadaId: string,
+    url: string,
+    orden = 0,
+  ): Promise<EmpleadaFotosExclusivas> {
+    const empleada = await this.empleadasRepository.findOne({
+      where: { id: empleadaId },
+    });
+    if (!empleada) {
+      throw new NotFoundException(`Empleada con ID ${empleadaId} no encontrada`);
+    }
+
+    const nuevaFoto = this.fotosExclusivasRepository.create({
+      empleadaId,
+      url,
+      orden,
+    });
+    return await this.fotosExclusivasRepository.save(nuevaFoto);
+  }
+
+  async removePrivatePhoto(id: string): Promise<{ deleted: boolean }> {
+    const foto = await this.fotosExclusivasRepository.findOne({ where: { id } });
+    if (!foto) {
+      throw new NotFoundException(`Foto exclusiva con ID ${id} no encontrada`);
+    }
+    await this.fotosExclusivasRepository.delete(id);
     return { deleted: true };
   }
 }

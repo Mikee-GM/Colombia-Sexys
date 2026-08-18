@@ -31,6 +31,7 @@ import { TransportOperationsModule } from './transport-operations/transport-oper
 import { EmployeeOnboardingModule } from './employee-onboarding/employee-onboarding.module';
 import { DisciplineModule } from './discipline/discipline.module';
 import { GroupServicesModule } from './group-services/group-services.module';
+import { WeeklyContentModule } from './weekly-content/weekly-content.module';
 
 @Module({
   imports: [
@@ -133,6 +134,7 @@ import { GroupServicesModule } from './group-services/group-services.module';
     EmployeeOnboardingModule,
     DisciplineModule,
     GroupServicesModule,
+    WeeklyContentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

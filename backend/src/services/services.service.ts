@@ -616,6 +616,23 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async updateForActor(
+    id: string,
+    updateData: any,
+    actor: Usuarios,
+  ): Promise<Servicios> {
+    const service = await this.findOne(id);
+    this.assertActorCanManageService(service, actor);
+
+    if (actor.rol === 'jefe' && service.estado !== 'pendiente') {
+      throw new ConflictException(
+        'Solo puedes modificar los datos de un servicio mientras esté en estado pendiente (antes de aceptarlo o rechazarlo).',
+      );
+    }
+
+    return this.update(id, updateData);
+  }
+
   async update(id: string, updateData: any): Promise<Servicios> {
     await this.serviciosRepository.update(id, updateData);
     const service = await this.findOne(id);

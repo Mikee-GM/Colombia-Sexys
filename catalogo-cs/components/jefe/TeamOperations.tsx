@@ -21,6 +21,7 @@ import {
   refreshJefeServices,
   sendServiceMessage,
   setEmployeeAvailability,
+  updatePendingServiceAction,
 } from "@/lib/actions/jefe-panel";
 import type { CashObligationSummary, ConversationMessage, Employee, Service, Trip } from "@/lib/types";
 import { formatAvailabilityTime } from "@/lib/availability";
@@ -43,6 +44,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   const [chatService, setChatService] = useState<Service | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [acceptingService, setAcceptingService] = useState<Service | null>(null);
+  const [editingService, setEditingService] = useState<Service | null>(null);
   const [selectedEvaluationUser, setSelectedEvaluationUser] = useState<{ id: string; name: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -63,15 +65,21 @@ export default function TeamOperations({ initialEmployees, initialServices, init
               (!trip.uberScreenshotUrl || !trip.fareConfirmedAt),
           ))),
   );
-  const history = services.filter(
-    (service) =>
-      service.estado === "finalizado" &&
-      !active.some((item) => item.id === service.id),
-  );
+  const history = services.filter((service) => ["finalizado", "cancelado"].includes(service.estado));
   const filteredHistory = historyEmployeeId === "all" ? history : history.filter((service) => service.empleadaId === historyEmployeeId);
 
   async function reloadServices() {
-    try { setServices(await refreshJefeServices()); } catch { toast.error("No se pudieron actualizar los servicios"); }
+    try {
+      setServices(await refreshJefeServices());
+    } catch {
+      // ignore
+    }
+  }
+
+  function handleSaveServiceEdit(updatedService: Service) {
+    setServices((prev) => prev.map((s) => (s.id === updatedService.id ? updatedService : s)));
+    setEditingService(null);
+    toast.success("Servicio actualizado correctamente.");
   }
 
   async function reloadEmployees() {
@@ -207,10 +215,11 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     <header className="mb-7"><p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#C5A55A]">Operación diaria</p><h1 className="font-heading text-4xl font-semibold sm:text-5xl">Mi equipo</h1><p className="mt-2 text-sm text-zinc-500">Disponibilidad, servicios, transporte y conversaciones de tu equipo.</p></header>
     <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl border border-zinc-800 bg-zinc-950 p-1.5 sm:grid-cols-5">{([['equipo', 'Disponibilidad'], ['grupos', `Grupos (${groupRequests.length})`], ['activos', `Activos (${active.length})`], ['historial', 'Historial'], ['efectivo', 'Efectivo']] as const).map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={`rounded-lg px-2 py-3 text-[10px] font-semibold uppercase tracking-wider ${tab === value ? "bg-[#C5A55A] text-black" : "text-zinc-500 hover:text-white"}`}>{label}</button>)}</div>
     {tab === "historial" && <label className="mb-5 block"><span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Filtrar por empleada</span><select value={historyEmployeeId} onChange={(event) => setHistoryEmployeeId(event.target.value)} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-[#C5A55A] sm:max-w-sm"><option value="all">Todas las empleadas</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.nombreArtistico}</option>)}</select></label>}
-    {tab === "equipo" ? <section><label className="mb-5 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-4 text-sm text-white outline-none placeholder:text-zinc-600" /></label><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleEmployees.map((employee) => <article key={employee.id} className={`overflow-hidden rounded-2xl border bg-zinc-950 ${employee.disponible ? "border-[#C5A55A]/55" : "border-zinc-800"}`}><div className="h-36 bg-cover bg-center" style={employee.fotoPerfilUrl ? { backgroundImage: `linear-gradient(to top, #090909, transparent), url(${employee.fotoPerfilUrl})` } : { background: "linear-gradient(135deg,#18181b,#050505)" }} /><div className="p-5"><div className="mb-4 flex items-start justify-between"><div><h2 className="font-heading text-2xl font-semibold">{employee.nombreArtistico}</h2><p className="mt-1 flex items-center gap-1 text-xs text-zinc-500"><MapPin size={12} />{employee.ubicacionLat ? "Ubicación recibida" : "Sin ubicación"}</p>{employee.availabilityStatus === "ocupada" && <p className="mt-2 text-xs text-[#E8D5A3]">Ocupada{employee.estimatedAvailableAt ? ` hasta ${formatAvailabilityTime(employee.estimatedAvailableAt)}` : ""}</p>}<EmployeeRatingSummary employee={employee} /></div><span className={`h-3 w-3 rounded-full ${employee.disponible ? "bg-emerald-400" : "bg-zinc-700"}`} /></div><div className="space-y-2"><button disabled={pending} onClick={() => toggleAvailability(employee)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C5A55A] py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] disabled:opacity-50">{employee.disponible ? <UserRoundX size={18} /> : <UserRoundCheck size={18} />}{employee.disponible ? "Marcar no disponible" : "Marcar disponible"}</button><button type="button" onClick={() => setSelectedEvaluationUser({ id: employee.usuarioId || employee.id, name: employee.nombreArtistico })} className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:border-[#C5A55A] hover:text-[#C5A55A] transition-all"><Award size={16} />Historial de Exámenes</button></div></div></article>)}</div></section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onCancel={cancelService} onChat={openChat} onRefresh={reloadServices} />}
+    {tab === "equipo" ? <section><label className="mb-5 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-4 text-sm text-white outline-none placeholder:text-zinc-600" /></label><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleEmployees.map((employee) => <article key={employee.id} className={`overflow-hidden rounded-2xl border bg-zinc-950 ${employee.disponible ? "border-[#C5A55A]/55" : "border-zinc-800"}`}><div className="h-36 bg-cover bg-center" style={employee.fotoPerfilUrl ? { backgroundImage: `linear-gradient(to top, #090909, transparent), url(${employee.fotoPerfilUrl})` } : { background: "linear-gradient(135deg,#18181b,#050505)" }} /><div className="p-5"><div className="mb-4 flex items-start justify-between"><div><h2 className="font-heading text-2xl font-semibold">{employee.nombreArtistico}</h2><p className="mt-1 flex items-center gap-1 text-xs text-zinc-500"><MapPin size={12} />{employee.ubicacionLat ? "Ubicación recibida" : "Sin ubicación"}</p>{employee.availabilityStatus === "ocupada" && <p className="mt-2 text-xs text-[#E8D5A3]">Ocupada{employee.estimatedAvailableAt ? ` hasta ${formatAvailabilityTime(employee.estimatedAvailableAt)}` : ""}</p>}<EmployeeRatingSummary employee={employee} /></div><span className={`h-3 w-3 rounded-full ${employee.disponible ? "bg-emerald-400" : "bg-zinc-700"}`} /></div><div className="space-y-2"><button disabled={pending} onClick={() => toggleAvailability(employee)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C5A55A] py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] disabled:opacity-50">{employee.disponible ? <UserRoundX size={18} /> : <UserRoundCheck size={18} />}{employee.disponible ? "Marcar no disponible" : "Marcar disponible"}</button><button type="button" onClick={() => setSelectedEvaluationUser({ id: employee.usuarioId || employee.id, name: employee.nombreArtistico })} className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:border-[#C5A55A] hover:text-[#C5A55A] transition-all"><Award size={16} />Historial de Exámenes</button></div></div></article>)}</div></section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={cancelService} onChat={openChat} onRefresh={reloadServices} />}
 
     {chatService && <ChatPanel service={chatService} messages={messages} setMessages={setMessages} onClose={() => setChatService(null)} />}
     {acceptingService && <AcceptServiceDialog service={acceptingService} previousService={services.find((item) => item.id === acceptingService.servicioPrevioId)} disabled={pending} onClose={() => setAcceptingService(null)} onAccept={(transport, notes) => decide(acceptingService, "aceptar", transport, notes)} />}
+    {editingService && <EditPendingServiceDialog service={editingService} onClose={() => setEditingService(null)} onSaved={handleSaveServiceEdit} />}
     <EvaluationHistorySheet userId={selectedEvaluationUser?.id ?? null} workerName={selectedEvaluationUser?.name} open={Boolean(selectedEvaluationUser)} onOpenChange={(open) => !open && setSelectedEvaluationUser(null)} />
   </>;
 }
@@ -223,9 +232,70 @@ function CashDeliveryPanel({ summary, pending, run }: { summary: CashObligationS
   return <section><header className="mb-5"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Control de efectivo</p><h2 className="mt-1 font-heading text-3xl">Pendiente por entregar: {money(summary.total)}</h2></header><div className="grid gap-4 lg:grid-cols-2">{groups.map((obligations) => { const employeeId = obligations[0].employeeId; const employeeName = summary.employees.find((item) => item.id === employeeId)?.name || "Empleada"; const balance = obligations.reduce((sum, item) => sum + Number(item.amount) - Number(item.paidAmount), 0); const hasProvisional = obligations.some((item) => item.calculationStatus === "provisional"); return <article key={employeeId} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"><div className="flex items-center justify-between gap-4"><div><p className="font-heading text-2xl">{employeeName}</p><p className="mt-1 text-xs text-zinc-500">{obligations.length} servicios pendientes</p></div><div className="flex items-center gap-2 text-[#E8D5A3]"><Banknote size={19}/><span className="font-heading text-2xl">{money(balance)}</span></div></div><div className="mt-4 space-y-2">{obligations.map((item) => <div key={item.id} className="rounded-xl border border-zinc-900 p-3 text-xs"><div className="grid grid-cols-[1fr_auto_auto] items-center gap-3"><span>Servicio {item.serviceId.slice(-6).toUpperCase()}</span><span>{money(Number(item.amount) - Number(item.paidAmount))}</span><button disabled={pending || item.calculationStatus !== "ready"} onClick={() => run(() => closeJefeCashObligation(item.id))} className="font-semibold text-[#C5A55A] disabled:text-zinc-700">Entregado</button></div><div className="mt-2 flex justify-between text-zinc-500"><span>Total cobrado: {money(Number(item.customerTotal))}</span><span>Ubers: -{money(Number(item.uberDeduction))}</span></div>{item.calculationStatus === "provisional" && <p className="mt-2 text-amber-400">Provisional: {item.pendingReason}</p>}</div>)}</div><div className="mt-4 flex gap-2"><input disabled={hasProvisional} value={amounts[employeeId] || ""} onChange={(event) => setAmounts({...amounts, [employeeId]: event.target.value})} inputMode="decimal" placeholder={hasProvisional ? "Confirma los Ubers pendientes" : "Monto recibido"} className="min-w-0 flex-1 rounded-xl border border-zinc-800 bg-black px-3 py-3 text-sm outline-none focus:border-[#C5A55A] disabled:text-zinc-700"/><button disabled={pending || hasProvisional} onClick={() => { const amount = Number(amounts[employeeId]); if (!Number.isFinite(amount) || amount <= 0) return toast.error("Ingresa un monto válido"); run(() => registerJefeCashPayment(employeeId, amount)); }} className="rounded-xl border border-[#C5A55A] px-4 text-xs font-semibold text-[#C5A55A] disabled:opacity-50">Registrar abono</button></div></article>; })}</div></section>;
 }
 
-function ServiceList({ services, allServices, active, disabled, onDecide, onRequestAccept, onCancel, onChat, onRefresh }: { services: Service[]; allServices: Service[]; active: boolean; disabled: boolean; onDecide: (service: Service, decision: "aceptar" | "rechazar", transport?: "chofer" | "uber", bossNotes?: string) => void; onRequestAccept: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
+function ServiceList({ services, allServices, active, disabled, onDecide, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { services: Service[]; allServices: Service[]; active: boolean; disabled: boolean; onDecide: (service: Service, decision: "aceptar" | "rechazar", transport?: "chofer" | "uber", bossNotes?: string) => void; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   if (!services.length) return <div className="rounded-2xl border border-dashed border-zinc-800 py-20 text-center text-sm text-zinc-500">No hay servicios en esta sección.</div>;
-  return <div className="space-y-4">{services.map((service) => { const previous = allServices.find((item) => item.id === service.servicioPrevioId); return <article key={service.id} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest text-[#C5A55A]">Servicio {service.id.slice(-6).toUpperCase()}</p><h2 className="mt-1 font-heading text-2xl">{service.empleada?.nombreArtistico || "Empleada asignada"}</h2>{!active && service.empleada && <EmployeeRatingSummary employee={service.empleada} />}<p className="mt-1 text-xs text-zinc-500">{service.cliente?.nombreTelegram || "Cliente"} · {service.duracionPactadaHoras} horas</p>{service.servicioPrevioId && <p className="mt-2 text-xs text-[#E8D5A3]">Después del servicio {previous?.id.slice(-6).toUpperCase() || service.servicioPrevioId.slice(-6).toUpperCase()}</p>}{service.horaInicioEstimada && <p className="mt-1 text-xs text-zinc-400">Llegada estimada: {formatAvailabilityTime(service.horaInicioEstimada)}</p>}{service.locationNameSnapshot && <p className="mt-1 text-xs text-zinc-500">Ubicación: {service.locationNameSnapshot}</p>}</div><ServiceStatusBadge status={service.estado} /></div>{service.notasJefe && <div className="mt-4 border-l-2 border-[#C5A55A]/70 bg-black/50 px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]">Notas internas</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{service.notasJefe}</p></div>}{!active && <ServiceRating service={service} />}<ReceiptEvidenceList service={service} /><div className="mt-5 flex flex-wrap gap-2">{active && service.estado === "pendiente" && <ActionButton disabled={disabled} onClick={() => onRequestAccept(service)}><Check size={15} />Aceptar servicio</ActionButton>}{!active && <span className="flex items-center gap-1 text-xs text-zinc-500"><Clock3 size={14} />{new Date(service.updatedAt).toLocaleString("es-MX")}</span>}<ActionButton outline onClick={() => onChat(service)}><MessageCircle size={15} />Abrir chat</ActionButton>{active && <button type="button" disabled={disabled} onClick={() => onCancel(service)} className="flex items-center gap-2 rounded-xl border border-red-500/80 bg-red-500/10 px-4 py-3 text-xs font-bold uppercase tracking-wider text-red-300 transition hover:bg-red-500 hover:text-white disabled:opacity-40"><Ban size={16} />Cancelar servicio</button>}</div>{active && service.estado !== "agendado" && <TransportPanel service={service} onRefresh={onRefresh} />}</article>; })}</div>;
+  return <div className="space-y-4">{services.map((service) => { const previous = allServices.find((item) => item.id === service.servicioPrevioId); return <article key={service.id} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] uppercase tracking-widest text-[#C5A55A]">Servicio {service.id.slice(-6).toUpperCase()}</p><h2 className="mt-1 font-heading text-2xl">{service.empleada?.nombreArtistico || "Empleada asignada"}</h2>{!active && service.empleada && <EmployeeRatingSummary employee={service.empleada} />}<p className="mt-1 text-xs text-zinc-500">{service.cliente?.nombreTelegram || "Cliente"} · {service.duracionPactadaHoras} horas · {service.metodoPago.toUpperCase()}</p>{service.servicioPrevioId && <p className="mt-2 text-xs text-[#E8D5A3]">Después del servicio {previous?.id.slice(-6).toUpperCase() || service.servicioPrevioId.slice(-6).toUpperCase()}</p>}{service.horaInicioEstimada && <p className="mt-1 text-xs text-zinc-400">Llegada estimada: {formatAvailabilityTime(service.horaInicioEstimada)}</p>}{service.locationNameSnapshot && <p className="mt-1 text-xs text-zinc-500">Ubicación: {service.locationNameSnapshot}</p>}</div><ServiceStatusBadge status={service.estado} /></div>{service.notasJefe && <div className="mt-4 border-l-2 border-[#C5A55A]/70 bg-black/50 px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]">Notas internas</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{service.notasJefe}</p></div>}{!active && <ServiceRating service={service} />}<ReceiptEvidenceList service={service} /><div className="mt-5 flex flex-wrap gap-2">{active && service.estado === "pendiente" && <><ActionButton disabled={disabled} onClick={() => onRequestAccept(service)}><Check size={15} />Aceptar servicio</ActionButton><ActionButton outline disabled={disabled} onClick={() => onRequestEdit?.(service)}><Pencil size={15} />Editar servicio</ActionButton></>}{!active && <span className="flex items-center gap-1 text-xs text-zinc-500"><Clock3 size={14} />{new Date(service.updatedAt).toLocaleString("es-MX")}</span>}<ActionButton outline onClick={() => onChat(service)}><MessageCircle size={15} />Abrir chat</ActionButton>{active && <button type="button" disabled={disabled} onClick={() => onCancel(service)} className="flex items-center gap-2 rounded-xl border border-red-500/80 bg-red-500/10 px-4 py-3 text-xs font-bold uppercase tracking-wider text-red-300 transition hover:bg-red-500 hover:text-white disabled:opacity-40"><Ban size={16} />Cancelar servicio</button>}</div>{active && service.estado !== "agendado" && <TransportPanel service={service} onRefresh={onRefresh} />}</article>; })}</div>;
+}
+
+function EditPendingServiceDialog({ service, onClose, onSaved }: { service: Service; onClose: () => void; onSaved: (service: Service) => void }) {
+  const [duracion, setDuracion] = useState(Number(service.duracionPactadaHoras) || 1);
+  const [metodoPago, setMetodoPago] = useState(service.metodoPago);
+  const [notas, setNotas] = useState(service.notas || "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await updatePendingServiceAction(service.id, {
+        duracionPactadaHoras: duracion,
+        metodoPago: metodoPago as any,
+        notas: notas.trim() || undefined,
+      });
+      if (!res.success || !res.data) {
+        throw new Error(res.error || "No se pudo actualizar");
+      }
+      onSaved(res.data);
+    } catch (err: any) {
+      toast.error(err.message || "Error al actualizar servicio");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && !saving && onClose()}>
+      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#090909] p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-heading text-xl text-white">Editar Servicio Pendiente</h3>
+          <button type="button" onClick={onClose} className="text-zinc-500 hover:text-white"><X size={18} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">Duración (Horas)</label>
+            <input type="number" min={1} max={24} value={duracion} onChange={(e) => setDuracion(parseInt(e.target.value, 10) || 1)} className="w-full bg-black border border-zinc-800 px-4 py-2.5 rounded-xl text-white outline-none focus:border-[#C5A55A]" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">Método de Pago</label>
+            <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value as any)} className="w-full bg-black border border-zinc-800 px-4 py-2.5 rounded-xl text-white outline-none focus:border-[#C5A55A]">
+              <option value="efectivo">Efectivo</option>
+              <option value="tarjeta">Tarjeta</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="mixto">Mixto</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">Notas / Instrucciones del Cliente</label>
+            <textarea rows={3} value={notas} onChange={(e) => setNotas(e.target.value)} className="w-full bg-black border border-zinc-800 px-4 py-2.5 rounded-xl text-white outline-none focus:border-[#C5A55A] resize-none" placeholder="Instrucciones de llegada o notas..." />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button type="button" onClick={onClose} disabled={saving} className="flex-1 py-2.5 border border-zinc-800 rounded-xl text-xs font-bold uppercase text-zinc-400 hover:text-white">Cancelar</button>
+            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#C5A55A] text-black rounded-xl text-xs font-bold uppercase hover:bg-[#D4AF37] disabled:opacity-50">{saving ? "Guardando..." : "Guardar Cambios"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function ReceiptEvidenceList({ service }: { service: Service }) {

@@ -3,10 +3,17 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmployeePhotosService } from './employee-photos.service';
 import { EmployeePhotosController } from './employee-photos.controller';
 import { EmpleadaFotos } from './entities/employee-photo.entity';
+import { EmpleadaFotosExclusivas } from './entities/employee-private-photo.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([EmpleadaFotos, Empleadas])],
+  imports: [
+    TypeOrmModule.forFeature([
+      EmpleadaFotos,
+      EmpleadaFotosExclusivas,
+      Empleadas,
+    ]),
+  ],
   controllers: [EmployeePhotosController],
   providers: [EmployeePhotosService],
   exports: [EmployeePhotosService],

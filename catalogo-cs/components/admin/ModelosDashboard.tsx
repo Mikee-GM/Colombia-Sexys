@@ -150,10 +150,26 @@ export default function ModelosDashboard({
             </span>
           </div>
         )}
-        <div className="absolute top-2 right-2 bg-black/80 px-2 py-1 border border-[#C5A55A]/30">
-          <span className="text-[9px] text-[#C5A55A] font-bold">
-            #{index + 1}
-          </span>
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+          <div className="bg-black/80 px-2 py-1 border border-[#C5A55A]/30">
+            <span className="text-[9px] text-[#C5A55A] font-bold">
+              #{index + 1}
+            </span>
+          </div>
+          {Number(modelo.pendingWeeklyPhotosCount) > 0 && (
+            <div className="bg-emerald-950/90 border border-emerald-500/80 px-2 py-1 shadow-lg animate-pulse">
+              <span className="text-[9px] text-emerald-300 font-bold uppercase tracking-wider">
+                📸 {modelo.pendingWeeklyPhotosCount} por validar
+              </span>
+            </div>
+          )}
+          {modelo.weeklyContentStatus === "atrasado" && Number(modelo.pendingWeeklyPhotosCount || 0) === 0 && (
+            <div className="bg-red-950/90 border border-red-500/80 px-2 py-1 shadow-lg">
+              <span className="text-[9px] text-red-300 font-bold uppercase tracking-wider">
+                ⚠️ Fotos atrasadas
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

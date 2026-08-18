@@ -3299,6 +3299,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                   `jefe_autorizar:${nuevoServicio.id}:0`,
                 ),
               ],
+              [
+                Markup.button.callback(
+                  '✏️ Editar Servicio',
+                  `jefe_editar_srv:${nuevoServicio.id}`,
+                ),
+              ],
             ]),
           });
           await ctx.telegram.sendLocation(
@@ -4252,10 +4258,51 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           return;
         }
 
-        // Strip DATA block unconditionally before sending to user
-        const cleanText = responseText
+        // Check if response contains [SEND_EXCLUSIVE_PHOTO]
+        const hasPhotoIntent = responseText.includes('[SEND_EXCLUSIVE_PHOTO]');
+        let cleanText = responseText
+          .replace(/\[SEND_EXCLUSIVE_PHOTO\]/g, '')
           .replace(/\[DATA:\s*\{.*?\}\]/g, '')
           .trim();
+
+        if (hasPhotoIntent) {
+          try {
+            const empleadaModel = await this.empleadasRepository.findOne({
+              where: { id: empleadaId },
+              relations: { fotosExclusivas: true, empleadaFotos: true },
+            });
+            const photosToSend =
+              empleadaModel?.fotosExclusivas &&
+              empleadaModel.fotosExclusivas.length > 0
+                ? empleadaModel.fotosExclusivas
+                : empleadaModel?.empleadaFotos || [];
+
+            if (photosToSend.length > 0) {
+              // Seleccionar una foto aleatoria
+              const randomPhoto =
+                photosToSend[Math.floor(Math.random() * photosToSend.length)];
+              await ctx.telegram.sendPhoto(telegramId, randomPhoto.url, {
+                caption: cleanText || `Para ti con cariño... 🔥`,
+              });
+              history.push({
+                role: 'model',
+                parts: [{ text: cleanText || 'Te envié una foto.' }],
+              });
+              session.chatHistory = history;
+              await this.recordDraftConversation(
+                ctx,
+                'ia',
+                `[Foto exclusiva enviada] ${cleanText}`,
+              );
+              return;
+            }
+          } catch (photoErr) {
+            this.logger.warn(
+              'Error enviando foto exclusiva por telegram:',
+              photoErr,
+            );
+          }
+        }
 
         // Check if response contains the structured DATA block
         const dataMatch = responseText.match(/\[DATA:\s*(\{.*?\})\]/);
