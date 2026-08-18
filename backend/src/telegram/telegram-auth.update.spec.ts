@@ -22,14 +22,17 @@ describe('TelegramAuthUpdate deep links', () => {
     const update = new TelegramAuthUpdate(
       usuariosRepository as any,
       clientesRepository as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      bookingUpdate as any,
-      {} as any,
-      {} as any,
+      {} as any, // empleadasRepository
+      {} as any, // serviciosRepository
+      {} as any, // viajesRepository
+      {} as any, // jwtService
+      {} as any, // authService
+      {} as any, // telegramService
+      bookingUpdate as any, // telegramBookingUpdate
+      {} as any, // telegramOnboardingService
+      {} as any, // groupServicesService
+      {} as any, // uploadService
+      {} as any, // weeklyContentService
     );
     const ctx = {
       from: { id: 123, first_name: 'Nuevo', last_name: 'Cliente' },
