@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
+import type { EmployeeRatingComment } from "@/lib/types";
 
 export type PersonType = "client" | "employee" | "driver";
 export type RatingDirection =
@@ -63,6 +64,12 @@ export async function getSanctions() {
 export async function getDossier(subjectType: PersonType, subjectId: string) {
   return apiFetch<Dossier>(
     `/discipline/dossiers/${subjectType}/${subjectId}`,
+  );
+}
+
+export async function getEmployeeRatingComments(employeeId: string) {
+  return apiFetch<EmployeeRatingComment[]>(
+    `/discipline/ratings/employee/${employeeId}`,
   );
 }
 

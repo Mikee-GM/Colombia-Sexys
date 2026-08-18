@@ -492,6 +492,70 @@ export class EmployeesService {
     return await this.findOne(id);
   }
 
+  async getKpis(): Promise<
+    Array<{
+      id: string;
+      nombreArtistico: string;
+      fotoPerfilUrl: string | null;
+      promedioCalificacion: number | null;
+      totalServiciosValorados: number;
+      confirmedReports90Days: number;
+      score: number | null;
+    }>
+  > {
+    const employees = await this.empleadasRepository.find({
+      select: {
+        id: true,
+        nombreArtistico: true,
+        fotoPerfilUrl: true,
+        promedioCalificacion: true,
+        totalServiciosValorados: true,
+      },
+    });
+    if (employees.length === 0) return [];
+
+    const confirmedRows: Array<{ employee_id: string; confirmed: number }> =
+      await this.dataSource.query(
+        `SELECT employee_id, COUNT(*)::int AS confirmed
+         FROM employee_reports
+         WHERE status = 'resuelto' AND created_at >= now() - interval '90 days'
+           AND employee_id = ANY($1::uuid[])
+         GROUP BY employee_id`,
+        [employees.map((employee) => employee.id)],
+      );
+    const confirmedByEmployee = new Map(
+      confirmedRows.map((row) => [row.employee_id, row.confirmed]),
+    );
+
+    const kpis = employees.map((employee) => {
+      const confirmedReports90Days = confirmedByEmployee.get(employee.id) ?? 0;
+      const promedio = employee.promedioCalificacion;
+      const score =
+        promedio != null
+          ? Math.max(
+              0,
+              Math.round((promedio / 5) * 100 - confirmedReports90Days * 8),
+            )
+          : null;
+      return {
+        id: employee.id,
+        nombreArtistico: employee.nombreArtistico,
+        fotoPerfilUrl: employee.fotoPerfilUrl,
+        promedioCalificacion: promedio,
+        totalServiciosValorados: employee.totalServiciosValorados,
+        confirmedReports90Days,
+        score,
+      };
+    });
+
+    return kpis.sort((a, b) => {
+      if (a.score == null && b.score == null) return 0;
+      if (a.score == null) return 1;
+      if (b.score == null) return -1;
+      return b.score - a.score;
+    });
+  }
+
   async remove(id: string): Promise<{ deleted: boolean }> {
     const empleada = await this.findOne(id);
 

@@ -26,7 +26,11 @@ import WeekSelector from "./week-selector";
 
 type Mode = "empleada" | "chofer";
 
-export default function LiquidationsClient() {
+export default function LiquidationsClient({
+  isAdmin = false,
+}: {
+  isAdmin?: boolean;
+}) {
   const [mode, setMode] = useState<Mode>("empleada");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [employees, setEmployees] = useState<LiquidationEmployee[]>([]);
@@ -86,35 +90,31 @@ export default function LiquidationsClient() {
     else void loadDrivers();
   }, [mode, loadEmployees, loadDrivers]);
 
+  const refetchReport = useCallback(async () => {
+    if (mode !== "empleada" || !selectedEmployeeId) return;
+    setLoadingReport(true);
+    try {
+      const data = await getLiquidationReport(
+        period.start.toISOString(),
+        period.end.toISOString(),
+        selectedEmployeeId,
+      );
+      setReport(data);
+    } catch (error) {
+      setReport(null);
+      toast.error(error instanceof Error ? error.message : "No fue posible calcular el corte");
+    } finally {
+      setLoadingReport(false);
+    }
+  }, [mode, period, selectedEmployeeId]);
+
   useEffect(() => {
     if (mode !== "empleada" || !selectedEmployeeId) {
       setReport(null);
       return;
     }
-
-    let active = true;
-    setLoadingReport(true);
-    getLiquidationReport(
-      period.start.toISOString(),
-      period.end.toISOString(),
-      selectedEmployeeId,
-    )
-      .then((data) => {
-        if (active) setReport(data);
-      })
-      .catch((error) => {
-        if (active) {
-          setReport(null);
-          toast.error(error instanceof Error ? error.message : "No fue posible calcular el corte");
-        }
-      })
-      .finally(() => {
-        if (active) setLoadingReport(false);
-      });
-
-    return () => {
-      active = false;
-    };
+    void refetchReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, period, selectedEmployeeId]);
 
   const loadDriverReport = useCallback(() => {
@@ -267,7 +267,12 @@ export default function LiquidationsClient() {
               </section>
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 <div className="space-y-6 lg:col-span-2">
-                  <CutComparison report={report} />
+                  <CutComparison
+                    report={report}
+                    isAdmin={isAdmin}
+                    locked={report.weeklySettlement.status === "confirmed"}
+                    onRecordUpdated={refetchReport}
+                  />
                 </div>
                 <div className="space-y-6">
                   <LiquidationSummary cut={report.finalCut} employeeName={selectedEmployee.name} />

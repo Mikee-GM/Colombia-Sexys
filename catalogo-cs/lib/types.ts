@@ -378,6 +378,22 @@ export type EmployeeTolerance = {
   extensionTolerance: number;
 };
 
+export type EmployeeKpi = {
+  id: string;
+  nombreArtistico: string;
+  fotoPerfilUrl: string | null;
+  promedioCalificacion: number | null;
+  totalServiciosValorados: number;
+  confirmedReports90Days: number;
+  score: number | null;
+};
+
+export type EmployeeRatingComment = {
+  stars: number;
+  comment: string;
+  createdAt: string;
+};
+
 export type EmployeeReportFilters = {
   page?: number;
   limit?: number;

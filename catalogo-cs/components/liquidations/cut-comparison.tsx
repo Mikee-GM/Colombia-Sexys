@@ -1,8 +1,12 @@
 import { formatCurrency, formatDateTime } from "@/lib/calculations";
+import LiquidationRecordEditor from "./liquidation-record-editor";
 import type { LiquidationRecord, LiquidationReport } from "./types";
 
 interface Props {
   report: LiquidationReport;
+  isAdmin?: boolean;
+  locked?: boolean;
+  onRecordUpdated?: () => void;
 }
 
 function SourceBadge({ role }: { role: LiquidationRecord["sourceRole"] }) {
@@ -13,7 +17,12 @@ function SourceBadge({ role }: { role: LiquidationRecord["sourceRole"] }) {
   );
 }
 
-export default function CutComparison({ report }: Props) {
+export default function CutComparison({
+  report,
+  isAdmin = false,
+  locked = false,
+  onRecordUpdated = () => {},
+}: Props) {
   return (
     <section className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-md">
       <header className="border-b border-zinc-800 p-5 sm:p-6">
@@ -64,6 +73,13 @@ export default function CutComparison({ report }: Props) {
                   <p className="mt-1 text-xs text-red-400">
                     Transporte: -{formatCurrency(transport)}
                   </p>
+                )}
+                {isAdmin && (
+                  <LiquidationRecordEditor
+                    record={record}
+                    locked={locked}
+                    onUpdated={onRecordUpdated}
+                  />
                 )}
               </article>
             );

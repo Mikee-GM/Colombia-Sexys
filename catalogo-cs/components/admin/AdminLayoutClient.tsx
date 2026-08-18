@@ -167,6 +167,16 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
             Reportes
           </Link>
           <Link
+            href="/admin/kpis"
+            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
+              isActive("/admin/kpis")
+                ? "text-black bg-[#C5A55A]"
+                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
+            }`}
+          >
+            Indicadores
+          </Link>
+          <Link
             href="/admin/regulations"
             className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
               isActive("/admin/regulations")
@@ -376,6 +386,17 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
               }`}
             >
               Reportes
+            </Link>
+            <Link
+              href="/admin/kpis"
+              onClick={() => setMenuOpen(false)}
+              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
+                isActive("/admin/kpis")
+                  ? "text-[#C5A55A] bg-zinc-900/50"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              Indicadores
             </Link>
             <Link
               href="/admin/regulations"

@@ -692,6 +692,19 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  async listEmployeeRatingComments(employeeId: string) {
+    return this.dataSource.query(
+      `SELECT stars, comment, created_at AS "createdAt"
+       FROM interaction_ratings
+       WHERE employee_id = $1
+         AND direction = 'client_to_employee'
+         AND comment IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 20`,
+      [employeeId],
+    );
+  }
+
   private async expireSanctions() {
     const result = await this.sanctions
       .createQueryBuilder()

@@ -48,6 +48,12 @@ export class EmployeesController {
     return this.employeesService.findAll();
   }
 
+  @Get('kpis')
+  @Roles('admin')
+  getKpis() {
+    return this.employeesService.getKpis();
+  }
+
   @Get(':id')
   @ApiFindOneDocs({ tag: 'employees', entity: Empleadas, protected: true })
   findOne(@Param('id') id: string) {

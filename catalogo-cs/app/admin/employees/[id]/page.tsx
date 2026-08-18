@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import PageHeader from "@/components/ui/page-header";
 import { getEmployee } from "@/lib/data/employees";
+import { getEmployeeRatingComments } from "@/lib/actions/discipline";
 import Image from "next/image";
 
 type Props = {
@@ -11,6 +12,8 @@ export default async function EmployeeDetailPage({ params }: Props) {
   const { id } = await params;
   const employee = await getEmployee(id);
   const photos = employee.empleadaFotos?.sort((a, b) => a.orden - b.orden) ?? [];
+  const ratingComments = await getEmployeeRatingComments(id).catch(() => []);
+  const negativeComments = ratingComments.filter((rating) => rating.stars <= 3);
 
   return (
     <>
@@ -50,6 +53,35 @@ export default async function EmployeeDetailPage({ params }: Props) {
         </div>
 
         <div className="space-y-6 xl:col-span-8">
+          {negativeComments.length > 0 && (
+            <div className="rounded-2xl border border-red-900/40 bg-red-950/10 p-6">
+              <h2 className="text-lg font-semibold text-red-300">
+                Comentarios que afectan la calificación
+              </h2>
+              <div className="mt-4 space-y-3">
+                {negativeComments.map((rating, index) => (
+                  <div
+                    key={index}
+                    className="rounded-xl border border-red-900/30 bg-black/30 p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-red-300">
+                        {"★".repeat(rating.stars)}
+                        {"☆".repeat(5 - rating.stars)}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {new Date(rating.createdAt).toLocaleDateString("es-MX")}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-zinc-300">
+                      {rating.comment}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
             <h2 className="text-lg font-semibold">Perfil</h2>
             <p className="mt-3 text-zinc-300">
