@@ -16,7 +16,7 @@ import { ConductReport } from '../discipline/entities/conduct-report.entity';
 @Injectable()
 export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WeeklyContentScheduler.name);
-  private timer?: NodeJS.Timeout;
+  private timer?: any;
   private running = false;
 
   constructor(
@@ -47,8 +47,13 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
 
     // Escanear cada 10 minutos
     this.timer = setInterval(() => void this.runCycle(), 10 * 60 * 1000);
-    this.timer.unref();
-    setTimeout(() => void this.runCycle(), 10_000).unref();
+    if (typeof (this.timer as any)?.unref === 'function') {
+      (this.timer as any).unref();
+    }
+    const initialTimer: any = setTimeout(() => void this.runCycle(), 10_000);
+    if (typeof initialTimer?.unref === 'function') {
+      initialTimer.unref();
+    }
   }
 
   onModuleDestroy() {
@@ -119,7 +124,10 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
               `Tienes hasta el sábado para enviarlas. ¡Quedamos atentos a tus fotos! ✨`,
           );
         } catch (err) {
-          this.logger.warn(`No se pudo enviar solicitud de fotos a ${emp.nombreArtistico}:`, err);
+          this.logger.warn(
+            `No se pudo enviar solicitud de fotos a ${emp.nombreArtistico}:`,
+            err,
+          );
         }
       }
     }
@@ -146,7 +154,10 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
             `Recuerda enviarlas a la brevedad por este chat para evitar incidencias en tu perfil.`,
         );
       } catch (err) {
-        this.logger.warn(`No se pudo enviar recordatorio a ${schedule.empleada.nombreArtistico}:`, err);
+        this.logger.warn(
+          `No se pudo enviar recordatorio a ${schedule.empleada.nombreArtistico}:`,
+          err,
+        );
       }
     }
   }
@@ -188,7 +199,10 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
               `Se ha registrado una falta por incumplimiento en tu historial disciplinario. Por favor comunícate con tu jefe o administración.`,
           );
         } catch (err) {
-          this.logger.warn(`No se pudo notificar falta a ${schedule.empleada.nombreArtistico}:`, err);
+          this.logger.warn(
+            `No se pudo notificar falta a ${schedule.empleada.nombreArtistico}:`,
+            err,
+          );
         }
       }
     }

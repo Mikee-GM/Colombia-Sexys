@@ -32,23 +32,20 @@ export class AiProviderService {
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      const response = await fetch(
-        'https://api.x.ai/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'grok-4.20-0309-non-reasoning',
-            messages,
-            max_tokens: 150,
-            temperature: 0.7,
-          }),
-          signal: controller.signal,
+      const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          model: 'grok-4.20-0309-non-reasoning',
+          messages,
+          max_tokens: 150,
+          temperature: 0.7,
+        }),
+        signal: controller.signal,
+      });
 
       clearTimeout(timeoutId);
 
@@ -126,23 +123,20 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
-      const response = await fetch(
-        'https://api.x.ai/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'grok-4.20-0309-non-reasoning',
-            messages,
-            response_format: { type: 'json_object' },
-            temperature: 0.1,
-          }),
-          signal: controller.signal,
+      const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          model: 'grok-4.20-0309-non-reasoning',
+          messages,
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        }),
+        signal: controller.signal,
+      });
 
       clearTimeout(timeoutId);
 

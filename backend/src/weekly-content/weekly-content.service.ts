@@ -161,7 +161,8 @@ export class WeeklyContentService {
         where: { empleadaId: submission.empleadaId },
         order: { orden: 'DESC' },
       });
-      const maxOrden = fotosActuales.length > 0 ? (fotosActuales[0].orden || 0) + 1 : 0;
+      const maxOrden =
+        fotosActuales.length > 0 ? (fotosActuales[0].orden || 0) + 1 : 0;
 
       const nuevaFotoPublica = this.fotosRepo.create({
         empleadaId: submission.empleadaId,
@@ -176,7 +177,8 @@ export class WeeklyContentService {
         where: { empleadaId: submission.empleadaId },
         order: { orden: 'DESC' },
       });
-      const maxOrden = fotosPrivadas.length > 0 ? (fotosPrivadas[0].orden || 0) + 1 : 0;
+      const maxOrden =
+        fotosPrivadas.length > 0 ? (fotosPrivadas[0].orden || 0) + 1 : 0;
 
       const nuevaFotoPrivada = this.fotosExclusivasRepo.create({
         empleadaId: submission.empleadaId,

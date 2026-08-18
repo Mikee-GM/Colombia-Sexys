@@ -112,7 +112,9 @@ export class EmployeePhotosService {
       where: { id: empleadaId },
     });
     if (!empleada) {
-      throw new NotFoundException(`Empleada con ID ${empleadaId} no encontrada`);
+      throw new NotFoundException(
+        `Empleada con ID ${empleadaId} no encontrada`,
+      );
     }
 
     const nuevaFoto = this.fotosExclusivasRepository.create({
@@ -124,7 +126,9 @@ export class EmployeePhotosService {
   }
 
   async removePrivatePhoto(id: string): Promise<{ deleted: boolean }> {
-    const foto = await this.fotosExclusivasRepository.findOne({ where: { id } });
+    const foto = await this.fotosExclusivasRepository.findOne({
+      where: { id },
+    });
     if (!foto) {
       throw new NotFoundException(`Foto exclusiva con ID ${id} no encontrada`);
     }

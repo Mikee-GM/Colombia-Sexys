@@ -707,13 +707,20 @@ export class TelegramAdminUpdate {
           Markup.button.callback('⏱️ +1 Hora', `srv_edit_dur:${serviceId}:1`),
         ],
         [
-          Markup.button.callback('💵 Efectivo', `srv_edit_pay:${serviceId}:efectivo`),
-          Markup.button.callback('💳 Tarjeta', `srv_edit_pay:${serviceId}:tarjeta`),
-          Markup.button.callback('📲 Transf', `srv_edit_pay:${serviceId}:transferencia`),
+          Markup.button.callback(
+            '💵 Efectivo',
+            `srv_edit_pay:${serviceId}:efectivo`,
+          ),
+          Markup.button.callback(
+            '💳 Tarjeta',
+            `srv_edit_pay:${serviceId}:tarjeta`,
+          ),
+          Markup.button.callback(
+            '📲 Transf',
+            `srv_edit_pay:${serviceId}:transferencia`,
+          ),
         ],
-        [
-          Markup.button.callback('🔙 Volver', `canc_ja:${serviceId}`),
-        ],
+        [Markup.button.callback('🔙 Volver', `canc_ja:${serviceId}`)],
       ]),
     });
   }
@@ -752,7 +759,8 @@ export class TelegramAdminUpdate {
   async onSrvEditPay(@Ctx() ctx: Context) {
     const match = (ctx as any).match;
     const serviceId = match[1];
-    const newPay = match[2] as 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
+    const newPay = match[2] as
+      'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
 
     const servicio = await this.serviciosRepository.findOne({
       where: { id: serviceId },
@@ -765,7 +773,9 @@ export class TelegramAdminUpdate {
 
     servicio.metodoPago = newPay;
     await this.serviciosRepository.save(servicio);
-    await ctx.answerCbQuery(`Método de pago cambiado a ${newPay.toUpperCase()}.`);
+    await ctx.answerCbQuery(
+      `Método de pago cambiado a ${newPay.toUpperCase()}.`,
+    );
 
     // Regresar al menú de edición actualizado
     await this.onJefeEditarSrv(ctx);

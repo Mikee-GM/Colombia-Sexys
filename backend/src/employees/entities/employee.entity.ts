@@ -198,10 +198,7 @@ export class Empleadas {
   })
   fotosExclusivas: EmpleadaFotosExclusivas[];
 
-  @OneToMany(
-    () => WeeklyPhotoSubmission,
-    (submission) => submission.empleada,
-  )
+  @OneToMany(() => WeeklyPhotoSubmission, (submission) => submission.empleada)
   @ApiPropertyOptional({
     description: 'Envíos de contenido semanal',
     type: () => [WeeklyPhotoSubmission],
@@ -209,10 +206,7 @@ export class Empleadas {
   })
   weeklyPhotoSubmissions: WeeklyPhotoSubmission[];
 
-  @OneToMany(
-    () => WeeklyContentSchedule,
-    (schedule) => schedule.empleada,
-  )
+  @OneToMany(() => WeeklyContentSchedule, (schedule) => schedule.empleada)
   @ApiPropertyOptional({
     description: 'Ciclos de solicitud de fotos semanales',
     type: () => [WeeklyContentSchedule],

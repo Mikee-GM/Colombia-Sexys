@@ -73,7 +73,7 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
-    const { password, ...toUpdate } = updateUserDto;
+    const { password, ...toUpdate } = updateUserDto as any;
     const updateData: any = { ...toUpdate };
 
     if (password) {

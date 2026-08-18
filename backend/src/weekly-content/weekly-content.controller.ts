@@ -64,10 +64,6 @@ export class WeeklyContentController {
     @Body() dto: ReviewSubmissionDto,
     @Req() req: any,
   ) {
-    return this.weeklyContentService.reviewSubmission(
-      id,
-      dto.action,
-      req.user,
-    );
+    return this.weeklyContentService.reviewSubmission(id, dto.action, req.user);
   }
 }

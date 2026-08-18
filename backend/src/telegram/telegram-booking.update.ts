@@ -4260,7 +4260,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
         // Check if response contains [SEND_EXCLUSIVE_PHOTO]
         const hasPhotoIntent = responseText.includes('[SEND_EXCLUSIVE_PHOTO]');
-        let cleanText = responseText
+        const cleanText = responseText
           .replace(/\[SEND_EXCLUSIVE_PHOTO\]/g, '')
           .replace(/\[DATA:\s*\{.*?\}\]/g, '')
           .trim();

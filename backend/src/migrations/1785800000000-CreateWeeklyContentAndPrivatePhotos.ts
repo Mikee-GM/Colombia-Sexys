@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateWeeklyContentAndPrivatePhotos1785800000000
-  implements MigrationInterface
-{
+export class CreateWeeklyContentAndPrivatePhotos1785800000000 implements MigrationInterface {
   name = 'CreateWeeklyContentAndPrivatePhotos1785800000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

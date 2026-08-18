@@ -3,14 +3,15 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { Empleadas } from '../../employees/entities/employee.entity';
 
 export type WeeklyScheduleStatus =
-  | 'solicitado'
-  | 'recordatorio_enviado'
-  | 'entregado'
-  | 'falta_aplicada';
+  'solicitado' | 'recordatorio_enviado' | 'entregado' | 'falta_aplicada';
 
-@Index('weekly_content_schedules_empleada_semana_key', ['empleadaId', 'semanaInicio'], {
-  unique: true,
-})
+@Index(
+  'weekly_content_schedules_empleada_semana_key',
+  ['empleadaId', 'semanaInicio'],
+  {
+    unique: true,
+  },
+)
 @Index('idx_weekly_content_schedules_empleada', ['empleadaId'], {})
 @Index('weekly_content_schedules_pkey', ['id'], { unique: true })
 @Entity('weekly_content_schedules', { schema: 'public' })
