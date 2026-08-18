@@ -16,6 +16,9 @@ function mapToModelo(emp: any): Modelo {
     descripcion: emp.descripcion || "",
     fotoPrincipal: emp.fotoPerfilUrl || "",
     fotos: emp.empleadaFotos ? emp.empleadaFotos.map((f: any) => f.url) : [],
+    fotosExclusivas: emp.fotosExclusivas ? emp.fotosExclusivas.map((f: any) => f.url) : [],
+    pendingWeeklyPhotosCount: emp.pendingWeeklyPhotosCount || 0,
+    weeklyContentStatus: emp.weeklyContentStatus || "al_dia",
     linkX: emp.linkX || "",
     contactLink: getEmployeeHireTelegramUrl(emp.id),
     contactLabel: emp.contactLabel || "Contacto",
@@ -212,4 +215,77 @@ export async function getApartmentsAction(): Promise<
     console.error("getApartmentsAction error:", error);
     return [];
   }
+}
+
+// --- FOTOS EXCLUSIVAS (CLIENTES TELEGRAM) ---
+
+export async function getPrivatePhotosAction(
+  empleadaId: string,
+): Promise<{ id: string; url: string; orden: number }[]> {
+  try {
+    return await apiFetch<any[]>(`/employee-photos/private/${empleadaId}`, {
+      authenticated: true,
+    });
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    console.error("getPrivatePhotosAction error:", error);
+    return [];
+  }
+}
+
+export async function addPrivatePhotoAction(
+  empleadaId: string,
+  url: string,
+  orden = 0,
+): Promise<any> {
+  const data = await apiFetch<any>("/employee-photos/private", {
+    method: "POST",
+    body: JSON.stringify({ empleadaId, url, orden }),
+    authenticated: true,
+  });
+  revalidatePath("/admin/modelos");
+  return data;
+}
+
+export async function deletePrivatePhotoAction(id: string): Promise<void> {
+  await apiFetch<void>(`/employee-photos/private/${id}`, {
+    method: "DELETE",
+    authenticated: true,
+  });
+  revalidatePath("/admin/modelos");
+}
+
+// --- CONTENIDO SEMANAL (VALIDAR CONTENIDO SEMANAL) ---
+
+export async function getWeeklySubmissionsAction(
+  empleadaId: string,
+  onlyPending = false,
+): Promise<any[]> {
+  try {
+    return await apiFetch<any[]>(
+      `/weekly-content/employee/${empleadaId}?onlyPending=${onlyPending}`,
+      { authenticated: true },
+    );
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    console.error("getWeeklySubmissionsAction error:", error);
+    return [];
+  }
+}
+
+export async function reviewWeeklySubmissionAction(
+  submissionId: string,
+  action: "aprobar_publica" | "aprobar_privada" | "rechazar",
+): Promise<any> {
+  const data = await apiFetch<any>(
+    `/weekly-content/submissions/${submissionId}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({ action }),
+      authenticated: true,
+    },
+  );
+  revalidatePath("/");
+  revalidatePath("/admin/modelos");
+  return data;
 }

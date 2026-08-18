@@ -13,6 +13,9 @@ export interface Modelo {
   descripcion: string;
   fotoPrincipal: string;
   fotos: string[];
+  fotosExclusivas?: string[];
+  pendingWeeklyPhotosCount?: number;
+  weeklyContentStatus?: "al_dia" | "atrasado" | "pendiente_revision";
   linkX: string;
   contactLink: string;
   contactLabel: string;

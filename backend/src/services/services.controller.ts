@@ -123,15 +123,19 @@ export class ServicesController {
   }
 
   @Patch(':id')
-  @Roles('admin')
+  @Roles('admin', 'jefe')
   @ApiUpdateDocs({
     tag: 'services',
     entity: Servicios,
     updateDto: UpdateServiceDto,
     protected: true,
   })
-  update(@Param('id') id: string, @Body() updateServiceDto: UpdateServiceDto) {
-    return this.servicesService.update(id, updateServiceDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateServiceDto: UpdateServiceDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.updateForActor(id, updateServiceDto, req.user);
   }
 
   @Delete(':id')

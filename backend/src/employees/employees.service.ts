@@ -15,6 +15,7 @@ import { ExtrasCatalogo } from '../catalog-extras/entities/catalog-extra.entity'
 import { UploadService } from '../upload/upload.service';
 import { EmployeeOnboarding } from '../employee-onboarding/entities/employee-onboarding.entity';
 import { Servicios } from '../services/entities/service.entity';
+import { WeeklyContentService } from '../weekly-content/weekly-content.service';
 
 @Injectable()
 export class EmployeesService {
@@ -27,6 +28,7 @@ export class EmployeesService {
     private readonly empleadaFotosRepository: Repository<EmpleadaFotos>,
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
+    private readonly weeklyContentService: WeeklyContentService,
   ) {}
 
   async create(createEmployeeDto: CreateEmployeeDto): Promise<Empleadas> {
@@ -158,14 +160,15 @@ export class EmployeesService {
       relations: {
         usuario: true,
         empleadaFotos: true,
+        fotosExclusivas: true,
         extrasCatalogos: true,
         jefe: true,
         jefeSecundario: true,
       },
     });
-    return this.attachCatalogAvailability(
-      await this.attachTrustScores(employees),
-    );
+    const withTrust = await this.attachTrustScores(employees);
+    const withAvailability = await this.attachCatalogAvailability(withTrust);
+    return await this.attachWeeklyContentMetrics(withAvailability);
   }
 
   async findAllActive(): Promise<Empleadas[]> {
@@ -207,6 +210,7 @@ export class EmployeesService {
       relations: {
         usuario: true,
         empleadaFotos: true,
+        fotosExclusivas: true,
         extrasCatalogos: true,
         jefe: true,
         jefeSecundario: true,
@@ -220,7 +224,30 @@ export class EmployeesService {
     const [employeeWithAvailability] = await this.attachCatalogAvailability(
       await this.attachTrustScores([empleada]),
     );
-    return employeeWithAvailability;
+    const [finalEmployee] = await this.attachWeeklyContentMetrics([
+      employeeWithAvailability,
+    ]);
+    return finalEmployee;
+  }
+
+  private async attachWeeklyContentMetrics(
+    employees: Empleadas[],
+  ): Promise<Empleadas[]> {
+    if (!employees.length) return employees;
+    try {
+      const [pendingCounts, statuses] = await Promise.all([
+        this.weeklyContentService.getPendingCountByEmployee(),
+        this.weeklyContentService.getWeeklyStatusForEmployees(),
+      ]);
+
+      return employees.map((emp) => {
+        emp.pendingWeeklyPhotosCount = pendingCounts[emp.id] || 0;
+        emp.weeklyContentStatus = statuses[emp.id] || 'al_dia';
+        return emp;
+      });
+    } catch {
+      return employees;
+    }
   }
 
   private async attachCatalogAvailability(

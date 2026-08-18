@@ -108,6 +108,33 @@ export async function decidePendingService(
   }
 }
 
+export async function updatePendingServiceAction(
+  serviceId: string,
+  data: {
+    duracionPactadaHoras?: number;
+    metodoPago?: "efectivo" | "tarjeta" | "transferencia" | "mixto";
+    notas?: string;
+  },
+) {
+  try {
+    await assertOwnedService(serviceId);
+    const updated = await apiFetch<Service>(`/services/${serviceId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    return { success: true, data: updated };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar el servicio",
+    };
+  }
+}
+
 export async function refreshJefeServices() {
   return getJefeServices();
 }

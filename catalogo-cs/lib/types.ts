@@ -23,6 +23,25 @@ export type EmployeePhoto = {
   createdAt?: string;
 };
 
+export type EmployeePrivatePhoto = {
+  id: string;
+  empleadaId: string;
+  url: string;
+  orden: number;
+  createdAt?: string;
+};
+
+export type WeeklyPhotoSubmission = {
+  id: string;
+  empleadaId: string;
+  url: string;
+  estado: "pendiente" | "aprobada_publica" | "aprobada_privada" | "rechazada";
+  semanaInicio: string | null;
+  revisadoPorUserId?: string | null;
+  revisadoAt?: string | null;
+  createdAt: string;
+};
+
 export type Employee = {
   id: string;
   usuarioId: string;
@@ -48,6 +67,9 @@ export type Employee = {
   ultimaUbicacionAt?: string | null;
   createdAt?: string;
   empleadaFotos?: EmployeePhoto[];
+  fotosExclusivas?: EmployeePrivatePhoto[];
+  pendingWeeklyPhotosCount?: number;
+  weeklyContentStatus?: "al_dia" | "atrasado" | "pendiente_revision";
   usuario?: ApiUser;
 };
 

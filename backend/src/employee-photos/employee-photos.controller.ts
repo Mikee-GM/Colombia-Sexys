@@ -85,4 +85,30 @@ export class EmployeePhotosController {
   remove(@Param('id') id: string) {
     return this.employeePhotosService.remove(id);
   }
+
+  // --- ENDPOINTS FOTOS EXCLUSIVAS ---
+
+  @Get('private/:empleadaId')
+  @Roles('admin', 'jefe')
+  findPrivateByEmployee(@Param('empleadaId') empleadaId: string) {
+    return this.employeePhotosService.findPrivatePhotosByEmployee(empleadaId);
+  }
+
+  @Post('private')
+  @Roles('admin', 'jefe')
+  createPrivate(
+    @Body() body: { empleadaId: string; url: string; orden?: number },
+  ) {
+    return this.employeePhotosService.createPrivatePhoto(
+      body.empleadaId,
+      body.url,
+      body.orden ?? 0,
+    );
+  }
+
+  @Delete('private/:id')
+  @Roles('admin', 'jefe')
+  removePrivate(@Param('id') id: string) {
+    return this.employeePhotosService.removePrivatePhoto(id);
+  }
 }

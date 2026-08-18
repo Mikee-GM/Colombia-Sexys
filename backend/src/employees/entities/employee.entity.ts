@@ -9,6 +9,9 @@ import {
   OneToOne,
 } from 'typeorm';
 import { EmpleadaFotos } from '../../employee-photos/entities/employee-photo.entity';
+import { EmpleadaFotosExclusivas } from '../../employee-photos/entities/employee-private-photo.entity';
+import { WeeklyPhotoSubmission } from '../../weekly-content/entities/weekly-photo-submission.entity';
+import { WeeklyContentSchedule } from '../../weekly-content/entities/weekly-content-schedule.entity';
 import { Usuarios } from '../../users/entities/user.entity';
 import { ExtrasCatalogo } from '../../catalog-extras/entities/catalog-extra.entity';
 import { Servicios } from '../../services/entities/service.entity';
@@ -183,6 +186,52 @@ export class Empleadas {
     example: [],
   })
   empleadaFotos: EmpleadaFotos[];
+
+  @OneToMany(
+    () => EmpleadaFotosExclusivas,
+    (fotosExclusivas) => fotosExclusivas.empleada,
+  )
+  @ApiPropertyOptional({
+    description: 'Fotos Exclusivas para Clientes',
+    type: () => [EmpleadaFotosExclusivas],
+    example: [],
+  })
+  fotosExclusivas: EmpleadaFotosExclusivas[];
+
+  @OneToMany(
+    () => WeeklyPhotoSubmission,
+    (submission) => submission.empleada,
+  )
+  @ApiPropertyOptional({
+    description: 'Envíos de contenido semanal',
+    type: () => [WeeklyPhotoSubmission],
+    example: [],
+  })
+  weeklyPhotoSubmissions: WeeklyPhotoSubmission[];
+
+  @OneToMany(
+    () => WeeklyContentSchedule,
+    (schedule) => schedule.empleada,
+  )
+  @ApiPropertyOptional({
+    description: 'Ciclos de solicitud de fotos semanales',
+    type: () => [WeeklyContentSchedule],
+    example: [],
+  })
+  weeklySchedules: WeeklyContentSchedule[];
+
+  @ApiPropertyOptional({
+    description: 'Cantidad de fotos semanales pendientes de validar',
+    example: 0,
+  })
+  pendingWeeklyPhotosCount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Estado del contenido semanal de la modelo',
+    enum: ['al_dia', 'atrasado', 'pendiente_revision'],
+    example: 'al_dia',
+  })
+  weeklyContentStatus?: 'al_dia' | 'atrasado' | 'pendiente_revision';
 
   @OneToOne(() => Usuarios, (usuarios) => usuarios.empleadas, {
     onDelete: 'CASCADE',

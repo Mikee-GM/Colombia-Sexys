@@ -7,6 +7,7 @@ import {
   Action,
   Command,
   Hears,
+  On,
 } from 'nestjs-telegraf';
 import { Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -22,6 +23,8 @@ import { TelegramBookingUpdate } from './telegram-booking.update';
 import { TelegramOnboardingService } from './telegram-onboarding.service';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { parseTelegramStartPayload } from './telegram-start-payload';
+import { UploadService } from '../upload/upload.service';
+import { WeeklyContentService } from '../weekly-content/weekly-content.service';
 
 @Update()
 export class TelegramAuthUpdate {
@@ -45,6 +48,9 @@ export class TelegramAuthUpdate {
     private readonly telegramBookingUpdate: TelegramBookingUpdate,
     private readonly telegramOnboardingService: TelegramOnboardingService,
     private readonly groupServicesService: GroupServicesService,
+    private readonly uploadService: UploadService,
+    @Inject(forwardRef(() => WeeklyContentService))
+    private readonly weeklyContentService: WeeklyContentService,
   ) {}
 
   @Start()
@@ -526,5 +532,55 @@ export class TelegramAuthUpdate {
         `Usa este token para autenticar tu panel externo conectándote al flujo de Server-Sent Events (SSE).`,
       { parse_mode: 'Markdown' },
     );
+  }
+
+  @On('photo')
+  async onPhotoMessage(@Ctx() ctx: Context) {
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
+
+    const user = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+
+    // Si es una empleada enviando fotos, procesarla para su contenido semanal
+    if (user && user.rol === 'empleada') {
+      const empleada = await this.empleadasRepository.findOne({
+        where: { usuarioId: user.id },
+      });
+      if (!empleada) return;
+
+      const photos = (ctx.message as any)?.photo;
+      if (!photos || photos.length === 0) return;
+
+      // Obtener la foto con mayor resolución (último elemento del arreglo)
+      const bestPhoto = photos[photos.length - 1];
+      const fileId = bestPhoto.file_id;
+
+      try {
+        const fileLink = await ctx.telegram.getFileLink(fileId);
+        const uploadResult = await this.uploadService.uploadEvidenceFromUrl({
+          sourceUrl: fileLink.href,
+          folder: 'transferencias', // o carpeta de contenido
+          scopeId: empleada.id,
+        });
+
+        await this.weeklyContentService.recordTelegramPhotoSubmission(
+          empleada.id,
+          uploadResult.url,
+        );
+
+        await ctx.reply(
+          `📸 *¡Foto recibida con éxito!*\n\n` +
+            `Tu foto ha sido enviada al panel administrativo para ser validada e incorporada a tu catálogo. ¡Gracias por mantener tu contenido actualizado! ✨`,
+          { parse_mode: 'Markdown' },
+        );
+      } catch (err) {
+        this.logger.error('Error al procesar foto semanal de empleada:', err);
+        await ctx.reply(
+          `⚠️ Ocurrió un inconveniente al guardar tu foto. Por favor intenta enviarla de nuevo.`,
+        );
+      }
+    }
   }
 }

@@ -6,7 +6,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import imageCompression from "browser-image-compression";
 import type { Modelo, ModeloPayload } from "@/types";
 
-import { uploadImagesAction, deleteImageAction } from "@/lib/actions/upload";
+import {
+  uploadImagesAction,
+  deleteImageAction,
+} from "@/lib/actions/upload";
+import {
+  getWeeklySubmissionsAction,
+  reviewWeeklySubmissionAction,
+  getPrivatePhotosAction,
+  addPrivatePhotoAction,
+  deletePrivatePhotoAction,
+} from "@/lib/actions/modelos";
 import InputField from "../ui/InputField";
 import TextareaField from "../ui/TextareaField";
 import SelectField from "../ui/SelectField";
@@ -99,6 +109,98 @@ export default function ModelModal({
 
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"perfil" | "semanal" | "exclusivas">("perfil");
+
+  // Estado para Contenido Semanal
+  const [weeklySubmissions, setWeeklySubmissions] = useState<any[]>([]);
+  const [loadingWeekly, setLoadingWeekly] = useState(false);
+
+  // Estado para Fotos Exclusivas
+  const [privatePhotos, setPrivatePhotos] = useState<{ id: string; url: string; orden: number }[]>([]);
+  const [loadingPrivate, setLoadingPrivate] = useState(false);
+
+  const fetchWeeklySubmissions = async () => {
+    if (!modelo?._id) return;
+    setLoadingWeekly(true);
+    try {
+      const data = await getWeeklySubmissionsAction(modelo._id, false);
+      setWeeklySubmissions(data);
+    } catch {
+      showNotification("Error al cargar fotos semanales", "error");
+    } finally {
+      setLoadingWeekly(false);
+    }
+  };
+
+  const fetchPrivatePhotos = async () => {
+    if (!modelo?._id) return;
+    setLoadingPrivate(true);
+    try {
+      const data = await getPrivatePhotosAction(modelo._id);
+      setPrivatePhotos(data);
+    } catch {
+      showNotification("Error al cargar fotos exclusivas", "error");
+    } finally {
+      setLoadingPrivate(false);
+    }
+  };
+
+  useEffect(() => {
+    if (modelo?._id) {
+      if (activeTab === "semanal") {
+        fetchWeeklySubmissions();
+      } else if (activeTab === "exclusivas") {
+        fetchPrivatePhotos();
+      }
+    }
+  }, [activeTab, modelo?._id]);
+
+  const handleReviewSubmission = async (
+    submissionId: string,
+    action: "aprobar_publica" | "aprobar_privada" | "rechazar",
+  ) => {
+    try {
+      await reviewWeeklySubmissionAction(submissionId, action);
+      const actionLabels = {
+        aprobar_publica: "Foto aprobada y agregada al catálogo público.",
+        aprobar_privada: "Foto aprobada como exclusiva para Telegram.",
+        rechazar: "Foto rechazada.",
+      };
+      showNotification(actionLabels[action], "success");
+      await fetchWeeklySubmissions();
+    } catch (err: any) {
+      showNotification(err.message || "Error al procesar la foto", "error");
+    }
+  };
+
+  const handleUploadPrivatePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !modelo?._id) return;
+    try {
+      setUploading(true);
+      const compressed = await compressImage(file);
+      const formData = new FormData();
+      formData.append("files", compressed);
+      const [uploadedUrl] = await uploadImagesAction(formData);
+      await addPrivatePhotoAction(modelo._id, uploadedUrl);
+      showNotification("Foto exclusiva añadida", "success");
+      await fetchPrivatePhotos();
+    } catch (err: any) {
+      showNotification(err.message || "Error al subir foto exclusiva", "error");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeletePrivatePhoto = async (id: string) => {
+    try {
+      await deletePrivatePhotoAction(id);
+      showNotification("Foto exclusiva eliminada", "success");
+      await fetchPrivatePhotos();
+    } catch (err: any) {
+      showNotification(err.message || "Error al eliminar", "error");
+    }
+  };
 
   // Limpiar URLs de objetos de tipo file al desmontar el componente para evitar fugas de memoria
   useEffect(() => {
@@ -322,10 +424,10 @@ export default function ModelModal({
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800 bg-zinc-900/30">
           <div>
             <h2 className="text-xl font-heading font-semibold text-white tracking-wide">
-              {modelo ? "Editar Modelo" : "Nueva Modelo"}
+              {modelo ? `Editar Modelo: ${modelo.nombre}` : "Nueva Modelo"}
             </h2>
             <p className="text-xs text-zinc-500 font-light mt-1">
-              Configura los datos del perfil y fotos (maximo 5 en galeria).
+              Configura perfil, valida fotos semanales de Telegram y gestiona contenido exclusivo.
             </p>
           </div>
           <button
@@ -340,8 +442,201 @@ export default function ModelModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Barra de pestañas */}
+        {modelo && (
+          <div className="flex border-b border-zinc-800 bg-zinc-950 px-6 gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("perfil")}
+              className={`pb-3 px-4 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 ${
+                activeTab === "perfil"
+                  ? "border-[#C5A55A] text-[#E8D5A3]"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Datos del Perfil
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("semanal")}
+              className={`pb-3 px-4 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
+                activeTab === "semanal"
+                  ? "border-[#C5A55A] text-[#E8D5A3]"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Validar Contenido Semanal
+              {Number(modelo.pendingWeeklyPhotosCount) > 0 && (
+                <span className="bg-emerald-500 text-black text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                  {modelo.pendingWeeklyPhotosCount}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("exclusivas")}
+              className={`pb-3 px-4 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 ${
+                activeTab === "exclusivas"
+                  ? "border-[#C5A55A] text-[#E8D5A3]"
+                  : "border-transparent text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Fotos Exclusivas (Telegram)
+            </button>
+          </div>
+        )}
+
+        {activeTab === "semanal" && modelo ? (
+          <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-heading text-lg text-white">Fotos Semanales Recibidas por Telegram</h3>
+                <p className="text-xs text-zinc-400">
+                  Revisa las fotos enviadas por la modelo. Puedes aprobarlas para que se agreguen a su catálogo público, como fotos privadas para clientes en Telegram, o rechazarlas.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={fetchWeeklySubmissions}
+                disabled={loadingWeekly}
+                className="text-xs text-[#C5A55A] hover:underline font-bold"
+              >
+                {loadingWeekly ? "Cargando..." : "Actualizar"}
+              </button>
+            </div>
+
+            {loadingWeekly ? (
+              <div className="p-12 text-center text-zinc-500 text-sm">Cargando fotos semanales...</div>
+            ) : weeklySubmissions.length === 0 ? (
+              <div className="border border-dashed border-zinc-800 p-12 text-center rounded-xl">
+                <p className="text-sm text-zinc-400">La modelo no tiene fotos semanales enviadas recientemente.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {weeklySubmissions.map((sub) => (
+                  <div key={sub.id} className="border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950 flex flex-col">
+                    <div className="aspect-[3/4] relative bg-black">
+                      <Image src={sub.url} alt="Foto semanal" fill className="object-cover" unoptimized />
+                      <div className="absolute top-2 left-2 bg-black/80 px-2 py-1 border border-zinc-700 text-[10px] uppercase font-bold text-zinc-300">
+                        {sub.estado.replace("_", " ")}
+                      </div>
+                    </div>
+                    <div className="p-3 space-y-2 flex-1 flex flex-col justify-between">
+                      <p className="text-[10px] text-zinc-500">
+                        Enviada: {new Date(sub.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                      {sub.estado === "pendiente" ? (
+                        <div className="space-y-1.5 pt-2 border-t border-zinc-900">
+                          <button
+                            type="button"
+                            onClick={() => handleReviewSubmission(sub.id, "aprobar_publica")}
+                            className="w-full bg-emerald-600/90 hover:bg-emerald-600 text-white font-bold text-[10px] uppercase tracking-wider py-2 rounded transition-colors"
+                          >
+                            🟢 Aprobar al Catálogo Público
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleReviewSubmission(sub.id, "aprobar_privada")}
+                            className="w-full bg-[#C5A55A]/20 hover:bg-[#C5A55A]/30 text-[#E8D5A3] border border-[#C5A55A]/50 font-bold text-[10px] uppercase tracking-wider py-2 rounded transition-colors"
+                          >
+                            🔒 Aprobar como Exclusiva
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleReviewSubmission(sub.id, "rechazar")}
+                            className="w-full bg-red-950/40 hover:bg-red-900/60 text-red-400 font-bold text-[10px] uppercase tracking-wider py-1.5 rounded transition-colors"
+                          >
+                            🔴 Rechazar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-zinc-400 font-semibold italic">
+                          Resuelta como: {sub.estado.replaceAll("_", " ")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-4 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-3 border border-zinc-800 text-zinc-300 font-bold text-xs uppercase hover:bg-zinc-900"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        ) : activeTab === "exclusivas" && modelo ? (
+          <div className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-heading text-lg text-white">Fotos Exclusivas y Privadas para Clientes</h3>
+                <p className="text-xs text-zinc-400">
+                  Estas fotos NO son visibles en la página web pública. La IA o el jefe las envían por Telegram cuando los clientes las solicitan por chat.
+                </p>
+              </div>
+              <div className="relative overflow-hidden">
+                <button
+                  type="button"
+                  disabled={uploading}
+                  className="bg-[#C5A55A] text-black font-bold text-xs px-4 py-2 uppercase tracking-wider hover:bg-[#D4AF37] transition-colors"
+                >
+                  {uploading ? "Subiendo..." : "+ Subir Foto Exclusiva"}
+                </button>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploading}
+                  onChange={handleUploadPrivatePhoto}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {loadingPrivate ? (
+              <div className="p-12 text-center text-zinc-500 text-sm">Cargando fotos exclusivas...</div>
+            ) : privatePhotos.length === 0 ? (
+              <div className="border border-dashed border-zinc-800 p-12 text-center rounded-xl">
+                <p className="text-sm text-zinc-400">No hay fotos exclusivas registradas para esta modelo.</p>
+                <p className="text-xs text-zinc-600 mt-1">Sube fotos o apruébalas desde el apartado de Contenido Semanal.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {privatePhotos.map((photo) => (
+                  <div key={photo.id} className="aspect-[3/4] relative border border-zinc-800 rounded-lg overflow-hidden group bg-black">
+                    <Image src={photo.url} alt="Foto exclusiva" fill className="object-cover" unoptimized />
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePrivatePhoto(photo.id)}
+                      className="absolute top-2 right-2 bg-black/80 text-red-400 p-1.5 rounded hover:bg-red-950 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-4 border-t border-zinc-800">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-3 border border-zinc-800 text-zinc-300 font-bold text-xs uppercase hover:bg-zinc-900"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Columna Izquierda: Datos */}
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-4">
@@ -708,6 +1003,7 @@ export default function ModelModal({
             </button>
           </div>
         </form>
+        )}
       </motion.div>
     </motion.div>
   );

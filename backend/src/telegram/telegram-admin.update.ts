@@ -653,7 +653,121 @@ export class TelegramAdminUpdate {
             `jefe_autorizar:${serviceId}:0`,
           ),
         ],
+        [
+          Markup.button.callback(
+            '✏️ Editar Servicio',
+            `jefe_editar_srv:${serviceId}`,
+          ),
+        ],
       ]),
     });
+  }
+
+  // --- FLUJO DE EDICIÓN DE SERVICIO PENDIENTE DESDE TELEGRAM ---
+
+  @Action(/^jefe_editar_srv:(.+)$/)
+  async onJefeEditarSrv(@Ctx() ctx: Context) {
+    const match = (ctx as any).match;
+    const serviceId = match[1];
+
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: serviceId },
+      relations: { empleada: true, cliente: true },
+    });
+
+    if (!servicio) {
+      await ctx.answerCbQuery('❌ Servicio no encontrado.');
+      return;
+    }
+
+    if (servicio.estado !== 'pendiente') {
+      await ctx.answerCbQuery(
+        '⚠️ Solo se pueden editar servicios en estado pendiente.',
+        { show_alert: true },
+      );
+      return;
+    }
+
+    await ctx.answerCbQuery();
+
+    const menuMsg =
+      `✏️ *Modificar Servicio Pendiente*\n\n` +
+      `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Cliente'}\n` +
+      `• *Empleada:* ${servicio.empleada?.nombreArtistico || 'N/A'}\n` +
+      `• *Duración Actual:* ${servicio.duracionPactadaHoras} horas\n` +
+      `• *Pago Actual:* ${servicio.metodoPago.toUpperCase()}\n` +
+      `• *Tarifa:* $${servicio.precioBaseHoraPactado}/hr\n\n` +
+      `Selecciona qué dato deseas modificar:`;
+
+    await ctx.editMessageText(menuMsg, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback('⏱️ -1 Hora', `srv_edit_dur:${serviceId}:-1`),
+          Markup.button.callback('⏱️ +1 Hora', `srv_edit_dur:${serviceId}:1`),
+        ],
+        [
+          Markup.button.callback('💵 Efectivo', `srv_edit_pay:${serviceId}:efectivo`),
+          Markup.button.callback('💳 Tarjeta', `srv_edit_pay:${serviceId}:tarjeta`),
+          Markup.button.callback('📲 Transf', `srv_edit_pay:${serviceId}:transferencia`),
+        ],
+        [
+          Markup.button.callback('🔙 Volver', `canc_ja:${serviceId}`),
+        ],
+      ]),
+    });
+  }
+
+  @Action(/^srv_edit_dur:(.+):(-1|1)$/)
+  async onSrvEditDur(@Ctx() ctx: Context) {
+    const match = (ctx as any).match;
+    const serviceId = match[1];
+    const change = parseInt(match[2], 10);
+
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: serviceId },
+    });
+
+    if (!servicio || servicio.estado !== 'pendiente') {
+      await ctx.answerCbQuery('⚠️ El servicio no se puede modificar.');
+      return;
+    }
+
+    const current = Number(servicio.duracionPactadaHoras);
+    const newDur = Math.max(1, Math.min(24, current + change));
+    if (newDur === current) {
+      await ctx.answerCbQuery('Duración fuera de rango.');
+      return;
+    }
+
+    servicio.duracionPactadaHoras = newDur;
+    await this.serviciosRepository.save(servicio);
+    await ctx.answerCbQuery(`Duración actualizada a ${newDur} horas.`);
+
+    // Regresar al menú de edición actualizado
+    await this.onJefeEditarSrv(ctx);
+  }
+
+  @Action(/^srv_edit_pay:(.+):(efectivo|tarjeta|transferencia|mixto)$/)
+  async onSrvEditPay(@Ctx() ctx: Context) {
+    const match = (ctx as any).match;
+    const serviceId = match[1];
+    const newPay = match[2] as 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
+
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: serviceId },
+    });
+
+    if (!servicio || servicio.estado !== 'pendiente') {
+      await ctx.answerCbQuery('⚠️ El servicio no se puede modificar.');
+      return;
+    }
+
+    servicio.metodoPago = newPay;
+    await this.serviciosRepository.save(servicio);
+    await ctx.answerCbQuery(`Método de pago cambiado a ${newPay.toUpperCase()}.`);
+
+    // Regresar al menú de edición actualizado
+    await this.onJefeEditarSrv(ctx);
   }
 }
