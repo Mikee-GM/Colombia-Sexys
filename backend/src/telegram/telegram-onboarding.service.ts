@@ -28,12 +28,9 @@ export class TelegramOnboardingService {
         if (chatId && (rol === 'chofer' || rol === 'empleada')) {
           const menu =
             rol === 'empleada'
-              ? Markup.keyboard([
-                  ['Servicios de hoy', 'Servicio activo'],
-                  ['Estatus del chofer'],
-                ]).resize()
+              ? Markup.keyboard([['👑 Mi Portal']]).resize()
               : Markup.keyboard([
-                  ['Quedar Disponible', 'Quedar Inactivo'],
+                  ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
                 ]).resize();
 
           await this.bot.telegram.sendMessage(

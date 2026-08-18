@@ -83,12 +83,9 @@ export class TelegramOnboardingUpdate {
         ) {
           const menu =
             user.rol === 'empleada'
-              ? Markup.keyboard([
-                  ['Servicios de hoy', 'Servicio activo'],
-                  ['Estatus del chofer'],
-                ]).resize()
+              ? Markup.keyboard([['👑 Mi Portal']]).resize()
               : Markup.keyboard([
-                  ['Quedar Disponible', 'Quedar Inactivo'],
+                  ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
                 ]).resize();
 
           await ctx.reply(

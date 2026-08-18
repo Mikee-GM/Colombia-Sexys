@@ -432,10 +432,7 @@ export class TelegramAuthUpdate {
   }
 
   private employeeMenu() {
-    return Markup.keyboard([
-      ['👑 Mi Portal', '🟢 Servicio activo'],
-      ['📋 Servicios de hoy', '🚗 Estatus del chofer'],
-    ]).resize();
+    return Markup.keyboard([['👑 Mi Portal']]).resize();
   }
 
   private driverMenu() {
