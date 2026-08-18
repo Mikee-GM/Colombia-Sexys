@@ -21,7 +21,7 @@ pnpm install --frozen-lockfile
 ```
 
 ## Variables de entorno
-
+l
 Hay tres plantillas:
 
 ```bash
