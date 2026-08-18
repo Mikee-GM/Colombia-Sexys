@@ -13,6 +13,7 @@ import { Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, MoreThan } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
+import { AuthService } from '../auth/auth.service';
 import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
@@ -42,6 +43,7 @@ export class TelegramAuthUpdate {
     @InjectRepository(Viajes)
     private readonly viajesRepository: Repository<Viajes>,
     private readonly jwtService: JwtService,
+    private readonly authService: AuthService,
     @Inject(forwardRef(() => TelegramService))
     private readonly telegramService: TelegramService,
     @Inject(forwardRef(() => TelegramBookingUpdate))
@@ -398,10 +400,41 @@ export class TelegramAuthUpdate {
     await ctx.reply(`🚗 Estatus de transporte\n\n${lines.join('\n')}`);
   }
 
+  @Hears(['👑 Mi Portal', '/portal'])
+  @Command('portal')
+  async onEmployeePortal(@Ctx() ctx: Context) {
+    const employee = await this.getEmployeeFromContext(ctx);
+    if (!employee || !employee.usuario) return;
+
+    const token = await this.authService.generatePortalToken(employee.usuario);
+    const baseUrl =
+      process.env.WEB_URL ||
+      process.env.FRONTEND_URL ||
+      'https://colombia-sexys.com';
+    const portalUrl = `${baseUrl.replace(/\/$/, '')}/empleada/portal?token=${encodeURIComponent(token)}`;
+
+    await ctx.reply(
+      `👑 *¡Hola, ${employee.nombreArtistico}! Tu Portal Exclusivo*\n\n` +
+        `Accede a tu panel para consultar:\n` +
+        `🏆 Tu posición en el *Ranking Global*\n` +
+        `💵 Tus *Ganancias Netas* y horas acumuladas\n` +
+        `📋 Tu historial de *Servicios* y estatus de transporte\n` +
+        `⭐ Tus *Calificaciones* y comentarios de clientes\n\n` +
+        `_Haz clic en el botón de abajo para abrir la Mini App de forma segura:_`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.webApp('✨ Abrir Mi Portal', portalUrl)],
+          [Markup.button.url('🌐 Abrir en el navegador', portalUrl)],
+        ]),
+      },
+    );
+  }
+
   private employeeMenu() {
     return Markup.keyboard([
-      ['📋 Servicios de hoy', '🟢 Servicio activo'],
-      ['🚗 Estatus del chofer'],
+      ['👑 Mi Portal', '🟢 Servicio activo'],
+      ['📋 Servicios de hoy', '🚗 Estatus del chofer'],
     ]).resize();
   }
 

@@ -428,3 +428,93 @@ export type EmployeeReportFilters = {
   from?: string;
   to?: string;
 };
+
+export type EmployeeRankingEntry = {
+  position: number;
+  nombreArtistico: string;
+  isMe: boolean;
+};
+
+export type EmployeePortalRanking = {
+  myPosition: number;
+  totalModels: number;
+  leaderboard: EmployeeRankingEntry[];
+};
+
+export type EmployeePortalEarnings = {
+  todayNet: number;
+  weekNet: number;
+  monthNet: number;
+  totalHistoricalNet: number;
+  todayHours: number;
+  weekHours: number;
+  monthHours: number;
+  totalHistoricalHours: number;
+  percentageRate: number;
+};
+
+export type EmployeePortalServiceItem = {
+  id: string;
+  fecha: string;
+  duracionHoras: number;
+  metodoPago: string;
+  estado: string;
+  extrasTotal: number;
+  gananciaNeta: number;
+  calificacion?: number | null;
+  comentarioCliente?: string | null;
+  transporteTipo?: string | null;
+  transporteEstado?: string | null;
+};
+
+export type EmployeePortalActiveService = {
+  id: string;
+  estado: string;
+  duracionHoras: number;
+  metodoPago: string;
+  horaInicio?: string | null;
+  horaFinEstimada?: string | null;
+  gananciaEstimada: number;
+  transporte?: {
+    tipo: string;
+    proveedor: string;
+    estado: string;
+    choferNombre?: string;
+  } | null;
+};
+
+export type EmployeePortalReputation = {
+  ratingAverage: number;
+  ratingCount: number;
+  trustScore: number;
+  reviews: {
+    id: string;
+    fecha: string;
+    estrellas: number;
+    comentario: string;
+  }[];
+};
+
+export type EmployeePortalData = {
+  profile: {
+    id: string;
+    nombreArtistico: string;
+    fotoPerfilUrl: string | null;
+    precioBaseHora: number;
+    disponible: boolean;
+    catalogoActivo: boolean;
+    availabilityStatus: string;
+    weeklyContentStatus: string;
+    pendingWeeklyPhotosCount: number;
+    publicPhotosCount: number;
+    privatePhotosCount: number;
+    publicPhotos: string[];
+    privatePhotos: string[];
+  };
+  ranking: EmployeePortalRanking;
+  earnings: EmployeePortalEarnings;
+  activeService: EmployeePortalActiveService | null;
+  recentServices: EmployeePortalServiceItem[];
+  reputation: EmployeePortalReputation;
+};
+

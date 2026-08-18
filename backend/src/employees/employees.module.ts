@@ -1,13 +1,15 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
+import { EmployeePortalController } from './employee-portal.controller';
 import { Empleadas } from './entities/employee.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { EmpleadaFotos } from '../employee-photos/entities/employee-photo.entity';
 import { EmpleadaFotosExclusivas } from '../employee-photos/entities/employee-private-photo.entity';
 import { UploadModule } from '../upload/upload.module';
 import { WeeklyContentModule } from '../weekly-content/weekly-content.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -19,8 +21,9 @@ import { WeeklyContentModule } from '../weekly-content/weekly-content.module';
     ]),
     UploadModule,
     WeeklyContentModule,
+    forwardRef(() => AuthModule),
   ],
-  controllers: [EmployeesController],
+  controllers: [EmployeesController, EmployeePortalController],
   providers: [EmployeesService],
   exports: [EmployeesService],
 })

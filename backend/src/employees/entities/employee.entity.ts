@@ -40,6 +40,12 @@ export class Empleadas {
   })
   clientRatingAverage?: number | null;
 
+  @ApiPropertyOptional({
+    description: 'Puntuación de confiabilidad de la empleada (0 a 1)',
+    example: 0.95,
+  })
+  trustScore?: number | null;
+
   @ApiProperty({
     description: 'Cantidad de opiniones públicas de clientes',
     example: 12,

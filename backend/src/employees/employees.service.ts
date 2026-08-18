@@ -8,6 +8,11 @@ import { Repository, DataSource, In, Not } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import {
+  EmployeePortalData,
+  EmployeePortalServiceItem,
+  EmployeePortalActiveService,
+} from './dto/employee-portal.dto';
 import { Empleadas } from './entities/employee.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { EmpleadaFotos } from '../employee-photos/entities/employee-photo.entity';
@@ -614,5 +619,302 @@ export class EmployeesService {
     // Eliminar el usuario, lo cual cascada y borra el perfil y fotos en la base de datos
     await this.usuariosRepository.delete(empleada.usuarioId);
     return { deleted: true };
+  }
+
+  async getEmployeePortalData(identifier: string): Promise<EmployeePortalData> {
+    const empleada = await this.empleadasRepository.findOne({
+      where: [{ usuarioId: identifier }, { id: identifier }],
+      relations: {
+        usuario: true,
+        empleadaFotos: true,
+        fotosExclusivas: true,
+      },
+    });
+
+    if (!empleada) {
+      throw new NotFoundException('Perfil de empleada no encontrado');
+    }
+
+    const [withTrust] = await this.attachTrustScores([empleada]);
+    const weeklyStatuses =
+      await this.weeklyContentService.getWeeklyStatusForEmployees();
+    const pendingCounts =
+      await this.weeklyContentService.getPendingCountByEmployee();
+    const weeklyContentStatus = weeklyStatuses[empleada.id] || 'al_dia';
+    const pendingWeeklyPhotosCount = pendingCounts[empleada.id] || 0;
+
+    // 1. Leaderboard / Ranking
+    const allModels = await this.empleadasRepository.find({
+      where: { catalogoActivo: true },
+      relations: { usuario: true },
+    });
+    const allWithTrust = await this.attachTrustScores(allModels);
+
+    const completedServicesCounts = await this.dataSource
+      .getRepository(Servicios)
+      .createQueryBuilder('s')
+      .select('s.empleadaId', 'empleadaId')
+      .addSelect('COUNT(s.id)', 'count')
+      .where('s.estado = :estado', { estado: 'finalizado' })
+      .groupBy('s.empleadaId')
+      .getRawMany();
+
+    const countsMap = new Map<string, number>();
+    for (const row of completedServicesCounts) {
+      countsMap.set(row.empleadaId, parseInt(row.count, 10) || 0);
+    }
+
+    const scored = allWithTrust.map((m) => {
+      const sCount = countsMap.get(m.id) || 0;
+      const rating = Number(
+        m.clientRatingAverage || m.promedioCalificacion || 5.0,
+      );
+      const trust = Number(m.trustScore || 1.0);
+      const score = sCount * 10 + rating * 5 + trust * 20;
+      return {
+        id: m.id,
+        nombreArtistico: m.nombreArtistico,
+        score,
+      };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    let myPosition = 1;
+    const leaderboard = scored.map((item, index) => {
+      const isMe = item.id === empleada.id;
+      if (isMe) myPosition = index + 1;
+      return {
+        position: index + 1,
+        nombreArtistico: item.nombreArtistico,
+        isMe,
+      };
+    });
+
+    // 2. Services & Earnings calculation
+    const services = await this.dataSource
+      .getRepository(Servicios)
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('s.viajes', 'viajes')
+      .leftJoinAndSelect('viajes.chofer', 'chofer')
+      .leftJoinAndSelect('s.extrasServicios', 'extrasServicios')
+      .where('s.empleadaId = :empleadaId', { empleadaId: empleada.id })
+      .orderBy('s.horaInicioServicio', 'DESC')
+      .getMany();
+
+    const finishedServices = services.filter((s) => s.estado === 'finalizado');
+    const now = new Date();
+
+    const isSameDay = (d1: Date, d2: Date) => {
+      return (
+        d1.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) ===
+        d2.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })
+      );
+    };
+
+    const isSameMonth = (d1: Date, d2: Date) => {
+      const f1 = new Intl.DateTimeFormat('es-MX', {
+        timeZone: 'America/Mexico_City',
+        year: 'numeric',
+        month: 'numeric',
+      }).format(d1);
+      const f2 = new Intl.DateTimeFormat('es-MX', {
+        timeZone: 'America/Mexico_City',
+        year: 'numeric',
+        month: 'numeric',
+      }).format(d2);
+      return f1 === f2;
+    };
+
+    const isSameWeek = (d1: Date, d2: Date) => {
+      const diffTime = Math.abs(d2.getTime() - d1.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays <= 7;
+    };
+
+    let todayNet = 0;
+    let weekNet = 0;
+    let monthNet = 0;
+    let totalHistoricalNet = 0;
+
+    let todayHours = 0;
+    let weekHours = 0;
+    let monthHours = 0;
+    let totalHistoricalHours = 0;
+
+    const mappedRecentServices: EmployeePortalServiceItem[] = [];
+    const reviews: {
+      id: string;
+      fecha: string;
+      estrellas: number;
+      comentario: string;
+    }[] = [];
+
+    for (const s of finishedServices) {
+      const duration = Number(
+        s.duracionFinalHoras || s.duracionPactadaHoras || 1,
+      );
+      const baseHourly = Number(
+        s.precioBaseHoraPactado || empleada.precioBaseHora || 2500,
+      );
+      const totalBase = Number(s.totalBase) || baseHourly * duration;
+      const totalExtras = Number(s.totalExtras) || 0;
+
+      // 60% estándar de la tarifa base para la empleada + 100% de extras
+      const netShare = Math.round((totalBase * 0.6 + totalExtras) * 100) / 100;
+      const sDate = s.horaFinServicio || s.horaInicioServicio || s.createdAt;
+
+      totalHistoricalNet += netShare;
+      totalHistoricalHours += duration;
+
+      if (sDate) {
+        const d = new Date(sDate);
+        if (isSameDay(d, now)) {
+          todayNet += netShare;
+          todayHours += duration;
+        }
+        if (isSameWeek(d, now)) {
+          weekNet += netShare;
+          weekHours += duration;
+        }
+        if (isSameMonth(d, now)) {
+          monthNet += netShare;
+          monthHours += duration;
+        }
+      }
+
+      // Reviews
+      if (s.calificacion || s.comentariosCalificacion) {
+        reviews.push({
+          id: s.id,
+          fecha: (sDate || now).toISOString(),
+          estrellas: Number(s.calificacion || 5),
+          comentario:
+            s.comentariosCalificacion || 'Servicio calificado con 5 estrellas.',
+        });
+      }
+
+      // Latest 20 services
+      if (mappedRecentServices.length < 20) {
+        const activeTrip = s.viajes?.[0];
+        mappedRecentServices.push({
+          id: s.id,
+          fecha: (sDate || now).toISOString(),
+          duracionHoras: duration,
+          metodoPago: s.metodoPago,
+          estado: s.estado,
+          extrasTotal: totalExtras,
+          gananciaNeta: netShare,
+          calificacion: s.calificacion ? Number(s.calificacion) : null,
+          comentarioCliente: s.comentariosCalificacion || null,
+          transporteTipo: activeTrip?.tipo || null,
+          transporteEstado: activeTrip?.estado || null,
+        });
+      }
+    }
+
+    // 3. Active / Next Service
+    const activeOrUpcoming = services.find(
+      (s) =>
+        s.estado === 'en_curso' ||
+        s.estado === 'agendado' ||
+        s.estado === 'pendiente',
+    );
+
+    let activeServiceDto: EmployeePortalActiveService | null = null;
+    if (activeOrUpcoming) {
+      const duration = Number(activeOrUpcoming.duracionPactadaHoras || 1);
+      const baseHourly = Number(
+        activeOrUpcoming.precioBaseHoraPactado ||
+          empleada.precioBaseHora ||
+          2500,
+      );
+      const totalBase =
+        Number(activeOrUpcoming.totalBase) || baseHourly * duration;
+      const totalExtras = Number(activeOrUpcoming.totalExtras) || 0;
+      const estimatedNet =
+        Math.round((totalBase * 0.6 + totalExtras) * 100) / 100;
+
+      const activeTrip = activeOrUpcoming.viajes?.[0];
+      const startTime = activeOrUpcoming.horaInicioServicio
+        ? new Date(activeOrUpcoming.horaInicioServicio)
+        : null;
+      const endTime = startTime
+        ? new Date(startTime.getTime() + duration * 3600000)
+        : null;
+
+      activeServiceDto = {
+        id: activeOrUpcoming.id,
+        estado: activeOrUpcoming.estado,
+        duracionHoras: duration,
+        metodoPago: activeOrUpcoming.metodoPago,
+        horaInicio: startTime?.toISOString() || null,
+        horaFinEstimada: endTime?.toISOString() || null,
+        gananciaEstimada: estimatedNet,
+        transporte: activeTrip
+          ? {
+              tipo: activeTrip.tipo,
+              proveedor: activeTrip.proveedorTransporte,
+              estado: activeTrip.estado,
+              choferNombre: activeTrip.chofer?.nombre || undefined,
+            }
+          : null,
+      };
+    }
+
+    const publicPhotos = (empleada.empleadaFotos || [])
+      .map((f) => f.url)
+      .filter(Boolean);
+    const privatePhotos = (empleada.fotosExclusivas || [])
+      .map((f) => f.url)
+      .filter(Boolean);
+
+    return {
+      profile: {
+        id: empleada.id,
+        nombreArtistico: empleada.nombreArtistico,
+        fotoPerfilUrl: empleada.fotoPerfilUrl,
+        precioBaseHora: Number(empleada.precioBaseHora),
+        disponible: empleada.disponible,
+        catalogoActivo: empleada.catalogoActivo,
+        availabilityStatus:
+          empleada.availabilityStatus ||
+          (empleada.disponible ? 'disponible' : 'inactiva'),
+        weeklyContentStatus,
+        pendingWeeklyPhotosCount,
+        publicPhotosCount: publicPhotos.length,
+        privatePhotosCount: privatePhotos.length,
+        publicPhotos,
+        privatePhotos,
+      },
+      ranking: {
+        myPosition,
+        totalModels: leaderboard.length,
+        leaderboard,
+      },
+      earnings: {
+        todayNet: Math.round(todayNet * 100) / 100,
+        weekNet: Math.round(weekNet * 100) / 100,
+        monthNet: Math.round(monthNet * 100) / 100,
+        totalHistoricalNet: Math.round(totalHistoricalNet * 100) / 100,
+        todayHours,
+        weekHours,
+        monthHours,
+        totalHistoricalHours,
+        percentageRate: 60,
+      },
+      activeService: activeServiceDto,
+      recentServices: mappedRecentServices,
+      reputation: {
+        ratingAverage: Number(
+          empleada.clientRatingAverage || empleada.promedioCalificacion || 5.0,
+        ),
+        ratingCount: Number(
+          empleada.clientRatingCount || empleada.totalServiciosValorados || 0,
+        ),
+        trustScore: Number(withTrust?.trustScore || 1.0),
+        reviews: reviews.slice(0, 15),
+      },
+    };
   }
 }

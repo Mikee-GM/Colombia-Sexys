@@ -229,6 +229,40 @@ export class AuthService {
     }
   }
 
+  async generatePortalToken(user: Usuarios): Promise<string> {
+    return this.jwtService.signAsync(
+      {
+        sub: user.id,
+        email: user.email,
+        rol: user.rol,
+        type: 'employee_portal',
+      },
+      {
+        secret: this.accessSecret(),
+        expiresIn: 86400 * 7, // 7 días para conveniencia de la empleada en Telegram
+      },
+    );
+  }
+
+  async verifyPortalToken(
+    token: string,
+  ): Promise<{ sub: string; email: string; rol: string }> {
+    try {
+      const payload = await this.jwtService.verifyAsync<any>(token, {
+        secret: this.accessSecret(),
+      });
+      if (
+        !payload ||
+        (payload.type !== 'employee_portal' && payload.type !== 'access')
+      ) {
+        throw new Error('Tipo de token inválido');
+      }
+      return payload;
+    } catch {
+      throw new UnauthorizedException('Token de portal inválido o expirado');
+    }
+  }
+
   private accessSecret(): string {
     return process.env.JWT_SECRET as string;
   }
