@@ -977,19 +977,32 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       await this.recordDraftConversation(ctx, 'sistema', waitingMessage);
     }
 
+    const [empleadaExtras, presetLocations] = await Promise.all([
+      this.extrasCatalogoRepository.find({
+        where: { empleadaId: empleada.id, activo: true },
+      }),
+      this.transportOperations.activeLocations(),
+    ]);
+
+    const extrasData = empleadaExtras.map((e) => ({
+      nombre: e.nombre,
+      precio: Number(e.precio),
+    }));
+    const ubicacionesData = presetLocations.map(
+      (l) => `${l.name}${l.address ? ` (${l.address})` : ''}`,
+    );
+
+    const promptParams = {
+      nombreArtistico: empleada.nombreArtistico,
+      precioBaseHora: empleada.precioBaseHora,
+      descripcion: empleada.descripcion,
+      extras: extrasData,
+      ubicacionesPreestablecidas: ubicacionesData,
+    };
+
     const systemPrompt = activeService
-      ? `Eres el asistente de una agencia. Nunca finjas ser la empleada. Ayuda a recopilar duración y método de pago para reservar el siguiente turno de ${empleada.nombreArtistico}. ${getHireSystemPrompt(
-          {
-            nombreArtistico: empleada.nombreArtistico,
-            precioBaseHora: empleada.precioBaseHora,
-            descripcion: empleada.descripcion,
-          },
-        )}`
-      : getHireSystemPrompt({
-          nombreArtistico: empleada.nombreArtistico,
-          precioBaseHora: empleada.precioBaseHora,
-          descripcion: empleada.descripcion,
-        });
+      ? `Eres el asistente de una agencia. Nunca finjas ser la empleada. Ayuda al cliente a coordinar para reservar el siguiente turno de ${empleada.nombreArtistico}. ${getHireSystemPrompt(promptParams)}`
+      : getHireSystemPrompt(promptParams);
 
     const history: { role: 'user' | 'model'; parts: { text: string }[] }[] = [
       { role: 'user', parts: [{ text: 'Hola' }] },
@@ -1018,7 +1031,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         return;
       }
       this.logger.error('Error starting LLM chat session:', err);
-      const fallbackMsg = `¡Hola! Soy *${empleada.nombreArtistico}* y me encantaría atenderte. ¿Cuántas horas de servicio necesitas?`;
+      const fallbackMsg = `¡Hola papi! Soy *${empleada.nombreArtistico}*, me alegra mucho saludarte mor. Cuéntame qué tienes en mente.`;
       await this.sendDelayedReply(ctx, fallbackMsg);
       await this.recordDraftConversation(ctx, 'ia', fallbackMsg);
       // Initialize basic history on error fallback
@@ -1026,11 +1039,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         { role: 'user', parts: [{ text: 'Hola' }] },
         {
           role: 'model',
-          parts: [
-            {
-              text: fallbackMsg,
-            },
-          ],
+          parts: [{ text: fallbackMsg }],
         },
       ];
     }
@@ -4197,10 +4206,27 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         return;
       }
 
+      const [empleadaExtras, presetLocations] = await Promise.all([
+        this.extrasCatalogoRepository.find({
+          where: { empleadaId: empleada.id, activo: true },
+        }),
+        this.transportOperations.activeLocations(),
+      ]);
+
+      const extrasData = empleadaExtras.map((e) => ({
+        nombre: e.nombre,
+        precio: Number(e.precio),
+      }));
+      const ubicacionesData = presetLocations.map(
+        (l) => `${l.name}${l.address ? ` (${l.address})` : ''}`,
+      );
+
       const generalPrompt = getGeneralChatSystemPrompt({
         nombreArtistico: empleada.nombreArtistico,
         precioBaseHora: empleada.precioBaseHora,
         descripcion: empleada.descripcion,
+        extras: extrasData,
+        ubicacionesPreestablecidas: ubicacionesData,
       });
       const systemPrompt = session.selectedEmployeeBusy
         ? `Eres el asistente de la agencia, no eres la empleada y nunca debes hablar como si lo fueras. ${generalPrompt}`
@@ -4268,6 +4294,42 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 history.push({ role: 'model', parts: [{ text: cleanText }] });
                 session.chatHistory = history;
 
+                // Verificar si se especificó una ubicación preestablecida en la marca DATA o en la conversación
+                const presetName = parsedData.ubicacionPreestablecida;
+                let matchedLocation: any = null;
+                if (presetName && typeof presetName === 'string') {
+                  const activeLocs =
+                    await this.transportOperations.activeLocations();
+                  matchedLocation =
+                    activeLocs.find(
+                      (loc) =>
+                        loc.name
+                          .toLowerCase()
+                          .includes(presetName.toLowerCase().trim()) ||
+                        presetName
+                          .toLowerCase()
+                          .includes(loc.name.toLowerCase().trim()),
+                    ) || null;
+                }
+
+                if (matchedLocation) {
+                  await this.sendDelayedReply(ctx, cleanText);
+                  await this.recordDraftConversation(ctx, 'ia', cleanText);
+
+                  session.presetLocationId = matchedLocation.id;
+                  session.locationNameSnapshot = matchedLocation.name;
+                  session.locationAddressSnapshot = matchedLocation.address;
+                  session.customerTransportCharge = 0;
+
+                  await this.onLocation(ctx, {
+                    latitude: Number(matchedLocation.latitude),
+                    longitude: Number(matchedLocation.longitude),
+                    title: matchedLocation.name,
+                    address: matchedLocation.address,
+                  });
+                  return;
+                }
+
                 await this.replyWithServiceLocationOptions(
                   ctx,
                   cleanText || 'Selecciona la ubicación del servicio.',
@@ -4282,7 +4344,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             }
           } catch (jsonErr) {
             this.logger.error(
-              'Failed to parse Gemini extracted JSON data:',
+              'Failed to parse LLM extracted JSON data:',
               jsonErr,
             );
           }

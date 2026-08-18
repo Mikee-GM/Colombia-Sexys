@@ -43,6 +43,8 @@ export class AiProviderService {
           body: JSON.stringify({
             model: 'grok-4.20-0309-non-reasoning',
             messages,
+            max_tokens: 150,
+            temperature: 0.7,
           }),
           signal: controller.signal,
         },
