@@ -507,6 +507,17 @@ export type EmployeeKpi = {
   totalServiciosValorados: number;
   confirmedReports90Days: number;
   score: number | null;
+  position: number | null;
+};
+
+export type DriverKpi = {
+  id: string;
+  nombre: string;
+  fotoPerfilUrl: null;
+  ratingAverage: number | null;
+  confirmedReports90Days: number;
+  score: number | null;
+  position: number | null;
 };
 
 export type EmployeeRatingComment = {

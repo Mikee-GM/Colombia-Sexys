@@ -8,6 +8,8 @@ import {
   confirmWeeklySettlement,
   getActiveDrivers,
   getDriverReport,
+  getEmployeeRankingPositions,
+  getDriverRankingPositions,
 } from "@/app/admin/liquidations/actions";
 import { getStartAndEndOfWeek } from "@/lib/calculations";
 import PageHeader from "@/components/ui/page-header";
@@ -42,6 +44,8 @@ export default function LiquidationsClient({
   const [loading, setLoading] = useState(true);
   const [loadingReport, setLoadingReport] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [employeeRanking, setEmployeeRanking] = useState<{ position: number; total: number } | null>(null);
+  const [driverRanking, setDriverRanking] = useState<{ position: number; total: number } | null>(null);
 
   const period = useMemo(() => getStartAndEndOfWeek(currentDate), [currentDate]);
 
@@ -143,6 +147,46 @@ export default function LiquidationsClient({
     }
     loadDriverReport();
   }, [mode, selectedDriverId, loadDriverReport]);
+
+  useEffect(() => {
+    if (!isAdmin || mode !== "empleada" || !selectedEmployeeId) {
+      setEmployeeRanking(null);
+      return;
+    }
+    let cancelled = false;
+    getEmployeeRankingPositions()
+      .then((positions) => {
+        if (cancelled) return;
+        const match = positions.find((entry) => entry.id === selectedEmployeeId);
+        setEmployeeRanking(
+          match?.position != null ? { position: match.position, total: match.total } : null,
+        );
+      })
+      .catch(() => setEmployeeRanking(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, mode, selectedEmployeeId]);
+
+  useEffect(() => {
+    if (!isAdmin || mode !== "chofer" || !selectedDriverId) {
+      setDriverRanking(null);
+      return;
+    }
+    let cancelled = false;
+    getDriverRankingPositions()
+      .then((positions) => {
+        if (cancelled) return;
+        const match = positions.find((entry) => entry.id === selectedDriverId);
+        setDriverRanking(
+          match?.position != null ? { position: match.position, total: match.total } : null,
+        );
+      })
+      .catch(() => setDriverRanking(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin, mode, selectedDriverId]);
 
   const employeeGroups = useMemo(() => {
     const groups = new Map<string, { id: string; name: string; employees: LiquidationEmployee[] }>();
@@ -275,7 +319,11 @@ export default function LiquidationsClient({
                   />
                 </div>
                 <div className="space-y-6">
-                  <LiquidationSummary cut={report.finalCut} employeeName={selectedEmployee.name} />
+                  <LiquidationSummary
+                    cut={report.finalCut}
+                    employeeName={selectedEmployee.name}
+                    ranking={employeeRanking}
+                  />
                   <LiquidationBreakdown cut={report.finalCut} />
                 </div>
               </div>
@@ -317,6 +365,7 @@ export default function LiquidationsClient({
               report={driverReport}
               period={period}
               onConfirmed={loadDriverReport}
+              ranking={driverRanking}
             />
           )}
         </div>

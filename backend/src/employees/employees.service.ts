@@ -533,6 +533,7 @@ export class EmployeesService {
       totalServiciosValorados: number;
       confirmedReports90Days: number;
       score: number | null;
+      position: number | null;
     }>
   > {
     const employees = await this.empleadasRepository.find({
@@ -577,15 +578,24 @@ export class EmployeesService {
         totalServiciosValorados: employee.totalServiciosValorados,
         confirmedReports90Days,
         score,
+        position: null as number | null,
       };
     });
 
-    return kpis.sort((a, b) => {
+    kpis.sort((a, b) => {
       if (a.score == null && b.score == null) return 0;
       if (a.score == null) return 1;
       if (b.score == null) return -1;
       return b.score - a.score;
     });
+    let position = 0;
+    for (const kpi of kpis) {
+      if (kpi.score != null) {
+        position += 1;
+        kpi.position = position;
+      }
+    }
+    return kpis;
   }
 
   async remove(id: string): Promise<{ deleted: boolean }> {

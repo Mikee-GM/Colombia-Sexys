@@ -59,3 +59,8 @@ export class CreateSanctionDto {
 export class RevokeSanctionDto {
   @IsString() @MinLength(3) @MaxLength(1000) reason: string;
 }
+
+export class ResolveAppealDto {
+  @IsIn(['upheld', 'overturned'])
+  decision: 'upheld' | 'overturned';
+}

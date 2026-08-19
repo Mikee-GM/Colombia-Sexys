@@ -128,12 +128,49 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         ratingId: saved.id,
         direction: saved.direction,
       });
+      if (dto.direction === 'client_to_employee' && dto.stars <= 2) {
+        await this.autoCreateReportFromBadRating(dto, interaction, saved.id);
+      }
       return saved;
     } catch (error: any) {
       if (error?.code === '23505') {
         throw new ConflictException('Esta interacción ya fue calificada');
       }
       throw error;
+    }
+  }
+
+  private async autoCreateReportFromBadRating(
+    dto: CreateRatingDto,
+    interaction: ResolvedInteraction,
+    ratingId: string,
+  ) {
+    try {
+      const report = this.reports.create({
+        direction: dto.direction,
+        reporterType: 'client',
+        reporterId: interaction.clientId,
+        subjectType: 'employee',
+        subjectId: interaction.employeeId,
+        serviceId: interaction.serviceId,
+        tripId: interaction.tripId,
+        category: 'otro',
+        description: (dto.comment || '').trim(),
+        priority: 'normal',
+        history: [
+          {
+            at: new Date().toISOString(),
+            action: 'created',
+            actorType: 'client',
+            actorId: interaction.clientId,
+            automatic: true,
+            ratingId,
+          },
+        ],
+      });
+      await this.reports.save(report);
+    } catch (error: any) {
+      if (error?.code !== '23505') throw error;
     }
   }
 
@@ -234,9 +271,16 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   }
 
   async closeReport(id: string, dto: CloseConductReportDto, admin: Actor) {
-    this.assertAdmin(admin);
     const report = await this.reports.findOneBy({ id });
     if (!report) throw new NotFoundException('Reporte no encontrado');
+    if (admin.rol !== 'admin') {
+      if (admin.rol !== 'jefe') {
+        throw new ForbiddenException(
+          'Solo un administrador o jefe puede realizar esta acción',
+        );
+      }
+      await this.assertReportBossScope(report, admin.id);
+    }
     report.status = 'cerrado';
     report.outcome = dto.outcome;
     report.resolution = dto.resolution.trim();
@@ -248,7 +292,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         at: report.updatedAt.toISOString(),
         action: 'closed',
         outcome: dto.outcome,
-        actorType: 'admin',
+        actorType: admin.rol,
         actorId: admin.id,
       },
     ];
@@ -413,6 +457,96 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       ratings: await this.ratingSummary(identity.type, identity.id),
       sanction: await this.getActiveSanction(identity.type, identity.id),
     };
+  }
+
+  async listOwnAppealableRatings(subjectType: PersonType, subjectId: string) {
+    const column =
+      subjectType === 'client'
+        ? 'client_id'
+        : subjectType === 'employee'
+          ? 'employee_id'
+          : 'driver_id';
+    return this.dataSource.query(
+      `SELECT id, direction, stars, comment, created_at AS "createdAt"
+       FROM interaction_ratings
+       WHERE ${column} = $1
+         AND direction LIKE $2
+         AND stars <= 3
+         AND appeal_status = 'none'
+       ORDER BY created_at DESC
+       LIMIT 5`,
+      [subjectId, `%_to_${subjectType}`],
+    );
+  }
+
+  async appealRating(
+    subjectType: PersonType,
+    subjectId: string,
+    ratingId: string,
+    reason: string,
+  ) {
+    const rating = await this.ratings.findOneBy({ id: ratingId });
+    if (!rating) throw new NotFoundException('Calificación no encontrada');
+    const subjectColumnValue = rating.direction.endsWith('_to_employee')
+      ? rating.employeeId
+      : rating.direction.endsWith('_to_client')
+        ? rating.clientId
+        : rating.driverId;
+    if (subjectColumnValue !== subjectId) {
+      throw new ForbiddenException('Esta calificación no te pertenece');
+    }
+    if (rating.appealStatus !== 'none') {
+      throw new ConflictException('Esta calificación ya fue apelada');
+    }
+    rating.appealStatus = 'pending';
+    rating.appealReason = reason.trim().slice(0, 2000);
+    const saved = await this.ratings.save(rating);
+    if (rating.direction === 'client_to_employee' && rating.employeeId) {
+      await this.refreshPublicEmployeeRating(
+        rating.employeeId,
+        rating.direction,
+      );
+    }
+    this.realtime.emitToJefes({
+      type: 'discipline.rating.appealed',
+      ratingId,
+      subjectType,
+      subjectId,
+    });
+    return saved;
+  }
+
+  async listPendingAppeals() {
+    return this.ratings.find({
+      where: { appealStatus: 'pending' },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async resolveAppeal(
+    ratingId: string,
+    decision: 'upheld' | 'overturned',
+    admin: Actor,
+  ) {
+    this.assertAdmin(admin);
+    const rating = await this.ratings.findOneBy({ id: ratingId });
+    if (!rating) throw new NotFoundException('Calificación no encontrada');
+    if (rating.appealStatus !== 'pending') {
+      throw new ConflictException(
+        'Esta calificación no tiene una apelación pendiente',
+      );
+    }
+    rating.appealStatus = decision;
+    rating.appealResolvedAt = new Date();
+    rating.appealResolvedByUserId = admin.id;
+    const saved = await this.ratings.save(rating);
+    if (rating.direction === 'client_to_employee' && rating.employeeId) {
+      await this.refreshPublicEmployeeRating(
+        rating.employeeId,
+        rating.direction,
+      );
+    }
+    return saved;
   }
 
   async getActiveSanction(subjectType: PersonType, subjectId: string) {
@@ -617,6 +751,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
        FROM interaction_ratings
        WHERE ${column} = $1
          AND direction LIKE $2
+         AND appeal_status NOT IN ('pending', 'overturned')
        GROUP BY direction ORDER BY direction`,
       [subjectId, `%_to_${subjectType}`],
     );
@@ -670,7 +805,41 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         subjectId,
         confirmedReportsIn90Days: count,
       });
+      if (
+        count === 3 &&
+        (subjectType === 'employee' || subjectType === 'driver')
+      ) {
+        await this.autoSuspendOnReportThreshold(subjectType, subjectId);
+      }
     }
+  }
+
+  private async autoSuspendOnReportThreshold(
+    subjectType: 'employee' | 'driver',
+    subjectId: string,
+  ) {
+    const active = await this.getActiveSanction(subjectType, subjectId);
+    if (active) return;
+    const startsAt = new Date();
+    const endsAt = new Date(startsAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const sanction = await this.sanctions.save(
+      this.sanctions.create({
+        subjectType,
+        subjectId,
+        type: 'suspension',
+        reason:
+          'Suspensión automática por acumular 3 reportes confirmados en los últimos 90 días.',
+        startsAt,
+        endsAt,
+      }),
+    );
+    this.realtime.emitToJefes({
+      type: 'discipline.sanction.applied',
+      sanctionId: sanction.id,
+      subjectType: sanction.subjectType,
+      subjectId: sanction.subjectId,
+      automatic: true,
+    });
   }
 
   private async refreshPublicEmployeeRating(
@@ -686,6 +855,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
          SELECT ROUND(AVG(stars)::numeric, 2) AS average, COUNT(*)::int AS count
          FROM interaction_ratings
          WHERE employee_id = $1 AND direction = 'client_to_employee'
+           AND appeal_status NOT IN ('pending', 'overturned')
        ) metric
        WHERE e.id = $1`,
       [employeeId],
@@ -772,6 +942,19 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     );
     if (!rows[0]) {
       throw new ForbiddenException('El expediente no pertenece a su operación');
+    }
+  }
+
+  private async assertReportBossScope(report: ConductReport, bossId: string) {
+    if (!report.serviceId) {
+      throw new ForbiddenException('Este reporte no pertenece a su operación');
+    }
+    const rows = await this.dataSource.query(
+      `SELECT 1 FROM servicios s WHERE s.id = $1 AND s.jefe_id = $2`,
+      [report.serviceId, bossId],
+    );
+    if (!rows[0]) {
+      throw new ForbiddenException('Este reporte no pertenece a su operación');
     }
   }
 

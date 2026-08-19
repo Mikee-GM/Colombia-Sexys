@@ -27,6 +27,7 @@ import { parseTelegramStartPayload } from './telegram-start-payload';
 import { UploadService } from '../upload/upload.service';
 import { WeeklyContentService } from '../weekly-content/weekly-content.service';
 import { CandidateScreeningService } from '../candidate-screening/candidate-screening.service';
+import { DisciplineService } from '../discipline/discipline.service';
 
 @Update()
 export class TelegramAuthUpdate {
@@ -55,6 +56,7 @@ export class TelegramAuthUpdate {
     @Inject(forwardRef(() => WeeklyContentService))
     private readonly weeklyContentService: WeeklyContentService,
     private readonly candidateScreeningService: CandidateScreeningService,
+    private readonly disciplineService: DisciplineService,
   ) {}
 
   @Start()
@@ -216,6 +218,119 @@ export class TelegramAuthUpdate {
     );
   }
 
+  private async resolveAppealIdentity(
+    telegramId: string,
+  ): Promise<{ type: 'client' | 'employee' | 'driver'; id: string } | null> {
+    const user = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId },
+      relations: { empleadas: true, choferes: true },
+    });
+    if (user?.empleadas) return { type: 'employee', id: user.empleadas.id };
+    if (user?.choferes) return { type: 'driver', id: user.choferes.id };
+    if (!user) {
+      const client = await this.clientesRepository.findOne({
+        where: { telegramChatId: telegramId },
+      });
+      if (client) return { type: 'client', id: client.id };
+    }
+    return null;
+  }
+
+  @Command('apelar')
+  async onAppealCommand(@Ctx() ctx: Context) {
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
+
+    const identity = await this.resolveAppealIdentity(telegramId);
+    if (!identity) {
+      await ctx.reply(
+        'No encontramos tu perfil para apelar calificaciones. Si eres cliente, primero debes tener al menos un servicio finalizado.',
+      );
+      return;
+    }
+
+    const ratings = await this.disciplineService.listOwnAppealableRatings(
+      identity.type,
+      identity.id,
+    );
+    if (!ratings.length) {
+      await ctx.reply(
+        'No tienes calificaciones recientes de 3 estrellas o menos que puedas apelar.',
+      );
+      return;
+    }
+
+    const buttons = ratings.map((rating: any) => [
+      Markup.button.callback(
+        `${'★'.repeat(rating.stars)}${'☆'.repeat(5 - rating.stars)} — ${new Date(rating.createdAt).toLocaleDateString('es-MX')}`,
+        `appeal_select:${rating.id}`,
+      ),
+    ]);
+    await ctx.reply(
+      '¿Cuál calificación quieres apelar?',
+      Markup.inlineKeyboard(buttons),
+    );
+  }
+
+  @Action(/^appeal_select:(.+)$/)
+  async onAppealSelect(@Ctx() ctx: Context) {
+    const match = (ctx as any).match;
+    const ratingId = match?.[1];
+    if (!ratingId) return;
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
+    const identity = await this.resolveAppealIdentity(telegramId);
+    if (!identity) return;
+
+    const session = ((ctx as any).session ??= {});
+    session.step = 'AWAITING_APPEAL_REASON';
+    session.appealRatingId = ratingId;
+    session.appealSubjectType = identity.type;
+    session.appealSubjectId = identity.id;
+    await ctx.reply(
+      'Cuéntanos brevemente por qué crees que esta calificación no es justa. Escribe tu explicación:',
+    );
+  }
+
+  @On('text')
+  async onAppealReasonText(@Ctx() ctx: Context) {
+    const session = (ctx as any).session;
+    if (
+      session?.step !== 'AWAITING_APPEAL_REASON' ||
+      !session.appealRatingId ||
+      !session.appealSubjectType ||
+      !session.appealSubjectId
+    ) {
+      return;
+    }
+    const text = ((ctx.message as { text?: string })?.text || '').trim();
+    if (!text || text.startsWith('/')) return;
+    if (text.length < 5 || text.length > 2000) {
+      await ctx.reply('Tu explicación debe tener entre 5 y 2000 caracteres.');
+      return;
+    }
+    try {
+      await this.disciplineService.appealRating(
+        session.appealSubjectType,
+        session.appealSubjectId,
+        session.appealRatingId,
+        text,
+      );
+      await ctx.reply(
+        'Tu apelación quedó registrada. Mientras se revisa, esa calificación no contará en tu promedio. Te avisaremos cuando haya una resolución.',
+      );
+    } catch (error: any) {
+      await ctx.reply(
+        error?.message || 'No fue posible registrar tu apelación.',
+      );
+    } finally {
+      session.step = undefined;
+      session.appealRatingId = undefined;
+      session.appealSubjectType = undefined;
+      session.appealSubjectId = undefined;
+    }
+  }
+
   @Help()
   async onHelp(@Ctx() ctx: Context) {
     await ctx.reply(
@@ -224,6 +339,7 @@ export class TelegramAuthUpdate {
         '/vincular <código> - Vincular cuenta de empleado o chofer\n' +
         '/desvincular - Desvincular tu cuenta de empleado o chofer\n' +
         '/vincular_grupo - Vincular el grupo de Telegram actual a tu cuenta (Jefes y Admins)\n' +
+        '/apelar - Apelar una calificación que recibiste\n' +
         '/help - Ver los comandos de ayuda',
     );
   }

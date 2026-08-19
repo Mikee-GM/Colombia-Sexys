@@ -34,6 +34,7 @@ describe('TelegramAuthUpdate deep links', () => {
       {} as any, // uploadService
       {} as any, // weeklyContentService
       {} as any, // candidateScreeningService
+      {} as any, // disciplineService
     );
     const ctx = {
       from: { id: 123, first_name: 'Nuevo', last_name: 'Cliente' },

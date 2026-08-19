@@ -7,11 +7,13 @@ import {
   closeConductReport,
   createSanction,
   getDossier,
+  resolveAppeal,
   revokeSanction,
   type ConductReport,
   type DisciplinarySanction,
   type Dossier,
   type PersonType,
+  type RatingAppeal,
   type RatingDirection,
 } from "@/lib/actions/discipline";
 
@@ -31,15 +33,18 @@ type Props = {
   role: "admin" | "jefe";
   initialReports: ConductReport[];
   initialSanctions: DisciplinarySanction[];
+  initialAppeals?: RatingAppeal[];
 };
 
 export default function DisciplineDashboard({
   role,
   initialReports,
   initialSanctions,
+  initialAppeals = [],
 }: Props) {
   const [reports] = useState(initialReports);
   const [sanctions] = useState(initialSanctions);
+  const [appeals, setAppeals] = useState(initialAppeals);
   const [personFilter, setPersonFilter] = useState<"all" | PersonType>("all");
   const [directionFilter, setDirectionFilter] = useState<"all" | RatingDirection>("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -135,6 +140,18 @@ export default function DisciplineDashboard({
     });
   }
 
+  function resolveAppealDecision(appeal: RatingAppeal, decision: "upheld" | "overturned") {
+    startTransition(async () => {
+      try {
+        await resolveAppeal(appeal.id, decision);
+        setAppeals((prev) => prev.filter((item) => item.id !== appeal.id));
+        toast.success(decision === "upheld" ? "Calificación confirmada" : "Calificación anulada");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "No se pudo resolver la apelación");
+      }
+    });
+  }
+
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <header>
@@ -150,6 +167,34 @@ export default function DisciplineDashboard({
         <Metric label="Confirmados" value={reports.filter((report) => report.outcome === "confirmado").length} />
         <Metric label="Sanciones activas" value={sanctions.filter((item) => item.status === "active").length} />
       </section>
+
+      {role === "admin" && appeals.length > 0 && (
+        <section className="border border-[#C5A55A]/40 bg-[#050505]">
+          <div className="border-b border-zinc-800 p-4">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-[#C5A55A]">Apelaciones pendientes</p>
+            <p className="mt-1 text-xs text-zinc-500">Estas calificaciones no cuentan en el promedio mientras se revisan.</p>
+          </div>
+          <div className="divide-y divide-zinc-900">
+            {appeals.map((appeal) => (
+              <article key={appeal.id} className="grid gap-3 p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#E8D5A3]">{"★".repeat(appeal.stars)}{"☆".repeat(5 - appeal.stars)}</span>
+                    <span className="text-xs text-zinc-500">{directionLabels[appeal.direction]}</span>
+                  </div>
+                  {appeal.comment && <p className="mt-2 text-sm text-zinc-400">Comentario original: &ldquo;{appeal.comment}&rdquo;</p>}
+                  {appeal.appealReason && <p className="mt-1 text-sm text-zinc-300">Motivo de la apelación: &ldquo;{appeal.appealReason}&rdquo;</p>}
+                  <p className="mt-2 text-[11px] text-zinc-600">{new Date(appeal.createdAt).toLocaleString("es-MX")}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Action onClick={() => resolveAppealDecision(appeal, "upheld")} disabled={pending}>Confirmar calificación</Action>
+                  <Action onClick={() => resolveAppealDecision(appeal, "overturned")} disabled={pending}>Anular calificación</Action>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="border border-zinc-800 bg-[#050505]">
         <div className="grid gap-3 border-b border-zinc-800 p-4 sm:grid-cols-2 xl:grid-cols-6">
@@ -187,7 +232,7 @@ export default function DisciplineDashboard({
               </div>
               <div className="flex flex-wrap gap-2">
                 <Action onClick={() => openDossier(report)} disabled={pending}>Ver expediente</Action>
-                {role === "admin" && report.status !== "cerrado" && <><Action onClick={() => close(report, "confirmado")} disabled={pending}>Confirmar</Action><Action onClick={() => close(report, "no_sustentado")} disabled={pending}>No sustentado</Action></>}
+                {(role === "admin" || role === "jefe") && report.status !== "cerrado" && <><Action onClick={() => close(report, "confirmado")} disabled={pending}>Confirmar</Action><Action onClick={() => close(report, "no_sustentado")} disabled={pending}>No sustentado</Action></>}
               </div>
             </article>
           ))}

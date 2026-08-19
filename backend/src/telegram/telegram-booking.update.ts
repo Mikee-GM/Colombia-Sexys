@@ -65,7 +65,8 @@ interface SessionData {
     | 'AWAITING_UBER_SCREENSHOT'
     | 'CHAT_CON_EMPLEADA'
     | 'GROUP_WITH_BOSS'
-    | 'AWAITING_CANDIDATE_ANSWER';
+    | 'AWAITING_CANDIDATE_ANSWER'
+    | 'AWAITING_APPEAL_REASON';
   empleadaId?: string;
   duracionPactadaHoras?: number;
   metodoPago?: 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
@@ -101,6 +102,9 @@ interface SessionData {
     participantId?: string;
   };
   candidateScreeningId?: string;
+  appealRatingId?: string;
+  appealSubjectType?: 'client' | 'employee' | 'driver';
+  appealSubjectId?: string;
 }
 
 interface BotContext extends Context {

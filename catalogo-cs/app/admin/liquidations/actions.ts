@@ -13,6 +13,7 @@ import type {
   LiquidationReport,
   LiquidationRecordInput,
 } from "@/components/liquidations/types";
+import type { DriverKpi, EmployeeKpi } from "@/lib/types";
 
 const periodParams = (startDate: string, endDate: string, employeeId?: string) => {
   const params = new URLSearchParams({ startDate, endDate });
@@ -152,4 +153,16 @@ export async function confirmDriverSettlement(
   );
   revalidatePath("/admin/liquidations");
   return result;
+}
+
+export async function getEmployeeRankingPositions() {
+  const kpis = await apiFetch<EmployeeKpi[]>("/employees/kpis");
+  const total = kpis.filter((kpi) => kpi.position != null).length;
+  return kpis.map((kpi) => ({ id: kpi.id, position: kpi.position, total }));
+}
+
+export async function getDriverRankingPositions() {
+  const kpis = await apiFetch<DriverKpi[]>("/drivers/kpis");
+  const total = kpis.filter((kpi) => kpi.position != null).length;
+  return kpis.map((kpi) => ({ id: kpi.id, position: kpi.position, total }));
 }

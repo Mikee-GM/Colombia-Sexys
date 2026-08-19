@@ -8,6 +8,14 @@ export const RATING_DIRECTIONS = [
 ] as const;
 export type RatingDirection = (typeof RATING_DIRECTIONS)[number];
 
+export const RATING_APPEAL_STATUSES = [
+  'none',
+  'pending',
+  'upheld',
+  'overturned',
+] as const;
+export type RatingAppealStatus = (typeof RATING_APPEAL_STATUSES)[number];
+
 @Entity('interaction_ratings')
 @Index(['direction', 'serviceId', 'employeeId'], {
   unique: true,
@@ -47,4 +55,20 @@ export class InteractionRating {
 
   @Column('timestamptz', { name: 'created_at', default: () => 'now()' })
   createdAt: Date;
+
+  @Column('varchar', {
+    name: 'appeal_status',
+    length: 20,
+    default: 'none',
+  })
+  appealStatus: RatingAppealStatus;
+
+  @Column('text', { name: 'appeal_reason', nullable: true })
+  appealReason: string | null;
+
+  @Column('timestamptz', { name: 'appeal_resolved_at', nullable: true })
+  appealResolvedAt: Date | null;
+
+  @Column('uuid', { name: 'appeal_resolved_by_user_id', nullable: true })
+  appealResolvedByUserId: string | null;
 }

@@ -245,6 +245,88 @@ export class DriversService {
     });
   }
 
+  async getKpis(): Promise<
+    Array<{
+      id: string;
+      nombre: string;
+      fotoPerfilUrl: null;
+      ratingAverage: number | null;
+      confirmedReports90Days: number;
+      score: number | null;
+      position: number | null;
+    }>
+  > {
+    const drivers = await this.choferesRepository.find({
+      select: { id: true, nombre: true },
+    });
+    if (drivers.length === 0) return [];
+    const driverIds = drivers.map((d) => d.id);
+
+    const ratingRows: Array<{ driver_id: string; average: number }> =
+      await this.dataSource.query(
+        `SELECT driver_id, AVG(stars)::float AS average
+         FROM interaction_ratings
+         WHERE direction = 'employee_to_driver' AND driver_id = ANY($1::uuid[])
+         GROUP BY driver_id`,
+        [driverIds],
+      );
+    const ratingByDriver = new Map(
+      ratingRows.map((row) => [row.driver_id, Number(row.average)]),
+    );
+
+    const reportRows: Array<{ subject_id: string; confirmed: number }> =
+      await this.dataSource.query(
+        `SELECT subject_id, COUNT(*)::int AS confirmed
+         FROM conduct_reports
+         WHERE subject_type = 'driver' AND outcome = 'confirmado'
+           AND created_at >= now() - interval '90 days'
+           AND subject_id = ANY($1::uuid[])
+         GROUP BY subject_id`,
+        [driverIds],
+      );
+    const reportsByDriver = new Map(
+      reportRows.map((row) => [row.subject_id, Number(row.confirmed)]),
+    );
+
+    const kpis = drivers.map((driver) => {
+      const ratingAverage = ratingByDriver.get(driver.id) ?? null;
+      const confirmedReports90Days = reportsByDriver.get(driver.id) ?? 0;
+      const score =
+        ratingAverage != null
+          ? Math.max(
+              0,
+              Math.round(
+                (ratingAverage / 5) * 100 - confirmedReports90Days * 8,
+              ),
+            )
+          : null;
+      return {
+        id: driver.id,
+        nombre: driver.nombre,
+        fotoPerfilUrl: null,
+        ratingAverage,
+        confirmedReports90Days,
+        score,
+        position: null as number | null,
+      };
+    });
+
+    kpis.sort((a, b) => {
+      if (a.score == null && b.score == null) return 0;
+      if (a.score == null) return 1;
+      if (b.score == null) return -1;
+      return b.score - a.score;
+    });
+    let position = 0;
+    for (const kpi of kpis) {
+      if (kpi.score != null) {
+        position += 1;
+        kpi.position = position;
+      }
+    }
+    return kpis;
+  }
+
   async getDriverPortalData(identifier: string): Promise<DriverPortalData> {
     const chofer = await this.choferesRepository.findOne({
       where: [{ usuarioId: identifier }, { id: identifier }],

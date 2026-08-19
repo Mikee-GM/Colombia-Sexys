@@ -48,6 +48,12 @@ export class DriversController {
     return this.driversService.findAll();
   }
 
+  @Get('kpis')
+  @Roles('admin')
+  getKpis() {
+    return this.driversService.getKpis();
+  }
+
   @Get(':id')
   @ApiFindOneDocs({ tag: 'drivers', entity: Choferes, protected: true })
   findOne(@Param('id') id: string) {

@@ -4,6 +4,9 @@ import type { EmployeeKpi } from "@/lib/types";
 
 interface Props {
   employees: EmployeeKpi[];
+  title?: string;
+  subtitle?: string;
+  linkBase?: string;
 }
 
 function scoreToColor(score: number) {
@@ -42,16 +45,18 @@ function initials(name: string) {
 function EmployeeTile({
   employee,
   size,
+  linkBase,
 }: {
   employee: EmployeeKpi;
   size: number;
+  linkBase: string;
 }) {
   const unrated = employee.score == null;
   const colors = unrated ? null : scoreToColor(employee.score as number);
 
   return (
     <Link
-      href={`/admin/employees/${employee.id}`}
+      href={`${linkBase}/${employee.id}`}
       className="group flex flex-col items-center gap-2 transition-transform duration-300 hover:-translate-y-1"
       style={{ width: size }}
     >
@@ -98,7 +103,12 @@ function EmployeeTile({
   );
 }
 
-export default function KpiPyramid({ employees }: Props) {
+export default function KpiPyramid({
+  employees,
+  title = "Pirámide de desempeño",
+  subtitle = "Ordenadas por puntuación total. Verde es lo mejor calificado, rojo requiere atención.",
+  linkBase = "/admin/employees",
+}: Props) {
   const rated = employees
     .filter((employee) => employee.score != null)
     .sort((a, b) => (b.score as number) - (a.score as number));
@@ -112,12 +122,9 @@ export default function KpiPyramid({ employees }: Props) {
   return (
     <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6 sm:p-8">
       <h2 className="mb-1 font-serif text-lg font-semibold text-zinc-100">
-        Pirámide de desempeño
+        {title}
       </h2>
-      <p className="mb-8 text-sm text-zinc-500">
-        Ordenadas por puntuación total. Verde es lo mejor calificado, rojo
-        requiere atención.
-      </p>
+      <p className="mb-8 text-sm text-zinc-500">{subtitle}</p>
 
       {rated.length === 0 ? (
         <p className="py-8 text-center text-sm italic text-zinc-600">
@@ -139,6 +146,7 @@ export default function KpiPyramid({ employees }: Props) {
                     key={employee.id}
                     employee={employee}
                     size={size}
+                    linkBase={linkBase}
                   />
                 ))}
               </div>
@@ -154,7 +162,12 @@ export default function KpiPyramid({ employees }: Props) {
           </p>
           <div className="flex flex-wrap items-start justify-center gap-6">
             {unrated.map((employee) => (
-              <EmployeeTile key={employee.id} employee={employee} size={84} />
+              <EmployeeTile
+                key={employee.id}
+                employee={employee}
+                size={84}
+                linkBase={linkBase}
+              />
             ))}
           </div>
         </div>

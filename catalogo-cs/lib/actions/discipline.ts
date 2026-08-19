@@ -41,6 +41,16 @@ export type DisciplinarySanction = {
   createdAt: string;
 };
 
+export type RatingAppeal = {
+  id: string;
+  direction: RatingDirection;
+  stars: number;
+  comment: string | null;
+  appealStatus: "none" | "pending" | "upheld" | "overturned";
+  appealReason: string | null;
+  createdAt: string;
+};
+
 export type Dossier = {
   subjectType: PersonType;
   subjectId: string;
@@ -106,6 +116,21 @@ export async function revokeSanction(id: string, reason: string) {
   await apiFetch(`/discipline/sanctions/${id}/revoke`, {
     method: "POST",
     body: JSON.stringify({ reason }),
+  });
+  revalidatePath("/admin/reports");
+}
+
+export async function getPendingAppeals() {
+  return apiFetch<RatingAppeal[]>("/discipline/appeals");
+}
+
+export async function resolveAppeal(
+  id: string,
+  decision: "upheld" | "overturned",
+) {
+  await apiFetch(`/discipline/appeals/${id}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
   });
   revalidatePath("/admin/reports");
 }

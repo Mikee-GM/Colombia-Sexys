@@ -18,10 +18,12 @@ export default function DriverSettlementPanel({
   report,
   period,
   onConfirmed,
+  ranking,
 }: {
   report: DriverLiquidationReport;
   period: { start: Date; end: Date };
   onConfirmed: () => void;
+  ranking?: { position: number; total: number } | null;
 }) {
   const [confirming, setConfirming] = useState(false);
   const { weeklySettlement, trips, driver } = report;
@@ -47,6 +49,11 @@ export default function DriverSettlementPanel({
 
   return (
     <div className="space-y-6">
+      {ranking && (
+        <span className="inline-block w-fit rounded-full border border-brand-gold/30 bg-brand-gold/10 px-3 py-1 text-xs font-bold text-brand-gold">
+          Ranking #{ranking.position} de {ranking.total}
+        </span>
+      )}
       <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-2xl border border-zinc-800 bg-black/40 p-4">

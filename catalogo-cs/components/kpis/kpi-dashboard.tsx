@@ -1,9 +1,10 @@
 import PageHeader from "@/components/ui/page-header";
-import type { EmployeeKpi } from "@/lib/types";
+import type { DriverKpi, EmployeeKpi } from "@/lib/types";
 import KpiPyramid from "./kpi-pyramid";
 
 interface Props {
   employees: EmployeeKpi[];
+  drivers?: DriverKpi[];
 }
 
 function SummaryCard({
@@ -23,7 +24,7 @@ function SummaryCard({
   );
 }
 
-export default function KpiDashboard({ employees }: Props) {
+export default function KpiDashboard({ employees, drivers = [] }: Props) {
   const rated = employees.filter((employee) => employee.score != null);
   const averageScore = rated.length
     ? Math.round(
@@ -36,11 +37,22 @@ export default function KpiDashboard({ employees }: Props) {
   ).length;
   const topEmployee = rated[0];
 
+  const driversAsKpi: EmployeeKpi[] = drivers.map((driver) => ({
+    id: driver.id,
+    nombreArtistico: driver.nombre,
+    fotoPerfilUrl: null,
+    promedioCalificacion: driver.ratingAverage,
+    totalServiciosValorados: 0,
+    confirmedReports90Days: driver.confirmedReports90Days,
+    score: driver.score,
+    position: driver.position,
+  }));
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <PageHeader
         title="Indicadores"
-        description="Comportamiento y desempeño de todas las modelos"
+        description="Comportamiento y desempeño de todas las modelos y choferes"
       />
 
       <section className="grid gap-4 sm:grid-cols-3">
@@ -59,6 +71,15 @@ export default function KpiDashboard({ employees }: Props) {
       </section>
 
       <KpiPyramid employees={employees} />
+
+      {driversAsKpi.length > 0 && (
+        <KpiPyramid
+          employees={driversAsKpi}
+          title="Pirámide de choferes"
+          subtitle="Basada en calificación de las empleadas y reportes confirmados en los últimos 90 días."
+          linkBase="/admin/drivers"
+        />
+      )}
     </div>
   );
 }

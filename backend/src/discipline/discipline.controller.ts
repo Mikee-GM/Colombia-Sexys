@@ -17,6 +17,7 @@ import {
   CreateConductReportDto,
   CreateRatingDto,
   CreateSanctionDto,
+  ResolveAppealDto,
   RevokeSanctionDto,
 } from './dto/discipline.dto';
 import { DisciplineService } from './discipline.service';
@@ -51,7 +52,7 @@ export class DisciplineController {
   }
 
   @Post('reports/:id/close')
-  @Roles('admin')
+  @Roles('admin', 'jefe')
   closeReport(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: any,
@@ -102,5 +103,21 @@ export class DisciplineController {
     @Req() req: any,
   ) {
     return this.discipline.revokeSanction(id, dto, req.user);
+  }
+
+  @Get('appeals')
+  @Roles('admin')
+  listPendingAppeals() {
+    return this.discipline.listPendingAppeals();
+  }
+
+  @Post('appeals/:id/resolve')
+  @Roles('admin')
+  resolveAppeal(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ResolveAppealDto,
+    @Req() req: any,
+  ) {
+    return this.discipline.resolveAppeal(id, dto.decision, req.user);
   }
 }

@@ -6,16 +6,24 @@ import type { CutResult } from "./types";
 interface Props {
   cut: CutResult;
   employeeName: string;
+  ranking?: { position: number; total: number } | null;
 }
 
-export default function LiquidationSummary({ cut, employeeName }: Props) {
+export default function LiquidationSummary({ cut, employeeName, ranking }: Props) {
   if (!cut) return null;
 
   return (
     <div className="space-y-5">
-      <h3 className="font-serif text-xl font-semibold leading-tight text-brand-gold">
-        Resumen: {employeeName}
-      </h3>
+      <div className="flex flex-wrap items-center gap-3">
+        <h3 className="font-serif text-xl font-semibold leading-tight text-brand-gold">
+          Resumen: {employeeName}
+        </h3>
+        {ranking && (
+          <span className="rounded-full border border-brand-gold/30 bg-brand-gold/10 px-3 py-1 text-xs font-bold text-brand-gold">
+            Ranking #{ranking.position} de {ranking.total}
+          </span>
+        )}
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
         <StatCard
           title="Venta Total"
