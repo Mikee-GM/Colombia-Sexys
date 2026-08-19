@@ -177,6 +177,16 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
             Indicadores
           </Link>
           <Link
+            href="/admin/candidatas"
+            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
+              isActive("/admin/candidatas")
+                ? "text-black bg-[#C5A55A]"
+                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
+            }`}
+          >
+            Candidatas
+          </Link>
+          <Link
             href="/admin/regulations"
             className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
               isActive("/admin/regulations")
@@ -397,6 +407,17 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
               }`}
             >
               Indicadores
+            </Link>
+            <Link
+              href="/admin/candidatas"
+              onClick={() => setMenuOpen(false)}
+              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
+                isActive("/admin/candidatas")
+                  ? "text-[#C5A55A] bg-zinc-900/50"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              Candidatas
             </Link>
             <Link
               href="/admin/regulations"

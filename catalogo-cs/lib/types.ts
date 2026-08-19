@@ -463,6 +463,42 @@ export type DriverPortalData = {
   };
 };
 
+export type ScreeningQuestion = {
+  id: string;
+  text: string;
+  active: boolean;
+  order: number;
+  createdAt: string;
+};
+
+export type CandidateScreeningStatus = "pendiente" | "en_progreso" | "completado";
+
+export type CandidateScreeningAnswer = {
+  id: string;
+  questionId: string;
+  questionText: string;
+  answerText: string;
+  answeredAt: string;
+};
+
+export type CandidateScreening = {
+  id: string;
+  candidateName: string;
+  candidatePhone: string | null;
+  token: string;
+  telegramChatId: string | null;
+  status: CandidateScreeningStatus;
+  questionIds: string[];
+  createdByUserId: string;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  promotedEmployeeId: string | null;
+  createdBy?: { id: string; email: string };
+  promotedEmployee?: { id: string; nombreArtistico: string } | null;
+  answers?: CandidateScreeningAnswer[];
+};
+
 export type EmployeeKpi = {
   id: string;
   nombreArtistico: string;

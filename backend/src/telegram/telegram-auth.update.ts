@@ -26,6 +26,7 @@ import { GroupServicesService } from '../group-services/group-services.service';
 import { parseTelegramStartPayload } from './telegram-start-payload';
 import { UploadService } from '../upload/upload.service';
 import { WeeklyContentService } from '../weekly-content/weekly-content.service';
+import { CandidateScreeningService } from '../candidate-screening/candidate-screening.service';
 
 @Update()
 export class TelegramAuthUpdate {
@@ -53,6 +54,7 @@ export class TelegramAuthUpdate {
     private readonly uploadService: UploadService,
     @Inject(forwardRef(() => WeeklyContentService))
     private readonly weeklyContentService: WeeklyContentService,
+    private readonly candidateScreeningService: CandidateScreeningService,
   ) {}
 
   @Start()
@@ -60,6 +62,13 @@ export class TelegramAuthUpdate {
   async onStart(@Ctx() ctx: Context) {
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
+
+    const startText = (ctx.message as any)?.text || '';
+    const earlyPayload = parseTelegramStartPayload(startText);
+    if (earlyPayload.type === 'candidate_screening') {
+      await this.onCandidateScreeningStart(ctx, telegramId, earlyPayload.token);
+      return;
+    }
 
     // Check if the user is a registered system user (employee, admin, etc.)
     const user = await this.usuariosRepository.findOne({
@@ -133,6 +142,77 @@ export class TelegramAuthUpdate {
       {
         parse_mode: 'Markdown',
       },
+    );
+  }
+
+  private async onCandidateScreeningStart(
+    ctx: Context,
+    telegramId: string,
+    token: string,
+  ) {
+    const screening =
+      await this.candidateScreeningService.getScreeningByToken(token);
+    if (!screening) {
+      await ctx.reply('Este enlace de evaluación no es válido o ya expiró.');
+      return;
+    }
+    if (screening.status === 'completado') {
+      await ctx.reply(
+        `¡Hola ${screening.candidateName}! Ya registramos tus respuestas anteriormente. ` +
+          `Gracias por tu tiempo, en breve nos pondremos en contacto contigo.`,
+      );
+      return;
+    }
+    await this.candidateScreeningService.bindTelegram(screening.id, telegramId);
+    await ctx.reply(
+      `¡Hola ${screening.candidateName}! 👋\n\n` +
+        `Vamos a hacerte algunas preguntas para conocerte un poco más. Responde cada una con un mensaje de texto.`,
+    );
+    await this.sendNextCandidateQuestion(ctx, screening.id);
+  }
+
+  private async sendNextCandidateQuestion(ctx: Context, screeningId: string) {
+    const next =
+      await this.candidateScreeningService.getNextQuestion(screeningId);
+    if (!next) return;
+    const session = ((ctx as any).session ??= {});
+    session.step = 'AWAITING_CANDIDATE_ANSWER';
+    session.candidateScreeningId = screeningId;
+    await ctx.reply(
+      `Pregunta ${next.index}/${next.total}:\n${next.question.text}`,
+    );
+  }
+
+  @On('text')
+  async onCandidateScreeningAnswer(@Ctx() ctx: Context) {
+    const session = (ctx as any).session;
+    if (
+      session?.step !== 'AWAITING_CANDIDATE_ANSWER' ||
+      !session.candidateScreeningId
+    ) {
+      return;
+    }
+    const text = ((ctx.message as { text?: string })?.text || '').trim();
+    if (!text || text.startsWith('/')) return;
+    if (text.length < 2 || text.length > 4000) {
+      await ctx.reply('Tu respuesta debe tener entre 2 y 4000 caracteres.');
+      return;
+    }
+
+    const result = await this.candidateScreeningService.submitAnswer(
+      session.candidateScreeningId,
+      text,
+    );
+    if (result.completed) {
+      session.step = undefined;
+      session.candidateScreeningId = undefined;
+      await ctx.reply(
+        '¡Gracias por tus respuestas! Las enviamos a administración, en breve te contactaremos.',
+      );
+      return;
+    }
+    await ctx.reply(
+      `Pregunta ${result.question.index}/${result.question.total}:\n${result.question.question.text}`,
     );
   }
 

@@ -1,12 +1,17 @@
 export type TelegramStartPayload =
   | { type: 'group_service' }
   | { type: 'employee_hire'; employeeId: string }
+  | { type: 'candidate_screening'; token: string }
   | { type: 'unknown' };
 
 export function parseTelegramStartPayload(text?: string): TelegramStartPayload {
   const payload = text?.trim().split(/\s+/, 2)[1];
   if (!payload) return { type: 'unknown' };
   if (payload === 'servicio_grupal') return { type: 'group_service' };
+  if (payload.startsWith('candidata_')) {
+    const token = payload.slice('candidata_'.length);
+    return token ? { type: 'candidate_screening', token } : { type: 'unknown' };
+  }
   if (!payload.startsWith('contratar_')) return { type: 'unknown' };
 
   const employeeId = payload

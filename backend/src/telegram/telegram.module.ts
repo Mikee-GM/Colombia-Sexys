@@ -37,6 +37,7 @@ import { DisciplineModule } from '../discipline/discipline.module';
 import { GroupServicesModule } from '../group-services/group-services.module';
 import { UploadModule } from '../upload/upload.module';
 import { WeeklyContentModule } from '../weekly-content/weekly-content.module';
+import { CandidateScreeningModule } from '../candidate-screening/candidate-screening.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { WeeklyContentModule } from '../weekly-content/weekly-content.module';
     forwardRef(() => GroupServicesModule),
     UploadModule,
     forwardRef(() => WeeklyContentModule),
+    CandidateScreeningModule,
     TelegrafModule.forRootAsync({
       imports: [ConfigModule, TypeOrmModule.forFeature([TelegramSession])],
       useFactory: (

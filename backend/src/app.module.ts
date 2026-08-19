@@ -32,6 +32,7 @@ import { EmployeeOnboardingModule } from './employee-onboarding/employee-onboard
 import { DisciplineModule } from './discipline/discipline.module';
 import { GroupServicesModule } from './group-services/group-services.module';
 import { WeeklyContentModule } from './weekly-content/weekly-content.module';
+import { CandidateScreeningModule } from './candidate-screening/candidate-screening.module';
 
 @Module({
   imports: [
@@ -135,6 +136,7 @@ import { WeeklyContentModule } from './weekly-content/weekly-content.module';
     DisciplineModule,
     GroupServicesModule,
     WeeklyContentModule,
+    CandidateScreeningModule,
   ],
   controllers: [AppController],
   providers: [AppService],

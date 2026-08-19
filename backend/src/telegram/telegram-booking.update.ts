@@ -64,7 +64,8 @@ interface SessionData {
     | 'AWAITING_UBER_FARE'
     | 'AWAITING_UBER_SCREENSHOT'
     | 'CHAT_CON_EMPLEADA'
-    | 'GROUP_WITH_BOSS';
+    | 'GROUP_WITH_BOSS'
+    | 'AWAITING_CANDIDATE_ANSWER';
   empleadaId?: string;
   duracionPactadaHoras?: number;
   metodoPago?: 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
@@ -99,6 +100,7 @@ interface SessionData {
     extraId: string;
     participantId?: string;
   };
+  candidateScreeningId?: string;
 }
 
 interface BotContext extends Context {
