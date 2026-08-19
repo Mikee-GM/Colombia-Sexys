@@ -400,6 +400,69 @@ export type EmployeeTolerance = {
   extensionTolerance: number;
 };
 
+export type DriverPortalTripItem = {
+  id: string;
+  fecha: string;
+  tipo: "ida" | "regreso";
+  zona: string;
+  proveedorTransporte: string;
+  driverPayout: number;
+};
+
+export type DriverPortalActiveTrip = {
+  id: string;
+  tipo: "ida" | "regreso";
+  estado: string;
+  zona: string;
+  proveedorTransporte: string;
+};
+
+export type DriverPortalData = {
+  profile: {
+    id: string;
+    nombre: string;
+    telefono: string;
+    disponible: boolean;
+    availabilityStatus: "disponible" | "inactiva";
+    vehiculo: {
+      marca: string | null;
+      modelo: string | null;
+      color: string | null;
+      placa: string | null;
+    };
+  };
+  ranking: {
+    myPosition: number;
+    totalDrivers: number;
+    leaderboard: Array<{ position: number; nombre: string; isMe: boolean }>;
+  };
+  earnings: {
+    todayNet: number;
+    weekNet: number;
+    monthNet: number;
+    totalHistoricalNet: number;
+    todayTrips: number;
+    weekTrips: number;
+    monthTrips: number;
+    totalHistoricalTrips: number;
+    weeklySettlementStatus: "preview" | "pending" | "paid";
+  };
+  activeTrip: DriverPortalActiveTrip | null;
+  recentTrips: DriverPortalTripItem[];
+  reputation: {
+    ratingAverage: number;
+    ratingCount: number;
+    kpiScore: number;
+    confirmedReports90Days: number;
+    reviews: Array<{
+      id: string;
+      fecha: string;
+      estrellas: number;
+      comentario: string;
+    }>;
+  };
+};
+
 export type EmployeeKpi = {
   id: string;
   nombreArtistico: string;

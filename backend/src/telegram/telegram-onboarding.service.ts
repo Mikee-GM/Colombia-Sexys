@@ -30,6 +30,7 @@ export class TelegramOnboardingService {
             rol === 'empleada'
               ? Markup.keyboard([['👑 Mi Portal']]).resize()
               : Markup.keyboard([
+                  ['🚚 Mi Portal'],
                   ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
                 ]).resize();
 

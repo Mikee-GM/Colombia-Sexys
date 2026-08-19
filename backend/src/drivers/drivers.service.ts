@@ -10,6 +10,70 @@ import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { Choferes } from './entities/driver.entity';
 import { Usuarios } from '../users/entities/user.entity';
+import { Viajes } from '../trips/entities/trip.entity';
+
+export interface DriverPortalTripItem {
+  id: string;
+  fecha: string;
+  tipo: 'ida' | 'regreso';
+  zona: string;
+  proveedorTransporte: string;
+  driverPayout: number;
+}
+
+export interface DriverPortalActiveTrip {
+  id: string;
+  tipo: 'ida' | 'regreso';
+  estado: string;
+  zona: string;
+  proveedorTransporte: string;
+}
+
+export interface DriverPortalData {
+  profile: {
+    id: string;
+    nombre: string;
+    telefono: string;
+    disponible: boolean;
+    availabilityStatus: 'disponible' | 'inactiva';
+    vehiculo: {
+      marca: string | null;
+      modelo: string | null;
+      color: string | null;
+      placa: string | null;
+    };
+  };
+  ranking: {
+    myPosition: number;
+    totalDrivers: number;
+    leaderboard: Array<{ position: number; nombre: string; isMe: boolean }>;
+  };
+  earnings: {
+    todayNet: number;
+    weekNet: number;
+    monthNet: number;
+    totalHistoricalNet: number;
+    todayTrips: number;
+    weekTrips: number;
+    monthTrips: number;
+    totalHistoricalTrips: number;
+    weeklySettlementStatus: 'preview' | 'pending' | 'paid';
+  };
+  activeTrip: DriverPortalActiveTrip | null;
+  recentTrips: DriverPortalTripItem[];
+  reputation: {
+    ratingAverage: number;
+    ratingCount: number;
+    kpiScore: number;
+    confirmedReports90Days: number;
+    reviews: Array<{
+      id: string;
+      fecha: string;
+      estrellas: number;
+      comentario: string;
+    }>;
+  };
+}
 
 @Injectable()
 export class DriversService {
@@ -18,6 +82,8 @@ export class DriversService {
     private readonly choferesRepository: Repository<Choferes>,
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
+    @InjectRepository(Viajes)
+    private readonly viajesRepository: Repository<Viajes>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -177,5 +243,241 @@ export class DriversService {
         distancia: parseFloat(raw.distancia),
       };
     });
+  }
+
+  async getDriverPortalData(identifier: string): Promise<DriverPortalData> {
+    const chofer = await this.choferesRepository.findOne({
+      where: [{ usuarioId: identifier }, { id: identifier }],
+      relations: { usuario: true },
+    });
+    if (!chofer) {
+      throw new NotFoundException('Perfil de chofer no encontrado');
+    }
+
+    const [ratingRow] = await this.dataSource.query(
+      `SELECT ROUND(AVG(stars)::numeric, 2)::float AS average, COUNT(*)::int AS count
+       FROM interaction_ratings
+       WHERE driver_id = $1 AND direction = 'employee_to_driver'`,
+      [chofer.id],
+    );
+    const ratingAverage = Number(ratingRow?.average) || 0;
+    const ratingCount = Number(ratingRow?.count) || 0;
+
+    const [confirmedRow] = await this.dataSource.query(
+      `SELECT COUNT(*)::int AS count
+       FROM conduct_reports
+       WHERE subject_type = 'driver' AND subject_id = $1
+         AND outcome = 'confirmado' AND created_at >= now() - interval '90 days'`,
+      [chofer.id],
+    );
+    const confirmedReports90Days = Number(confirmedRow?.count) || 0;
+    const kpiScore =
+      ratingCount > 0
+        ? Math.max(
+            0,
+            Math.round((ratingAverage / 5) * 100 - confirmedReports90Days * 8),
+          )
+        : 0;
+
+    const reviewRows: Array<{
+      stars: number;
+      comment: string;
+      createdAt: string;
+    }> = await this.dataSource.query(
+      `SELECT stars, comment, created_at AS "createdAt"
+       FROM interaction_ratings
+       WHERE driver_id = $1 AND direction = 'employee_to_driver' AND comment IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 15`,
+      [chofer.id],
+    );
+
+    // Ranking entre choferes activos, ponderado igual que el KPI de modelos
+    const allDrivers = await this.choferesRepository.find({
+      where: {},
+      relations: { usuario: true },
+    });
+    const activeDrivers = allDrivers.filter((d) => d.usuario?.activo);
+    const driverIds = activeDrivers.map((d) => d.id);
+    const scoreRows: Array<{ driver_id: string; score: number }> =
+      driverIds.length === 0
+        ? []
+        : await this.dataSource.query(
+            `SELECT c.id AS driver_id,
+              GREATEST(0, ROUND(
+                (COALESCE(r.average, 0) / 5) * 100
+                - COALESCE(rep.confirmed, 0) * 8
+              ))::int AS score
+             FROM choferes c
+             LEFT JOIN (
+               SELECT driver_id, AVG(stars) AS average
+               FROM interaction_ratings
+               WHERE direction = 'employee_to_driver'
+               GROUP BY driver_id
+             ) r ON r.driver_id = c.id
+             LEFT JOIN (
+               SELECT subject_id, COUNT(*) AS confirmed
+               FROM conduct_reports
+               WHERE subject_type = 'driver' AND outcome = 'confirmado'
+                 AND created_at >= now() - interval '90 days'
+               GROUP BY subject_id
+             ) rep ON rep.subject_id = c.id
+             WHERE c.id = ANY($1::uuid[])`,
+            [driverIds],
+          );
+    const scoreByDriver = new Map(
+      scoreRows.map((row) => [row.driver_id, Number(row.score) || 0]),
+    );
+    const ranked = activeDrivers
+      .map((d) => ({
+        id: d.id,
+        nombre: d.nombre,
+        score: scoreByDriver.get(d.id) || 0,
+      }))
+      .sort((a, b) => b.score - a.score);
+    let myPosition = 1;
+    const leaderboard = ranked.map((item, index) => {
+      const isMe = item.id === chofer.id;
+      if (isMe) myPosition = index + 1;
+      return { position: index + 1, nombre: item.nombre, isMe };
+    });
+
+    // Viajes internos finalizados: ganancias y viajes recientes
+    const trips = await this.viajesRepository.find({
+      where: { choferId: chofer.id, proveedorTransporte: 'interno' },
+      order: { horaFinViaje: 'DESC' },
+    });
+    const finishedTrips = trips.filter(
+      (t) => t.estado === 'finalizado' && t.horaFinViaje,
+    );
+    const now = new Date();
+    const isSameDay = (d1: Date, d2: Date) =>
+      d1.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) ===
+      d2.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
+    const isSameMonth = (d1: Date, d2: Date) => {
+      const fmt = (d: Date) =>
+        new Intl.DateTimeFormat('es-MX', {
+          timeZone: 'America/Mexico_City',
+          year: 'numeric',
+          month: 'numeric',
+        }).format(d);
+      return fmt(d1) === fmt(d2);
+    };
+    const isSameWeek = (d1: Date, d2: Date) =>
+      Math.ceil(
+        Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24),
+      ) <= 7;
+
+    let todayNet = 0;
+    let weekNet = 0;
+    let monthNet = 0;
+    let totalHistoricalNet = 0;
+    let todayTrips = 0;
+    let weekTrips = 0;
+    let monthTrips = 0;
+    const totalHistoricalTrips = finishedTrips.length;
+
+    for (const trip of finishedTrips) {
+      const payout = Number(trip.driverPayout) || 0;
+      totalHistoricalNet += payout;
+      const d = new Date(trip.horaFinViaje as Date);
+      if (isSameDay(d, now)) {
+        todayNet += payout;
+        todayTrips += 1;
+      }
+      if (isSameWeek(d, now)) {
+        weekNet += payout;
+        weekTrips += 1;
+      }
+      if (isSameMonth(d, now)) {
+        monthNet += payout;
+        monthTrips += 1;
+      }
+    }
+
+    const recentTrips: DriverPortalTripItem[] = finishedTrips
+      .slice(0, 20)
+      .map((trip) => ({
+        id: trip.id,
+        fecha: (trip.horaFinViaje as Date).toISOString(),
+        tipo: trip.tipo,
+        zona: trip.zona,
+        proveedorTransporte: trip.proveedorTransporte,
+        driverPayout: Number(trip.driverPayout) || 0,
+      }));
+
+    const activeTripEntity = trips.find((t) =>
+      ['aceptado', 'en_camino', 'en_curso', 'llegado'].includes(t.estado),
+    );
+    const activeTrip: DriverPortalActiveTrip | null = activeTripEntity
+      ? {
+          id: activeTripEntity.id,
+          tipo: activeTripEntity.tipo,
+          estado: activeTripEntity.estado,
+          zona: activeTripEntity.zona,
+          proveedorTransporte: activeTripEntity.proveedorTransporte,
+        }
+      : null;
+
+    const weekBounds = (() => {
+      const d = new Date(now);
+      const day = d.getDay();
+      const adjustedDay = day === 0 ? 7 : day;
+      d.setDate(d.getDate() - adjustedDay + 1);
+      d.setHours(0, 0, 0, 0);
+      return d.toISOString().slice(0, 10);
+    })();
+    const settlement = await this.dataSource.query(
+      `SELECT status FROM driver_settlements WHERE driver_id = $1 AND week_start = $2`,
+      [chofer.id, weekBounds],
+    );
+    const weeklySettlementStatus: 'preview' | 'pending' | 'paid' =
+      settlement[0]?.status || 'preview';
+
+    return {
+      profile: {
+        id: chofer.id,
+        nombre: chofer.nombre,
+        telefono: chofer.telefono,
+        disponible: chofer.disponible,
+        availabilityStatus: chofer.disponible ? 'disponible' : 'inactiva',
+        vehiculo: {
+          marca: chofer.vehiculoMarca,
+          modelo: chofer.vehiculoModelo,
+          color: chofer.vehiculoColor,
+          placa: chofer.vehiculoPlaca,
+        },
+      },
+      ranking: {
+        myPosition,
+        totalDrivers: leaderboard.length,
+        leaderboard,
+      },
+      earnings: {
+        todayNet: Math.round(todayNet * 100) / 100,
+        weekNet: Math.round(weekNet * 100) / 100,
+        monthNet: Math.round(monthNet * 100) / 100,
+        totalHistoricalNet: Math.round(totalHistoricalNet * 100) / 100,
+        todayTrips,
+        weekTrips,
+        monthTrips,
+        totalHistoricalTrips,
+        weeklySettlementStatus,
+      },
+      activeTrip,
+      recentTrips,
+      reputation: {
+        ratingAverage,
+        ratingCount,
+        kpiScore,
+        confirmedReports90Days,
+        reviews: reviewRows.map((row) => ({
+          id: `${row.createdAt}`,
+          fecha: row.createdAt,
+          estrellas: row.stars,
+          comentario: row.comment,
+        })),
+      },
+    };
   }
 }

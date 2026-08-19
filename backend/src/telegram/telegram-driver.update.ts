@@ -24,6 +24,7 @@ import {
 } from '../employee-reports/report-callback';
 import { DisciplineService } from '../discipline/discipline.service';
 import { SettlementsService } from '../transport-operations/settlements.service';
+import { AuthService } from '../auth/auth.service';
 
 interface DriverCacheEntry {
   userId: string;
@@ -59,6 +60,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     private readonly employeeReportsService: EmployeeReportsService,
     private readonly disciplineService: DisciplineService,
     private readonly settlementsService: SettlementsService,
+    private readonly authService: AuthService,
   ) {
     this.cacheCleanupInterval = setInterval(() => {
       const now = Date.now();
@@ -74,6 +76,40 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     if (this.cacheCleanupInterval) {
       clearInterval(this.cacheCleanupInterval);
     }
+  }
+
+  @Hears(['🚚 Mi Portal', '/portal'])
+  async onDriverPortal(@Ctx() ctx: Context) {
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
+    const user = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId, rol: 'chofer' },
+    });
+    if (!user) return;
+
+    const token = await this.authService.generatePortalToken(user);
+    const baseUrl =
+      process.env.WEB_URL ||
+      process.env.FRONTEND_URL ||
+      'https://colombia-sexys.com';
+    const portalUrl = `${baseUrl.replace(/\/$/, '')}/chofer/portal?token=${encodeURIComponent(token)}`;
+
+    await ctx.reply(
+      `🚚 *¡Hola! Tu Portal de Chofer*\n\n` +
+        `Accede a tu panel para consultar:\n` +
+        `🏆 Tu posición en el *Ranking* de choferes\n` +
+        `💵 Tus *Ganancias* y viajes acumulados\n` +
+        `📋 Tu historial de *Viajes*\n` +
+        `⭐ Tu *Reputación* y comentarios\n\n` +
+        `_Haz clic en el botón de abajo para abrir la Mini App de forma segura:_`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.webApp('✨ Abrir Mi Portal', portalUrl)],
+          [Markup.button.url('🌐 Abrir en el navegador', portalUrl)],
+        ]),
+      },
+    );
   }
 
   @Hears('/reputacion')
