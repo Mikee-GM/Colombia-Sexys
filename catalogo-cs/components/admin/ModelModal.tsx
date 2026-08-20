@@ -881,19 +881,8 @@ export default function ModelModal({
               </div>
             </div>
 
-            {/* Columna Derecha: Descripción y Fotos */}
+            {/* Columna Derecha: Fotos y Descripción */}
             <div className="space-y-6 border-t lg:border-t-0 lg:border-l border-zinc-800 pt-6 lg:pt-0 lg:pl-8 flex flex-col">
-              {/* Apartado de Descripción (Espacioso a la derecha) */}
-              <div>
-                <TextareaField
-                  label="Descripción del Perfil"
-                  value={form.descripcion}
-                  onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
-                  placeholder="Escribe la biografía completa, gustos, medidas, detalles y personalidad de la modelo..."
-                  rows={6}
-                />
-              </div>
-
               {/* Foto Principal */}
               <div>
                 <label className="block text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase mb-2">
@@ -984,6 +973,18 @@ export default function ModelModal({
                     <p className="text-xs text-zinc-500">Sin fotos adicionales en la galeria.</p>
                   </div>
                 )}
+              </div>
+
+              {/* Apartado de Descripción (Debajo de las fotos) */}
+              <div>
+                <TextareaField
+                  label="Descripción del Perfil"
+                  value={form.descripcion}
+                  onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+                  placeholder="Escribe la biografía completa, gustos, medidas, detalles y personalidad de la modelo..."
+                  rows={4}
+                  autoResize
+                />
               </div>
             </div>
           </div>

@@ -113,17 +113,17 @@ BEGIN
     LOOP
         RAISE NOTICE 'Eliminando modelo: % (Real: %, ID: %)', emp_record.nombre_artistico, emp_record.nombre_real, emp_record.id;
         
-        -- Borrar fotos asociadas
+        -- Borrar fotos asociadas y registros de la modelo
         DELETE FROM empleada_fotos WHERE empleada_id = emp_record.id;
         DELETE FROM empleada_fotos_exclusivas WHERE empleada_id = emp_record.id;
-        DELETE FROM weekly_photo_submissions WHERE employee_id = emp_record.id;
-        DELETE FROM weekly_content_schedules WHERE employee_id = emp_record.id;
+        DELETE FROM weekly_photo_submissions WHERE empleada_id = emp_record.id;
+        DELETE FROM weekly_content_schedules WHERE empleada_id = emp_record.id;
         DELETE FROM extras_catalogo WHERE empleada_id = emp_record.id;
         DELETE FROM questionnaire_answers WHERE attempt_id IN (
             SELECT id FROM questionnaire_attempts WHERE user_id = emp_record.usuario_id
         );
         DELETE FROM questionnaire_attempts WHERE user_id = emp_record.usuario_id;
-        DELETE FROM employee_onboardings WHERE employee_id = emp_record.id;
+        DELETE FROM employee_onboardings WHERE employee_id = emp_record.id OR user_id = emp_record.usuario_id;
         
         -- Borrar empleada
         DELETE FROM empleadas WHERE id = emp_record.id;
