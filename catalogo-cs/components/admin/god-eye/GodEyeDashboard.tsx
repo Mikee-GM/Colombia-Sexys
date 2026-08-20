@@ -388,7 +388,7 @@ export default function GodEyeDashboard({
               <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
                 1. Actores del Sistema
               </span>
-              <div className="flex gap-1 rounded-lg bg-zinc-900 p-1 text-[11px]">
+              <div className="flex gap-1 rounded-lg bg-zinc-900 p-1 text-xs">
                 <button
                   onClick={() => {
                     setActorTab("employee");
@@ -400,9 +400,9 @@ export default function GodEyeDashboard({
                       setDossier(null);
                     }
                   }}
-                  className={`rounded px-2.5 py-1 font-semibold transition-all ${
+                  className={`rounded-md px-3 py-1.5 font-semibold transition-all ${
                     actorTab === "employee"
-                      ? "bg-[#C5A55A] text-black"
+                      ? "bg-[#C5A55A] text-black font-bold"
                       : "text-zinc-400 hover:text-white"
                   }`}
                 >
@@ -419,9 +419,9 @@ export default function GodEyeDashboard({
                       setDossier(null);
                     }
                   }}
-                  className={`rounded px-2.5 py-1 font-semibold transition-all ${
+                  className={`rounded-md px-3 py-1.5 font-semibold transition-all ${
                     actorTab === "driver"
-                      ? "bg-[#C5A55A] text-black"
+                      ? "bg-[#C5A55A] text-black font-bold"
                       : "text-zinc-400 hover:text-white"
                   }`}
                 >
@@ -438,9 +438,9 @@ export default function GodEyeDashboard({
                       setDossier(null);
                     }
                   }}
-                  className={`rounded px-2.5 py-1 font-semibold transition-all ${
+                  className={`rounded-md px-3 py-1.5 font-semibold transition-all ${
                     actorTab === "boss"
-                      ? "bg-[#C5A55A] text-black"
+                      ? "bg-[#C5A55A] text-black font-bold"
                       : "text-zinc-400 hover:text-white"
                   }`}
                 >
@@ -450,20 +450,20 @@ export default function GodEyeDashboard({
             </div>
 
             {/* Lista compacta de selección rápida */}
-            <div className="mt-3 flex max-h-44 flex-col gap-1.5 overflow-y-auto pr-1">
+            <div className="mt-3 flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-1">
               {actorTab === "employee" &&
                 actors.employees.map((emp) => (
                   <button
                     key={emp.id}
                     onClick={() => loadDossier("employee", emp.id)}
-                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-all ${
+                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
                       selectedActorId === emp.id
                         ? "border border-[#C5A55A]/50 bg-[#C5A55A]/10 text-white"
                         : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className="relative h-6 w-6 overflow-hidden rounded-full bg-zinc-800">
+                      <div className="relative h-7 w-7 overflow-hidden rounded-full bg-zinc-800 flex items-center justify-center">
                         {emp.avatar ? (
                           <Image
                             src={emp.avatar}
@@ -472,18 +472,18 @@ export default function GodEyeDashboard({
                             className="object-cover"
                           />
                         ) : (
-                          <Users className="h-3.5 w-3.5 m-auto text-zinc-500" />
+                          <Users className="h-4 w-4 text-zinc-400" />
                         )}
                       </div>
-                      <span className="font-semibold">{emp.name}</span>
+                      <span className="font-semibold text-zinc-200">{emp.name}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span
-                        className={`h-2 w-2 rounded-full ${
+                        className={`h-2.5 w-2.5 rounded-full ${
                           emp.disponible ? "bg-emerald-400" : "bg-zinc-600"
                         }`}
                       />
-                      <span className="text-[11px] text-zinc-500">
+                      <span className="text-xs text-zinc-400 font-medium">
                         ${emp.precioBaseHora}/h
                       </span>
                     </div>
@@ -495,17 +495,17 @@ export default function GodEyeDashboard({
                   <button
                     key={drv.id}
                     onClick={() => loadDossier("driver", drv.id)}
-                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-all ${
+                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
                       selectedActorId === drv.id
                         ? "border border-blue-500/50 bg-blue-500/10 text-white"
                         : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
                     }`}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <Car className="h-4 w-4 text-blue-400" />
-                      <span className="font-semibold">{drv.name}</span>
+                      <span className="font-semibold text-zinc-200">{drv.name}</span>
                     </div>
-                    <span className="text-[10px] text-zinc-500">
+                    <span className="text-xs text-zinc-400">
                       {drv.vehiculoModelo || "Sin auto"}
                     </span>
                   </button>
@@ -516,17 +516,17 @@ export default function GodEyeDashboard({
                   <button
                     key={boss.id}
                     onClick={() => loadDossier("boss", boss.id)}
-                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-all ${
+                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
                       selectedActorId === boss.id
                         ? "border border-amber-500/50 bg-amber-500/10 text-white"
                         : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
                     }`}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <Shield className="h-4 w-4 text-amber-400" />
-                      <span className="font-semibold">{boss.name}</span>
+                      <span className="font-semibold text-zinc-200">{boss.name}</span>
                     </div>
-                    <span className="text-[10px] uppercase text-zinc-500">
+                    <span className="text-xs uppercase text-zinc-400 font-semibold">
                       {boss.rol}
                     </span>
                   </button>
@@ -537,15 +537,15 @@ export default function GodEyeDashboard({
           {/* FICHA 360° DEL ACTOR SELECCIONADO */}
           <div className="flex-1 rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-2xl">
             {loadingDossier ? (
-              <div className="flex h-64 items-center justify-center text-xs text-zinc-500">
+              <div className="flex h-64 items-center justify-center text-sm text-zinc-500">
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin text-[#C5A55A]" />
                 Cargando radiografía 360°...
               </div>
             ) : dossier ? (
               <div className="flex flex-col gap-4">
-                <div className="flex items-start justify-between border-b border-zinc-800 pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="relative h-12 w-12 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 flex items-center justify-center">
                       {dossier.profile?.fotoPerfilUrl ? (
                         <Image
                           src={dossier.profile.fotoPerfilUrl}
@@ -554,49 +554,49 @@ export default function GodEyeDashboard({
                           className="object-cover"
                         />
                       ) : (
-                        <Users className="h-6 w-6 m-auto text-zinc-500" />
+                        <Users className="h-6 w-6 text-zinc-400" />
                       )}
                     </div>
-                    <div>
-                      <h3 className="font-bold text-white">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-bold text-white text-base truncate" title={dossier.profile?.nombreArtistico || dossier.profile?.nombre || dossier.profile?.email}>
                         {dossier.profile?.nombreArtistico ||
                           dossier.profile?.nombre ||
                           dossier.profile?.email}
                       </h3>
-                      <p className="text-xs text-zinc-400">
+                      <p className="text-xs text-zinc-400 truncate">
                         {dossier.profile?.nombreReal
                           ? `Nombre real: ${dossier.profile.nombreReal}`
-                          : dossier.profile?.telefono || dossier.profile?.rol}
+                          : dossier.profile?.telefono || (dossier.profile?.rol ? `Rol: ${dossier.profile.rol}` : "")}
                       </p>
                     </div>
                   </div>
                   <button
                     onClick={() => setShowSanctionModal(true)}
-                    className="flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-950/40 px-2.5 py-1 text-xs font-bold text-red-300 transition-colors hover:bg-red-900"
+                    className="flex shrink-0 self-start sm:self-center items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-950/40 px-3 py-1.5 text-xs font-bold text-red-300 transition-colors hover:bg-red-900"
                   >
-                    <ShieldAlert className="h-3.5 w-3.5" />
+                    <ShieldAlert className="h-4 w-4" />
                     Sancionar
                   </button>
                 </div>
 
                 {/* Métricas rápidas del actor */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 gap-2 text-sm">
                   {dossier.profile?.precioBaseHora && (
-                    <div className="rounded-xl border border-zinc-800/80 bg-zinc-950 p-2.5">
-                      <span className="text-[10px] text-zinc-500">
+                    <div className="rounded-xl border border-zinc-800/80 bg-zinc-950 p-3">
+                      <span className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">
                         Tarifa Base
                       </span>
-                      <p className="font-bold text-[#C5A55A]">
+                      <p className="font-bold text-[#C5A55A] text-base mt-0.5">
                         ${dossier.profile.precioBaseHora}/hr
                       </p>
                     </div>
                   )}
                   {dossier.profile?.jefeEmail && (
-                    <div className="rounded-xl border border-zinc-800/80 bg-zinc-950 p-2.5">
-                      <span className="text-[10px] text-zinc-500">
+                    <div className="rounded-xl border border-zinc-800/80 bg-zinc-950 p-3">
+                      <span className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">
                         Jefe Asignado
                       </span>
-                      <p className="truncate font-semibold text-zinc-300">
+                      <p className="truncate font-semibold text-zinc-200 text-sm mt-0.5" title={dossier.profile.jefeEmail}>
                         {dossier.profile.jefeEmail}
                       </p>
                     </div>
@@ -605,33 +605,33 @@ export default function GodEyeDashboard({
 
                 {/* Reseñas / Calificaciones recibidas */}
                 <div>
-                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
                     Últimas Calificaciones & Reseñas
                   </h4>
-                  <div className="mt-2 flex max-h-36 flex-col gap-2 overflow-y-auto pr-1">
+                  <div className="mt-2 flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
                     {dossier.ratings && dossier.ratings.length > 0 ? (
                       dossier.ratings.map((r: any) => (
                         <div
                           key={r.id}
-                          className="rounded-xl border border-zinc-900 bg-zinc-950 p-2.5 text-xs"
+                          className="rounded-xl border border-zinc-900 bg-zinc-950 p-3 text-xs"
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-amber-400">
+                            <span className="font-bold text-amber-400 text-sm">
                               {"⭐".repeat(r.stars)}
                             </span>
-                            <span className="text-[10px] text-zinc-500">
+                            <span className="text-xs text-zinc-500">
                               {r.direction}
                             </span>
                           </div>
                           {r.comment && (
-                            <p className="mt-1 italic text-zinc-300">
+                            <p className="mt-1.5 italic text-zinc-200 text-sm">
                               &ldquo;{r.comment}&rdquo;
                             </p>
                           )}
                         </div>
                       ))
                     ) : (
-                      <p className="text-xs text-zinc-600">
+                      <p className="text-sm text-zinc-500 py-1">
                         Sin calificaciones registradas.
                       </p>
                     )}
@@ -640,29 +640,29 @@ export default function GodEyeDashboard({
 
                 {/* Historial de Sanciones */}
                 <div>
-                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
                     Sanciones & Amonestaciones
                   </h4>
-                  <div className="mt-2 flex max-h-28 flex-col gap-1.5 overflow-y-auto pr-1">
+                  <div className="mt-2 flex max-h-32 flex-col gap-1.5 overflow-y-auto pr-1">
                     {dossier.sanctions && dossier.sanctions.length > 0 ? (
                       dossier.sanctions.map((s: any) => (
                         <div
                           key={s.id}
-                          className="flex items-center justify-between rounded-lg border border-red-900/30 bg-red-950/10 px-2.5 py-1.5 text-xs"
+                          className="flex items-center justify-between rounded-xl border border-red-900/30 bg-red-950/10 px-3 py-2 text-xs"
                         >
                           <div>
-                            <span className="font-bold uppercase text-red-400">
+                            <span className="font-bold uppercase text-red-400 text-xs">
                               {s.type}
                             </span>
-                            <p className="text-[11px] text-zinc-300">{s.reason}</p>
+                            <p className="text-xs text-zinc-200 mt-0.5">{s.reason}</p>
                           </div>
-                          <span className="text-[10px] text-zinc-500">
+                          <span className="text-xs text-zinc-400 font-semibold">
                             {s.status}
                           </span>
                         </div>
                       ))
                     ) : (
-                      <p className="text-xs text-zinc-600">
+                      <p className="text-sm text-zinc-500 py-1">
                         Historial limpio sin sanciones.
                       </p>
                     )}
@@ -670,7 +670,7 @@ export default function GodEyeDashboard({
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-zinc-500">
+              <p className="text-sm text-zinc-500">
                 Selecciona un actor para ver su expediente 360°.
               </p>
             )}
@@ -685,17 +685,17 @@ export default function GodEyeDashboard({
               <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
                 2. Servicios & Triangulación de Incidentes
               </span>
-              <span className="text-xs text-zinc-500">
+              <span className="text-xs text-zinc-400 font-semibold">
                 {overview.activeServices.length} Activos
               </span>
             </div>
 
-            <div className="mt-3 flex max-h-36 flex-col gap-2 overflow-y-auto pr-1">
+            <div className="mt-3 flex max-h-48 flex-col gap-2 overflow-y-auto pr-1">
               {overview.activeServices.map((srv) => (
                 <button
                   key={srv.id}
                   onClick={() => loadIncident(srv.id)}
-                  className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-left text-xs transition-all ${
+                  className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 text-left text-sm transition-all ${
                     selectedServiceId === srv.id
                       ? "border border-[#C5A55A] bg-[#C5A55A]/10 text-white"
                       : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
@@ -703,10 +703,10 @@ export default function GodEyeDashboard({
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col">
-                      <span className="font-bold text-white">
+                      <span className="font-bold text-zinc-100 text-sm">
                         {srv.empleadaNombre} · {srv.clienteNombre}
                       </span>
-                      <span className="text-[11px] text-zinc-500">
+                      <span className="text-xs text-zinc-400 mt-0.5">
                         Duración: {srv.duracionPactadaHoras}h · ${srv.totalFinal} (
                         {srv.metodoPago})
                       </span>
@@ -714,7 +714,7 @@ export default function GodEyeDashboard({
                   </div>
                   <div className="flex items-center gap-2">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      className={`rounded-full px-2.5 py-1 text-xs font-bold ${
                         srv.iaActiva
                           ? "bg-emerald-500/10 text-emerald-400"
                           : "bg-red-500/10 text-red-400"
@@ -722,7 +722,7 @@ export default function GodEyeDashboard({
                     >
                       {srv.iaActiva ? "🤖 IA ON" : "🛑 IA PAUSADA"}
                     </span>
-                    <ChevronRight className="h-4 w-4 text-zinc-600" />
+                    <ChevronRight className="h-4 w-4 text-zinc-500" />
                   </div>
                 </button>
               ))}
@@ -739,46 +739,46 @@ export default function GodEyeDashboard({
             </div>
 
             {loadingIncident ? (
-              <div className="flex h-48 items-center justify-center text-xs text-zinc-500">
+              <div className="flex h-48 items-center justify-center text-sm text-zinc-500">
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin text-[#C5A55A]" />
                 Triangulando tiempos GPS, reportes y chats...
               </div>
             ) : incidentData ? (
-              <div className="mt-3 flex flex-col gap-3 text-xs">
+              <div className="mt-3 flex flex-col gap-3 text-sm">
                 {/* Diagnóstico Primario */}
                 <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-4">
-                  <span className="text-[10px] font-bold uppercase text-amber-400">
+                  <span className="text-xs font-bold uppercase text-amber-400">
                     Dictamen del Ojo de Dios
                   </span>
-                  <p className="mt-1 text-sm font-semibold text-white">
+                  <p className="mt-1.5 text-base font-semibold text-white">
                     {incidentData.triangulationSummary.primaryDiagnosis}
                   </p>
                 </div>
 
                 {/* Causas específicas detectadas */}
                 <div className="flex flex-col gap-2">
-                  <span className="text-[10px] font-bold uppercase text-zinc-400">
+                  <span className="text-xs font-bold uppercase text-zinc-300">
                     Factores y Discrepancias Identificadas
                   </span>
                   {incidentData.detectedCauses.length > 0 ? (
                     incidentData.detectedCauses.map((c, i) => (
                       <div
                         key={i}
-                        className="rounded-xl border border-red-900/30 bg-red-950/10 p-3"
+                        className="rounded-xl border border-red-900/30 bg-red-950/10 p-3.5"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-red-300">
+                          <span className="font-bold text-red-300 text-sm">
                             {c.title}
                           </span>
-                          <span className="rounded bg-red-900/40 px-1.5 py-0.5 text-[9px] font-bold text-red-200 uppercase">
+                          <span className="rounded bg-red-900/40 px-2 py-0.5 text-xs font-bold text-red-200 uppercase">
                             Causal: {c.culprit}
                           </span>
                         </div>
-                        <p className="mt-1 text-zinc-300">{c.description}</p>
+                        <p className="mt-1.5 text-zinc-200 text-xs">{c.description}</p>
                       </div>
                     ))
                   ) : (
-                    <p className="text-zinc-500">
+                    <p className="text-zinc-400 text-xs py-1">
                       Operación normal: tiempos de chofer y notas dentro de los
                       parámetros.
                     </p>
@@ -787,21 +787,21 @@ export default function GodEyeDashboard({
 
                 {/* Tiempos de Viaje / Chofer */}
                 {incidentData.trips.length > 0 && (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-                    <span className="text-[10px] font-bold uppercase text-zinc-400">
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5">
+                    <span className="text-xs font-bold uppercase text-zinc-300">
                       Cronograma de Traslados
                     </span>
-                    <div className="mt-2 flex flex-col gap-1 text-[11px] text-zinc-300">
+                    <div className="mt-2 flex flex-col gap-1.5 text-xs text-zinc-200">
                       {incidentData.trips.map((t) => (
                         <div
                           key={t.id}
-                          className="flex items-center justify-between border-b border-zinc-900 py-1"
+                          className="flex items-center justify-between border-b border-zinc-900 py-1.5"
                         >
-                          <span>
+                          <span className="font-medium">
                             {t.tipo === "ida" ? "Ida" : "Regreso"}:{" "}
                             {t.choferNombre || t.proveedorTransporte}
                           </span>
-                          <span className="font-bold text-zinc-400">
+                          <span className="font-bold text-zinc-400 uppercase text-[11px]">
                             {t.estado}
                           </span>
                         </div>
@@ -811,7 +811,7 @@ export default function GodEyeDashboard({
                 )}
               </div>
             ) : (
-              <p className="mt-4 text-xs text-zinc-500">
+              <p className="mt-4 text-sm text-zinc-500">
                 Selecciona un servicio para analizar la causa de posibles
                 discrepancias.
               </p>
@@ -830,10 +830,10 @@ export default function GodEyeDashboard({
             </div>
 
             {/* Switch de Pausa / Reanudación de IA */}
-            <div className="mt-3 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+            <div className="mt-3 flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950 p-3.5">
               <div>
-                <span className="text-xs font-bold text-white">Estado de IA</span>
-                <p className="text-[10px] text-zinc-500">
+                <span className="text-sm font-bold text-white">Estado de IA</span>
+                <p className="text-xs text-zinc-400 mt-0.5">
                   {incidentData?.service?.ia_activa ?? true
                     ? "Respondiendo automáticamente"
                     : "Pausada indefinidamente"}
@@ -843,7 +843,7 @@ export default function GodEyeDashboard({
                 onClick={() =>
                   handleToggleAi(incidentData?.service?.ia_activa ?? true)
                 }
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
                   incidentData?.service?.ia_activa ?? true
                     ? "bg-red-950 text-red-300 hover:bg-red-900"
                     : "bg-emerald-950 text-emerald-300 hover:bg-emerald-900"
@@ -851,18 +851,18 @@ export default function GodEyeDashboard({
               >
                 {incidentData?.service?.ia_activa ?? true ? (
                   <>
-                    <PauseCircle className="h-3.5 w-3.5" /> Pausar IA
+                    <PauseCircle className="h-4 w-4" /> Pausar IA
                   </>
                 ) : (
                   <>
-                    <PlayCircle className="h-3.5 w-3.5" /> Reanudar IA
+                    <PlayCircle className="h-4 w-4" /> Reanudar IA
                   </>
                 )}
               </button>
             </div>
 
             {/* Mensajes del chat en vivo */}
-            <div className="my-3 flex max-h-72 flex-1 flex-col gap-2 overflow-y-auto rounded-2xl border border-zinc-900 bg-black p-3 text-xs">
+            <div className="my-3 flex max-h-72 flex-1 flex-col gap-2 overflow-y-auto rounded-2xl border border-zinc-900 bg-black p-3.5 text-xs">
               {incidentData?.conversations &&
               incidentData.conversations.length > 0 ? (
                 incidentData.conversations.map((msg) => (
@@ -874,23 +874,23 @@ export default function GodEyeDashboard({
                         : "self-end bg-[#C5A55A]/20 text-[#C5A55A]"
                     } max-w-[85%]`}
                   >
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
                       {msg.emisor}
                     </span>
-                    <p className="mt-0.5 text-zinc-100">{msg.mensaje}</p>
+                    <p className="mt-0.5 text-zinc-100 text-xs leading-relaxed">{msg.mensaje}</p>
                   </div>
                 ))
               ) : (
-                <p className="text-center text-zinc-600 my-auto">
+                <p className="text-center text-zinc-500 my-auto text-xs">
                   Selecciona un servicio para leer la conversación.
                 </p>
               )}
             </div>
 
             {/* Envío Manual de Admin */}
-            <div className="flex flex-col gap-2 border-t border-zinc-800 pt-3">
-              <div className="flex gap-2 text-[10px]">
-                <label className="flex items-center gap-1 text-zinc-400">
+            <div className="flex flex-col gap-2.5 border-t border-zinc-800 pt-3">
+              <div className="flex gap-3 text-xs">
+                <label className="flex items-center gap-1.5 text-zinc-300 font-medium">
                   <input
                     type="radio"
                     name="identity"
@@ -899,7 +899,7 @@ export default function GodEyeDashboard({
                   />
                   Agencia
                 </label>
-                <label className="flex items-center gap-1 text-zinc-400">
+                <label className="flex items-center gap-1.5 text-zinc-300 font-medium">
                   <input
                     type="radio"
                     name="identity"
@@ -916,13 +916,13 @@ export default function GodEyeDashboard({
                   value={adminMessage}
                   onChange={(e) => setAdminMessage(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSendAdminMessage()}
-                  className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none"
+                  className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-xs text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none"
                 />
                 <button
                   onClick={handleSendAdminMessage}
-                  className="flex items-center justify-center rounded-xl bg-[#C5A55A] px-3 py-2 text-black transition-transform hover:scale-105"
+                  className="flex items-center justify-center rounded-xl bg-[#C5A55A] px-3.5 py-2 text-black transition-transform hover:scale-105"
                 >
-                  <Send className="h-3.5 w-3.5" />
+                  <Send className="h-4 w-4" />
                 </button>
               </div>
             </div>
