@@ -25,6 +25,7 @@ import {
 } from './entities/interaction-rating.entity';
 
 type PersonType = 'client' | 'employee' | 'driver' | 'boss';
+type ReportPersonType = 'client' | 'employee' | 'driver';
 type Actor = { id: string; rol: 'jefe' | 'empleada' | 'chofer' | 'admin' };
 type ResolvedInteraction = {
   serviceId: string | null;
@@ -32,9 +33,9 @@ type ResolvedInteraction = {
   clientId: string;
   employeeId: string;
   driverId: string | null;
-  reporterType: PersonType;
+  reporterType: ReportPersonType;
   reporterId: string;
-  subjectType: PersonType;
+  subjectType: ReportPersonType;
   subjectId: string;
   bossId: string;
   finishedAt: Date;
@@ -523,10 +524,12 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     }
     const [ratings, reports, sanctions] = await Promise.all([
       this.ratingSummary(subjectType, subjectId),
-      this.reports.find({
-        where: { subjectType, subjectId, outcome: 'confirmado' },
-        order: { createdAt: 'DESC' },
-      }),
+      subjectType === 'boss'
+        ? Promise.resolve([])
+        : this.reports.find({
+            where: { subjectType, subjectId, outcome: 'confirmado' },
+            order: { createdAt: 'DESC' },
+          }),
       this.sanctions.find({
         where: { subjectType, subjectId },
         order: { createdAt: 'DESC' },
@@ -763,7 +766,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     }
     const map: Record<
       RatingDirection,
-      { reporterType: PersonType; subjectType: PersonType }
+      { reporterType: ReportPersonType; subjectType: ReportPersonType }
     > = {
       client_to_employee: {
         reporterType: 'client',
@@ -888,6 +891,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     subjectType: PersonType,
     subjectId: string,
   ) {
+    if (subjectType === 'boss') return;
     const count = await this.reports.count({
       where: {
         subjectType,
