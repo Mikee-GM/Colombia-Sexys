@@ -3935,7 +3935,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         if (
           groupRequest &&
           groupRequest.boss?.grupoTelegramId &&
-          groupRequest.telegramThreadId
+          groupRequest.telegramThreadId &&
+          ctx.session?.step === 'GROUP_WITH_BOSS'
         ) {
           await this.groupServicesService.recordRequestConversation(
             groupRequest,
