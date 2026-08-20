@@ -131,4 +131,19 @@ describe('Telegram booking session input parsing', () => {
     expect(result.valid).toBe(false);
     expect(result.reason).toContain('no coincide');
   });
+
+  it('permite estructurar correctamente una sesión con humanTakeover y control de jefe', () => {
+    const session: any = {
+      humanTakeover: true,
+      iaActiva: false,
+      bossThreadId: '12345',
+      bossGroupId: '-1001234567890',
+      step: 'AWAITING_LOCATION',
+    };
+
+    expect(session.humanTakeover).toBe(true);
+    expect(session.iaActiva).toBe(false);
+    expect(session.bossThreadId).toBe('12345');
+  });
 });
+

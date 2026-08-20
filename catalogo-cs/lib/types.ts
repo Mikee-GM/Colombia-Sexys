@@ -694,3 +694,28 @@ export type ChallengeDetail = ChallengeSummary & {
   standings: ChallengeStanding[];
 };
 
+export type PresetServiceLocation = {
+  id: string;
+  name: string;
+  address?: string | null;
+  latitude: number | string;
+  longitude: number | string;
+  active: boolean;
+  sortOrder?: number;
+};
+
+export type CreateManualServiceInput = {
+  clienteId: string;
+  empleadaId: string;
+  duracionPactadaHoras: number;
+  metodoPago: "efectivo" | "tarjeta" | "transferencia";
+  ubicacionClienteLat: number;
+  ubicacionClienteLng: number;
+  precioBaseHoraPactado: number;
+  notas?: string;
+  fechaProgramada?: string;
+  tipoAgenda?: "inmediato" | "programado";
+  presetLocationId?: string;
+  clienteTelegramId?: string;
+};
+

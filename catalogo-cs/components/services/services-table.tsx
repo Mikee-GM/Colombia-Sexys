@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Search } from "lucide-react";
+import { Eye, Plus, Search } from "lucide-react";
 import ServiceStatusBadge from "./service-status-badge";
 import ServiceDetailDialog from "./service-detail-dialog";
+import CreateServiceDialog from "./create-service-dialog";
 import type { Service } from "@/lib/types";
 import { formatAvailabilityTime } from "@/lib/availability";
 import { getServices } from "@/lib/data/services";
@@ -17,6 +18,7 @@ export default function ServicesTable({ initialServices = [] }: Props) {
   const router = useRouter();
   const [services, setServices] = useState<Service[]>(initialServices);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [creatingService, setCreatingService] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
@@ -61,7 +63,8 @@ export default function ServicesTable({ initialServices = [] }: Props) {
           />
         </div>
 
-        <div className="flex gap-2 items-center overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex gap-2 items-center flex-wrap sm:flex-nowrap">
+          <div className="flex gap-2 items-center overflow-x-auto pb-1 sm:pb-0">
           {(
             [
               ["all", "Todos"],
@@ -85,6 +88,16 @@ export default function ServicesTable({ initialServices = [] }: Props) {
               {label}
             </button>
           ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCreatingService(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#C5A55A] text-zinc-950 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#d8b769] shadow-md shadow-amber-500/20 transition-all whitespace-nowrap ml-auto sm:ml-0"
+          >
+            <Plus size={15} />
+            <span>Crear Servicio</span>
+          </button>
         </div>
       </div>
 
@@ -204,6 +217,14 @@ export default function ServicesTable({ initialServices = [] }: Props) {
           }}
         />
       )}
+      {/* Modal de Creación Manual */}
+      <CreateServiceDialog
+        open={creatingService}
+        onClose={() => setCreatingService(false)}
+        onCreated={() => {
+          handleRefresh();
+        }}
+      />
     </div>
   );
 }

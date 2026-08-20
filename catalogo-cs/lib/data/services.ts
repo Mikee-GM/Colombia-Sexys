@@ -216,3 +216,47 @@ export async function uploadUberScreenshotAction(formData: FormData) {
   }
 }
 
+export async function getClientsAction() {
+  try {
+    const clients = await apiFetch<any[]>("/clients");
+    return { success: true, data: clients };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo cargar la lista de clientes",
+    };
+  }
+}
+
+export async function getActiveLocationsAction() {
+  try {
+    const locations = await apiFetch<any[]>("/transport-operations/locations/active");
+    return { success: true, data: locations };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo cargar las ubicaciones",
+    };
+  }
+}
+
+export async function createManualServiceAction(payload: any) {
+  try {
+    const data = await apiFetch<Service>("/services", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    revalidateAdminViews();
+    try {
+      revalidatePath("/jefe");
+    } catch {}
+    return { success: true, data };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo crear el servicio",
+    };
+  }
+}
+
+

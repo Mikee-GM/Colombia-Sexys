@@ -69,4 +69,14 @@ export class CreateServiceDto {
   @IsOptional()
   @IsEnum(['inmediato', 'programado'])
   tipoAgenda?: 'inmediato' | 'programado';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  presetLocationId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  clienteTelegramId?: string;
 }
