@@ -13,7 +13,6 @@ export default function TextareaField({
   className,
   value,
   onChange,
-  onInput,
   rows = 4,
   ...props
 }: TextareaFieldProps) {
@@ -38,13 +37,6 @@ export default function TextareaField({
     }
   };
 
-  const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
-    onInput?.(e);
-    if (autoResize) {
-      adjustHeight();
-    }
-  };
-
   return (
     <div>
       <label className="block text-xs font-bold tracking-widest text-[#C5A55A] uppercase mb-2">
@@ -55,7 +47,6 @@ export default function TextareaField({
         rows={rows}
         value={value}
         onChange={handleChange}
-        onInput={handleInput}
         className={`w-full bg-black border border-zinc-800 text-white text-base font-medium px-4 py-3.5 transition-colors duration-200 focus:border-[#C5A55A] placeholder:text-zinc-600 focus:outline-none resize-none ${autoResize ? "overflow-hidden" : ""} ${className || ""}`}
         {...props}
       />
