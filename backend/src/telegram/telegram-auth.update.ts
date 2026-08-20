@@ -8,6 +8,7 @@ import {
   Command,
   Hears,
   On,
+  Next,
 } from 'nestjs-telegraf';
 import { Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -186,12 +187,16 @@ export class TelegramAuthUpdate {
   }
 
   @On('text')
-  async onCandidateScreeningAnswer(@Ctx() ctx: Context) {
+  async onCandidateScreeningAnswer(
+    @Ctx() ctx: Context,
+    @Next() next: () => Promise<void>,
+  ) {
     const session = (ctx as any).session;
     if (
       session?.step !== 'AWAITING_CANDIDATE_ANSWER' ||
       !session.candidateScreeningId
     ) {
+      await next();
       return;
     }
     const text = ((ctx.message as { text?: string })?.text || '').trim();
@@ -293,7 +298,10 @@ export class TelegramAuthUpdate {
   }
 
   @On('text')
-  async onAppealReasonText(@Ctx() ctx: Context) {
+  async onAppealReasonText(
+    @Ctx() ctx: Context,
+    @Next() next: () => Promise<void>,
+  ) {
     const session = (ctx as any).session;
     if (
       session?.step !== 'AWAITING_APPEAL_REASON' ||
@@ -301,6 +309,7 @@ export class TelegramAuthUpdate {
       !session.appealSubjectType ||
       !session.appealSubjectId
     ) {
+      await next();
       return;
     }
     const text = ((ctx.message as { text?: string })?.text || '').trim();
@@ -761,9 +770,15 @@ export class TelegramAuthUpdate {
   }
 
   @On('photo')
-  async onPhotoMessage(@Ctx() ctx: Context) {
+  async onPhotoMessage(
+    @Ctx() ctx: Context,
+    @Next() next: () => Promise<void>,
+  ) {
     const telegramId = ctx.from?.id.toString();
-    if (!telegramId) return;
+    if (!telegramId) {
+      await next();
+      return;
+    }
 
     const user = await this.usuariosRepository.findOne({
       where: { telegramChatId: telegramId },
@@ -774,10 +789,16 @@ export class TelegramAuthUpdate {
       const empleada = await this.empleadasRepository.findOne({
         where: { usuarioId: user.id },
       });
-      if (!empleada) return;
+      if (!empleada) {
+        await next();
+        return;
+      }
 
       const photos = (ctx.message as any)?.photo;
-      if (!photos || photos.length === 0) return;
+      if (!photos || photos.length === 0) {
+        await next();
+        return;
+      }
 
       // Obtener la foto con mayor resolución (último elemento del arreglo)
       const bestPhoto = photos[photos.length - 1];
@@ -807,6 +828,8 @@ export class TelegramAuthUpdate {
           `⚠️ Ocurrió un inconveniente al guardar tu foto. Por favor intenta enviarla de nuevo.`,
         );
       }
+    } else {
+      await next();
     }
   }
 }

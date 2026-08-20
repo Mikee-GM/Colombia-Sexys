@@ -4,7 +4,7 @@ import {
   BeforeApplicationShutdown,
   Logger,
 } from '@nestjs/common';
-import { Update, Ctx, Action, On, Hears } from 'nestjs-telegraf';
+import { Update, Ctx, Action, On, Hears, Next } from 'nestjs-telegraf';
 import { Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -1608,7 +1608,10 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
   }
 
   @On('text')
-  async onDriverReportText(@Ctx() ctx: Context) {
+  async onDriverReportText(
+    @Ctx() ctx: Context,
+    @Next() next: () => Promise<void>,
+  ) {
     const session = (ctx as any).session;
     if (session?.step === 'AWAITING_DRIVER_RATING_COMMENT') {
       const comment = ((ctx.message as { text?: string })?.text || '').trim();
@@ -1676,7 +1679,10 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
       await ctx.reply('Reporte enviado para revisión administrativa.');
       return;
     }
-    if (session?.step !== 'AWAITING_DRIVER_REPORT_DESCRIPTION') return;
+    if (session?.step !== 'AWAITING_DRIVER_REPORT_DESCRIPTION') {
+      await next();
+      return;
+    }
     const description = ((ctx.message as { text?: string })?.text || '').trim();
     if (description.length < 3 || description.length > 2000) {
       await ctx.reply('La descripción debe tener entre 3 y 2000 caracteres.');
