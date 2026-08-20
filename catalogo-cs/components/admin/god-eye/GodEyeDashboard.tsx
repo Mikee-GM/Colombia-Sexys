@@ -570,13 +570,15 @@ export default function GodEyeDashboard({
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setShowSanctionModal(true)}
-                    className="flex shrink-0 self-start sm:self-center items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-950/40 px-3 py-1.5 text-xs font-bold text-red-300 transition-colors hover:bg-red-900"
-                  >
-                    <ShieldAlert className="h-4 w-4" />
-                    Sancionar
-                  </button>
+                  {actorTab !== "boss" && (
+                    <button
+                      onClick={() => setShowSanctionModal(true)}
+                      className="flex shrink-0 self-start sm:self-center items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-950/40 px-3 py-1.5 text-xs font-bold text-red-300 transition-colors hover:bg-red-900"
+                    >
+                      <ShieldAlert className="h-4 w-4" />
+                      Sancionar
+                    </button>
+                  )}
                 </div>
 
                 {/* Métricas rápidas del actor */}
