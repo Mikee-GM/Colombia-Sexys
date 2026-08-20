@@ -4542,7 +4542,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         }
       }
     } catch (topicErr) {
-      this.logger.error('Error creando tema de foro para solicitud grupal:', topicErr);
+      this.logger.error(
+        'Error creando tema de foro para solicitud grupal:',
+        topicErr,
+      );
     }
     await this.groupServicesService.recordRequestConversation(
       request,
