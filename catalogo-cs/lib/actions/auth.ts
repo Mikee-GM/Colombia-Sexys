@@ -5,6 +5,7 @@ import {
   getBackendCookieHeader,
   getCsrfToken,
   getCurrentUser,
+  isRedirectError,
 } from "@/lib/auth";
 import { getApiBaseUrl } from "@/lib/api-server";
 
@@ -61,4 +62,49 @@ export async function logoutAction() {
 
 export async function checkSessionAction() {
   return getCurrentUser();
+}
+
+export async function getMyProfileAction() {
+  return getCurrentUser();
+}
+
+export async function updateMyProfileAction(input: {
+  nombre?: string;
+  apellido?: string;
+  email?: string;
+  password?: string;
+}) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: "Sesión no válida o expirada" };
+    }
+
+    const body: Record<string, any> = {};
+    if (input.nombre !== undefined) body.nombre = input.nombre.trim();
+    if (input.apellido !== undefined) body.apellido = input.apellido.trim();
+    if (input.email !== undefined && input.email.trim()) body.email = input.email.trim();
+    if (input.password && input.password.trim().length > 0) {
+      if (input.password.trim().length < 6) {
+        return { success: false, error: "La contraseña debe tener al menos 6 caracteres" };
+      }
+      body.password = input.password.trim();
+    }
+
+    const { apiFetch } = await import("@/lib/api-server");
+    await apiFetch(`/users/${user.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+      authenticated: true,
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    if (isRedirectError(error)) throw error;
+    console.error("updateMyProfileAction error:", error);
+    return {
+      success: false,
+      error: error.message || "Error al actualizar los datos de perfil",
+    };
+  }
 }

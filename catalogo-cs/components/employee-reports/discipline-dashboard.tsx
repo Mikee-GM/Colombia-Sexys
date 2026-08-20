@@ -21,6 +21,7 @@ const personLabels: Record<PersonType, string> = {
   client: "Cliente",
   employee: "Empleada",
   driver: "Chofer",
+  boss: "Jefe de Zona",
 };
 const directionLabels: Record<RatingDirection, string> = {
   client_to_employee: "Cliente a empleada",
@@ -199,7 +200,7 @@ export default function DisciplineDashboard({
       <section className="border border-zinc-800 bg-[#050505]">
         <div className="grid gap-3 border-b border-zinc-800 p-4 sm:grid-cols-2 xl:grid-cols-6">
           <Filter value={personFilter} onChange={(value) => setPersonFilter(value as typeof personFilter)}>
-            <option value="all">Todas las personas</option><option value="client">Clientes</option><option value="employee">Empleadas</option><option value="driver">Choferes</option>
+            <option value="all">Todas las personas</option><option value="client">Clientes</option><option value="employee">Empleadas</option><option value="driver">Choferes</option><option value="boss">Jefes de Zona</option>
           </Filter>
           <Filter value={directionFilter} onChange={(value) => setDirectionFilter(value as typeof directionFilter)}>
             <option value="all">Todas las direcciones</option>

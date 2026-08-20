@@ -30,6 +30,7 @@ import {
   ApiControllerDocs,
   ApiLoginDocs,
 } from '../common/swagger/api-docs.decorators';
+import { Usuarios } from '../users/entities/user.entity';
 
 @Controller('auth')
 @ApiControllerDocs('auth')
@@ -91,12 +92,14 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   me(@Req() request: Request) {
-    const user = request.user as {
-      id: string;
-      email: string;
-      rol: string;
+    const user = request.user as Usuarios;
+    return {
+      id: user.id,
+      email: user.email,
+      rol: user.rol,
+      nombre: user.nombre ?? null,
+      apellido: user.apellido ?? null,
     };
-    return { id: user.id, email: user.email, rol: user.rol };
   }
 
   private setAuthCookies(

@@ -1,20 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Ban,
+  Camera,
   Car,
   Check,
   CircleDollarSign,
   Clock3,
   ExternalLink,
   FileCheck2,
+  Image as ImageIcon,
   MapPin,
   MessageCircle,
   Pencil,
   Send,
   Smartphone,
   Star,
+  Upload,
   User,
   X,
 } from "lucide-react";
@@ -28,9 +31,11 @@ import {
   chooseReturnTransportAction,
   confirmUberFareAction,
   decideServiceAction,
+  getServiceByIdAction,
   getServiceMessagesAction,
   sendServiceMessageAction,
   updateServiceAction,
+  uploadUberScreenshotAction,
 } from "@/lib/data/services";
 
 interface ServiceDetailDialogProps {
@@ -41,11 +46,12 @@ interface ServiceDetailDialogProps {
 }
 
 export default function ServiceDetailDialog({
-  service,
+  service: initialService,
   allServices = [],
   onClose,
   onUpdated,
 }: ServiceDetailDialogProps) {
+  const [service, setService] = useState<Service | null>(initialService);
   const [activeTab, setActiveTab] = useState<"detalles" | "chat" | "transporte">("detalles");
   const [editing, setEditing] = useState(false);
   const [accepting, setAccepting] = useState(false);
@@ -66,6 +72,10 @@ export default function ServiceDetailDialog({
   const [messageText, setMessageText] = useState("");
 
   useEffect(() => {
+    setService(initialService);
+  }, [initialService]);
+
+  useEffect(() => {
     if (service) {
       setDuracion(Number(service.duracionPactadaHoras) || 1);
       setMetodoPago(service.metodoPago as any || "efectivo");
@@ -74,7 +84,6 @@ export default function ServiceDetailDialog({
       setEditing(false);
       setAccepting(false);
       setBossNotes("");
-      setActiveTab("detalles");
     }
   }, [service]);
 
@@ -89,6 +98,19 @@ export default function ServiceDetailDialog({
   }, [service, activeTab]);
 
   if (!service) return null;
+
+  const reloadCurrentService = async () => {
+    if (!service?.id) return;
+    try {
+      const res = await getServiceByIdAction(service.id);
+      if (res.success && res.data) {
+        setService(res.data);
+      }
+    } catch (err) {
+      console.error("Error reloading service detail:", err);
+    }
+    onUpdated();
+  };
 
   const previous = allServices.find((item) => item.id === service.servicioPrevioId);
   const receipts = (service.receiptValidations ?? []).filter((item) => item.imageUrl);
@@ -109,7 +131,7 @@ export default function ServiceDetailDialog({
       }
       toast.success("Servicio actualizado con éxito");
       setEditing(false);
-      onUpdated();
+      await reloadCurrentService();
     } catch (err: any) {
       toast.error(err.message || "No se pudo actualizar el servicio");
     } finally {
@@ -126,7 +148,7 @@ export default function ServiceDetailDialog({
       }
       toast.success(decision === "aceptar" ? "Servicio aceptado" : "Servicio rechazado");
       setAccepting(false);
-      onUpdated();
+      await reloadCurrentService();
     } catch (err: any) {
       toast.error(err.message || "Error al procesar");
     } finally {
@@ -143,7 +165,7 @@ export default function ServiceDetailDialog({
         throw new Error(res.error || "Error al cancelar");
       }
       toast.success("Servicio cancelado");
-      onUpdated();
+      await reloadCurrentService();
     } catch (err: any) {
       toast.error(err.message || "No se pudo cancelar el servicio");
     } finally {
@@ -187,6 +209,11 @@ export default function ServiceDetailDialog({
                 SERVICIO #{service.id.slice(-6).toUpperCase()}
               </span>
               <ServiceStatusBadge status={service.estado} />
+              {service.tipoAgenda === "programado" && (
+                <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-300">
+                  📅 Cita Programada
+                </span>
+              )}
             </div>
             <h2 className="text-xl font-heading font-semibold text-white mt-1">
               {service.empleada?.nombreArtistico || "Sin empleada asignada"}
@@ -440,7 +467,13 @@ export default function ServiceDetailDialog({
                         {service.locationAddressSnapshot}
                       </p>
                     )}
-                    {service.horaInicioEstimada && (
+                    {service.tipoAgenda === "programado" && service.fechaProgramada && (
+                      <p className="text-xs text-purple-300 font-medium flex items-center gap-1">
+                        <Clock3 size={13} className="text-purple-400 shrink-0" />
+                        Cita pactada: {new Date(service.fechaProgramada).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
+                      </p>
+                    )}
+                    {service.horaInicioEstimada && service.tipoAgenda !== "programado" && (
                       <p className="text-xs text-zinc-400 flex items-center gap-1">
                         <Clock3 size={13} className="text-zinc-500" />
                         Llegada estimada: {formatAvailabilityTime(service.horaInicioEstimada)}
@@ -516,6 +549,36 @@ export default function ServiceDetailDialog({
                 </div>
               )}
 
+              {/* Sección de Traslados Uber con Capturas y Tarifas */}
+              {trips.some((t) => t.proveedorTransporte === "uber") && (
+                <div className="rounded-2xl border border-[#C5A55A]/30 bg-black/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                    <p className="text-xs font-bold uppercase tracking-wider text-[#C5A55A] flex items-center gap-1.5">
+                      <Car size={14} /> Traslados Uber & Capturas
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("transporte")}
+                      className="text-[11px] text-[#E8D5A3] hover:underline font-bold"
+                    >
+                      Ver en pestaña Transporte →
+                    </button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {trips
+                      .filter((t) => t.proveedorTransporte === "uber")
+                      .map((trip) => (
+                        <AdminTripCard
+                          key={trip.id}
+                          trip={trip}
+                          service={service}
+                          onRefresh={reloadCurrentService}
+                        />
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* Comprobantes de Transferencia */}
               {receipts.length > 0 && (
                 <div className="rounded-2xl border border-zinc-800 bg-black/40 p-4">
@@ -580,19 +643,17 @@ export default function ServiceDetailDialog({
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider opacity-60">
                           {pres.label}
                         </p>
-                        <p className="whitespace-pre-wrap text-sm">{msg.mensaje}</p>
-                        <time className="mt-1 block text-[10px] opacity-60">
-                          {new Date(msg.enviadoAt).toLocaleTimeString("es-MX", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </time>
+                        <p className="whitespace-pre-wrap leading-relaxed">{msg.mensaje}</p>
+                        <p className="mt-1 text-right text-[8px] opacity-40">
+                          {new Date(msg.enviadoAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </p>
                       </div>
                     );
                   })
                 )}
               </div>
-              <div className="flex gap-2 border-t border-zinc-800 p-3 bg-zinc-950">
+              {/* Chat Input */}
+              <div className="flex gap-2 border-t border-zinc-800 bg-black/40 p-3">
                 <textarea
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
@@ -632,7 +693,7 @@ export default function ServiceDetailDialog({
                       key={trip.id}
                       trip={trip}
                       service={service}
-                      onRefresh={onUpdated}
+                      onRefresh={reloadCurrentService}
                     />
                   ))}
                 </div>
@@ -658,7 +719,7 @@ export default function ServiceDetailDialog({
                         if (!res.success) toast.error(res.error);
                         else {
                           toast.success("Regreso asignado con chofer");
-                          onUpdated();
+                          await reloadCurrentService();
                         }
                       }}
                       className="px-4 py-2 rounded-xl bg-[#C5A55A] text-black font-bold text-xs uppercase"
@@ -675,7 +736,7 @@ export default function ServiceDetailDialog({
                         if (!res.success) toast.error(res.error);
                         else {
                           toast.success("Regreso asignado con Uber");
-                          onUpdated();
+                          await reloadCurrentService();
                         }
                       }}
                       className="px-4 py-2 rounded-xl border border-[#C5A55A] text-[#C5A55A] font-bold text-xs uppercase"
@@ -717,6 +778,8 @@ function AdminTripCard({
   const [fare, setFare] = useState(String(trip.tarifa || ""));
   const [savingFare, setSavingFare] = useState(false);
   const [changingTransport, setChangingTransport] = useState(false);
+  const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isIda = trip.tipo === "ida";
   const pickupLat = isIda ? service?.empleada?.ubicacionLat : service?.ubicacionClienteLat;
@@ -752,6 +815,28 @@ function AdminTripCard({
     onRefresh();
   };
 
+  const handleUploadScreenshot = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingScreenshot(true);
+    try {
+      const formData = new FormData();
+      formData.append("tripId", trip.id);
+      formData.append("file", file);
+      const res = await uploadUberScreenshotAction(formData);
+      if (!res.success) {
+        throw new Error(res.error || "Error al subir la captura");
+      }
+      toast.success("Captura de Uber registrada con éxito");
+      onRefresh();
+    } catch (err: any) {
+      toast.error(err.message || "No se pudo subir la captura");
+    } finally {
+      setUploadingScreenshot(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const handleChangeTransport = async () => {
     const target = trip.proveedorTransporte === "uber" ? "chofer" : "uber";
     setChangingTransport(true);
@@ -766,20 +851,20 @@ function AdminTripCard({
   };
 
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-black/60 p-4 space-y-3">
-      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-        <div className="flex items-center gap-2">
-          <span className="p-1.5 bg-[#C5A55A]/10 text-[#C5A55A] rounded-lg">
-            <Car size={15} />
+    <div className="rounded-2xl border border-zinc-800 bg-black/60 p-4 space-y-3.5 shadow-md">
+      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="p-2 bg-[#C5A55A]/10 text-[#C5A55A] rounded-xl border border-[#C5A55A]/20">
+            <Car size={16} />
           </span>
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-zinc-100">
               Viaje de {trip.tipo}
             </p>
-            <p className="text-[10px] text-zinc-500 uppercase">{trip.proveedorTransporte}</p>
+            <p className="text-[11px] font-semibold text-zinc-500 uppercase">{trip.proveedorTransporte}</p>
           </div>
         </div>
-        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border border-zinc-700 text-zinc-300">
+        <span className="text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full border border-zinc-700 text-zinc-300">
           {trip.estado}
         </span>
       </div>
@@ -790,25 +875,74 @@ function AdminTripCard({
             href={uberDeeplink}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full rounded-xl bg-[#C5A55A] py-2 text-xs font-bold uppercase text-black hover:bg-[#D4AF37] transition-all"
+            className="flex items-center justify-center gap-2 w-full rounded-xl bg-[#C5A55A] py-2.5 text-xs font-bold uppercase tracking-wider text-black hover:bg-[#D4AF37] transition-all shadow-sm"
           >
-            <Smartphone size={14} /> Abrir / Pedir Uber
+            <Smartphone size={15} /> Abrir / Pedir Uber
           </a>
 
-          {trip.uberScreenshotUrl ? (
-            <div className="p-2.5 rounded-xl border border-[#C5A55A]/40 bg-[#C5A55A]/5 text-xs flex items-center justify-between">
-              <span className="text-[#E8D5A3] font-semibold">Captura recibida</span>
-              <a
-                href={trip.uberScreenshotUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#C5A55A] hover:underline flex items-center gap-1 font-bold"
-              >
-                Ver <ExternalLink size={11} />
-              </a>
-            </div>
-          ) : null}
+          {/* Sección de Captura de Pantalla */}
+          <div className="space-y-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              disabled={uploadingScreenshot}
+              onChange={handleUploadScreenshot}
+              className="hidden"
+              id={`uber-screenshot-${trip.id}`}
+            />
 
+            {trip.uberScreenshotUrl ? (
+              <div className="rounded-xl border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3 text-xs space-y-2 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-[#E8D5A3] font-bold flex items-center gap-1.5">
+                    <Camera size={14} className="text-[#C5A55A]" /> Captura Registrada
+                  </span>
+                  <a
+                    href={trip.uberScreenshotUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#C5A55A] hover:underline flex items-center gap-1 font-bold bg-[#C5A55A]/10 px-2.5 py-1 rounded-lg border border-[#C5A55A]/30 text-xs"
+                  >
+                    Ver Captura <ExternalLink size={11} />
+                  </a>
+                </div>
+                <div className="pt-2 border-t border-zinc-800/80 flex justify-end">
+                  <label
+                    htmlFor={`uber-screenshot-${trip.id}`}
+                    className="text-[11px] font-semibold text-zinc-400 hover:text-[#C5A55A] cursor-pointer flex items-center gap-1 transition-colors"
+                  >
+                    <Upload size={12} /> {uploadingScreenshot ? "Subiendo..." : "Reemplazar captura"}
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/80 p-3 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-300 font-semibold flex items-center gap-1.5">
+                    <Camera size={14} className="text-[#C5A55A]" /> Captura de Uber
+                  </span>
+                  <span className="text-[10px] text-amber-400 font-bold uppercase bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                    Pendiente
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-400">
+                  Sube el comprobante o captura del viaje de Uber.
+                </p>
+                <label
+                  htmlFor={`uber-screenshot-${trip.id}`}
+                  className={`flex items-center justify-center gap-2 w-full rounded-xl border border-[#C5A55A]/50 bg-[#C5A55A]/10 py-2 text-xs font-bold uppercase tracking-wider text-[#E8D5A3] hover:bg-[#C5A55A]/20 transition-all cursor-pointer ${
+                    uploadingScreenshot ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  <Upload size={14} />
+                  {uploadingScreenshot ? "Subiendo captura..." : "Subir Captura"}
+                </label>
+              </div>
+            )}
+          </div>
+
+          {/* Sección de Tarifa Uber */}
           {editingFare ? (
             <div className="flex gap-2">
               <input
@@ -816,37 +950,37 @@ function AdminTripCard({
                 value={fare}
                 onChange={(e) => setFare(e.target.value)}
                 placeholder="Monto Uber"
-                className="flex-1 bg-black border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-[#C5A55A]"
+                className="flex-1 bg-black border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-[#C5A55A]"
               />
               <button
                 type="button"
                 disabled={savingFare}
                 onClick={handleSaveFare}
-                className="px-3 py-1.5 bg-[#C5A55A] text-black font-bold text-xs rounded-xl"
+                className="px-3.5 py-2 bg-[#C5A55A] text-black font-bold text-xs rounded-xl hover:bg-[#D4AF37]"
               >
                 {savingFare ? "..." : "Guardar"}
               </button>
               <button
                 type="button"
                 onClick={() => setEditingFare(false)}
-                className="px-2 py-1.5 text-zinc-400 text-xs"
+                className="px-2 py-2 text-zinc-400 text-xs hover:text-white"
               >
                 ✕
               </button>
             </div>
           ) : (
-            <div className="flex items-center justify-between text-xs pt-1">
-              <span className="text-zinc-500">Tarifa Uber:</span>
+            <div className="flex items-center justify-between text-xs pt-1 border-t border-zinc-900">
+              <span className="text-zinc-400">Tarifa Uber:</span>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-[#E8D5A3]">
+                <span className="font-bold text-[#E8D5A3] text-sm">
                   {Number(trip.tarifa) > 0 ? `$${Number(trip.tarifa).toFixed(2)}` : "Sin registrar"}
                 </span>
                 <button
                   type="button"
                   onClick={() => setEditingFare(true)}
-                  className="text-[#C5A55A] hover:underline text-[10px] font-bold"
+                  className="text-[#C5A55A] hover:underline text-xs font-bold"
                 >
-                  {Number(trip.tarifa) > 0 ? "Cambiar" : "+ Registrar"}
+                  {Number(trip.tarifa) > 0 ? "Cambiar" : "+ Registrar Tarifa"}
                 </button>
               </div>
             </div>
@@ -856,13 +990,13 @@ function AdminTripCard({
             type="button"
             disabled={changingTransport}
             onClick={handleChangeTransport}
-            className="w-full text-center text-[10px] font-bold uppercase text-zinc-400 hover:text-[#C5A55A] pt-1"
+            className="w-full text-center text-[11px] font-bold uppercase tracking-wider text-zinc-400 hover:text-[#C5A55A] pt-1 transition-colors"
           >
             Cambiar a Chofer Interno
           </button>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <p className="text-xs text-zinc-400">
             Gestionado por Chofer Interno de la flota.
           </p>
@@ -870,7 +1004,7 @@ function AdminTripCard({
             type="button"
             disabled={changingTransport}
             onClick={handleChangeTransport}
-            className="w-full text-center text-[10px] font-bold uppercase text-zinc-400 hover:text-[#C5A55A] pt-1"
+            className="w-full text-center text-[11px] font-bold uppercase tracking-wider text-zinc-400 hover:text-[#C5A55A] pt-1 transition-colors"
           >
             Cambiar a Uber
           </button>

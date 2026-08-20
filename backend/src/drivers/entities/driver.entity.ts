@@ -16,6 +16,9 @@ import { ColumnNumericTransformer } from '../../common/transformers/column-numer
 @Index('choferes_usuario_id_key', ['usuarioId'], { unique: true })
 @Entity('choferes', { schema: 'public' })
 export class Choferes {
+  @ApiPropertyOptional()
+  sancionada?: boolean;
+
   @Column('uuid', {
     primary: true,
     name: 'id',

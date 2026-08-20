@@ -43,17 +43,21 @@ export class CloseConductReportDto {
 }
 
 export class CreateSanctionDto {
-  @IsIn(['client', 'employee', 'driver'])
-  subjectType: 'client' | 'employee' | 'driver';
+  @IsIn(['client', 'employee', 'driver', 'boss'])
+  subjectType: 'client' | 'employee' | 'driver' | 'boss';
   @IsUUID() subjectId: string;
-  @IsIn(['suspension', 'permanent_ban'])
-  type: 'suspension' | 'permanent_ban';
+  @IsIn(['suspension', 'permanent_ban', 'fine'])
+  type: 'suspension' | 'permanent_ban' | 'fine';
   @IsString() @MinLength(3) @MaxLength(2000) reason: string;
   @IsOptional() @IsUUID() conductReportId?: string;
   @IsOptional() @IsDateString() startsAt?: string;
   @ValidateIf((value: CreateSanctionDto) => value.type === 'suspension')
   @IsDateString()
   endsAt?: string;
+  @ValidateIf((value: CreateSanctionDto) => value.type === 'fine')
+  @Type(() => Number)
+  @Min(1)
+  fineAmount?: number;
 }
 
 export class RevokeSanctionDto {

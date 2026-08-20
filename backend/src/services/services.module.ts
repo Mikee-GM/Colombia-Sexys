@@ -20,6 +20,8 @@ import { UploadModule } from '../upload/upload.module';
 import { GodEyeService } from './god-eye.service';
 import { GodEyeController } from './god-eye.controller';
 
+import { ServiceScheduleScheduler } from './service-schedule.scheduler';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -40,7 +42,7 @@ import { GodEyeController } from './god-eye.controller';
     UploadModule,
   ],
   controllers: [ServicesController, GodEyeController],
-  providers: [ServicesService, GodEyeService],
+  providers: [ServicesService, GodEyeService, ServiceScheduleScheduler],
   exports: [ServicesService, GodEyeService],
 })
 export class ServicesModule {}

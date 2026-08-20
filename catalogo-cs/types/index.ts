@@ -21,6 +21,7 @@ export interface Modelo {
   contactLabel: string;
   disponible: boolean;
   catalogoActivo?: boolean;
+  sancionada?: boolean;
   availabilityStatus?: "disponible" | "ocupada" | "inactiva";
   estimatedAvailableAt?: string | null;
   canScheduleNext?: boolean;

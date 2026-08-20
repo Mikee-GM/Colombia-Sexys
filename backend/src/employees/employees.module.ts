@@ -7,6 +7,7 @@ import { Empleadas } from './entities/employee.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { EmpleadaFotos } from '../employee-photos/entities/employee-photo.entity';
 import { EmpleadaFotosExclusivas } from '../employee-photos/entities/employee-private-photo.entity';
+import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 import { UploadModule } from '../upload/upload.module';
 import { WeeklyContentModule } from '../weekly-content/weekly-content.module';
 import { AuthModule } from '../auth/auth.module';
@@ -18,6 +19,7 @@ import { AuthModule } from '../auth/auth.module';
       Usuarios,
       EmpleadaFotos,
       EmpleadaFotosExclusivas,
+      EmployeeCashObligation,
     ]),
     UploadModule,
     WeeklyContentModule,

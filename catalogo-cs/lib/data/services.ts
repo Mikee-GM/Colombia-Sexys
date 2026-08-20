@@ -4,12 +4,43 @@ import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
 import type { ConversationMessage, Service } from "@/lib/types";
 
+function revalidateAdminViews() {
+  try {
+    revalidatePath("/admin/services");
+    revalidatePath("/admin/dashboard");
+    revalidatePath("/admin/god-eye");
+    revalidatePath("/admin/transport");
+    revalidatePath("/admin");
+  } catch {
+    // ignore outside request context
+  }
+}
+
 export async function getServices() {
+  return apiFetch<Service[]>("/services");
+}
+
+export async function getServicesAction() {
   return apiFetch<Service[]>("/services");
 }
 
 export async function getPendingServices() {
   return apiFetch<Service[]>("/services/pendientes");
+}
+
+export async function getServiceByIdAction(serviceId: string) {
+  try {
+    const data = await apiFetch<Service>(`/services/${serviceId}`);
+    return { success: true, data };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo obtener el detalle del servicio",
+    };
+  }
 }
 
 export async function decideServiceAction(
@@ -29,7 +60,7 @@ export async function decideServiceAction(
             })
           : undefined,
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true, data: result };
   } catch (error) {
     return {
@@ -53,7 +84,7 @@ export async function updateServiceAction(
       method: "PATCH",
       body: JSON.stringify(data),
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true, data: updated };
   } catch (error) {
     return {
@@ -69,7 +100,7 @@ export async function updateServiceAction(
 export async function cancelServiceAction(serviceId: string) {
   try {
     await apiFetch(`/services/${serviceId}/cancel`, { method: "POST" });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true };
   } catch (error) {
     return {
@@ -116,7 +147,7 @@ export async function chooseReturnTransportAction(
       method: "POST",
       body: JSON.stringify({ transportType }),
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true, data };
   } catch (error) {
     return {
@@ -135,7 +166,7 @@ export async function changeTripTransportAction(
       method: "PATCH",
       body: JSON.stringify({ transportType }),
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true, data };
   } catch (error) {
     return {
@@ -154,7 +185,7 @@ export async function confirmUberFareAction(tripId: string, amount: number) {
       method: "POST",
       body: JSON.stringify({ amount }),
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true };
   } catch (error) {
     return {
@@ -175,7 +206,7 @@ export async function uploadUberScreenshotAction(formData: FormData) {
       method: "POST",
       body: payload,
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true };
   } catch (error) {
     return {
@@ -184,3 +215,48 @@ export async function uploadUberScreenshotAction(formData: FormData) {
     };
   }
 }
+
+export async function getClientsAction() {
+  try {
+    const clients = await apiFetch<any[]>("/clients");
+    return { success: true, data: clients };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo cargar la lista de clientes",
+    };
+  }
+}
+
+export async function getActiveLocationsAction() {
+  try {
+    const locations = await apiFetch<any[]>("/transport-operations/locations/active");
+    return { success: true, data: locations };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo cargar las ubicaciones",
+    };
+  }
+}
+
+export async function createManualServiceAction(payload: any) {
+  try {
+    const data = await apiFetch<Service>("/services", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    revalidateAdminViews();
+    try {
+      revalidatePath("/jefe");
+    } catch {}
+    return { success: true, data };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo crear el servicio",
+    };
+  }
+}
+
+

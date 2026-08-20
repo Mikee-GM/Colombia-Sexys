@@ -45,6 +45,11 @@ export class TransportOperationsController {
   ) {
     return this.service.updateFee(dto.externalLocationFee, req.user.id);
   }
+  @Get('locations/active')
+  @Roles('admin', 'jefe')
+  activeLocations() {
+    return this.service.activeLocations();
+  }
   @Post('locations') create(@Body() dto: SavePresetLocationDto) {
     return this.service.createLocation(dto);
   }

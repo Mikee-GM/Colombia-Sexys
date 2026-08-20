@@ -23,10 +23,13 @@ export type GodEyeOverview = {
     estado: string;
     metodoPago: string;
     duracionPactadaHoras: number;
+    duracionFinalHoras?: number | null;
     precioBaseHoraPactado: number;
     totalFinal: number;
     iaActiva: boolean;
     horaInicioServicio: string | null;
+    horaFinServicio?: string | null;
+    estadoLiquidacion?: string;
     createdAt: string;
     notas: string | null;
     clienteId: string;
@@ -36,6 +39,10 @@ export type GodEyeOverview = {
     empleadaFoto: string | null;
     jefeId: string;
     jefeEmail: string;
+    viajes?: any[];
+    pendingReceiptsCount?: number;
+    calificacion?: number | null;
+    comentariosCalificacion?: string | null;
   }>;
 };
 
@@ -48,21 +55,29 @@ export type GodEyeActorSummary = {
     precioBaseHora: number;
     avatar: string | null;
     jefeEmail: string | null;
+    sancionada?: boolean;
+    rankingPosition?: number | null;
+    totalEmployees?: number;
+    rankingScore?: number | null;
   }>;
   drivers: Array<{
     id: string;
     name: string;
     type: "driver";
     estado: string;
+    disponible: boolean;
     telefono: string;
     vehiculoModelo: string;
+    sancionada?: boolean;
   }>;
   bosses: Array<{
     id: string;
     name: string;
+    email?: string;
     type: "boss";
     rol: string;
     activo: boolean;
+    sancionada?: boolean;
   }>;
 };
 
@@ -70,13 +85,69 @@ export type GodEyeActorDossier = {
   actorType: "employee" | "driver" | "boss";
   profile: any;
   ratings?: any[];
+  ratingsSummary?: {
+    client: {
+      count: number;
+      average: number;
+      stars_5: number;
+      stars_4: number;
+      stars_3: number;
+      stars_2: number;
+      stars_1: number;
+    };
+    driver: {
+      count: number;
+      average: number;
+      stars_5: number;
+      stars_4: number;
+      stars_3: number;
+      stars_2: number;
+      stars_1: number;
+    };
+  };
+  ranking?: {
+    position: number;
+    total: number;
+    score: number | null;
+  } | null;
   reports?: any[];
   sanctions?: any[];
+  services?: any[];
   servicesHistory?: any[];
   managedServices?: any[];
   trips?: any[];
   extras?: any[];
   cashObligations?: any[];
+  finances?: {
+    totalCashDue: number;
+    totalDebt: number;
+    totalOwed: number;
+    cashObligations: any[];
+    liquidationDebts: any[];
+    recentSettlement?: any;
+  };
+  onboarding?: {
+    id?: string;
+    status: string;
+    attemptCount?: number;
+    bestScore?: number;
+    trustScore?: number;
+    assignedAt?: string;
+    completedAt?: string;
+    attempts?: Array<{
+      id?: string;
+      attemptNumber: number;
+      status: string;
+      score: number;
+      correctAnswers: number;
+      totalQuestions: number;
+      startedAt?: string;
+      completedAt?: string;
+    }>;
+    screening?: any;
+  };
+  weeklyPhotos?: any[];
+  challenges?: any[];
   employees?: any[];
 };
 

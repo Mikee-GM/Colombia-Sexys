@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import LoginForm from "@/components/admin/LoginForm";
-import { logoutAction } from "@/lib/actions/auth";
+import { logoutAction, getMyProfileAction } from "@/lib/actions/auth";
 import SessionKeeper from "@/components/auth/session-keeper";
 import { broadcastLogout } from "@/lib/client-session";
-
+import EditProfileModal from "@/components/admin/EditProfileModal";
 
 import {
   Activity,
@@ -23,9 +23,11 @@ import {
   Landmark,
   MapPin,
   Scale,
+  Settings,
   Shield,
   TrendingUp,
   Trophy,
+  User,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -86,8 +88,24 @@ interface AdminLayoutClientProps {
 
 export default function AdminLayoutClient({ children }: AdminLayoutClientProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{
+    id?: string;
+    nombre?: string | null;
+    apellido?: string | null;
+    email?: string | null;
+  } | null>(null);
+
   const pathname = usePathname();
   const router = useRouter();
+
+  useEffect(() => {
+    getMyProfileAction().then((user) => {
+      if (user) {
+        setCurrentUser(user);
+      }
+    });
+  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -151,10 +169,28 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
           ))}
         </nav>
 
-        <div className="p-4 border-t border-zinc-800/80 bg-zinc-950/40">
-          <p className="text-[10px] text-zinc-500 mb-2.5 px-2 truncate text-center font-mono">
-            admin@colombiasexys.com
-          </p>
+        <div className="p-4 border-t border-zinc-800/80 bg-zinc-950/40 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setShowProfileModal(true)}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-zinc-900/60 border border-zinc-800/80 hover:border-[#C5A55A]/50 hover:bg-[#C5A55A]/10 text-zinc-300 hover:text-[#E8D5A3] transition-all duration-200 group"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#C5A55A]/20 text-[#C5A55A]">
+                <User className="h-3.5 w-3.5" />
+              </div>
+              <div className="text-left truncate">
+                <p className="text-xs font-bold text-white truncate">
+                  {currentUser?.nombre ? `${currentUser.nombre} ${currentUser.apellido || ""}`.trim() : "Administrador"}
+                </p>
+                <p className="text-[10px] text-zinc-500 truncate font-mono">
+                  {currentUser?.email || "admin@colombiasexys.com"}
+                </p>
+              </div>
+            </div>
+            <Settings className="h-3.5 w-3.5 shrink-0 text-zinc-500 group-hover:text-[#C5A55A] transition-colors" />
+          </button>
+
           <button
             onClick={handleSignOut}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-red-500/50 hover:bg-red-950/20 text-zinc-400 hover:text-red-300 transition-all duration-200"
@@ -221,7 +257,22 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
               </div>
             ))}
 
-            <div className="pt-3 border-t border-zinc-800">
+            <div className="pt-3 border-t border-zinc-800 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setShowProfileModal(true);
+                }}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-semibold text-zinc-300 hover:text-white"
+              >
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-[#C5A55A]" />
+                  <span>Mi Perfil ({currentUser?.nombre || "Admin"})</span>
+                </div>
+                <Settings className="h-4 w-4 text-zinc-500" />
+              </button>
+
               <button
                 onClick={() => {
                   setMenuOpen(false);
@@ -242,6 +293,19 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
           {children}
         </div>
       </main>
+
+      {/* Modal de Edición de Perfil Propio */}
+      <EditProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        currentUser={currentUser}
+        onProfileUpdated={(updated) => {
+          setCurrentUser((prev) => ({
+            ...prev,
+            ...updated,
+          }));
+        }}
+      />
     </div>
   );
 }

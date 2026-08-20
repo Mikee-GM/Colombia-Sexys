@@ -131,7 +131,13 @@ export default function ModelosDashboard({
             </span>
           </div>
         )}
-        {modelo.availabilityStatus === "inactiva" || modelo.catalogoActivo === false ? (
+        {modelo.sancionada ? (
+          <div className="absolute top-2 left-2 bg-red-950/90 px-3 py-1.5 border border-red-500/80 rounded-lg shadow-lg flex items-center gap-1.5">
+            <span className="text-xs text-red-300 font-bold tracking-widest uppercase">
+              ⛔ Sancionada
+            </span>
+          </div>
+        ) : modelo.availabilityStatus === "inactiva" || modelo.catalogoActivo === false ? (
           <div className="absolute top-2 left-2 bg-red-950/90 px-2.5 py-1 border border-red-500/50">
             <span className="text-[9px] text-red-300 font-bold tracking-widest uppercase">
               Inactiva (Baja)

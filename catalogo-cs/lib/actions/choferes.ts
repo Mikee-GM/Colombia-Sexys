@@ -11,6 +11,7 @@ export async function getChoferesAction(): Promise<
     telefono: string;
     email: string;
     usuarioId: string;
+    sancionada?: boolean;
     vehiculoMarca?: string;
     vehiculoModelo?: string;
     vehiculoColor?: string;
@@ -32,6 +33,7 @@ export async function getChoferesAction(): Promise<
       telefono: d.telefono,
       email: d.usuario?.email || "",
       usuarioId: d.usuarioId,
+      sancionada: Boolean(d.sancionada),
       vehiculoMarca: d.vehiculoMarca || "",
       vehiculoModelo: d.vehiculoModelo || "",
       vehiculoColor: d.vehiculoColor || "",

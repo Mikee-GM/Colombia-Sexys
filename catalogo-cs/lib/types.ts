@@ -2,6 +2,8 @@ export type AuthUser = {
   id: string;
   email: string;
   rol: "jefe" | "empleada" | "chofer" | "admin";
+  nombre?: string | null;
+  apellido?: string | null;
 };
 
 export type LoginResponse = {
@@ -141,6 +143,9 @@ export type Service = {
   servicioPrevioId: string | null;
   horaDisponibilidadEstimada?: string | null;
   horaInicioEstimada: string | null;
+  fechaProgramada?: string | null;
+  tipoAgenda?: "inmediato" | "programado";
+  notificacionPreviaEnviada?: boolean;
   transporteAgendado?: "chofer" | "uber" | null;
   createdAt: string;
   calculationStatus: "provisional" | "ready" | "paid";
@@ -614,6 +619,27 @@ export type EmployeePortalReputation = {
   }[];
 };
 
+export type EmployeePortalCashObligationItem = {
+  id: string;
+  serviceId: string;
+  amount: number;
+  paidAmount: number;
+  pendingAmount: number;
+  calculationStatus: "provisional" | "ready" | "paid";
+  pendingReason: string | null;
+  customerTotal: number;
+  uberDeduction: number;
+  serviceDate: string;
+  createdAt: string;
+};
+
+export type EmployeePortalCashDelivery = {
+  totalPending: number;
+  pendingServicesCount: number;
+  hasProvisional: boolean;
+  obligations: EmployeePortalCashObligationItem[];
+};
+
 export type EmployeePortalData = {
   profile: {
     id: string;
@@ -632,6 +658,7 @@ export type EmployeePortalData = {
   };
   ranking: EmployeePortalRanking;
   earnings: EmployeePortalEarnings;
+  cashDelivery?: EmployeePortalCashDelivery;
   activeService: EmployeePortalActiveService | null;
   recentServices: EmployeePortalServiceItem[];
   reputation: EmployeePortalReputation;
@@ -692,5 +719,30 @@ export type DriverShiftCandidates = {
   capacity: number | null;
   assignedCount: number;
   candidates: DriverShiftPerson[];
+};
+
+export type PresetServiceLocation = {
+  id: string;
+  name: string;
+  address?: string | null;
+  latitude: number | string;
+  longitude: number | string;
+  active: boolean;
+  sortOrder?: number;
+};
+
+export type CreateManualServiceInput = {
+  clienteId: string;
+  empleadaId: string;
+  duracionPactadaHoras: number;
+  metodoPago: "efectivo" | "tarjeta" | "transferencia";
+  ubicacionClienteLat: number;
+  ubicacionClienteLng: number;
+  precioBaseHoraPactado: number;
+  notas?: string;
+  fechaProgramada?: string;
+  tipoAgenda?: "inmediato" | "programado";
+  presetLocationId?: string;
+  clienteTelegramId?: string;
 };
 

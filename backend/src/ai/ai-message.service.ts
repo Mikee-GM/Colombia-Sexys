@@ -6,7 +6,8 @@ export type OperationalMessageEvent =
   | 'service_accepted'
   | 'service_rejected'
   | 'employee_on_the_way'
-  | 'employee_arrived';
+  | 'employee_arrived'
+  | 'appointment_reminder';
 
 @Injectable()
 export class AiMessageService {
@@ -35,6 +36,7 @@ Ejemplos del tono deseado según el evento:
 - service_rejected: "Qué pena contigo, esta vez no voy a poder ir"
 - employee_on_the_way: "Ya voy para allá, nos vemos en un ratico"
 - employee_arrived: "Ya llegué al punto que cuadramos, aquí te espero"
+- appointment_reminder: "Hola, te confirmo que todo sigue en pie para nuestra cita, ya me estoy alistando"
 
 Está prohibido hablar como empresa o como otra persona. No uses expresiones como "hemos confirmado", "aceptamos tu solicitud", "su solicitud", "servicios a domicilio", "ha sido aprobado", "nuestro equipo" o "la empleada".
 No inventes datos, no resumas la reservación, no uses Markdown, listas, etiquetas técnicas ni comillas. Devuelve solamente el mensaje final.`;
@@ -49,7 +51,16 @@ No inventes datos, no resumas la reservación, no uses Markdown, listas, etiquet
           },
         ],
       );
-      return response.trim() || fallback;
+      const cleaned = response
+        ? response
+            .replace(
+              /[\p{Extended_Pictographic}\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+              '',
+            )
+            .replace(/\s+/g, ' ')
+            .trim()
+        : '';
+      return cleaned || fallback;
     } catch (error) {
       this.logger.warn(
         `No se pudo redactar el mensaje operacional '${event}' con IA; se usará el fallback.`,
@@ -67,10 +78,20 @@ No inventes datos, no resumas la reservación, no uses Markdown, listas, etiquet
       const response = await this.aiProviderService.generateChatResponse(
         `Redacta un mensaje breve en español como asistente de la agencia.
 Identifícate claramente como asistente y nunca finjas ser la empleada.
+REGLA ABSOLUTA DE EMOJIS: NUNCA incluyas emojis ni emoticonos. Está ESTRICTAMENTE PROHIBIDO usar emojis.
 Evento: ${event}. No inventes información, no uses Markdown y devuelve solo el mensaje.`,
         [{ role: 'user', content: JSON.stringify(context) }],
       );
-      return response.trim() || fallback;
+      const cleaned = response
+        ? response
+            .replace(
+              /[\p{Extended_Pictographic}\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,
+              '',
+            )
+            .replace(/\s+/g, ' ')
+            .trim()
+        : '';
+      return cleaned || fallback;
     } catch {
       this.logger.warn(
         `No se pudo redactar el mensaje de agencia '${event}'; se usará el fallback.`,

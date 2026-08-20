@@ -48,6 +48,7 @@ import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
+import { TelegramSession } from './entities/telegram-session.entity';
 
 interface SessionData {
   step?:
@@ -105,6 +106,12 @@ interface SessionData {
   appealRatingId?: string;
   appealSubjectType?: 'client' | 'employee' | 'driver';
   appealSubjectId?: string;
+  fechaProgramada?: string;
+  tipoAgenda?: 'inmediato' | 'programado';
+  humanTakeover?: boolean;
+  iaActiva?: boolean;
+  bossThreadId?: string;
+  bossGroupId?: string;
 }
 
 interface BotContext extends Context {
@@ -306,12 +313,10 @@ export function extractHireDuration(text: string): number | undefined {
     return undefined;
   }
 
-  const match = text.match(/(?:^|\s)(\d+)\s*(?:h|hora|horas)?(?:\s|$)/i);
+  const match = text.match(/\b(\d+)(?:\s*(?:h|hr|hrs|hora|horas))?\b/i);
   if (match) {
-    const duration = parseInt(match[1], 10);
-    return Number.isInteger(duration) && duration >= 1 && duration <= 24
-      ? duration
-      : undefined;
+    const hours = parseInt(match[1], 10);
+    if (hours >= 1 && hours <= 24) return hours;
   }
 
   const normalized = text.toLowerCase().trim();
@@ -334,7 +339,9 @@ export function extractHireDuration(text: string): number | undefined {
   const word = Object.keys(wordDurations).find(
     (candidate) =>
       normalized === candidate ||
-      new RegExp(`\\b${candidate}\\s+horas?\\b`).test(normalized),
+      new RegExp(`\\b${candidate}\\s+(?:h|hr|hrs|hora|horas)\\b`).test(
+        normalized,
+      ),
   );
   return word ? wordDurations[word] : undefined;
 }
@@ -343,6 +350,7 @@ export function extractHirePaymentMethod(
   text: string,
 ): SessionData['metodoPago'] | undefined {
   const normalized = text.toLowerCase();
+  if (/\bmixto\b/.test(normalized)) return 'mixto';
   if (/\befectivo\b/.test(normalized)) return 'efectivo';
   if (/\btarjeta\b/.test(normalized)) return 'tarjeta';
   if (/\btransferencia\b/.test(normalized)) return 'transferencia';
@@ -358,6 +366,7 @@ export function detectGroupServiceIntent(
     .toLowerCase();
   if (
     /\bservicio\s+grupal\b/.test(normalized) ||
+    /\btrios?\b/.test(normalized) ||
     /\b(grupo\s+de\s+(chicas|empleadas)|varias\s+(chicas|empleadas|modelos)|mas\s+de\s+una\s+(chica|empleada|modelo)|(dos|tres|cuatro)\s+(chicas|empleadas|modelos))\b/.test(
       normalized,
     )
@@ -409,16 +418,20 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly serviciosRepository: Repository<Servicios>,
     @InjectRepository(Viajes)
     private readonly viajesRepository: Repository<Viajes>,
-    @InjectRepository(AuthorizedBankAccounts)
-    private readonly authorizedBankAccountsRepository: Repository<AuthorizedBankAccounts>,
-    @InjectRepository(PaymentReceiptValidations)
-    private readonly paymentReceiptValidationsRepository: Repository<PaymentReceiptValidations>,
+    @InjectRepository(Choferes)
+    private readonly choferesRepository: Repository<Choferes>,
     @InjectRepository(ExtrasCatalogo)
     private readonly extrasCatalogoRepository: Repository<ExtrasCatalogo>,
     @InjectRepository(ExtrasServicio)
     private readonly extrasServicioRepository: Repository<ExtrasServicio>,
+    @InjectRepository(AuthorizedBankAccounts)
+    private readonly authorizedBankAccountsRepository: Repository<AuthorizedBankAccounts>,
+    @InjectRepository(PaymentReceiptValidations)
+    private readonly paymentReceiptValidationsRepository: Repository<PaymentReceiptValidations>,
     @InjectRepository(ConversacionesTelegram)
     private readonly conversationsRepository: Repository<ConversacionesTelegram>,
+    @InjectRepository(TelegramSession)
+    private readonly telegramSessionRepository: Repository<TelegramSession>,
     private readonly realtimeEventsService: RealtimeEventsService,
     private readonly jwtService: JwtService,
     @Inject(forwardRef(() => ServicesService))
@@ -625,9 +638,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }),
     ]);
     if (!client || !employee) return false;
-    await ctx.reply(`Método de pago: *${method.toUpperCase()}*.`, {
-      parse_mode: 'Markdown',
-    });
     await this.finalizeBooking(
       ctx,
       client,
@@ -891,6 +901,52 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     await this.recordDraftConversation(ctx, 'sistema', message);
   }
 
+  private async getEmployeeBusySchedules(
+    empleadaId: string,
+  ): Promise<{ inicio: string; fin: string; descripcion?: string }[]> {
+    try {
+      const upcomingServices = await this.serviciosRepository.find({
+        where: {
+          empleadaId,
+          estado: In(['pendiente', 'agendado', 'en_curso']),
+        },
+        order: { fechaProgramada: 'ASC', createdAt: 'ASC' },
+      });
+
+      const schedules: { inicio: string; fin: string; descripcion?: string }[] =
+        [];
+      for (const s of upcomingServices) {
+        const start =
+          s.fechaProgramada ||
+          s.horaInicioEstimada ||
+          s.horaInicioServicio ||
+          s.createdAt;
+        if (!start) continue;
+        const startDate = new Date(start);
+        const durationHours = Number(s.duracionPactadaHoras) || 1;
+        const endDate = new Date(
+          startDate.getTime() + (durationHours * 60 + 45) * 60_000,
+        );
+        schedules.push({
+          inicio: startDate.toLocaleString('es-MX', {
+            timeZone: 'America/Mexico_City',
+            dateStyle: 'short',
+            timeStyle: 'short',
+          }),
+          fin: endDate.toLocaleString('es-MX', {
+            timeZone: 'America/Mexico_City',
+            timeStyle: 'short',
+          }),
+          descripcion:
+            s.estado === 'en_curso' ? 'En servicio activo' : 'Cita agendada',
+        });
+      }
+      return schedules;
+    } catch {
+      return [];
+    }
+  }
+
   async startHireSession(ctx: any, empleadaId: string) {
     const empleada = await this.empleadasRepository.findOne({
       where: { id: empleadaId },
@@ -991,11 +1047,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       await this.recordDraftConversation(ctx, 'sistema', waitingMessage);
     }
 
-    const [empleadaExtras, presetLocations] = await Promise.all([
+    const [empleadaExtras, presetLocations, busySchedules] = await Promise.all([
       this.extrasCatalogoRepository.find({
         where: { empleadaId: empleada.id, activo: true },
       }),
       this.transportOperations.activeLocations(),
+      this.getEmployeeBusySchedules(empleada.id),
     ]);
 
     const extrasData = empleadaExtras.map((e) => ({
@@ -1012,6 +1069,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       descripcion: empleada.descripcion,
       extras: extrasData,
       ubicacionesPreestablecidas: ubicacionesData,
+      fechaHoraActual: new Date().toLocaleString('es-MX', {
+        timeZone: 'America/Mexico_City',
+      }),
+      horariosOcupados: busySchedules,
     };
 
     const systemPrompt = activeService
@@ -1037,25 +1098,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       await this.sendDelayedReply(ctx, responseText);
       await this.recordDraftConversation(ctx, 'ia', responseText);
     } catch (err: any) {
-      if (err?.message === 'AI_LIMIT_REACHED') {
-        await ctx.reply(
-          '⚠️ *Límite de IA alcanzado:* Has agotado tus consultas gratuitas de hoy con la Inteligencia Artificial. Por favor, intenta de nuevo mañana.',
-          { parse_mode: 'Markdown' },
-        );
-        return;
-      }
       this.logger.error('Error starting LLM chat session:', err);
-      const fallbackMsg = `¡Hola papi! Soy *${empleada.nombreArtistico}*, estoy libre para ti mor. Mi tarifa es de $${empleada.precioBaseHora}/hr, ¿cuántas horas me vas a contratar?`;
-      await this.sendDelayedReply(ctx, fallbackMsg);
-      await this.recordDraftConversation(ctx, 'ia', fallbackMsg);
-      // Initialize basic history on error fallback
-      ctx.session.chatHistory = [
-        { role: 'user', parts: [{ text: 'Hola' }] },
-        {
-          role: 'model',
-          parts: [{ text: fallbackMsg }],
-        },
-      ];
+      await this.handleAIFailureAndTransferToBoss(ctx, empleada, err);
     }
   }
 
@@ -2283,7 +2327,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ]),
     );
 
-    // 2. Limpieza de chat del cliente (Eliminar mensaje anterior) y enviar solicitud de calificación
+    // 2. Limpieza de chat del cliente (Eliminar mensaje anterior)
     if (servicio.cliente?.telegramChatId) {
       if (servicio.telegramClienteMensajeId) {
         try {
@@ -2294,33 +2338,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         } catch (err) {
           console.error('Error al eliminar mensaje del cliente:', err);
         }
-      }
-
-      try {
-        const ratingKeyboard = Markup.inlineKeyboard([
-          ...[1, 2, 3, 4, 5].map((rating) => [
-            Markup.button.callback(
-              `${rating} - ${'⭐'.repeat(rating)}`,
-              `calificar_servicio:${servicio.id}:${rating}`,
-            ),
-          ]),
-          [
-            Markup.button.callback(
-              '⚠️ Reportar empleada',
-              `er_client_start:${servicio.id}`,
-            ),
-          ],
-        ]);
-        await ctx.telegram.sendMessage(
-          servicio.cliente.telegramChatId,
-          `✨ *El servicio con ${servicio.empleada?.nombreArtistico || 'la empleada'} ha finalizado.*\n\nPor favor, tómate un momento para calificar tu experiencia:`,
-          { parse_mode: 'Markdown', ...ratingKeyboard },
-        );
-      } catch (err) {
-        console.error(
-          'Error al enviar la solicitud de calificación al cliente:',
-          err,
-        );
       }
     }
 
@@ -2912,7 +2929,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       this.logger.log(`No system user found for telegramChatId=${telegramId}`);
     }
 
-    if (ctx.chat?.type === 'private') {
+    if (
+      ctx.chat?.type === 'private' &&
+      ctx.session?.step === 'GROUP_WITH_BOSS'
+    ) {
       const groupRequest =
         await this.groupServicesService.findActiveRequestByClientTelegram(
           telegramId,
@@ -3013,8 +3033,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
       if (ctx.session.metodoPago) {
         const metodoPrevio = ctx.session.metodoPago;
-        priceMsg += `\n\nQuedamos en pago por *${metodoPrevio.toUpperCase()}*.`;
-        await this.sendDelayedReply(ctx, priceMsg);
         await this.applyDraftPaymentMethod(ctx, metodoPrevio);
         return;
       }
@@ -3235,6 +3253,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }
 
       // ─── FLUJO NORMAL ────────────────────────────────────────────────────────
+      const isProgramado = ctx.session?.tipoAgenda === 'programado';
+      const fechaProg = ctx.session?.fechaProgramada
+        ? new Date(ctx.session.fechaProgramada)
+        : undefined;
+
       const nuevoServicio = await this.servicesService.reserveNext({
         clienteId: client.id,
         empleadaId: empleada.id,
@@ -3253,6 +3276,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         locationAddressSnapshot: ctx.session?.locationAddressSnapshot ?? null,
         customerTransportCharge: ctx.session?.customerTransportCharge ?? 0,
         totalTransporte: ctx.session?.customerTransportCharge ?? 0,
+        fechaProgramada: fechaProg,
+        tipoAgenda: isProgramado ? 'programado' : 'inmediato',
       });
       if (receiptValidationId) {
         await this.paymentReceiptValidationsRepository.update(
@@ -3282,18 +3307,35 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             topic.message_thread_id,
           );
 
+          const fechaProgFormatted = nuevoServicio.fechaProgramada
+            ? new Date(nuevoServicio.fechaProgramada).toLocaleString('es-MX', {
+                timeZone: 'America/Mexico_City',
+              })
+            : null;
+
           const detailsMsg =
-            `📋 *Información del Servicio:*\n\n` +
+            (isProgramado
+              ? `📅 *SOLICITUD DE CITA PROGRAMADA*\n\n`
+              : `📋 *Información del Servicio:*\n\n`) +
             `• *Cliente:* ${clientName} (ID: ${telegramId})\n` +
             `• *Empleada:* ${empleada.nombreArtistico}\n` +
+            (isProgramado && fechaProgFormatted
+              ? `• *Fecha/Hora de Cita:* ${fechaProgFormatted}\n`
+              : '') +
             `• *Duración:* ${duracionPactadaHoras} horas\n` +
             `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
             `• *Tarifa:* $${empleada.precioBaseHora}/hr\n` +
             (notasUbicacionSafe
               ? `• *Ubicación/Notas:* ${notasUbicacionSafe}\n`
               : '') +
-            `• *Estado:* ${nuevoServicio.servicioPrevioId ? 'Pendiente para agendar' : 'Pendiente'}` +
-            (nuevoServicio.horaInicioEstimada
+            `• *Estado:* ${
+              nuevoServicio.servicioPrevioId
+                ? 'Pendiente para agendar'
+                : isProgramado
+                  ? 'Pendiente (Cita Programada)'
+                  : 'Pendiente'
+            }` +
+            (!isProgramado && nuevoServicio.horaInicioEstimada
               ? `\n• *Llegada estimada:* ${nuevoServicio.horaInicioEstimada.toLocaleTimeString(
                   'es-MX',
                   {
@@ -3362,11 +3404,37 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         }
       }
 
-      const msgExito = await this.aiMessageService.generate(
-        'booking_received',
-        { employeeName: empleada.nombreArtistico },
-        'Listo, dame un momentico y miro si puedo ir contigo',
+      const formatoMoneda = new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+      });
+      const totalBase = duracionPactadaHoras * Number(empleada.precioBaseHora);
+      const transportCharge = Number(
+        nuevoServicio.customerTransportCharge ?? 0,
       );
+      const total = totalBase + transportCharge;
+
+      let msgExito = isProgramado
+        ? `*Resumen de nuestra cita programada:*\n\n`
+        : `*Resumen de nuestra cita:*\n\n`;
+      if (isProgramado && nuevoServicio.fechaProgramada) {
+        msgExito += `*Fecha y hora:* ${new Date(nuevoServicio.fechaProgramada).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}\n`;
+      }
+      msgExito += `*Tiempo:* ${duracionPactadaHoras} hora(s)\n`;
+      if (transportCharge > 0) {
+        msgExito += `*Total a pagar:* ${formatoMoneda.format(total)} (incluye transporte)\n`;
+      } else {
+        msgExito += `*Total a pagar:* ${formatoMoneda.format(total)}\n`;
+      }
+      const ubicacionNombre =
+        nuevoServicio.locationNameSnapshot || 'Ubicación enviada';
+      msgExito += `*Lugar:* ${ubicacionNombre}\n`;
+      msgExito += `*Método de pago:* ${metodoPago.toUpperCase()}\n\n`;
+      if (isProgramado) {
+        msgExito += `¿Todo correcto mor? Tu cita quedó solicitada. Un ratico antes de la hora te avisaré para confirmar que voy saliendo.`;
+      } else {
+        msgExito += `¿Todo correcto mor? Yo me voy arreglando para salir a verte rapidito 🔥 Dame un momentico mientras mi chofer confirma la ruta y te aviso.`;
+      }
 
       const msg = await ctx.telegram.sendMessage(telegramId, msgExito, {
         ...Markup.removeKeyboard(),
@@ -3913,6 +3981,40 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ) {
           await ctx.telegram.sendMessage(service.clienteTelegramId, text);
           await this.recordConversation(service, 'jefe', text);
+        } else if (
+          !service &&
+          !groupRequest &&
+          actor &&
+          (actor.rol === 'admin' || actor.rol === 'jefe')
+        ) {
+          // Buscar si es un hilo de borrador o takeover de un cliente
+          const sessions = await this.telegramSessionRepository.find();
+          const matched = sessions.find(
+            (s) =>
+              s.data?.bossThreadId === threadId.toString() &&
+              s.data?.bossGroupId === chatId,
+          );
+          if (matched) {
+            const clientTelegramId = matched.key.split(':')[0];
+            if (clientTelegramId) {
+              await ctx.telegram.sendMessage(clientTelegramId, text);
+              const client = await this.clientesRepository.findOne({
+                where: { telegramChatId: clientTelegramId },
+              });
+              if (client) {
+                await this.conversationsRepository.save(
+                  this.conversationsRepository.create({
+                    clienteId: client.id,
+                    servicioId: null,
+                    bookingSessionId: matched.data.bookingSessionId || null,
+                    emisor: 'jefe',
+                    mensaje: text,
+                    iaActiva: false,
+                  }),
+                );
+              }
+            }
+          }
         }
       } catch (err) {
         this.logger.error('Error en Flujo 2 (Respuesta del Jefe):', err);
@@ -3933,7 +4035,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         if (
           groupRequest &&
           groupRequest.boss?.grupoTelegramId &&
-          groupRequest.telegramThreadId
+          groupRequest.telegramThreadId &&
+          ctx.session?.step === 'GROUP_WITH_BOSS'
         ) {
           await this.groupServicesService.recordRequestConversation(
             groupRequest,
@@ -3961,6 +4064,19 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           },
           order: { createdAt: 'DESC' },
         });
+
+        if (
+          !activeService &&
+          (ctx.session?.humanTakeover || ctx.session?.iaActiva === false) &&
+          ctx.session?.bossGroupId &&
+          ctx.session?.bossThreadId
+        ) {
+          await this.recordDraftConversation(ctx, 'cliente', text);
+          await ctx.telegram.sendMessage(ctx.session.bossGroupId, text, {
+            message_thread_id: Number(ctx.session.bossThreadId),
+          });
+          return;
+        }
 
         if (activeService && activeService.iaActiva === false) {
           const jefe = activeService.jefe || activeService.empleada?.jefe;
@@ -4152,12 +4268,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         existingBuffer.ctx = ctx;
         existingBuffer.timer = setTimeout(() => {
           this.flushClientMessageBuffer(telegramId, empleada);
-        }, 1800);
+        }, 4000);
         return;
       } else {
         const timer = setTimeout(() => {
           this.flushClientMessageBuffer(telegramId, empleada);
-        }, 1800);
+        }, 4000);
         this.clientMessageBuffers.set(telegramId, {
           messages: [userMessage],
           timer,
@@ -4472,11 +4588,30 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       );
       return;
     }
-    const request = await this.groupServicesService.createFromDetectedIntent(
-      client.id,
-      initialEmployeeId,
-      ctx.session?.bookingSessionId,
-    );
+    const message =
+      '¡Uy qué rico! Déjame ver qué amiguitas mías están disponibles para que armemos algo bien delicioso y te aviso en un momentito.';
+    await ctx.reply(message, Markup.removeKeyboard());
+
+    let request;
+    try {
+      request = await this.groupServicesService.createFromDetectedIntent(
+        client.id,
+        initialEmployeeId,
+        ctx.session?.bookingSessionId,
+      );
+    } catch (err: any) {
+      this.logger.error('Error creando solicitud grupal:', err);
+      if (err instanceof ConflictException) {
+        await ctx.reply(
+          'Uy amor, me acaban de avisar que ahorita todas mis amigas andan ocupadas. Si quieres nos vemos tú y yo solitos, ¿cuántas horitas te gustaría?',
+        );
+      } else {
+        await ctx.reply(
+          'Uy lindo, déjame checarlo bien y te confirmo en un momentito.',
+        );
+      }
+      return;
+    }
     ctx.session = {
       ...(ctx.session ?? {}),
       step: 'GROUP_WITH_BOSS',
@@ -4484,44 +4619,48 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       groupIntentClarificationPending: false,
     };
 
-    const bossGroupId = request.boss?.grupoTelegramId;
-    if (bossGroupId && !request.telegramThreadId) {
-      const clientName =
-        client.nombreTelegram || ctx.from?.first_name || 'Cliente';
-      const topic = await ctx.telegram.createForumTopic(
-        bossGroupId,
-        `Grupo: ${clientName}`,
-      );
-      await this.groupServicesService.setTelegramThread(
-        request.id,
-        topic.message_thread_id.toString(),
-      );
-      await ctx.telegram.sendMessage(
-        bossGroupId,
-        `Solicitud de servicio grupal\nCliente: ${clientName}\nLa IA fue desactivada. Organiza participantes, ubicación, horas, pago y transporte desde el panel del jefe.`,
-        { message_thread_id: topic.message_thread_id },
-      );
-      const history = await this.conversationsRepository.find({
-        where: { groupRequestId: request.id },
-        order: { enviadoAt: 'ASC' },
-      });
-      for (const item of history) {
-        const label =
-          item.emisor === 'cliente'
-            ? 'Cliente'
-            : item.emisor === 'ia'
-              ? 'IA'
-              : 'Sistema';
+    try {
+      const bossGroupId = request.boss?.grupoTelegramId;
+      if (bossGroupId && !request.telegramThreadId) {
+        const clientName =
+          client.nombreTelegram || ctx.from?.first_name || 'Cliente';
+        const topic = await ctx.telegram.createForumTopic(
+          bossGroupId,
+          `Grupo: ${clientName}`,
+        );
+        await this.groupServicesService.setTelegramThread(
+          request.id,
+          topic.message_thread_id.toString(),
+        );
         await ctx.telegram.sendMessage(
           bossGroupId,
-          `${label}: ${item.mensaje}`,
+          `Solicitud de servicio grupal\nCliente: ${clientName}\nLa IA fue desactivada. Organiza participantes, ubicación, horas, pago y transporte desde el panel del jefe.`,
           { message_thread_id: topic.message_thread_id },
         );
+        const history = await this.conversationsRepository.find({
+          where: { groupRequestId: request.id },
+          order: { enviadoAt: 'ASC' },
+        });
+        for (const item of history) {
+          const label =
+            item.emisor === 'cliente'
+              ? 'Cliente'
+              : item.emisor === 'ia'
+                ? 'IA'
+                : 'Sistema';
+          await ctx.telegram.sendMessage(
+            bossGroupId,
+            `${label}: ${item.mensaje}`,
+            { message_thread_id: topic.message_thread_id },
+          );
+        }
       }
+    } catch (topicErr) {
+      this.logger.error(
+        'Error creando tema de foro para solicitud grupal:',
+        topicErr,
+      );
     }
-    const message =
-      'Entendido. Te estoy comunicando con el jefe para organizar el servicio grupal y confirmar disponibilidad, precio y transporte.';
-    await ctx.reply(message, Markup.removeKeyboard());
     await this.groupServicesService.recordRequestConversation(
       request,
       'sistema',
@@ -4674,292 +4813,858 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const userMessage = buffer.messages.join('\n').trim();
     if (!userMessage) return;
 
-    await this.recordDraftConversation(ctx, 'cliente', userMessage);
+    const executeBuffer = async () => {
+      await this.recordDraftConversation(ctx, 'cliente', userMessage);
 
-    const normalizedAnswer = userMessage.toLowerCase();
-    if (session.groupIntentClarificationPending) {
-      if (
-        /^(s[ií]|claro|correcto|exacto|varias|más de una)\b/.test(
-          normalizedAnswer,
-        )
-      ) {
-        await this.handoffGroupRequest(ctx, empleada.id);
-        return;
-      }
-      if (/^(no|solo una|solamente una)\b/.test(normalizedAnswer)) {
-        session.groupIntentClarificationPending = false;
-      } else {
-        await ctx.reply(
-          'Solo para confirmar: ¿quieres contratar a dos o más empleadas?',
-        );
-        return;
-      }
-    } else {
-      const groupIntent = detectGroupServiceIntent(userMessage);
-      if (groupIntent === 'grupal') {
-        await this.handoffGroupRequest(ctx, empleada.id);
-        return;
-      }
-      if (groupIntent === 'incierta') {
-        session.groupIntentClarificationPending = true;
-        await ctx.reply(
-          '¿Quieres que el servicio incluya a dos o más empleadas?',
-        );
-        return;
-      }
-    }
-
-    if (session.waitingForBusyChoice) {
-      const normalized = userMessage.toLowerCase();
-      if (
-        /\b(otra|otras|opciones|disponibles|cat[aá]logo|ver)\b/.test(normalized)
-      ) {
-        await this.showAvailableEmployeeCatalog(ctx);
-        return;
-      }
-      if (
-        /\b(esperar|espero|quiero a|con ella|reservar|agendar)\b/.test(
-          normalized,
-        ) ||
-        extractHireDuration(userMessage) ||
-        extractHirePaymentMethod(userMessage)
-      ) {
-        session.waitingForBusyChoice = false;
-      } else {
-        const clarification =
-          '¿Prefieres esperar a esta empleada o ver las empleadas disponibles ahora?';
-        await this.sendDelayedReply(ctx, clarification);
-        await this.recordDraftConversation(ctx, 'ia', clarification);
-        return;
-      }
-    }
-
-    // Actualizar duración o método de pago si el cliente lo mencionó o cambió
-    const extractedDuration = extractHireDuration(userMessage);
-    const extractedPayment = extractHirePaymentMethod(userMessage);
-
-    if (extractedDuration) {
-      session.duracionPactadaHoras = extractedDuration;
-    }
-    if (extractedPayment) {
-      session.metodoPago = extractedPayment;
-    }
-
-    const history = session.chatHistory || [];
-    history.push({ role: 'user', parts: [{ text: userMessage }] });
-
-    const [empleadaExtras, presetLocations] = await Promise.all([
-      this.extrasCatalogoRepository.find({
-        where: { empleadaId: empleada.id, activo: true },
-      }),
-      this.transportOperations.activeLocations(),
-    ]);
-
-    const extrasData = empleadaExtras.map((e) => ({
-      nombre: e.nombre,
-      precio: Number(e.precio),
-    }));
-    const ubicacionesData = presetLocations.map(
-      (l) => `${l.name}${l.address ? ` (${l.address})` : ''}`,
-    );
-
-    const generalPrompt = getGeneralChatSystemPrompt({
-      nombreArtistico: empleada.nombreArtistico,
-      precioBaseHora: empleada.precioBaseHora,
-      descripcion: empleada.descripcion,
-      extras: extrasData,
-      ubicacionesPreestablecidas: ubicacionesData,
-    });
-    const systemPrompt = session.selectedEmployeeBusy
-      ? `Eres el asistente de la agencia, no eres la empleada y nunca debes hablar como si lo fueras. ${generalPrompt}`
-      : generalPrompt;
-
-    try {
-      await ctx.sendChatAction('typing');
-      const responseText = await this.getGroqResponse(
-        systemPrompt,
-        history,
-        telegramId,
-      );
-
-      if (responseText.includes('[GROUP_INTENT]')) {
-        await this.handoffGroupRequest(ctx, empleada.id);
-        return;
-      }
-      if (responseText.includes('[GROUP_UNCLEAR]')) {
-        session.groupIntentClarificationPending = true;
-        await ctx.reply(
-          '¿Quieres que el servicio incluya a dos o más empleadas?',
-        );
-        return;
-      }
-
-      // Check if response contains [SEND_EXCLUSIVE_PHOTO]
-      const hasPhotoIntent = responseText.includes('[SEND_EXCLUSIVE_PHOTO]');
-      const cleanText = responseText
-        .replace(/\[SEND_EXCLUSIVE_PHOTO\]/g, '')
-        .replace(/\[DATA:\s*\{.*?\}\]/g, '')
-        .trim();
-
-      if (hasPhotoIntent) {
-        try {
-          const empleadaModel = await this.empleadasRepository.findOne({
-            where: { id: empleada.id },
-            relations: { fotosExclusivas: true, empleadaFotos: true },
-          });
-          const photosToSend =
-            empleadaModel?.fotosExclusivas &&
-            empleadaModel.fotosExclusivas.length > 0
-              ? empleadaModel.fotosExclusivas
-              : empleadaModel?.empleadaFotos || [];
-
-          if (photosToSend.length > 0) {
-            const randomPhoto =
-              photosToSend[Math.floor(Math.random() * photosToSend.length)];
-            await ctx.telegram.sendPhoto(telegramId, randomPhoto.url, {
-              caption: cleanText || `Para ti con cariño... 🔥`,
-            });
-            history.push({
-              role: 'model',
-              parts: [{ text: cleanText || 'Te envié una foto.' }],
-            });
-            session.chatHistory = history;
-            await this.recordDraftConversation(
-              ctx,
-              'ia',
-              `[Foto exclusiva enviada] ${cleanText}`,
-            );
-            return;
-          }
-        } catch (photoErr) {
-          this.logger.warn(
-            'Error enviando foto exclusiva por telegram:',
-            photoErr,
+      const normalizedAnswer = userMessage.toLowerCase();
+      if (session.groupIntentClarificationPending) {
+        if (
+          /^(s[ií]|claro|correcto|exacto|varias|más de una)\b/.test(
+            normalizedAnswer,
+          )
+        ) {
+          await this.handoffGroupRequest(ctx, empleada.id);
+          return;
+        }
+        if (/^(no|solo una|solamente una)\b/.test(normalizedAnswer)) {
+          session.groupIntentClarificationPending = false;
+        } else {
+          await ctx.reply(
+            'Solo para confirmar: ¿quieres contratar a dos o más empleadas?',
           );
+          return;
+        }
+      } else {
+        const groupIntent = detectGroupServiceIntent(userMessage);
+        if (groupIntent === 'grupal') {
+          await this.handoffGroupRequest(ctx, empleada.id);
+          return;
+        }
+        if (groupIntent === 'incierta') {
+          session.groupIntentClarificationPending = true;
+          await ctx.reply(
+            '¿Quieres que el servicio incluya a dos o más empleadas?',
+          );
+          return;
         }
       }
 
-      // Check if response contains the structured DATA block
-      const dataMatch = responseText.match(/\[DATA:\s*(\{.*?\})\]/);
+      if (session.waitingForBusyChoice) {
+        const normalized = userMessage.toLowerCase();
+        if (
+          /\b(otra|otras|opciones|disponibles|cat[aá]logo|ver)\b/.test(
+            normalized,
+          )
+        ) {
+          await this.showAvailableEmployeeCatalog(ctx);
+          return;
+        }
+        if (
+          /\b(esperar|espero|quiero a|con ella|reservar|agendar)\b/.test(
+            normalized,
+          ) ||
+          extractHireDuration(userMessage) ||
+          extractHirePaymentMethod(userMessage)
+        ) {
+          session.waitingForBusyChoice = false;
+        } else {
+          const clarification =
+            '¿Prefieres esperar a esta empleada o ver las empleadas disponibles ahora?';
+          await this.sendDelayedReply(ctx, clarification);
+          await this.recordDraftConversation(ctx, 'ia', clarification);
+          return;
+        }
+      }
 
-      if (dataMatch) {
-        try {
-          const parsedData = JSON.parse(dataMatch[1]);
-          const parsedDuracion = parseInt(parsedData.duracion, 10);
-          const userProvidedPayment =
-            extractHirePaymentMethod(userMessage) ||
-            history
-              .filter((h) => h.role === 'user')
-              .map((h) => extractHirePaymentMethod(h.parts[0]?.text || ''))
-              .find((method) => Boolean(method));
+      // Actualizar duración o método de pago si el cliente lo mencionó o cambió
+      const extractedDuration = extractHireDuration(userMessage);
+      const extractedPayment = extractHirePaymentMethod(userMessage);
 
-          if (
-            Number.isInteger(parsedDuracion) &&
-            parsedDuracion >= 1 &&
-            parsedDuracion <= 24
-          ) {
-            session.duracionPactadaHoras = parsedDuracion;
-            if (userProvidedPayment) {
-              session.metodoPago = userProvidedPayment;
-            } else if (
-              parsedData.pago &&
-              extractHirePaymentMethod(userMessage)
-            ) {
-              session.metodoPago = parsedData.pago;
-            }
+      if (extractedDuration) {
+        session.duracionPactadaHoras = extractedDuration;
+      }
+      if (extractedPayment) {
+        session.metodoPago = extractedPayment;
+      }
 
-            if (session.duracionPactadaHoras && session.metodoPago) {
-              session.step = 'AWAITING_LOCATION';
-              history.push({ role: 'model', parts: [{ text: cleanText }] });
+      const history = session.chatHistory || [];
+      history.push({ role: 'user', parts: [{ text: userMessage }] });
+
+      const [empleadaExtras, presetLocations, busySchedules] =
+        await Promise.all([
+          this.extrasCatalogoRepository.find({
+            where: { empleadaId: empleada.id, activo: true },
+          }),
+          this.transportOperations.activeLocations(),
+          this.getEmployeeBusySchedules(empleada.id),
+        ]);
+
+      const extrasData = empleadaExtras.map((e) => ({
+        nombre: e.nombre,
+        precio: Number(e.precio),
+      }));
+      const ubicacionesData = presetLocations.map(
+        (l) => `${l.name}${l.address ? ` (${l.address})` : ''}`,
+      );
+
+      const generalPrompt = getGeneralChatSystemPrompt({
+        nombreArtistico: empleada.nombreArtistico,
+        precioBaseHora: empleada.precioBaseHora,
+        descripcion: empleada.descripcion,
+        extras: extrasData,
+        ubicacionesPreestablecidas: ubicacionesData,
+        duracionPactada: session.duracionPactadaHoras,
+        metodoPago: session.metodoPago,
+        fechaHoraActual: new Date().toLocaleString('es-MX', {
+          timeZone: 'America/Mexico_City',
+        }),
+        horariosOcupados: busySchedules,
+        fechaProgramadaPactada: session.fechaProgramada
+          ? new Date(session.fechaProgramada).toLocaleString('es-MX', {
+              timeZone: 'America/Mexico_City',
+            })
+          : null,
+      });
+      const systemPrompt = session.selectedEmployeeBusy
+        ? `Eres el asistente de la agencia, no eres la empleada y nunca debes hablar como si lo fueras. ${generalPrompt}`
+        : generalPrompt;
+
+      try {
+        await ctx.sendChatAction('typing');
+        const responseText = await this.getGroqResponse(
+          systemPrompt,
+          history,
+          telegramId,
+        );
+
+        if (responseText.includes('[GROUP_INTENT]')) {
+          await this.handoffGroupRequest(ctx, empleada.id);
+          return;
+        }
+        if (responseText.includes('[GROUP_UNCLEAR]')) {
+          session.groupIntentClarificationPending = true;
+          await ctx.reply(
+            '¿Quieres que el servicio incluya a dos o más empleadas?',
+          );
+          return;
+        }
+
+        // Check if response contains [SEND_EXCLUSIVE_PHOTO]
+        const hasPhotoIntent = responseText.includes('[SEND_EXCLUSIVE_PHOTO]');
+        const cleanText = responseText
+          .replace(/\[SEND_EXCLUSIVE_PHOTO\]/g, '')
+          .replace(/\[DATA:\s*\{.*?\}\]/g, '')
+          .trim();
+
+        if (hasPhotoIntent) {
+          try {
+            const empleadaModel = await this.empleadasRepository.findOne({
+              where: { id: empleada.id },
+              relations: { fotosExclusivas: true, empleadaFotos: true },
+            });
+            const photosToSend =
+              empleadaModel?.fotosExclusivas &&
+              empleadaModel.fotosExclusivas.length > 0
+                ? empleadaModel.fotosExclusivas
+                : empleadaModel?.empleadaFotos || [];
+
+            if (photosToSend.length > 0) {
+              const randomPhoto =
+                photosToSend[Math.floor(Math.random() * photosToSend.length)];
+              await ctx.telegram.sendPhoto(telegramId, randomPhoto.url, {
+                caption: cleanText || `Para ti con cariño... 🔥`,
+              });
+              history.push({
+                role: 'model',
+                parts: [{ text: cleanText || 'Te envié una foto.' }],
+              });
               session.chatHistory = history;
-
-              const presetName = parsedData.ubicacionPreestablecida;
-              let matchedLocation: any = null;
-              if (presetName && typeof presetName === 'string') {
-                const activeLocs =
-                  await this.transportOperations.activeLocations();
-                matchedLocation =
-                  activeLocs.find(
-                    (loc) =>
-                      loc.name
-                        .toLowerCase()
-                        .includes(presetName.toLowerCase().trim()) ||
-                      presetName
-                        .toLowerCase()
-                        .includes(loc.name.toLowerCase().trim()),
-                  ) || null;
-              }
-
-              if (matchedLocation) {
-                await this.sendDelayedReply(ctx, cleanText);
-                await this.recordDraftConversation(ctx, 'ia', cleanText);
-
-                session.presetLocationId = matchedLocation.id;
-                session.locationNameSnapshot = matchedLocation.name;
-                session.locationAddressSnapshot = matchedLocation.address;
-                session.customerTransportCharge = 0;
-
-                await this.onLocation(ctx, {
-                  latitude: Number(matchedLocation.latitude),
-                  longitude: Number(matchedLocation.longitude),
-                  title: matchedLocation.name,
-                  address: matchedLocation.address,
-                });
-                return;
-              }
-
-              await this.replyWithServiceLocationOptions(
-                ctx,
-                cleanText || 'Selecciona la ubicación del servicio.',
-              );
               await this.recordDraftConversation(
                 ctx,
                 'ia',
-                cleanText || 'Selecciona la ubicación del servicio.',
+                `[Foto exclusiva enviada] ${cleanText}`,
               );
               return;
             }
+          } catch (photoErr) {
+            this.logger.warn(
+              'Error enviando foto exclusiva por telegram:',
+              photoErr,
+            );
           }
-        } catch (jsonErr) {
-          this.logger.error(
-            'Failed to parse LLM extracted JSON data:',
-            jsonErr,
+        }
+
+        // Check if response contains the structured DATA block
+        const dataMatch = responseText.match(/\[DATA:\s*(\{.*?\})\]/);
+
+        if (dataMatch) {
+          try {
+            const parsedData = JSON.parse(dataMatch[1]);
+            const parsedDuracion = parseInt(parsedData.duracion, 10);
+            const userProvidedPayment =
+              extractHirePaymentMethod(userMessage) ||
+              history
+                .filter((h) => h.role === 'user')
+                .map((h) => extractHirePaymentMethod(h.parts[0]?.text || ''))
+                .find((method) => Boolean(method));
+
+            if (
+              Number.isInteger(parsedDuracion) &&
+              parsedDuracion >= 1 &&
+              parsedDuracion <= 24
+            ) {
+              session.duracionPactadaHoras = parsedDuracion;
+              if (
+                parsedData.fechaProgramada &&
+                typeof parsedData.fechaProgramada === 'string'
+              ) {
+                const parsedDate = new Date(parsedData.fechaProgramada);
+                if (
+                  !isNaN(parsedDate.getTime()) &&
+                  parsedDate.getTime() > Date.now()
+                ) {
+                  session.fechaProgramada = parsedDate.toISOString();
+                  session.tipoAgenda = 'programado';
+                }
+              } else {
+                session.fechaProgramada = undefined;
+                session.tipoAgenda = 'inmediato';
+              }
+
+              if (userProvidedPayment) {
+                session.metodoPago = userProvidedPayment;
+              } else if (
+                parsedData.pago &&
+                extractHirePaymentMethod(userMessage)
+              ) {
+                session.metodoPago = parsedData.pago;
+              }
+
+              if (session.duracionPactadaHoras && session.metodoPago) {
+                session.step = 'AWAITING_LOCATION';
+                history.push({ role: 'model', parts: [{ text: cleanText }] });
+                session.chatHistory = history;
+
+                const presetName = parsedData.ubicacionPreestablecida;
+                let matchedLocation: any = null;
+                if (presetName && typeof presetName === 'string') {
+                  const activeLocs =
+                    await this.transportOperations.activeLocations();
+                  matchedLocation =
+                    activeLocs.find(
+                      (loc) =>
+                        loc.name
+                          .toLowerCase()
+                          .includes(presetName.toLowerCase().trim()) ||
+                        presetName
+                          .toLowerCase()
+                          .includes(loc.name.toLowerCase().trim()),
+                    ) || null;
+                }
+
+                if (matchedLocation) {
+                  await this.sendDelayedReply(ctx, cleanText);
+                  await this.recordDraftConversation(ctx, 'ia', cleanText);
+
+                  session.presetLocationId = matchedLocation.id;
+                  session.locationNameSnapshot = matchedLocation.name;
+                  session.locationAddressSnapshot = matchedLocation.address;
+                  session.customerTransportCharge = 0;
+
+                  await this.onLocation(ctx, {
+                    latitude: Number(matchedLocation.latitude),
+                    longitude: Number(matchedLocation.longitude),
+                    title: matchedLocation.name,
+                    address: matchedLocation.address,
+                  });
+                  return;
+                }
+
+                await this.replyWithServiceLocationOptions(
+                  ctx,
+                  cleanText || 'Selecciona la ubicación del servicio.',
+                );
+                await this.recordDraftConversation(
+                  ctx,
+                  'ia',
+                  cleanText || 'Selecciona la ubicación del servicio.',
+                );
+                return;
+              }
+            }
+          } catch (jsonErr) {
+            this.logger.error(
+              'Failed to parse LLM extracted JSON data:',
+              jsonErr,
+            );
+          }
+        }
+
+        history.push({ role: 'model', parts: [{ text: cleanText }] });
+        session.chatHistory = history;
+
+        // Si ya teníamos horas y pago y el cliente sólo está chateando o en paso de ubicación, volver a ofrecer la selección de ubicación
+        if (session.step === 'AWAITING_LOCATION') {
+          await this.replyWithServiceLocationOptions(
+            ctx,
+            cleanText || 'Selecciona la ubicación del servicio.',
           );
+          await this.recordDraftConversation(
+            ctx,
+            'ia',
+            cleanText || 'Selecciona la ubicación del servicio.',
+          );
+          return;
+        }
+
+        await this.sendDelayedReply(ctx, cleanText);
+        await this.recordDraftConversation(ctx, 'ia', cleanText);
+      } catch (err: any) {
+        this.logger.error('Error in LLM booking chat flow:', err);
+        await this.handleAIFailureAndTransferToBoss(ctx, empleada, err);
+      }
+    };
+
+    try {
+      await executeBuffer();
+    } finally {
+      const sessionKey =
+        ctx.from && ctx.chat ? `${ctx.from.id}:${ctx.chat.id}` : undefined;
+      if (sessionKey && ctx.session) {
+        await this.telegramSessionRepository.save({
+          key: sessionKey,
+          data: ctx.session,
+        });
+      }
+    }
+  }
+
+  private async handleAIFailureAndTransferToBoss(
+    ctx: BotContext,
+    empleada?: Empleadas | null,
+    error?: any,
+  ): Promise<void> {
+    this.logger.error('IA failure triggered boss takeover:', error);
+
+    // Mensaje natural al cliente sin mencionar bots ni IA
+    const naturalFallback = empleada?.nombreArtistico
+      ? `¡Hola papi! Soy *${empleada.nombreArtistico}*, dame un momentico y ya te sigo respondiendo 😘`
+      : 'Hola amor, dame un momentico y ya te sigo atendiendo 😘';
+    await this.sendDelayedReply(ctx, naturalFallback);
+    await this.recordDraftConversation(ctx, 'ia', naturalFallback);
+
+    if (!ctx.session) ctx.session = {};
+    ctx.session.iaActiva = false;
+    ctx.session.humanTakeover = true;
+
+    const telegramId = ctx.from?.id?.toString();
+    if (!telegramId) return;
+
+    const client = await this.clientesRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+    const clientName =
+      client?.nombreTelegram || ctx.from?.first_name || 'Cliente';
+
+    // Buscar jefe asignado o jefe/admin activo
+    let boss = empleada?.jefe;
+    if (!boss && empleada?.jefeId) {
+      boss = await this.usuariosRepository.findOne({
+        where: { id: empleada.jefeId, activo: true },
+      });
+    }
+    if (!boss) {
+      boss = await this.usuariosRepository.findOne({
+        where: { rol: 'jefe', disponible: true, activo: true },
+      });
+    }
+    if (!boss) {
+      boss = await this.usuariosRepository.findOne({
+        where: { rol: 'admin', activo: true },
+      });
+    }
+
+    const grupoTelegramId = boss?.grupoTelegramId;
+    if (!grupoTelegramId) {
+      this.logger.warn(
+        `No boss group found to transfer chat for client ${clientName} (${telegramId})`,
+      );
+      return;
+    }
+
+    let threadId = ctx.session.bossThreadId
+      ? parseInt(ctx.session.bossThreadId, 10)
+      : null;
+
+    if (!threadId) {
+      try {
+        const topic = await ctx.telegram.createForumTopic(
+          grupoTelegramId,
+          `👤 Cliente: ${clientName}`,
+        );
+        threadId = topic.message_thread_id;
+        ctx.session.bossThreadId = threadId.toString();
+        ctx.session.bossGroupId = grupoTelegramId;
+      } catch (topicErr) {
+        this.logger.error('Error creating forum topic for boss:', topicErr);
+      }
+    }
+
+    if (threadId) {
+      const bookingSessionId = ctx.session?.bookingSessionId;
+      if (bookingSessionId) {
+        const messages = await this.conversationsRepository.find({
+          where: { bookingSessionId },
+          order: { enviadoAt: 'ASC' },
+        });
+        if (messages.length > 0) {
+          let historyChunk = '📝 *Historial previo de la conversación:*\n\n';
+          for (const m of messages) {
+            const senderLabel = m.emisor === 'cliente' ? '👤 Cliente' : '🤖 IA';
+            historyChunk += `${senderLabel}: ${m.mensaje}\n`;
+          }
+          try {
+            await ctx.telegram.sendMessage(grupoTelegramId, historyChunk, {
+              message_thread_id: threadId,
+            });
+          } catch (histErr) {
+            this.logger.warn(
+              'Could not forward history to boss topic',
+              histErr,
+            );
+          }
         }
       }
 
-      history.push({ role: 'model', parts: [{ text: cleanText }] });
-      session.chatHistory = history;
+      const alertMsg =
+        `🚨 *Control del Chat Transferido al Jefe*\n\n` +
+        `• *Cliente:* ${clientName} (ID: \`${telegramId}\`)\n` +
+        (empleada
+          ? `• *Empleada de interés:* ${empleada.nombreArtistico}\n`
+          : '') +
+        (ctx.session.duracionPactadaHoras
+          ? `• *Duración hablada:* ${ctx.session.duracionPactadaHoras} hrs\n`
+          : '') +
+        (ctx.session.metodoPago
+          ? `• *Método de pago:* ${ctx.session.metodoPago}\n`
+          : '') +
+        `\n⚠️ *La IA se ha pausado.* Todo lo que escribas en este tema se le enviará directamente al cliente.\n\n` +
+        `💡 También puedes crear el servicio manualmente desde aquí:`;
 
-      // Si ya teníamos horas y pago y el cliente sólo está chateando o en paso de ubicación, volver a ofrecer la selección de ubicación
-      if (session.step === 'AWAITING_LOCATION') {
-        await this.replyWithServiceLocationOptions(
-          ctx,
-          cleanText || 'Selecciona la ubicación del servicio.',
+      const keyboard = Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            '➕ Crear Servicio Manual',
+            `boss_create_service:${client?.id || 'none'}:${empleada?.id || 'none'}`,
+          ),
+        ],
+      ]);
+
+      try {
+        await ctx.telegram.sendMessage(grupoTelegramId, alertMsg, {
+          message_thread_id: threadId,
+          parse_mode: 'Markdown',
+          ...keyboard,
+        });
+      } catch (sendErr) {
+        this.logger.error('Error sending alert to boss topic:', sendErr);
+      }
+    }
+  }
+
+  @Hears(/^\/(crear_servicio|crearservicio)(\s+.*)?$/i)
+  async onCommandCrearServicio(@Ctx() ctx: BotContext) {
+    const threadId = (ctx.message as any)?.message_thread_id;
+    const chatId = ctx.chat?.id?.toString();
+    const senderId = ctx.from?.id?.toString();
+    if (!senderId) return;
+
+    const actor = await this.usuariosRepository.findOne({
+      where: { telegramChatId: senderId },
+    });
+    if (!actor || (actor.rol !== 'jefe' && actor.rol !== 'admin')) {
+      await ctx.reply('❌ No tienes permisos para crear servicios.');
+      return;
+    }
+
+    let clientId = 'none';
+    let empleadaId = 'none';
+
+    if (threadId && chatId) {
+      const activeService = await this.serviciosRepository.findOne({
+        where: { telegramThreadId: threadId.toString() },
+        relations: { cliente: true, empleada: true },
+      });
+      if (activeService) {
+        clientId = activeService.clienteId || 'none';
+        empleadaId = activeService.empleadaId || 'none';
+      } else {
+        const sessions = await this.telegramSessionRepository.find();
+        const matched = sessions.find(
+          (s) =>
+            s.data?.bossThreadId === threadId.toString() &&
+            s.data?.bossGroupId === chatId,
         );
-        await this.recordDraftConversation(
-          ctx,
-          'ia',
-          cleanText || 'Selecciona la ubicación del servicio.',
-        );
+        if (matched) {
+          const clientTelId = matched.key.split(':')[0];
+          const client = await this.clientesRepository.findOne({
+            where: { telegramChatId: clientTelId },
+          });
+          if (client) clientId = client.id;
+          if (matched.data?.empleadaId) empleadaId = matched.data.empleadaId;
+        }
+      }
+    }
+
+    await this.startManualServiceWizard(ctx, clientId, empleadaId);
+  }
+
+  @Action(/^boss_create_service:(.+):(.+)$/)
+  async onBossCreateServiceAction(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const clientId = match[1];
+    const empleadaId = match[2];
+    await this.startManualServiceWizard(ctx, clientId, empleadaId);
+  }
+
+  private async startManualServiceWizard(
+    ctx: BotContext,
+    clientId: string,
+    empleadaId: string,
+  ) {
+    if (empleadaId && empleadaId !== 'none') {
+      const emp = await this.empleadasRepository.findOne({
+        where: { id: empleadaId },
+      });
+      if (emp) {
+        await this.showManualServiceDurationOptions(ctx, clientId, emp);
+        return;
+      }
+    }
+
+    // Mostrar selección de empleada
+    const employees = await this.empleadasRepository.find({
+      where: { catalogoActivo: true },
+      order: { nombreArtistico: 'ASC' },
+    });
+
+    const rows = employees
+      .slice(0, 10)
+      .map((emp) => [
+        Markup.button.callback(
+          `🌸 ${emp.nombreArtistico} ($${emp.precioBaseHora}/hr)`,
+          `boss_ms_emp:${clientId}:${emp.id}`,
+        ),
+      ]);
+
+    const msgText = '✨ *Paso 1: Selecciona la Empleada para el Servicio*';
+    const extra = {
+      parse_mode: 'Markdown' as const,
+      ...Markup.inlineKeyboard(rows),
+    };
+
+    if (ctx.callbackQuery) {
+      await ctx
+        .editMessageText(msgText, extra)
+        .catch(() => ctx.reply(msgText, extra));
+    } else {
+      await ctx.reply(msgText, extra);
+    }
+  }
+
+  @Action(/^boss_ms_emp:(.+):(.+)$/)
+  async onBossMsEmp(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const clientId = match[1];
+    const empleadaId = match[2];
+    const emp = await this.empleadasRepository.findOne({
+      where: { id: empleadaId },
+    });
+    if (!emp) {
+      await ctx.reply('Empleada no encontrada.');
+      return;
+    }
+    await this.showManualServiceDurationOptions(ctx, clientId, emp);
+  }
+
+  private async showManualServiceDurationOptions(
+    ctx: BotContext,
+    clientId: string,
+    emp: Empleadas,
+  ) {
+    const rate = Number(emp.precioBaseHora) || 1200;
+    const rows = [
+      [
+        Markup.button.callback(
+          `⏱️ 1 hr ($${rate})`,
+          `boss_ms_dur:${clientId}:${emp.id}:1`,
+        ),
+        Markup.button.callback(
+          `⏱️ 2 hrs ($${rate * 2})`,
+          `boss_ms_dur:${clientId}:${emp.id}:2`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          `⏱️ 3 hrs ($${rate * 3})`,
+          `boss_ms_dur:${clientId}:${emp.id}:3`,
+        ),
+        Markup.button.callback(
+          `⏱️ 4 hrs ($${rate * 4})`,
+          `boss_ms_dur:${clientId}:${emp.id}:4`,
+        ),
+      ],
+    ];
+
+    const msgText = `🌸 *Empleada:* ${emp.nombreArtistico} ($${rate}/hr)\n\n⏱️ *Paso 2: Selecciona la Duración del Servicio:*`;
+    const extra = {
+      parse_mode: 'Markdown' as const,
+      ...Markup.inlineKeyboard(rows),
+    };
+    if (ctx.callbackQuery) {
+      await ctx
+        .editMessageText(msgText, extra)
+        .catch(() => ctx.reply(msgText, extra));
+    } else {
+      await ctx.reply(msgText, extra);
+    }
+  }
+
+  @Action(/^boss_ms_dur:(.+):(.+):(\d+)$/)
+  async onBossMsDur(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const clientId = match[1];
+    const empleadaId = match[2];
+    const duracion = match[3];
+
+    const rows = [
+      [
+        Markup.button.callback(
+          '💵 Efectivo',
+          `boss_ms_pay:${clientId}:${empleadaId}:${duracion}:efectivo`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          '🏦 Transferencia',
+          `boss_ms_pay:${clientId}:${empleadaId}:${duracion}:transferencia`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          '💳 Tarjeta',
+          `boss_ms_pay:${clientId}:${empleadaId}:${duracion}:tarjeta`,
+        ),
+      ],
+    ];
+
+    const msgText = `⏱️ *Duración:* ${duracion} hora(s)\n\n💳 *Paso 3: Selecciona el Método de Pago:*`;
+    const extra = {
+      parse_mode: 'Markdown' as const,
+      ...Markup.inlineKeyboard(rows),
+    };
+    await ctx
+      .editMessageText(msgText, extra)
+      .catch(() => ctx.reply(msgText, extra));
+  }
+
+  @Action(/^boss_ms_pay:(.+):(.+):(\d+):(efectivo|tarjeta|transferencia)$/)
+  async onBossMsPay(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const clientId = match[1];
+    const empleadaId = match[2];
+    const duracion = match[3];
+    const metodoPago = match[4];
+
+    const locations = await this.transportOperations.activeLocations();
+    const rows = locations.map((loc) => [
+      Markup.button.callback(
+        `🏨 ${loc.name}`,
+        `boss_ms_loc:${clientId}:${empleadaId}:${duracion}:${metodoPago}:${loc.id}`,
+      ),
+    ]);
+    rows.push([
+      Markup.button.callback(
+        '📍 Ubicación Externa / Domicilio',
+        `boss_ms_loc:${clientId}:${empleadaId}:${duracion}:${metodoPago}:external`,
+      ),
+    ]);
+
+    const msgText = `💳 *Pago:* ${metodoPago.toUpperCase()}\n\n🏨 *Paso 4: Selecciona la Ubicación:*`;
+    const extra = {
+      parse_mode: 'Markdown' as const,
+      ...Markup.inlineKeyboard(rows),
+    };
+    await ctx
+      .editMessageText(msgText, extra)
+      .catch(() => ctx.reply(msgText, extra));
+  }
+
+  @Action(/^boss_ms_loc:(.+):(.+):(\d+):(efectivo|tarjeta|transferencia):(.+)$/)
+  async onBossMsLoc(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const clientId = match[1];
+    const empleadaId = match[2];
+    const duracion = match[3];
+    const metodoPago = match[4];
+    const locId = match[5];
+
+    const rows = [
+      [
+        Markup.button.callback(
+          '⚡ Inmediato (Para Ya)',
+          `boss_ms_conf:${clientId}:${empleadaId}:${duracion}:${metodoPago}:${locId}:inmediato`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          '📅 Programado (+1 hora)',
+          `boss_ms_conf:${clientId}:${empleadaId}:${duracion}:${metodoPago}:${locId}:programado`,
+        ),
+      ],
+    ];
+
+    const msgText = `🏨 *Ubicación Seleccionada*\n\n📅 *Paso 5: Selecciona el Tipo de Agenda:*`;
+    const extra = {
+      parse_mode: 'Markdown' as const,
+      ...Markup.inlineKeyboard(rows),
+    };
+    await ctx
+      .editMessageText(msgText, extra)
+      .catch(() => ctx.reply(msgText, extra));
+  }
+
+  @Action(
+    /^boss_ms_conf:(.+):(.+):(\d+):(efectivo|tarjeta|transferencia):(.+):(inmediato|programado)$/,
+  )
+  async onBossMsConfirm(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const clientId = match[1];
+    const empleadaId = match[2];
+    const duracion = parseInt(match[3], 10);
+    const metodoPago = match[4] as 'efectivo' | 'tarjeta' | 'transferencia';
+    const locId = match[5];
+    const tipoAgenda = match[6] as 'inmediato' | 'programado';
+
+    const threadId = (ctx.callbackQuery?.message as any)?.message_thread_id;
+
+    try {
+      const empleada = await this.empleadasRepository.findOne({
+        where: { id: empleadaId },
+        relations: { jefe: true },
+      });
+      if (!empleada) {
+        await ctx.reply('❌ Empleada no encontrada.');
         return;
       }
 
-      await this.sendDelayedReply(ctx, cleanText);
-      await this.recordDraftConversation(ctx, 'ia', cleanText);
+      let client: Clientes | null = null;
+      if (clientId && clientId !== 'none') {
+        client = await this.clientesRepository.findOne({
+          where: { id: clientId },
+        });
+      }
+      if (!client && threadId) {
+        const sessions = await this.telegramSessionRepository.find();
+        const matched = sessions.find(
+          (s) => s.data?.bossThreadId === threadId.toString(),
+        );
+        if (matched) {
+          const telId = matched.key.split(':')[0];
+          client = await this.clientesRepository.findOne({
+            where: { telegramChatId: telId },
+          });
+        }
+      }
+
+      if (!client) {
+        const latestClient = await this.clientesRepository.findOne({
+          order: { createdAt: 'DESC' },
+        });
+        client = latestClient;
+      }
+
+      if (!client) {
+        await ctx.reply('❌ No se encontró cliente vinculado a este chat.');
+        return;
+      }
+
+      let lat = 19.432608;
+      let lng = -99.133209;
+      let locName = 'Ubicación acordada';
+      let presetLocationId: string | undefined = undefined;
+
+      if (locId !== 'external') {
+        const locs = await this.transportOperations.activeLocations();
+        const found = locs.find((l) => l.id === locId);
+        if (found) {
+          lat = Number(found.latitude);
+          lng = Number(found.longitude);
+          locName = found.name;
+          presetLocationId = found.id;
+        }
+      }
+
+      const scheduledDate =
+        tipoAgenda === 'programado'
+          ? new Date(Date.now() + 60 * 60 * 1000)
+          : undefined;
+
+      const newService = await this.servicesService.create({
+        empleadaId: empleada.id,
+        clienteId: client.id,
+        jefeId: empleada.jefeId || undefined,
+        duracionPactadaHoras: duracion,
+        metodoPago,
+        ubicacionClienteLat: lat,
+        ubicacionClienteLng: lng,
+        precioBaseHoraPactado: Number(empleada.precioBaseHora) || 1200,
+        notas: `Servicio creado manualmente por el jefe (${locName})`,
+        tipoAgenda,
+        fechaProgramada: scheduledDate,
+        presetLocationId,
+        clienteTelegramId: client.telegramChatId,
+      });
+
+      if (threadId) {
+        newService.telegramThreadId = threadId.toString();
+        newService.iaActiva = false;
+        await this.serviciosRepository.save(newService);
+      }
+
+      const totalBase = (Number(empleada.precioBaseHora) || 1200) * duracion;
+      const successMsg =
+        `✅ *Servicio Creado Exitosamente*\n\n` +
+        `• *ID:* #${newService.id.slice(0, 8)}\n` +
+        `• *Cliente:* ${client.nombreTelegram || 'Cliente'}\n` +
+        `• *Empleada:* ${empleada.nombreArtistico}\n` +
+        `• *Duración:* ${duracion} hrs\n` +
+        `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
+        `• *Ubicación:* ${locName}\n` +
+        `• *Total Base:* $${totalBase}\n` +
+        `• *Agenda:* ${tipoAgenda.toUpperCase()}`;
+
+      await ctx
+        .editMessageText(successMsg, { parse_mode: 'Markdown' })
+        .catch(() => ctx.reply(successMsg, { parse_mode: 'Markdown' }));
+
+      // Notificar al cliente en privado
+      if (client.telegramChatId) {
+        const clientMsg = `¡Listo amor! Tu servicio con *${empleada.nombreArtistico}* por ${duracion} hora(s) ha sido confirmado. Ya nos estamos preparando para salir a verte.`;
+        await ctx.telegram.sendMessage(client.telegramChatId, clientMsg, {
+          parse_mode: 'Markdown',
+        });
+        await this.recordConversation(newService, 'ia', clientMsg);
+      }
     } catch (err: any) {
-      if (err?.message === 'AI_LIMIT_REACHED') {
-        await ctx.reply(
-          '⚠️ *Límite de IA alcanzado:* Has agotado tus consultas gratuitas de hoy con la Inteligencia Artificial. Por favor, intenta de nuevo mañana.',
-          { parse_mode: 'Markdown' },
-        );
-        return;
-      }
-      this.logger.error('Error in LLM booking chat flow:', err);
-      await this.sendDelayedReply(
-        ctx,
-        'Oye lindo, se me cortó un segundo la señal 🙈 ¿Me recuerdas cuántas horitas querías y cómo vas a pagar (efectivo, tarjeta o transferencia)?',
-      );
+      this.logger.error('Error creating manual service from Telegram:', err);
+      await ctx.reply(`❌ Error al crear servicio: ${err.message || err}`);
     }
   }
 }

@@ -42,36 +42,37 @@ export class TelegramBookingService {
     clientTelegramId?: string,
   ): Promise<string> {
     if (clientTelegramId) {
-      const client = await this.clientesRepository.findOne({
-        where: { telegramChatId: clientTelegramId },
-      });
+      try {
+        const client = await this.clientesRepository.findOne({
+          where: { telegramChatId: clientTelegramId },
+        });
 
-      if (client) {
-        const today = new Date();
-        const lastCall = client.lastAiCallAt
-          ? new Date(client.lastAiCallAt)
-          : null;
+        if (client) {
+          const today = new Date();
+          const lastCall = client.lastAiCallAt
+            ? new Date(client.lastAiCallAt)
+            : null;
 
-        // Comprobar si el día, mes o año cambiaron en la zona horaria del servidor
-        const isDifferentDay =
-          !lastCall ||
-          today.getDate() !== lastCall.getDate() ||
-          today.getMonth() !== lastCall.getMonth() ||
-          today.getFullYear() !== lastCall.getFullYear();
+          // Comprobar si el día, mes o año cambiaron en la zona horaria del servidor
+          const isDifferentDay =
+            !lastCall ||
+            today.getDate() !== lastCall.getDate() ||
+            today.getMonth() !== lastCall.getMonth() ||
+            today.getFullYear() !== lastCall.getFullYear();
 
-        if (isDifferentDay) {
-          client.aiCallsToday = 0;
+          if (isDifferentDay) {
+            client.aiCallsToday = 0;
+          }
+
+          client.aiCallsToday = (client.aiCallsToday || 0) + 1;
+          client.lastAiCallAt = today;
+          await this.clientesRepository.save(client);
         }
-
-        const maxCalls =
-          this.configService.get<number>('MAX_DAILY_AI_CALLS') || 15;
-        if (client.aiCallsToday >= maxCalls) {
-          throw new Error('AI_LIMIT_REACHED');
-        }
-
-        client.aiCallsToday += 1;
-        client.lastAiCallAt = today;
-        await this.clientesRepository.save(client);
+      } catch (err) {
+        this.logger.warn(
+          'Error registrando llamada de IA para el cliente:',
+          err,
+        );
       }
     }
 

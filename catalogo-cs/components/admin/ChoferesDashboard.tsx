@@ -23,6 +23,7 @@ interface Chofer {
   telefono: string;
   email: string;
   usuarioId: string;
+  sancionada?: boolean;
   vehiculoMarca?: string;
   vehiculoModelo?: string;
   vehiculoColor?: string;
@@ -399,7 +400,14 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
               {filtered.map((chofer) => (
                 <tr key={chofer.id} className="border-b border-zinc-800/40 hover:bg-zinc-900/10 transition-colors">
                   <td className="px-6 py-4 text-base font-semibold text-white">
-                    {chofer.nombre}
+                    <div className="flex items-center gap-2">
+                      <span>{chofer.nombre}</span>
+                      {chofer.sancionada && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-red-950/80 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-400">
+                          ⛔ Sancionado
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-zinc-300">
                     {chofer.telefono}

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, MessageCircle, Pencil, Search } from "lucide-react";
+import { Eye, Plus, Search } from "lucide-react";
 import ServiceStatusBadge from "./service-status-badge";
 import ServiceDetailDialog from "./service-detail-dialog";
-import type { Service, ServiceStatus } from "@/lib/types";
+import CreateServiceDialog from "./create-service-dialog";
+import type { Service } from "@/lib/types";
 import { formatAvailabilityTime } from "@/lib/availability";
+import { getServices } from "@/lib/data/services";
 
 type Props = {
   initialServices?: Service[];
@@ -16,8 +18,13 @@ export default function ServicesTable({ initialServices = [] }: Props) {
   const router = useRouter();
   const [services, setServices] = useState<Service[]>(initialServices);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [creatingService, setCreatingService] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  useEffect(() => {
+    setServices(initialServices);
+  }, [initialServices]);
 
   const filteredServices = services.filter((service) => {
     const matchesSearch =
@@ -31,7 +38,13 @@ export default function ServicesTable({ initialServices = [] }: Props) {
     return matchesSearch && matchesStatus;
   });
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
+    try {
+      const fresh = await getServices();
+      if (fresh) setServices(fresh);
+    } catch (err) {
+      console.error("Error refreshing services:", err);
+    }
     router.refresh();
   };
 
@@ -50,7 +63,8 @@ export default function ServicesTable({ initialServices = [] }: Props) {
           />
         </div>
 
-        <div className="flex gap-2 items-center overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex gap-2 items-center flex-wrap sm:flex-nowrap">
+          <div className="flex gap-2 items-center overflow-x-auto pb-1 sm:pb-0">
           {(
             [
               ["all", "Todos"],
@@ -74,6 +88,16 @@ export default function ServicesTable({ initialServices = [] }: Props) {
               {label}
             </button>
           ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCreatingService(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#C5A55A] text-zinc-950 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-[#d8b769] shadow-md shadow-amber-500/20 transition-all whitespace-nowrap ml-auto sm:ml-0"
+          >
+            <Plus size={15} />
+            <span>Crear Servicio</span>
+          </button>
         </div>
       </div>
 
@@ -140,11 +164,24 @@ export default function ServicesTable({ initialServices = [] }: Props) {
                     </td>
 
                     <td className="p-4">
-                      <ServiceStatusBadge status={service.estado} />
-                      {service.horaInicioEstimada && (
-                        <p className="mt-1 text-[11px] text-zinc-500">
-                          Llegada: {formatAvailabilityTime(service.horaInicioEstimada)}
+                      <div className="flex items-center gap-1.5">
+                        <ServiceStatusBadge status={service.estado} />
+                        {service.tipoAgenda === "programado" && (
+                          <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-purple-300">
+                            📅 Cita
+                          </span>
+                        )}
+                      </div>
+                      {service.tipoAgenda === "programado" && service.fechaProgramada ? (
+                        <p className="mt-1 text-[11px] text-purple-300 font-medium">
+                          Cita: {new Date(service.fechaProgramada).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
                         </p>
+                      ) : (
+                        service.horaInicioEstimada && (
+                          <p className="mt-1 text-[11px] text-zinc-500">
+                            Llegada: {formatAvailabilityTime(service.horaInicioEstimada)}
+                          </p>
+                        )
                       )}
                     </td>
 
@@ -180,6 +217,14 @@ export default function ServicesTable({ initialServices = [] }: Props) {
           }}
         />
       )}
+      {/* Modal de Creación Manual */}
+      <CreateServiceDialog
+        open={creatingService}
+        onClose={() => setCreatingService(false)}
+        onCreated={() => {
+          handleRefresh();
+        }}
+      />
     </div>
   );
 }
