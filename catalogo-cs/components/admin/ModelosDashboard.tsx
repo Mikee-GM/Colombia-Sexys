@@ -138,34 +138,34 @@ export default function ModelosDashboard({
             </span>
           </div>
         ) : !modelo.disponible || modelo.availabilityStatus === "ocupada" ? (
-          <div className="absolute top-2 left-2 bg-amber-950/90 px-2.5 py-1 border border-amber-500/50">
-            <span className="text-[9px] text-amber-300 font-bold tracking-widest uppercase">
+          <div className="absolute top-2 left-2 bg-amber-950/90 px-3 py-1.5 border border-amber-500/50 rounded-lg">
+            <span className="text-xs text-amber-300 font-bold tracking-widest uppercase">
               Ocupada
             </span>
           </div>
         ) : (
-          <div className="absolute top-2 left-2 bg-black/80 px-2.5 py-1 border border-[#C5A55A]/50">
-            <span className="text-[9px] text-[#E8D5A3] font-bold tracking-widest uppercase">
+          <div className="absolute top-2 left-2 bg-black/80 px-3 py-1.5 border border-[#C5A55A]/50 rounded-lg">
+            <span className="text-xs text-[#E8D5A3] font-bold tracking-widest uppercase">
               Disponible
             </span>
           </div>
         )}
-        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-          <div className="bg-black/80 px-2 py-1 border border-[#C5A55A]/30">
-            <span className="text-[9px] text-[#C5A55A] font-bold">
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-1.5">
+          <div className="bg-black/80 px-2.5 py-1 border border-[#C5A55A]/30 rounded-lg">
+            <span className="text-xs text-[#C5A55A] font-bold">
               #{index + 1}
             </span>
           </div>
           {Number(modelo.pendingWeeklyPhotosCount) > 0 && (
-            <div className="bg-emerald-950/90 border border-emerald-500/80 px-2 py-1 shadow-lg animate-pulse">
-              <span className="text-[9px] text-emerald-300 font-bold uppercase tracking-wider">
+            <div className="bg-emerald-950/90 border border-emerald-500/80 px-2.5 py-1 rounded-lg shadow-lg animate-pulse">
+              <span className="text-xs text-emerald-300 font-bold uppercase tracking-wider">
                 📸 {modelo.pendingWeeklyPhotosCount} por validar
               </span>
             </div>
           )}
           {modelo.weeklyContentStatus === "atrasado" && Number(modelo.pendingWeeklyPhotosCount || 0) === 0 && (
-            <div className="bg-red-950/90 border border-red-500/80 px-2 py-1 shadow-lg">
-              <span className="text-[9px] text-red-300 font-bold uppercase tracking-wider">
+            <div className="bg-red-950/90 border border-red-500/80 px-2.5 py-1 rounded-lg shadow-lg">
+              <span className="text-xs text-red-300 font-bold uppercase tracking-wider">
                 ⚠️ Fotos atrasadas
               </span>
             </div>
@@ -173,8 +173,8 @@ export default function ModelosDashboard({
         </div>
       </div>
 
-      <div className="p-4 flex-1 flex flex-col">
-        <h3 className="font-heading text-lg font-semibold text-white mb-2">
+      <div className="p-5 flex-1 flex flex-col">
+        <h3 className="font-heading text-xl font-bold text-white mb-2">
           {modelo.nombre}
         </h3>
         <ReliabilityRating
@@ -186,7 +186,7 @@ export default function ModelosDashboard({
           <div className="mb-3">
             {otpCodes[modelo.usuarioId!] ? (
               <div className="flex items-center gap-2">
-                <div className="inline-block bg-[#C5A55A]/10 text-[#C5A55A] border border-[#C5A55A]/30 px-3 py-1 rounded text-xs font-mono font-bold">
+                <div className="inline-block bg-[#C5A55A]/10 text-[#C5A55A] border border-[#C5A55A]/30 px-3 py-1.5 rounded-lg text-sm font-mono font-bold">
                   OTP: {otpCodes[modelo.usuarioId!]}
                 </div>
                 <button
@@ -200,8 +200,8 @@ export default function ModelosDashboard({
                   className="text-[#C5A55A] hover:text-[#E8D5A3] transition-colors p-1"
                 >
                   <svg
-                    width="14"
-                    height="14"
+                    width="16"
+                    height="16"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -215,20 +215,20 @@ export default function ModelosDashboard({
             ) : (
               <button
                 onClick={() => handleGenerateOtp(modelo.usuarioId!)}
-                className="text-[10px] font-bold tracking-widest text-[#C5A55A] hover:text-[#E8D5A3] transition-colors uppercase"
+                className="text-xs font-bold tracking-wider text-[#C5A55A] hover:text-[#E8D5A3] transition-colors uppercase"
               >
                 Generar OTP
               </button>
             )}
           </div>
         )}
-        <div className="mt-auto flex gap-3 pt-3 border-t border-zinc-800/60">
+        <div className="mt-auto flex gap-3 pt-3.5 border-t border-zinc-800/60">
           <button
             onClick={() => {
               setEditingModelo(modelo);
               setShowModal(true);
             }}
-            className="text-[10px] font-bold tracking-widest text-[#E8D5A3] uppercase hover:text-white transition-colors"
+            className="text-xs font-bold tracking-wider text-[#E8D5A3] uppercase hover:text-white transition-colors"
           >
             Editar
           </button>
@@ -239,13 +239,13 @@ export default function ModelosDashboard({
                 name: modelo.nombre,
               })
             }
-            className="text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase hover:text-white transition-colors"
+            className="text-xs font-bold tracking-wider text-[#C5A55A] uppercase hover:text-white transition-colors"
           >
             Exámenes
           </button>
           <button
             onClick={() => setConfirmDelete(modelo)}
-            className="text-[10px] font-bold tracking-widest text-zinc-600 uppercase hover:text-red-400 transition-colors ml-auto"
+            className="text-xs font-bold tracking-wider text-zinc-500 uppercase hover:text-red-400 transition-colors ml-auto"
           >
             Eliminar
           </button>

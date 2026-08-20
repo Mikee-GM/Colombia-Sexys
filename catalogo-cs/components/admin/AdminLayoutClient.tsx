@@ -11,6 +11,71 @@ import SessionKeeper from "@/components/auth/session-keeper";
 import { broadcastLogout } from "@/lib/client-session";
 
 
+import {
+  Activity,
+  Award,
+  BookOpen,
+  Car,
+  CreditCard,
+  Eye,
+  FileCheck,
+  Landmark,
+  MapPin,
+  Scale,
+  Shield,
+  TrendingUp,
+  UserPlus,
+  Users,
+} from "lucide-react";
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: any;
+}
+
+interface NavGroup {
+  title: string;
+  items: NavItem[];
+}
+
+const navGroups: NavGroup[] = [
+  {
+    title: "Operaciones en Vivo",
+    items: [
+      { label: "Ojo de Dios", href: "/admin/dashboard", icon: Eye },
+      { label: "Mapa de Flota", href: "/admin/map", icon: MapPin },
+      { label: "Servicios", href: "/admin/services", icon: Activity },
+      { label: "Evidencias", href: "/admin/evidence", icon: FileCheck },
+    ],
+  },
+  {
+    title: "Personal & Equipos",
+    items: [
+      { label: "Modelos", href: "/admin/modelos", icon: Users },
+      { label: "Choferes", href: "/admin/choferes", icon: Car },
+      { label: "Jefes", href: "/admin/jefes", icon: Shield },
+      { label: "Candidatas", href: "/admin/candidatas", icon: UserPlus },
+    ],
+  },
+  {
+    title: "Finanzas & Cortes",
+    items: [
+      { label: "Liquidaciones", href: "/admin/liquidations", icon: CreditCard },
+      { label: "Cuentas Bancarias", href: "/admin/bank-accounts", icon: Landmark },
+    ],
+  },
+  {
+    title: "Control & Normativas",
+    items: [
+      { label: "Reportes & Disciplina", href: "/admin/reports", icon: Scale },
+      { label: "Indicadores (KPIs)", href: "/admin/kpis", icon: TrendingUp },
+      { label: "Transporte", href: "/admin/transport", icon: Award },
+      { label: "Reglamentos", href: "/admin/regulations", icon: BookOpen },
+    ],
+  },
+];
+
 interface AdminLayoutClientProps {
   children: React.ReactNode;
 }
@@ -19,7 +84,6 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-
 
   const handleSignOut = async () => {
     try {
@@ -32,7 +96,7 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
   };
 
   const isActive = (path: string) => {
-    return pathname === path || pathname.startsWith(path + "/");
+    return pathname === path || (path !== "/admin/dashboard" && pathname.startsWith(path + "/"));
   };
 
   const isLoginPage = pathname === "/admin";
@@ -41,213 +105,58 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
     return <LoginForm onSuccess={(redirectTo) => router.push(redirectTo)} />;
   }
 
-
   return (
     <div className="flex min-h-screen bg-black text-white font-body overflow-hidden">
       <SessionKeeper />
       {/* Sidebar Desktop */}
-      <aside className="w-72 border-r border-zinc-800 bg-[#050505] flex flex-col hidden md:flex shrink-0">
-        <div className="p-8 border-b border-zinc-800 flex flex-col items-center">
-          <div className="w-16 h-16 relative mb-4">
+      <aside className="w-64 border-r border-zinc-800/80 bg-[#050505] flex flex-col hidden md:flex shrink-0">
+        <div className="p-6 border-b border-zinc-800/80 flex flex-col items-center">
+          <div className="w-12 h-12 relative mb-3">
             <Image src="/logo-icono.webp" alt="Logo" fill className="object-contain" />
           </div>
           <p className="text-[10px] font-bold tracking-[0.25em] text-[#C5A55A] uppercase">
             Panel Admin
           </p>
         </div>
-        <nav className="flex-1 py-8 flex flex-col gap-2 px-4 overflow-y-auto">
-          <Link
-            href="/admin/dashboard"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/dashboard")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Dashboard
-          </Link>
-          <Link
-            href="/admin/modelos"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/modelos")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Modelos
-          </Link>
-          <Link
-            href="/admin/jefes"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/jefes")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Jefes
-          </Link>
-          <Link
-            href="/admin/choferes"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/choferes")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Choferes
-          </Link>
-          <Link
-            href="/admin/services"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/services")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Servicios
-          </Link>
-          <Link
-            href="/admin/evidence"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/evidence")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Evidencias
-          </Link>
-          <Link
-            href="/admin/map"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/map")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Mapa en Vivo
-          </Link>
-          <Link
-            href="/admin/liquidations"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/liquidations")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Liquidaciones
-          </Link>
-          <Link
-            href="/admin/transport"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/transport")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Transporte
-          </Link>
-          <Link
-            href="/admin/bank-accounts"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/bank-accounts")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Cuentas bancarias
-          </Link>
-          <Link
-            href="/admin/reports"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/reports")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Reportes
-          </Link>
-          <Link
-            href="/admin/kpis"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/kpis")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Indicadores
-          </Link>
-          <Link
-            href="/admin/candidatas"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/candidatas")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Candidatas
-          </Link>
-          <Link
-            href="/admin/regulations"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/regulations")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Reglamentos
-          </Link>
-          {/* <Link
-            href="/admin/alerts"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/alerts")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Alertas
-          </Link>
-          <Link
-            href="/admin/catalog"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/catalog")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Catálogo Web
-          </Link>
-          <Link
-            href="/admin/chat-monitor"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/chat-monitor")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Chat Monitor
-          </Link>
-          <Link
-            href="/admin/sentiment-alerts"
-            className={`flex items-center gap-4 px-6 py-4 text-xs font-bold tracking-[0.15em] uppercase transition-colors duration-300 ${
-              isActive("/admin/sentiment-alerts")
-                ? "text-black bg-[#C5A55A]"
-                : "text-zinc-400 hover:text-white hover:bg-zinc-900/50"
-            }`}
-          >
-            Alertas Sentimiento
-          </Link> */}
 
+        <nav className="flex-1 py-6 flex flex-col gap-6 px-3 overflow-y-auto custom-scrollbar">
+          {navGroups.map((group) => (
+            <div key={group.title} className="flex flex-col gap-1">
+              <span className="px-3 text-[10px] font-bold tracking-[0.2em] uppercase text-zinc-500">
+                {group.title}
+              </span>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all duration-200 ${
+                      active
+                        ? "text-black bg-[#C5A55A] shadow-md shadow-[#C5A55A]/20"
+                        : "text-zinc-400 hover:text-white hover:bg-zinc-900/60"
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 shrink-0 ${active ? "text-black" : "text-[#C5A55A]"}`} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
-        <div className="p-4 border-t border-zinc-800">
-          <p className="text-[10px] text-zinc-500 mb-3 px-2 truncate text-center">
+
+        <div className="p-4 border-t border-zinc-800/80 bg-zinc-950/40">
+          <p className="text-[10px] text-zinc-500 mb-2.5 px-2 truncate text-center font-mono">
             admin@colombiasexys.com
           </p>
           <button
             onClick={handleSignOut}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-none bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-all duration-300"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-red-500/50 hover:bg-red-950/20 text-zinc-400 hover:text-red-300 transition-all duration-200"
           >
-            <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-zinc-400">
-              Salir
+            <span className="text-[10px] font-bold tracking-[0.15em] uppercase">
+              Cerrar Sesión
             </span>
           </button>
         </div>
@@ -255,8 +164,13 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
 
       {/* Mobile Navbar */}
       <div className="md:hidden fixed top-0 inset-x-0 h-16 border-b border-zinc-800 bg-[#050505]/95 backdrop-blur-md z-40 flex items-center justify-between px-4">
-        <div className="w-8 h-8 relative">
-          <Image src="/logo-icono.webp" alt="Logo" fill className="object-contain" />
+        <div className="flex items-center gap-3">
+          <div className="w-7 h-7 relative">
+            <Image src="/logo-icono.webp" alt="Logo" fill className="object-contain" />
+          </div>
+          <span className="text-xs font-bold tracking-widest text-[#C5A55A] uppercase">
+            Panel Admin
+          </span>
         </div>
         <button onClick={() => setMenuOpen(!menuOpen)} className="text-[#C5A55A] p-2">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -274,216 +188,44 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="md:hidden fixed top-16 inset-x-0 bg-[#050505] border-b border-zinc-800 z-30 py-4 px-4 flex flex-col gap-2 shadow-2xl max-h-[calc(100vh-4rem)] overflow-y-auto"
+            className="md:hidden fixed top-16 inset-x-0 bg-[#080808] border-b border-zinc-800 z-30 py-5 px-4 flex flex-col gap-5 shadow-2xl max-h-[calc(100vh-4rem)] overflow-y-auto"
           >
-            <Link
-              href="/admin/dashboard"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/dashboard")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Dashboard
-            </Link>
-            <Link
-              href="/admin/modelos"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/modelos")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Modelos
-            </Link>
-            <Link
-              href="/admin/jefes"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/jefes")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Jefes
-            </Link>
-            <Link
-              href="/admin/choferes"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/choferes")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Choferes
-            </Link>
-            <Link
-              href="/admin/services"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/services")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Servicios
-            </Link>
-            <Link
-              href="/admin/evidence"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/evidence")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Evidencias
-            </Link>
-            <Link
-              href="/admin/map"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/map")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Mapa en Vivo
-            </Link>
-            <Link
-              href="/admin/liquidations"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/liquidations")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Liquidaciones
-            </Link>
-            <Link
-              href="/admin/transport"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/transport")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Transporte
-            </Link>
-            <Link
-              href="/admin/bank-accounts"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/bank-accounts")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Cuentas bancarias
-            </Link>
-            <Link
-              href="/admin/reports"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/reports")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Reportes
-            </Link>
-            <Link
-              href="/admin/kpis"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/kpis")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Indicadores
-            </Link>
-            <Link
-              href="/admin/candidatas"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/candidatas")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Candidatas
-            </Link>
-            <Link
-              href="/admin/regulations"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/regulations")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Reglamentos
-            </Link>
-            <Link
-              href="/admin/alerts"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/alerts")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Alertas
-            </Link>
-            <Link
-              href="/admin/catalog"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/catalog")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Catálogo Web
-            </Link>
-            <Link
-              href="/admin/chat-monitor"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/chat-monitor")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Chat Monitor
-            </Link>
-            <Link
-              href="/admin/sentiment-alerts"
-              onClick={() => setMenuOpen(false)}
-              className={`px-4 py-3 text-left text-xs font-bold tracking-widest uppercase transition-colors duration-300 ${
-                isActive("/admin/sentiment-alerts")
-                  ? "text-[#C5A55A] bg-zinc-900/50"
-                  : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              Alertas Sentimiento
-            </Link>
+            {navGroups.map((group) => (
+              <div key={group.title} className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold tracking-widest uppercase text-zinc-500 px-2">
+                  {group.title}
+                </span>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMenuOpen(false)}
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-colors ${
+                        active
+                          ? "text-black bg-[#C5A55A]"
+                          : "text-zinc-400 hover:text-white bg-zinc-950/60 border border-zinc-900"
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 ${active ? "text-black" : "text-[#C5A55A]"}`} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
 
-            <div className="mt-2 pt-2 border-t border-zinc-800">
+            <div className="pt-3 border-t border-zinc-800">
               <button
                 onClick={() => {
                   setMenuOpen(false);
                   handleSignOut();
                 }}
-                className="w-full px-4 py-3 text-left text-xs font-bold tracking-widest uppercase text-zinc-400 hover:text-white"
+                className="w-full py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold tracking-widest uppercase text-red-400 hover:bg-red-950/30 text-center"
               >
-                Cerrar Sesion
+                Cerrar Sesión
               </button>
             </div>
           </motion.div>

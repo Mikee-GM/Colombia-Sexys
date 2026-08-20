@@ -375,22 +375,22 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
           <table className="w-full min-w-[1050px] text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-900/30">
-                <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
+                <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
                   Nombre
                 </th>
-                <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
-                  Telefono
+                <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
+                  Teléfono
                 </th>
-                <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
-                  Correo Electronico
+                <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
+                  Correo Electrónico
                 </th>
-                <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
+                <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
                   Confiabilidad
                 </th>
-                <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
+                <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
                   Telegram OTP
                 </th>
-                <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase text-right">
+                <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase text-right">
                   Acciones
                 </th>
               </tr>
@@ -398,7 +398,7 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
             <tbody>
               {filtered.map((chofer) => (
                 <tr key={chofer.id} className="border-b border-zinc-800/40 hover:bg-zinc-900/10 transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-white">
+                  <td className="px-6 py-4 text-base font-semibold text-white">
                     {chofer.nombre}
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-zinc-300">
@@ -413,7 +413,7 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
                   <td className="px-6 py-4 text-sm font-medium">
                     {otpCodes[chofer.usuarioId] ? (
                       <div className="flex items-center gap-2">
-                        <span className="bg-[#C5A55A]/10 text-[#C5A55A] border border-[#C5A55A]/30 px-3 py-1 rounded text-xs font-mono font-bold">
+                        <span className="bg-[#C5A55A]/10 text-[#C5A55A] border border-[#C5A55A]/30 px-3 py-1.5 rounded-lg text-sm font-mono font-bold">
                           {otpCodes[chofer.usuarioId]}
                         </span>
                         <button
@@ -424,7 +424,7 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
                           title="Copiar comando de vinculacion"
                           className="text-[#C5A55A] hover:text-[#E8D5A3] transition-colors p-1"
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                           </svg>
@@ -433,7 +433,7 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
                     ) : (
                       <button
                         onClick={() => handleGenerateOtp(chofer.usuarioId)}
-                        className="text-[10px] font-bold tracking-widest text-[#C5A55A] hover:text-[#E8D5A3] transition-colors uppercase"
+                        className="text-xs font-bold tracking-wider text-[#C5A55A] hover:text-[#E8D5A3] transition-colors uppercase"
                       >
                         Generar OTP
                       </button>
