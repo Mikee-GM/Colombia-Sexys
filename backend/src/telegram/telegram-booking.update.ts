@@ -306,7 +306,7 @@ export function extractHireDuration(text: string): number | undefined {
     return undefined;
   }
 
-  const match = text.match(/\b(\d+)\s*(?:h|hr|hrs|hora|horas)\b/i);
+  const match = text.match(/\b(\d+)(?:\s*(?:h|hr|hrs|hora|horas))?\b/i);
   if (match) {
     const hours = parseInt(match[1], 10);
     if (hours >= 1 && hours <= 24) return hours;
