@@ -4521,7 +4521,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }
     }
     const message =
-      'Entendido. Te estoy comunicando con el jefe para organizar el servicio grupal y confirmar disponibilidad, precio y transporte.';
+      '¡Uy qué rico! Déjame ver qué amiguitas mías están disponibles para que armemos algo bien delicioso y te aviso en un momentito.';
     await ctx.reply(message, Markup.removeKeyboard());
     await this.groupServicesService.recordRequestConversation(
       request,
