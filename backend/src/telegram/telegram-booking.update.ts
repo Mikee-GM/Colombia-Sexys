@@ -5147,10 +5147,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     this.logger.error('IA failure triggered boss takeover:', error);
 
     // Mensaje natural al cliente sin mencionar bots ni IA
-    const naturalFallback =
-      empleada?.nombreArtistico
-        ? `¡Hola papi! Soy *${empleada.nombreArtistico}*, dame un momentico y ya te sigo respondiendo 😘`
-        : 'Hola amor, dame un momentico y ya te sigo atendiendo 😘';
+    const naturalFallback = empleada?.nombreArtistico
+      ? `¡Hola papi! Soy *${empleada.nombreArtistico}*, dame un momentico y ya te sigo respondiendo 😘`
+      : 'Hola amor, dame un momentico y ya te sigo atendiendo 😘';
     await this.sendDelayedReply(ctx, naturalFallback);
     await this.recordDraftConversation(ctx, 'ia', naturalFallback);
 
@@ -5221,15 +5220,19 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         if (messages.length > 0) {
           let historyChunk = '📝 *Historial previo de la conversación:*\n\n';
           for (const m of messages) {
-            const senderLabel =
-              m.emisor === 'cliente' ? '👤 Cliente' : '🤖 IA';
+            const senderLabel = m.emisor === 'cliente' ? '👤 Cliente' : '🤖 IA';
             historyChunk += `${senderLabel}: ${m.mensaje}\n`;
           }
           try {
             await ctx.telegram.sendMessage(grupoTelegramId, historyChunk, {
               message_thread_id: threadId,
             });
-          } catch {}
+          } catch (histErr) {
+            this.logger.warn(
+              'Could not forward history to boss topic',
+              histErr,
+            );
+          }
         }
       }
 
@@ -5346,12 +5349,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       order: { nombreArtistico: 'ASC' },
     });
 
-    const rows = employees.slice(0, 10).map((emp) => [
-      Markup.button.callback(
-        `🌸 ${emp.nombreArtistico} ($${emp.precioBaseHora}/hr)`,
-        `boss_ms_emp:${clientId}:${emp.id}`,
-      ),
-    ]);
+    const rows = employees
+      .slice(0, 10)
+      .map((emp) => [
+        Markup.button.callback(
+          `🌸 ${emp.nombreArtistico} ($${emp.precioBaseHora}/hr)`,
+          `boss_ms_emp:${clientId}:${emp.id}`,
+        ),
+      ]);
 
     const msgText = '✨ *Paso 1: Selecciona la Empleada para el Servicio*';
     const extra = {
@@ -5499,9 +5504,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       .catch(() => ctx.reply(msgText, extra));
   }
 
-  @Action(
-    /^boss_ms_loc:(.+):(.+):(\d+):(efectivo|tarjeta|transferencia):(.+)$/,
-  )
+  @Action(/^boss_ms_loc:(.+):(.+):(\d+):(efectivo|tarjeta|transferencia):(.+)$/)
   async onBossMsLoc(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery().catch(() => {});
     const match = (ctx as any).match;

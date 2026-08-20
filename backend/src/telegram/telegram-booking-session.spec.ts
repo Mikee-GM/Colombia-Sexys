@@ -146,4 +146,3 @@ describe('Telegram booking session input parsing', () => {
     expect(session.bossThreadId).toBe('12345');
   });
 });
-
