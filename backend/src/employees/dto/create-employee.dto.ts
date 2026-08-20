@@ -37,6 +37,18 @@ export class CreateExtraDto {
   )
   @IsNotEmpty({ message: 'El precio del servicio extra es obligatorio' })
   readonly precio: number;
+
+  @ApiPropertyOptional({
+    description: 'IDs de modelos vinculadas si es un extra de trío',
+    type: [String],
+  })
+  @IsArray({ message: 'modelosVinculadasIds debe ser un arreglo' })
+  @IsString({
+    each: true,
+    message: 'Cada ID de modelo vinculada debe ser texto',
+  })
+  @IsOptional()
+  readonly modelosVinculadasIds?: string[];
 }
 
 export class CreateEmployeeDto {

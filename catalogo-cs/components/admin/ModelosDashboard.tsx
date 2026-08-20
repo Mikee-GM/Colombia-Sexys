@@ -281,6 +281,7 @@ export default function ModelosDashboard({
         {showModal && (
           <ModelModal
             modelo={editingModelo}
+            modelos={modelos}
             onClose={() => {
               setShowModal(false);
               setEditingModelo(null);

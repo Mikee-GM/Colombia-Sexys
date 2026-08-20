@@ -1,5 +1,13 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID, IsNumber, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsNotEmpty,
+  IsString,
+  IsUUID,
+  IsNumber,
+  Min,
+  IsArray,
+  IsOptional,
+} from 'class-validator';
 
 export class CreateCatalogExtraDto {
   @ApiProperty({
@@ -23,4 +31,13 @@ export class CreateCatalogExtraDto {
   @Min(0)
   @IsNotEmpty()
   readonly precio: number;
+
+  @ApiPropertyOptional({
+    description: 'IDs de modelos vinculadas',
+    type: [String],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  readonly modelosVinculadasIds?: string[];
 }

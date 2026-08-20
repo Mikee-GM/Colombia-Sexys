@@ -51,6 +51,14 @@ export class ExtrasCatalogo {
   @ApiProperty({ description: 'Activo', example: true })
   activo: boolean;
 
+  @Column('jsonb', { name: 'modelos_vinculadas_ids', nullable: true, default: () => "'[]'" })
+  @ApiPropertyOptional({
+    description: 'IDs de modelos vinculadas para extras grupales / trios',
+    type: [String],
+    example: ['00000000-0000-4000-8000-000000000000'],
+  })
+  modelosVinculadasIds?: string[] | null;
+
   @Column('timestamp with time zone', {
     name: 'created_at',
     default: () => 'now()',

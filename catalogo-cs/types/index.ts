@@ -3,6 +3,7 @@ export interface ServiceExtra {
   nombre: string;
   precio: number;
   activo?: boolean;
+  modelosVinculadasIds?: string[];
 }
 
 export interface Modelo {

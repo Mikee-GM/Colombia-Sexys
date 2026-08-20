@@ -2,7 +2,7 @@ export interface EmpleadaPromptParams {
   nombreArtistico: string;
   precioBaseHora: number | string;
   descripcion?: string | null;
-  extras?: { nombre: string; precio: number }[];
+  extras?: { nombre: string; precio: number; modelosVinculadasNombres?: string[] }[];
   ubicacionesPreestablecidas?: string[];
   duracionPactada?: number;
   metodoPago?: string;
@@ -14,7 +14,15 @@ export interface EmpleadaPromptParams {
 export const getHireSystemPrompt = (params: EmpleadaPromptParams): string => {
   const extrasList =
     params.extras && params.extras.length > 0
-      ? params.extras.map((e) => `- ${e.nombre}: $${e.precio}`).join('\n')
+      ? params.extras
+          .map((e) => {
+            const vinculadas =
+              e.modelosVinculadasNombres && e.modelosVinculadasNombres.length > 0
+                ? ` (Hace trío con: ${e.modelosVinculadasNombres.join(', ')})`
+                : '';
+            return `- ${e.nombre}: $${e.precio}${vinculadas}`;
+          })
+          .join('\n')
       : 'No hay extras específicos registrados previamente; cualquier extra se pacta en persona.';
 
   const locationsList =

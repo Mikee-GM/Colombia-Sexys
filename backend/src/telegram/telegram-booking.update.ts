@@ -1055,10 +1055,32 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       this.getEmployeeBusySchedules(empleada.id),
     ]);
 
-    const extrasData = empleadaExtras.map((e) => ({
-      nombre: e.nombre,
-      precio: Number(e.precio),
-    }));
+    const allLinkedIds = Array.from(
+      new Set(
+        empleadaExtras.flatMap((e) =>
+          Array.isArray(e.modelosVinculadasIds) ? e.modelosVinculadasIds : [],
+        ),
+      ),
+    );
+    const linkedEmployees = allLinkedIds.length > 0
+      ? await this.empleadasRepository.find({
+          where: { id: In(allLinkedIds) },
+          select: { id: true, nombreArtistico: true },
+        })
+      : [];
+    const linkedNameMap = new Map(linkedEmployees.map((m) => [m.id, m.nombreArtistico]));
+
+    const extrasData = empleadaExtras.map((e) => {
+      const linkedIds = Array.isArray(e.modelosVinculadasIds) ? e.modelosVinculadasIds : [];
+      const linkedNames = linkedIds
+        .map((id) => linkedNameMap.get(id))
+        .filter((n): n is string => Boolean(n));
+      return {
+        nombre: e.nombre,
+        precio: Number(e.precio),
+        modelosVinculadasNombres: linkedNames,
+      };
+    });
     const ubicacionesData = presetLocations.map(
       (l) => `${l.name}${l.address ? ` (${l.address})` : ''}`,
     );
@@ -4899,10 +4921,32 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           this.getEmployeeBusySchedules(empleada.id),
         ]);
 
-      const extrasData = empleadaExtras.map((e) => ({
-        nombre: e.nombre,
-        precio: Number(e.precio),
-      }));
+      const allLinkedIds = Array.from(
+        new Set(
+          empleadaExtras.flatMap((e) =>
+            Array.isArray(e.modelosVinculadasIds) ? e.modelosVinculadasIds : [],
+          ),
+        ),
+      );
+      const linkedEmployees = allLinkedIds.length > 0
+        ? await this.empleadasRepository.find({
+            where: { id: In(allLinkedIds) },
+            select: { id: true, nombreArtistico: true },
+          })
+        : [];
+      const linkedNameMap = new Map(linkedEmployees.map((m) => [m.id, m.nombreArtistico]));
+
+      const extrasData = empleadaExtras.map((e) => {
+        const linkedIds = Array.isArray(e.modelosVinculadasIds) ? e.modelosVinculadasIds : [];
+        const linkedNames = linkedIds
+          .map((id) => linkedNameMap.get(id))
+          .filter((n): n is string => Boolean(n));
+        return {
+          nombre: e.nombre,
+          precio: Number(e.precio),
+          modelosVinculadasNombres: linkedNames,
+        };
+      });
       const ubicacionesData = presetLocations.map(
         (l) => `${l.name}${l.address ? ` (${l.address})` : ''}`,
       );

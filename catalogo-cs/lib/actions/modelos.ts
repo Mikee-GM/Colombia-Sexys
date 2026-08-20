@@ -46,6 +46,7 @@ function mapToModelo(emp: any): Modelo {
             id: ext.id,
             nombre: ext.nombre,
             precio: ext.precio ? parseFloat(ext.precio) : 0,
+            modelosVinculadasIds: Array.isArray(ext.modelosVinculadasIds) ? ext.modelosVinculadasIds : [],
           }))
       : [],
   };

@@ -139,6 +139,7 @@ export class EmployeesService {
             empleadaId: empleadaGuardada.id,
             nombre: ext.nombre,
             precio: Number(ext.precio),
+            modelosVinculadasIds: ext.modelosVinculadasIds || [],
             activo: true,
           });
           const extraGuardado = await manager.save(ExtrasCatalogo, nuevoExtra);
@@ -565,6 +566,7 @@ export class EmployeesService {
           if (matched) {
             await manager.update(ExtrasCatalogo, matched.id, {
               precio: Number(ext.precio),
+              modelosVinculadasIds: ext.modelosVinculadasIds || [],
               activo: true,
             });
           } else {
@@ -572,6 +574,7 @@ export class EmployeesService {
               empleadaId: id,
               nombre: ext.nombre,
               precio: Number(ext.precio),
+              modelosVinculadasIds: ext.modelosVinculadasIds || [],
               activo: true,
             });
             await manager.save(ExtrasCatalogo, nuevoExtra);

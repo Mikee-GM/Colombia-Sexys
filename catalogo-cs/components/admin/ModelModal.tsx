@@ -26,6 +26,7 @@ const inputClass =
 
 interface ModelModalProps {
   modelo: Modelo | null;
+  modelos?: Modelo[];
   onClose: () => void;
   onSave: (payload: ModeloPayload, id?: string) => Promise<void>;
   showNotification: (msg: string, type: "success" | "error") => void;
@@ -44,6 +45,7 @@ const PREDEFINED_EXTRAS = [
 
 export default function ModelModal({
   modelo,
+  modelos = [],
   onClose,
   onSave,
   showNotification,
@@ -331,6 +333,20 @@ export default function ModelModal({
     setForm((prev) => {
       const newExtras = [...(prev.extras || [])];
       newExtras[index] = { ...newExtras[index], precio: newPrecio };
+      return { ...prev, extras: newExtras };
+    });
+  };
+
+  const toggleVinculadaModelo = (extraIndex: number, targetModeloId: string) => {
+    setForm((prev) => {
+      const newExtras = [...(prev.extras || [])];
+      const extra = newExtras[extraIndex];
+      const currentIds = extra.modelosVinculadasIds || [];
+      const exists = currentIds.includes(targetModeloId);
+      const updatedIds = exists
+        ? currentIds.filter((id) => id !== targetModeloId)
+        : [...currentIds, targetModeloId];
+      newExtras[extraIndex] = { ...extra, modelosVinculadasIds: updatedIds };
       return { ...prev, extras: newExtras };
     });
   };
@@ -812,31 +828,83 @@ export default function ModelModal({
                     <div className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase mb-2 px-1">
                       Servicios asignados a esta modelo ({form.extras.length})
                     </div>
-                    {form.extras.map((extra, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between bg-zinc-950 border border-zinc-800 px-3 py-2 rounded text-xs gap-3"
-                      >
-                        <div className="font-semibold text-white truncate flex-1">{extra.nombre}</div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-zinc-500 text-[11px]">$</span>
-                          <input
-                            type="number"
-                            value={extra.precio}
-                            onChange={(e) => updateExtraPrecio(idx, parseFloat(e.target.value) || 0)}
-                            min={0}
-                            className="w-20 bg-zinc-900 border border-zinc-700 px-2 py-1 text-right text-white font-mono rounded text-xs focus:border-[#C5A55A]"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeExtra(idx)}
-                          className="text-zinc-500 hover:text-red-400 font-bold uppercase tracking-wider text-[10px] transition-colors ml-1"
+                    {form.extras.map((extra, idx) => {
+                      const isTrio = /tr[ií]o/i.test(extra.nombre);
+                      const currentVinculadas = extra.modelosVinculadasIds || [];
+                      const availableOtherModelos = modelos.filter(
+                        (m) => m._id !== modelo?._id
+                      );
+
+                      return (
+                        <div
+                          key={idx}
+                          className="bg-zinc-950 border border-zinc-800 p-3 rounded text-xs space-y-2"
                         >
-                          Quitar
-                        </button>
-                      </div>
-                    ))}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="font-semibold text-white truncate flex-1">
+                              {extra.nombre}
+                              {isTrio && (
+                                <span className="ml-2 text-[10px] bg-[#C5A55A]/20 border border-[#C5A55A]/40 text-[#E8D5A3] px-1.5 py-0.5 rounded font-mono">
+                                  Trío (Vinculación disponible)
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-zinc-500 text-[11px]">$</span>
+                              <input
+                                type="number"
+                                value={extra.precio}
+                                onChange={(e) => updateExtraPrecio(idx, parseFloat(e.target.value) || 0)}
+                                min={0}
+                                className="w-20 bg-zinc-900 border border-zinc-700 px-2 py-1 text-right text-white font-mono rounded text-xs focus:border-[#C5A55A]"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeExtra(idx)}
+                              className="text-zinc-500 hover:text-red-400 font-bold uppercase tracking-wider text-[10px] transition-colors ml-1"
+                            >
+                              Quitar
+                            </button>
+                          </div>
+
+                          {/* Si el extra es un Trío o contiene "Trío", mostramos el selector de modelos vinculadas */}
+                          {isTrio && (
+                            <div className="pt-2 border-t border-zinc-900 space-y-1.5">
+                              <span className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                                Modelos con las que realiza trío ({currentVinculadas.length} seleccionadas):
+                              </span>
+                              {availableOtherModelos.length === 0 ? (
+                                <p className="text-[11px] text-zinc-600 italic">
+                                  No hay otras modelos registradas en el sistema para vincular.
+                                </p>
+                              ) : (
+                                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pt-1">
+                                  {availableOtherModelos.map((m) => {
+                                    const isSelected = currentVinculadas.includes(m._id);
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={m._id}
+                                        onClick={() => toggleVinculadaModelo(idx, m._id)}
+                                        className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors flex items-center gap-1 ${
+                                          isSelected
+                                            ? "bg-[#C5A55A]/20 border-[#C5A55A] text-[#E8D5A3]"
+                                            : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                                        }`}
+                                      >
+                                        <span>{isSelected ? "✓" : "+"}</span>
+                                        <span>{m.nombreArtistico || m.nombre}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-xs text-zinc-500 font-light italic">
