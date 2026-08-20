@@ -166,14 +166,8 @@ export default function GodEyeDashboard({
   };
 
   useEffect(() => {
-    if (selectedActorId) {
-      loadDossier(actorTab, selectedActorId);
-    }
-  }, [actorTab]);
-
-  useEffect(() => {
-    if (selectedServiceId) {
-      loadIncident(selectedServiceId);
+    if (initialActors.employees[0]?.id) {
+      loadDossier("employee", initialActors.employees[0].id);
     }
   }, []);
 
@@ -396,7 +390,16 @@ export default function GodEyeDashboard({
               </span>
               <div className="flex gap-1 rounded-lg bg-zinc-900 p-1 text-[11px]">
                 <button
-                  onClick={() => setActorTab("employee")}
+                  onClick={() => {
+                    setActorTab("employee");
+                    const firstId = actors.employees[0]?.id || null;
+                    setSelectedActorId(firstId);
+                    if (firstId) {
+                      loadDossier("employee", firstId);
+                    } else {
+                      setDossier(null);
+                    }
+                  }}
                   className={`rounded px-2.5 py-1 font-semibold transition-all ${
                     actorTab === "employee"
                       ? "bg-[#C5A55A] text-black"
@@ -406,7 +409,16 @@ export default function GodEyeDashboard({
                   Empleadas ({actors.employees.length})
                 </button>
                 <button
-                  onClick={() => setActorTab("driver")}
+                  onClick={() => {
+                    setActorTab("driver");
+                    const firstId = actors.drivers[0]?.id || null;
+                    setSelectedActorId(firstId);
+                    if (firstId) {
+                      loadDossier("driver", firstId);
+                    } else {
+                      setDossier(null);
+                    }
+                  }}
                   className={`rounded px-2.5 py-1 font-semibold transition-all ${
                     actorTab === "driver"
                       ? "bg-[#C5A55A] text-black"
@@ -416,7 +428,16 @@ export default function GodEyeDashboard({
                   Choferes ({actors.drivers.length})
                 </button>
                 <button
-                  onClick={() => setActorTab("boss")}
+                  onClick={() => {
+                    setActorTab("boss");
+                    const firstId = actors.bosses[0]?.id || null;
+                    setSelectedActorId(firstId);
+                    if (firstId) {
+                      loadDossier("boss", firstId);
+                    } else {
+                      setDossier(null);
+                    }
+                  }}
                   className={`rounded px-2.5 py-1 font-semibold transition-all ${
                     actorTab === "boss"
                       ? "bg-[#C5A55A] text-black"

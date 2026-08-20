@@ -323,13 +323,13 @@ export class GodEyeService {
             v.tipo,
             v.estado,
             v.tarifa AS "costoEstimado",
-            v.created_at AS "createdAt",
+            v.hora_notificacion AS "createdAt",
             e.nombre_artistico AS "empleadaNombre"
           FROM viajes v
           LEFT JOIN servicios s ON s.id = v.servicio_id
           LEFT JOIN empleadas e ON e.id = s.empleada_id
           WHERE v.chofer_id = $1
-          ORDER BY v.created_at DESC
+          ORDER BY v.hora_notificacion DESC
           LIMIT 10`,
           [id],
         ),
