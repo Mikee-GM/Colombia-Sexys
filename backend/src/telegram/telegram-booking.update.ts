@@ -1062,16 +1062,21 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ),
       ),
     );
-    const linkedEmployees = allLinkedIds.length > 0
-      ? await this.empleadasRepository.find({
-          where: { id: In(allLinkedIds) },
-          select: { id: true, nombreArtistico: true },
-        })
-      : [];
-    const linkedNameMap = new Map(linkedEmployees.map((m) => [m.id, m.nombreArtistico]));
+    const linkedEmployees =
+      allLinkedIds.length > 0
+        ? await this.empleadasRepository.find({
+            where: { id: In(allLinkedIds) },
+            select: { id: true, nombreArtistico: true },
+          })
+        : [];
+    const linkedNameMap = new Map(
+      linkedEmployees.map((m) => [m.id, m.nombreArtistico]),
+    );
 
     const extrasData = empleadaExtras.map((e) => {
-      const linkedIds = Array.isArray(e.modelosVinculadasIds) ? e.modelosVinculadasIds : [];
+      const linkedIds = Array.isArray(e.modelosVinculadasIds)
+        ? e.modelosVinculadasIds
+        : [];
       const linkedNames = linkedIds
         .map((id) => linkedNameMap.get(id))
         .filter((n): n is string => Boolean(n));
@@ -4928,16 +4933,21 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           ),
         ),
       );
-      const linkedEmployees = allLinkedIds.length > 0
-        ? await this.empleadasRepository.find({
-            where: { id: In(allLinkedIds) },
-            select: { id: true, nombreArtistico: true },
-          })
-        : [];
-      const linkedNameMap = new Map(linkedEmployees.map((m) => [m.id, m.nombreArtistico]));
+      const linkedEmployees =
+        allLinkedIds.length > 0
+          ? await this.empleadasRepository.find({
+              where: { id: In(allLinkedIds) },
+              select: { id: true, nombreArtistico: true },
+            })
+          : [];
+      const linkedNameMap = new Map(
+        linkedEmployees.map((m) => [m.id, m.nombreArtistico]),
+      );
 
       const extrasData = empleadaExtras.map((e) => {
-        const linkedIds = Array.isArray(e.modelosVinculadasIds) ? e.modelosVinculadasIds : [];
+        const linkedIds = Array.isArray(e.modelosVinculadasIds)
+          ? e.modelosVinculadasIds
+          : [];
         const linkedNames = linkedIds
           .map((id) => linkedNameMap.get(id))
           .filter((n): n is string => Boolean(n));

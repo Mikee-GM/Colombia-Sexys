@@ -2,7 +2,11 @@ export interface EmpleadaPromptParams {
   nombreArtistico: string;
   precioBaseHora: number | string;
   descripcion?: string | null;
-  extras?: { nombre: string; precio: number; modelosVinculadasNombres?: string[] }[];
+  extras?: {
+    nombre: string;
+    precio: number;
+    modelosVinculadasNombres?: string[];
+  }[];
   ubicacionesPreestablecidas?: string[];
   duracionPactada?: number;
   metodoPago?: string;
@@ -17,7 +21,8 @@ export const getHireSystemPrompt = (params: EmpleadaPromptParams): string => {
       ? params.extras
           .map((e) => {
             const vinculadas =
-              e.modelosVinculadasNombres && e.modelosVinculadasNombres.length > 0
+              e.modelosVinculadasNombres &&
+              e.modelosVinculadasNombres.length > 0
                 ? ` (Hace trío con: ${e.modelosVinculadasNombres.join(', ')})`
                 : '';
             return `- ${e.nombre}: $${e.precio}${vinculadas}`;
