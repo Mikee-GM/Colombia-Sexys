@@ -119,11 +119,18 @@ BEGIN
         DELETE FROM weekly_photo_submissions WHERE empleada_id = emp_record.id;
         DELETE FROM weekly_content_schedules WHERE empleada_id = emp_record.id;
         DELETE FROM extras_catalogo WHERE empleada_id = emp_record.id;
+        
+        -- Borrar intentos de cuestionario de onboarding
         DELETE FROM questionnaire_answers WHERE attempt_id IN (
-            SELECT id FROM questionnaire_attempts WHERE user_id = emp_record.usuario_id
+            SELECT qa.id FROM questionnaire_attempts qa
+            JOIN employee_onboardings eo ON qa.onboarding_id = eo.id
+            WHERE eo.employee_id = emp_record.id OR (emp_record.usuario_id IS NOT NULL AND eo.user_id = emp_record.usuario_id)
         );
-        DELETE FROM questionnaire_attempts WHERE user_id = emp_record.usuario_id;
-        DELETE FROM employee_onboardings WHERE employee_id = emp_record.id OR user_id = emp_record.usuario_id;
+        DELETE FROM questionnaire_attempts WHERE onboarding_id IN (
+            SELECT id FROM employee_onboardings 
+            WHERE employee_id = emp_record.id OR (emp_record.usuario_id IS NOT NULL AND user_id = emp_record.usuario_id)
+        );
+        DELETE FROM employee_onboardings WHERE employee_id = emp_record.id OR (emp_record.usuario_id IS NOT NULL AND user_id = emp_record.usuario_id);
         
         -- Borrar empleada
         DELETE FROM empleadas WHERE id = emp_record.id;
