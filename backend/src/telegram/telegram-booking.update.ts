@@ -306,12 +306,10 @@ export function extractHireDuration(text: string): number | undefined {
     return undefined;
   }
 
-  const match = text.match(/(?:^|\s)(\d+)\s*(?:h|hora|horas)?(?:\s|$)/i);
+  const match = text.match(/\b(\d+)\s*(?:h|hr|hrs|hora|horas)\b/i);
   if (match) {
-    const duration = parseInt(match[1], 10);
-    return Number.isInteger(duration) && duration >= 1 && duration <= 24
-      ? duration
-      : undefined;
+    const hours = parseInt(match[1], 10);
+    if (hours >= 1 && hours <= 24) return hours;
   }
 
   const normalized = text.toLowerCase().trim();
@@ -334,7 +332,7 @@ export function extractHireDuration(text: string): number | undefined {
   const word = Object.keys(wordDurations).find(
     (candidate) =>
       normalized === candidate ||
-      new RegExp(`\\b${candidate}\\s+horas?\\b`).test(normalized),
+      new RegExp(`\\b${candidate}\\s+(?:h|hr|hrs|hora|horas)\\b`).test(normalized),
   );
   return word ? wordDurations[word] : undefined;
 }
