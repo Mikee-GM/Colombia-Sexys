@@ -640,7 +640,14 @@ export class GodEyeService {
           e.disponible,
           e.precio_base_hora AS "precioBaseHora",
           e.foto_perfil_url AS avatar,
-          u.email AS "jefeEmail"
+          u.email AS "jefeEmail",
+          EXISTS(
+            SELECT 1 FROM disciplinary_sanctions s
+            WHERE s.subject_type = 'employee'
+              AND s.subject_id = e.id
+              AND s.status = 'active'
+              AND (s.ends_at IS NULL OR s.ends_at > NOW())
+          ) AS "sancionada"
         FROM empleadas e
         LEFT JOIN usuarios u ON u.id = e.jefe_id
         ORDER BY e.nombre_artistico ASC
@@ -652,17 +659,26 @@ export class GodEyeService {
           'driver' AS type,
           d.disponible,
           d.telefono,
-          d.vehiculo_modelo AS "vehiculoModelo"
+          d.vehiculo_modelo AS "vehiculoModelo",
+          EXISTS(
+            SELECT 1 FROM disciplinary_sanctions s
+            WHERE s.subject_type = 'driver'
+              AND s.subject_id = d.id
+              AND s.status = 'active'
+              AND (s.ends_at IS NULL OR s.ends_at > NOW())
+          ) AS "sancionada"
         FROM choferes d
         ORDER BY d.nombre ASC
       `),
       this.dataSource.query(`
         SELECT
           u.id,
-          u.email AS name,
+          COALESCE(u.nombre, u.email) AS name,
+          u.email,
           'boss' AS type,
           u.rol,
-          u.activo
+          u.activo,
+          false AS "sancionada"
         FROM usuarios u
         WHERE u.rol IN ('jefe', 'admin')
         ORDER BY u.email ASC

@@ -48,21 +48,26 @@ export type GodEyeActorSummary = {
     precioBaseHora: number;
     avatar: string | null;
     jefeEmail: string | null;
+    sancionada?: boolean;
   }>;
   drivers: Array<{
     id: string;
     name: string;
     type: "driver";
     estado: string;
+    disponible: boolean;
     telefono: string;
     vehiculoModelo: string;
+    sancionada?: boolean;
   }>;
   bosses: Array<{
     id: string;
     name: string;
+    email?: string;
     type: "boss";
     rol: string;
     activo: boolean;
+    sancionada?: boolean;
   }>;
 };
 

@@ -28,6 +28,9 @@ export class Empleadas {
   @ApiPropertyOptional({ enum: ['disponible', 'ocupada', 'inactiva'] })
   availabilityStatus?: 'disponible' | 'ocupada' | 'inactiva';
 
+  @ApiPropertyOptional()
+  sancionada?: boolean;
+
   @ApiPropertyOptional({ type: String, format: 'date-time' })
   estimatedAvailableAt?: Date | null;
 

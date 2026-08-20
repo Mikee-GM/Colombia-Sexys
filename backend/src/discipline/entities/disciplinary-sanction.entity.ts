@@ -13,7 +13,16 @@ export class DisciplinarySanction {
   subjectId: string;
 
   @Column('varchar', { length: 20 })
-  type: 'suspension' | 'permanent_ban';
+  type: 'suspension' | 'permanent_ban' | 'fine';
+
+  @Column('numeric', {
+    name: 'fine_amount',
+    precision: 12,
+    scale: 2,
+    default: 0,
+    nullable: true,
+  })
+  fineAmount: number | null;
 
   @Column('varchar', { length: 20, default: 'active' })
   status: 'active' | 'revoked' | 'expired';

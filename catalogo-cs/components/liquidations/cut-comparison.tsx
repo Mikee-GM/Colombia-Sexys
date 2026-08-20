@@ -48,6 +48,41 @@ export default function CutComparison({
           </p>
         ) : (
           report.officeRecords.map((record) => {
+            if (record.isFine) {
+              return (
+                <article
+                  key={record.id}
+                  className="rounded-xl border border-red-900/50 bg-red-950/20 p-3.5"
+                >
+                  <div className="mb-1 flex items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-zinc-400">
+                        {formatDateTime(record.occurredAt)}
+                      </span>
+                      <span className="rounded-md border border-red-800 bg-red-900/40 px-2 py-0.5 text-[10px] font-bold uppercase text-red-300">
+                        Multa Disciplinaria
+                      </span>
+                    </div>
+                    <span className="text-sm font-bold text-red-400">
+                      -{formatCurrency(record.fineAmount)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-300 mt-1">
+                    {record.place || "Sanción monetaria aplicada"}
+                  </p>
+                  {isAdmin && (
+                    <div className="mt-2">
+                      <LiquidationRecordEditor
+                        record={record}
+                        locked={locked}
+                        onUpdated={onRecordUpdated}
+                      />
+                    </div>
+                  )}
+                </article>
+              );
+            }
+
             const transport =
               Number(record.companyTransportExpense) + Number(record.transportExcess);
             return (

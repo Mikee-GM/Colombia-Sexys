@@ -357,9 +357,27 @@ export class EmployeesService {
       queuedEmployees.add(row.employee_id);
     }
 
+    const sanctionedRows: Array<{ subject_id: string }> =
+      ids.length === 0
+        ? []
+        : await this.dataSource.query(
+            `SELECT DISTINCT subject_id
+             FROM disciplinary_sanctions
+             WHERE subject_type = 'employee'
+               AND status = 'active'
+               AND starts_at <= now()
+               AND (type = 'permanent_ban' OR ends_at > now())
+               AND subject_id = ANY($1::uuid[])`,
+            [ids],
+          );
+    const sanctionedSet = new Set(sanctionedRows.map((r) => r.subject_id));
+
     return employees.map((employee) => {
       employee.clientRatingAverage = employee.promedioCalificacion;
       employee.clientRatingCount = employee.totalServiciosValorados;
+      const isSanctioned = sanctionedSet.has(employee.id);
+      employee.sancionada = isSanctioned;
+
       const active = activeByEmployee.get(employee.id);
       const estimatedAvailableAt =
         active?.horaInicioServicio && active.duracionPactadaHoras
@@ -368,14 +386,16 @@ export class EmployeesService {
                 Number(active.duracionPactadaHoras) * 3_600_000,
             )
           : null;
-      employee.availabilityStatus = !employee.catalogoActivo
+      employee.availabilityStatus = isSanctioned
         ? 'inactiva'
-        : active || !employee.disponible
-          ? 'ocupada'
-          : 'disponible';
+        : !employee.catalogoActivo
+          ? 'inactiva'
+          : active || !employee.disponible
+            ? 'ocupada'
+            : 'disponible';
       employee.estimatedAvailableAt = estimatedAvailableAt;
       employee.canScheduleNext =
-        Boolean(active) && !queuedEmployees.has(employee.id);
+        !isSanctioned && Boolean(active) && !queuedEmployees.has(employee.id);
       return employee;
     });
   }

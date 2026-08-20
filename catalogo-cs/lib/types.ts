@@ -2,6 +2,8 @@ export type AuthUser = {
   id: string;
   email: string;
   rol: "jefe" | "empleada" | "chofer" | "admin";
+  nombre?: string | null;
+  apellido?: string | null;
 };
 
 export type LoginResponse = {

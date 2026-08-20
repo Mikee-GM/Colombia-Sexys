@@ -157,8 +157,26 @@ export class DriversService {
   }
 
   async findAll(): Promise<Choferes[]> {
-    return await this.choferesRepository.find({
+    const drivers = await this.choferesRepository.find({
       relations: { usuario: true },
+    });
+    if (drivers.length === 0) return drivers;
+    const ids = drivers.map((d) => d.id);
+    const sanctionedRows: Array<{ subject_id: string }> =
+      await this.dataSource.query(
+        `SELECT DISTINCT subject_id
+         FROM disciplinary_sanctions
+         WHERE subject_type = 'driver'
+           AND status = 'active'
+           AND starts_at <= now()
+           AND (type = 'permanent_ban' OR ends_at > now())
+           AND subject_id = ANY($1::uuid[])`,
+        [ids],
+      );
+    const sanctionedSet = new Set(sanctionedRows.map((r) => r.subject_id));
+    return drivers.map((d) => {
+      d.sancionada = sanctionedSet.has(d.id);
+      return d;
     });
   }
 

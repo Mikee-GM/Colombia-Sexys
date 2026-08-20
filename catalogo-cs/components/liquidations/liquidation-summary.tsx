@@ -67,6 +67,14 @@ export default function LiquidationSummary({ cut, employeeName, ranking }: Props
           icon={Car}
           variant="compact"
         />
+        {cut.finesTotal > 0 && (
+          <StatCard
+            title="Multas Aplicadas"
+            value={`-${formatCurrency(cut.finesTotal)}`}
+            icon={Activity}
+            variant="compact"
+          />
+        )}
       </div>
     </div>
   );

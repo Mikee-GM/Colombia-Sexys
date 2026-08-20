@@ -320,12 +320,16 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         'La suspensión requiere una fecha final posterior al inicio',
       );
     }
+    if (dto.type === 'fine' && (!dto.fineAmount || Number(dto.fineAmount) <= 0)) {
+      throw new BadRequestException('La multa requiere un monto mayor a 0');
+    }
     await this.assertPersonExists(dto.subjectType, dto.subjectId);
     const sanction = await this.sanctions.save(
       this.sanctions.create({
         subjectType: dto.subjectType,
         subjectId: dto.subjectId,
         type: dto.type,
+        fineAmount: dto.type === 'fine' ? Number(dto.fineAmount) : null,
         reason: dto.reason.trim(),
         conductReportId: dto.conductReportId ?? null,
         createdByUserId: admin.id,
@@ -342,6 +346,44 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         dto.subjectId,
         false,
       );
+    }
+    if (
+      (dto.type === 'suspension' || dto.type === 'permanent_ban') &&
+      (dto.subjectType === 'employee' || dto.subjectType === 'driver')
+    ) {
+      await this.setOperationalAvailability(
+        dto.subjectType,
+        dto.subjectId,
+        false,
+      );
+    }
+    if (dto.type === 'fine' && dto.subjectType === 'employee') {
+      await this.dataSource.getRepository('LiquidationRecord').save({
+        employeeId: dto.subjectId,
+        registeredByUserId: admin.id,
+        sourceRole: 'admin',
+        occurredAt: startsAt,
+        serviceTotal: 0,
+        paymentMethod: 'efectivo',
+        cashAmount: 0,
+        cardAmounts: [],
+        companyPercentage: 0,
+        extraAmount: 0,
+        promotion: false,
+        membershipAmount: 0,
+        companyTransportExpense: 0,
+        customerTransportCharge: 0,
+        employeeUberReimbursement: 0,
+        employeeCashDue: 0,
+        electronicExtraAmount: 0,
+        transportExcess: 0,
+        place: `Multa: ${dto.reason.trim()}`,
+        hasOutboundDriver: false,
+        hasReturnDriver: false,
+        cancelled: false,
+        isFine: true,
+        fineAmount: Number(dto.fineAmount),
+      });
     }
     this.realtime.emitToJefes({
       type: 'discipline.sanction.applied',
@@ -365,20 +407,39 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     sanction.revocationReason = dto.reason.trim();
     const saved = await this.sanctions.save(sanction);
     if (
-      sanction.type === 'permanent_ban' &&
+      (sanction.type === 'permanent_ban' || sanction.type === 'suspension') &&
       (sanction.subjectType === 'employee' || sanction.subjectType === 'driver')
     ) {
       const remaining = await this.getActiveSanction(
         sanction.subjectType,
         sanction.subjectId,
       );
-      if (!remaining?.type || remaining.type !== 'permanent_ban') {
-        await this.setOperationalUserActive(
+      if (!remaining) {
+        if (sanction.type === 'permanent_ban') {
+          await this.setOperationalUserActive(
+            sanction.subjectType,
+            sanction.subjectId,
+            true,
+          );
+        }
+        await this.setOperationalAvailability(
           sanction.subjectType,
           sanction.subjectId,
           true,
         );
       }
+    }
+    if (sanction.type === 'fine' && sanction.subjectType === 'employee') {
+      await this.dataSource
+        .createQueryBuilder()
+        .delete()
+        .from('liquidation_records')
+        .where('employee_id = :empId AND is_fine = true AND fine_amount = :amt AND place LIKE :plc', {
+          empId: sanction.subjectId,
+          amt: sanction.fineAmount,
+          plc: `%${sanction.reason.trim()}%`,
+        })
+        .execute();
     }
     this.realtime.emitToJefes({
       type: 'discipline.sanction.revoked',
@@ -833,6 +894,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         endsAt,
       }),
     );
+    await this.setOperationalAvailability(subjectType, subjectId, false);
     this.realtime.emitToJefes({
       type: 'discipline.sanction.applied',
       sanctionId: sanction.id,
@@ -886,6 +948,14 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       .returning(['id', 'subjectType', 'subjectId'])
       .execute();
     for (const sanction of result.raw ?? []) {
+      const subjectType = sanction.subject_type as PersonType;
+      const subjectId = sanction.subject_id as string;
+      if (subjectType === 'employee' || subjectType === 'driver') {
+        const remaining = await this.getActiveSanction(subjectType, subjectId);
+        if (!remaining) {
+          await this.setOperationalAvailability(subjectType, subjectId, true);
+        }
+      }
       this.realtime.emitToJefes({
         type: 'discipline.sanction.expired',
         sanctionId: sanction.id,
@@ -907,6 +977,18 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       [id],
     );
     if (!rows[0]) throw new NotFoundException('Persona no encontrada');
+  }
+
+  private async setOperationalAvailability(
+    type: 'employee' | 'driver',
+    id: string,
+    disponible: boolean,
+  ) {
+    const table = type === 'employee' ? 'empleadas' : 'choferes';
+    await this.dataSource.query(
+      `UPDATE ${table} SET disponible = $2 WHERE id = $1`,
+      [id, disponible],
+    );
   }
 
   private async setOperationalUserActive(

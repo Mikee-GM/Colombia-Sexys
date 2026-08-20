@@ -26,6 +26,8 @@ import {
   XCircle,
   ChevronRight,
   TrendingUp,
+  Search,
+  X,
 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState, useTransition } from "react";
@@ -45,6 +47,7 @@ import {
 } from "@/lib/actions/god-eye";
 import {
   createSanction,
+  revokeSanction,
   resolveAppeal,
   getPendingAppeals,
   type RatingAppeal,
@@ -69,11 +72,34 @@ export default function GodEyeDashboard({
   const [actorTab, setActorTab] = useState<"employee" | "driver" | "boss">(
     "employee",
   );
+  const [actorSearchQuery, setActorSearchQuery] = useState("");
   const [selectedActorId, setSelectedActorId] = useState<string | null>(
     initialActors.employees[0]?.id || null,
   );
   const [dossier, setDossier] = useState<GodEyeActorDossier | null>(null);
   const [loadingDossier, setLoadingDossier] = useState(false);
+
+  const cleanSearch = actorSearchQuery.trim().toLowerCase();
+  const filteredEmployees = actors.employees.filter(
+    (emp) =>
+      !cleanSearch ||
+      emp.name.toLowerCase().includes(cleanSearch) ||
+      (emp.jefeEmail && emp.jefeEmail.toLowerCase().includes(cleanSearch)),
+  );
+  const filteredDrivers = actors.drivers.filter(
+    (drv) =>
+      !cleanSearch ||
+      drv.name.toLowerCase().includes(cleanSearch) ||
+      (drv.telefono && drv.telefono.toLowerCase().includes(cleanSearch)) ||
+      (drv.vehiculoModelo && drv.vehiculoModelo.toLowerCase().includes(cleanSearch)),
+  );
+  const filteredBosses = actors.bosses.filter(
+    (boss) =>
+      !cleanSearch ||
+      boss.name.toLowerCase().includes(cleanSearch) ||
+      (boss.email && boss.email.toLowerCase().includes(cleanSearch)) ||
+      (boss.rol && boss.rol.toLowerCase().includes(cleanSearch)),
+  );
 
   // Servicio / Incidente seleccionado para investigación causal
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(
@@ -93,10 +119,11 @@ export default function GodEyeDashboard({
   // Modal de sanción
   const [showSanctionModal, setShowSanctionModal] = useState(false);
   const [sanctionType, setSanctionType] = useState<
-    "suspension" | "permanent_ban"
+    "suspension" | "permanent_ban" | "fine"
   >("suspension");
   const [sanctionReason, setSanctionReason] = useState("");
   const [sanctionHours, setSanctionHours] = useState(24);
+  const [sanctionFineAmount, setSanctionFineAmount] = useState<number | "">(500);
 
   const [isPending, startTransition] = useTransition();
   const [notification, setNotification] = useState<{
@@ -194,7 +221,7 @@ export default function GodEyeDashboard({
     try {
       await sendAdminChatMessageAction(
         selectedServiceId,
-        adminMessage,
+        adminMessage.trim(),
         asIdentity,
       );
       setAdminMessage("");
@@ -208,6 +235,10 @@ export default function GodEyeDashboard({
   // Aplicar sanción rápida
   const handleApplySanction = async () => {
     if (!selectedActorId || !sanctionReason.trim()) return;
+    if (sanctionType === "fine" && (!sanctionFineAmount || Number(sanctionFineAmount) <= 0)) {
+      notify("El monto de la multa debe ser mayor a 0", "error");
+      return;
+    }
     try {
       const startsAt = new Date().toISOString();
       const endsAt =
@@ -220,16 +251,44 @@ export default function GodEyeDashboard({
         subjectId: selectedActorId,
         type: sanctionType,
         reason: sanctionReason,
+        fineAmount: sanctionType === "fine" ? Number(sanctionFineAmount) : undefined,
         startsAt,
         endsAt,
       });
 
       setShowSanctionModal(false);
       setSanctionReason("");
-      notify("Sanción aplicada y notificada al usuario");
+      notify(
+        sanctionType === "fine"
+          ? `Multa de $${sanctionFineAmount} aplicada y vinculada a la liquidación`
+          : "Sanción aplicada y notificada al usuario",
+      );
       refreshAll();
     } catch (err: any) {
       notify(err.message || "Error al aplicar sanción", "error");
+    }
+  };
+
+  // Revocar sanción manualmente
+  const [revokingSanctionId, setRevokingSanctionId] = useState<string | null>(null);
+  const [showRevokeModal, setShowRevokeModal] = useState(false);
+  const [revokeReason, setRevokeReason] = useState("");
+  const [isRevoking, setIsRevoking] = useState(false);
+
+  const handleRevokeSanction = async () => {
+    if (!revokingSanctionId || !revokeReason.trim()) return;
+    setIsRevoking(true);
+    try {
+      await revokeSanction(revokingSanctionId, revokeReason);
+      notify("Sanción revocada con éxito");
+      setShowRevokeModal(false);
+      setRevokeReason("");
+      setRevokingSanctionId(null);
+      refreshAll();
+    } catch (err: any) {
+      notify(err.message || "Error al revocar sanción", "error");
+    } finally {
+      setIsRevoking(false);
     }
   };
 
@@ -388,11 +447,11 @@ export default function GodEyeDashboard({
               <span className="text-xs font-bold uppercase tracking-wider text-zinc-300">
                 1. Actores del Sistema
               </span>
-              <div className="flex gap-1 rounded-lg bg-zinc-900 p-1 text-xs">
+              <div className="flex flex-wrap items-center gap-1 rounded-lg bg-zinc-900 p-1 text-xs">
                 <button
                   onClick={() => {
                     setActorTab("employee");
-                    const firstId = actors.employees[0]?.id || null;
+                    const firstId = filteredEmployees[0]?.id || actors.employees[0]?.id || null;
                     setSelectedActorId(firstId);
                     if (firstId) {
                       loadDossier("employee", firstId);
@@ -406,12 +465,12 @@ export default function GodEyeDashboard({
                       : "text-zinc-400 hover:text-white"
                   }`}
                 >
-                  Empleadas ({actors.employees.length})
+                  Empleadas ({filteredEmployees.length})
                 </button>
                 <button
                   onClick={() => {
                     setActorTab("driver");
-                    const firstId = actors.drivers[0]?.id || null;
+                    const firstId = filteredDrivers[0]?.id || actors.drivers[0]?.id || null;
                     setSelectedActorId(firstId);
                     if (firstId) {
                       loadDossier("driver", firstId);
@@ -425,12 +484,12 @@ export default function GodEyeDashboard({
                       : "text-zinc-400 hover:text-white"
                   }`}
                 >
-                  Choferes ({actors.drivers.length})
+                  Choferes ({filteredDrivers.length})
                 </button>
                 <button
                   onClick={() => {
                     setActorTab("boss");
-                    const firstId = actors.bosses[0]?.id || null;
+                    const firstId = filteredBosses[0]?.id || actors.bosses[0]?.id || null;
                     setSelectedActorId(firstId);
                     if (firstId) {
                       loadDossier("boss", firstId);
@@ -444,92 +503,168 @@ export default function GodEyeDashboard({
                       : "text-zinc-400 hover:text-white"
                   }`}
                 >
-                  Jefes ({actors.bosses.length})
+                  Jefes ({filteredBosses.length})
                 </button>
               </div>
             </div>
 
+            {/* Barra de búsqueda de actores */}
+            <div className="mt-3 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500 pointer-events-none" />
+              <input
+                type="text"
+                placeholder={
+                  actorTab === "employee"
+                    ? "Buscar empleada..."
+                    : actorTab === "driver"
+                      ? "Buscar chofer o vehículo..."
+                      : "Buscar jefe o email..."
+                }
+                value={actorSearchQuery}
+                onChange={(e) => setActorSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-950/80 py-1.5 pl-8 pr-8 text-xs text-zinc-200 placeholder-zinc-500 focus:border-[#C5A55A]/60 focus:outline-none transition-colors"
+              />
+              {actorSearchQuery && (
+                <button
+                  onClick={() => setActorSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-0.5 transition-colors"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
             {/* Lista compacta de selección rápida */}
-            <div className="mt-3 flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-1">
+            <div className="mt-2.5 flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-1">
               {actorTab === "employee" &&
-                actors.employees.map((emp) => (
-                  <button
-                    key={emp.id}
-                    onClick={() => loadDossier("employee", emp.id)}
-                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
-                      selectedActorId === emp.id
-                        ? "border border-[#C5A55A]/50 bg-[#C5A55A]/10 text-white"
-                        : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="relative h-7 w-7 overflow-hidden rounded-full bg-zinc-800 flex items-center justify-center">
-                        {emp.avatar ? (
-                          <Image
-                            src={emp.avatar}
-                            alt={emp.name}
-                            fill
-                            className="object-cover"
-                          />
-                        ) : (
-                          <Users className="h-4 w-4 text-zinc-400" />
-                        )}
+                (filteredEmployees.length > 0 ? (
+                  filteredEmployees.map((emp) => (
+                    <button
+                      key={emp.id}
+                      onClick={() => loadDossier("employee", emp.id)}
+                      className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
+                        selectedActorId === emp.id
+                          ? "border border-[#C5A55A]/50 bg-[#C5A55A]/10 text-white"
+                          : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full bg-zinc-800 flex items-center justify-center">
+                          {emp.avatar ? (
+                            <Image
+                              src={emp.avatar}
+                              alt={emp.name}
+                              fill
+                              className="object-cover"
+                            />
+                          ) : (
+                            <Users className="h-4 w-4 text-zinc-400" />
+                          )}
+                        </div>
+                        <span className="font-semibold text-zinc-200 truncate">{emp.name}</span>
                       </div>
-                      <span className="font-semibold text-zinc-200">{emp.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`h-2.5 w-2.5 rounded-full ${
-                          emp.disponible ? "bg-emerald-400" : "bg-zinc-600"
-                        }`}
-                      />
-                      <span className="text-xs text-zinc-400 font-medium">
-                        ${emp.precioBaseHora}/h
-                      </span>
-                    </div>
-                  </button>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {emp.sancionada ? (
+                          <span className="flex items-center gap-1 rounded-full bg-red-950/80 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-400">
+                            <ShieldAlert className="h-3 w-3" />
+                            Sancionada
+                          </span>
+                        ) : (
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              emp.disponible ? "bg-emerald-400" : "bg-zinc-600"
+                            }`}
+                            title={emp.disponible ? "Disponible" : "No disponible"}
+                          />
+                        )}
+                        <span className="text-xs text-zinc-400 font-medium">
+                          ${emp.precioBaseHora}/h
+                        </span>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="py-6 text-center text-xs text-zinc-500">
+                    No se encontraron empleadas para &quot;{actorSearchQuery}&quot;
+                  </div>
                 ))}
 
               {actorTab === "driver" &&
-                actors.drivers.map((drv) => (
-                  <button
-                    key={drv.id}
-                    onClick={() => loadDossier("driver", drv.id)}
-                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
-                      selectedActorId === drv.id
-                        ? "border border-blue-500/50 bg-blue-500/10 text-white"
-                        : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Car className="h-4 w-4 text-blue-400" />
-                      <span className="font-semibold text-zinc-200">{drv.name}</span>
-                    </div>
-                    <span className="text-xs text-zinc-400">
-                      {drv.vehiculoModelo || "Sin auto"}
-                    </span>
-                  </button>
+                (filteredDrivers.length > 0 ? (
+                  filteredDrivers.map((drv) => (
+                    <button
+                      key={drv.id}
+                      onClick={() => loadDossier("driver", drv.id)}
+                      className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
+                        selectedActorId === drv.id
+                          ? "border border-blue-500/50 bg-blue-500/10 text-white"
+                          : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Car className="h-4 w-4 shrink-0 text-blue-400" />
+                        <span className="font-semibold text-zinc-200 truncate">{drv.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {drv.sancionada ? (
+                          <span className="flex items-center gap-1 rounded-full bg-red-950/80 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-400">
+                            <ShieldAlert className="h-3 w-3" />
+                            Sancionado
+                          </span>
+                        ) : (
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              drv.disponible ? "bg-emerald-400" : "bg-zinc-600"
+                            }`}
+                            title={drv.disponible ? "Disponible" : "No disponible"}
+                          />
+                        )}
+                        <span className="text-xs text-zinc-400 truncate max-w-[100px]">
+                          {drv.vehiculoModelo || "Sin auto"}
+                        </span>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="py-6 text-center text-xs text-zinc-500">
+                    No se encontraron choferes para &quot;{actorSearchQuery}&quot;
+                  </div>
                 ))}
 
               {actorTab === "boss" &&
-                actors.bosses.map((boss) => (
-                  <button
-                    key={boss.id}
-                    onClick={() => loadDossier("boss", boss.id)}
-                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
-                      selectedActorId === boss.id
-                        ? "border border-amber-500/50 bg-amber-500/10 text-white"
-                        : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Shield className="h-4 w-4 text-amber-400" />
-                      <span className="font-semibold text-zinc-200">{boss.name}</span>
-                    </div>
-                    <span className="text-xs uppercase text-zinc-400 font-semibold">
-                      {boss.rol}
-                    </span>
-                  </button>
+                (filteredBosses.length > 0 ? (
+                  filteredBosses.map((boss) => (
+                    <button
+                      key={boss.id}
+                      onClick={() => loadDossier("boss", boss.id)}
+                      className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
+                        selectedActorId === boss.id
+                          ? "border border-amber-500/50 bg-amber-500/10 text-white"
+                          : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Shield className="h-4 w-4 shrink-0 text-amber-400" />
+                        <span className="font-semibold text-zinc-200 truncate">{boss.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <span
+                          className={`h-2.5 w-2.5 rounded-full ${
+                            boss.activo ? "bg-emerald-400" : "bg-zinc-600"
+                          }`}
+                          title={boss.activo ? "Activo" : "Inactivo"}
+                        />
+                        <span className="text-xs uppercase text-zinc-400 font-semibold">
+                          {boss.rol}
+                        </span>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="py-6 text-center text-xs text-zinc-500">
+                    No se encontraron jefes para &quot;{actorSearchQuery}&quot;
+                  </div>
                 ))}
             </div>
           </div>
@@ -645,22 +780,55 @@ export default function GodEyeDashboard({
                   <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
                     Sanciones & Amonestaciones
                   </h4>
-                  <div className="mt-2 flex max-h-32 flex-col gap-1.5 overflow-y-auto pr-1">
+                  <div className="mt-2 flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
                     {dossier.sanctions && dossier.sanctions.length > 0 ? (
                       dossier.sanctions.map((s: any) => (
                         <div
                           key={s.id}
-                          className="flex items-center justify-between rounded-xl border border-red-900/30 bg-red-950/10 px-3 py-2 text-xs"
+                          className={`flex items-center justify-between rounded-xl border p-3 text-xs ${
+                            s.status === "active"
+                              ? "border-red-900/50 bg-red-950/20"
+                              : "border-zinc-900 bg-zinc-950/60 opacity-70"
+                          }`}
                         >
-                          <div>
-                            <span className="font-bold uppercase text-red-400 text-xs">
-                              {s.type}
-                            </span>
-                            <p className="text-xs text-zinc-200 mt-0.5">{s.reason}</p>
+                          <div className="flex-1 pr-2 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-bold uppercase text-xs ${s.status === "active" ? "text-red-400" : "text-zinc-400"}`}>
+                                {s.type === "fine" ? "Multa Monetaria" : s.type === "suspension" ? "Suspensión" : "Baneo Permanente"}
+                              </span>
+                              {s.fineAmount && Number(s.fineAmount) > 0 && (
+                                <span className="rounded-md bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[11px] font-bold text-red-300">
+                                  -${s.fineAmount} MXN
+                                </span>
+                              )}
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                s.status === "active"
+                                  ? "bg-red-500/20 text-red-300"
+                                  : s.status === "revoked"
+                                  ? "bg-zinc-800 text-zinc-400"
+                                  : "bg-amber-500/10 text-amber-400"
+                              }`}>
+                                {s.status === "active" ? "Activa" : s.status === "revoked" ? "Revocada" : "Expirada"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-zinc-200 mt-1">{s.reason}</p>
+                            {s.revocationReason && (
+                              <p className="text-[11px] text-zinc-400 italic mt-0.5">
+                                Motivo revocación: {s.revocationReason}
+                              </p>
+                            )}
                           </div>
-                          <span className="text-xs text-zinc-400 font-semibold">
-                            {s.status}
-                          </span>
+                          {s.status === "active" && (
+                            <button
+                              onClick={() => {
+                                setRevokingSanctionId(s.id);
+                                setShowRevokeModal(true);
+                              }}
+                              className="shrink-0 rounded-lg border border-red-500/30 bg-red-950/40 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-900 transition-colors"
+                            >
+                              Revocar
+                            </button>
+                          )}
                         </div>
                       ))
                     ) : (
@@ -1021,7 +1189,8 @@ export default function GodEyeDashboard({
                   onChange={(e) => setSanctionType(e.target.value as any)}
                   className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-white"
                 >
-                  <option value="suspension">Suspensión Temporal</option>
+                  <option value="suspension">Suspensión Temporal (Horas)</option>
+                  <option value="fine">Multa Monetaria ($ Descuento en Liquidación)</option>
                   <option value="permanent_ban">Baneo Permanente</option>
                 </select>
               </div>
@@ -1035,6 +1204,24 @@ export default function GodEyeDashboard({
                     onChange={(e) => setSanctionHours(Number(e.target.value))}
                     className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-white"
                   />
+                </div>
+              )}
+
+              {sanctionType === "fine" && (
+                <div>
+                  <label className="text-zinc-300 font-semibold">Monto de la Multa ($ MXN)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="50"
+                    placeholder="Ej: 500"
+                    value={sanctionFineAmount}
+                    onChange={(e) => setSanctionFineAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="mt-1 w-full rounded-xl border border-[#C5A55A]/50 bg-zinc-950 px-3 py-2 text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none"
+                  />
+                  <p className="mt-1 text-[11px] text-zinc-400">
+                    Este monto se registrará como descuento automático en la liquidación semanal del usuario.
+                  </p>
                 </div>
               )}
 
@@ -1064,6 +1251,63 @@ export default function GodEyeDashboard({
                 className="rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white hover:bg-red-500"
               >
                 Confirmar Sanción
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🟢 MODAL DE REVOCACIÓN DE SANCIÓN */}
+      {showRevokeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              Revocar Sanción Disciplinaria
+            </h3>
+            <p className="mt-1 text-xs text-zinc-400">
+              Al revocar la sanción, el sujeto volverá a estar habilitado y se registrará el motivo en su expediente.
+            </p>
+
+            <div className="mt-4 flex flex-col gap-3 text-xs">
+              <div>
+                <label className="text-zinc-300 font-semibold">
+                  Motivo de la revocación (requerido)
+                </label>
+                <textarea
+                  rows={3}
+                  value={revokeReason}
+                  onChange={(e) => setRevokeReason(e.target.value)}
+                  placeholder="Ej: Aclaración de malentendido con cliente / cumplimiento anticipado..."
+                  className="mt-1.5 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                disabled={isRevoking}
+                onClick={() => {
+                  setShowRevokeModal(false);
+                  setRevokeReason("");
+                  setRevokingSanctionId(null);
+                }}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={isRevoking || !revokeReason.trim()}
+                onClick={handleRevokeSanction}
+                className="rounded-xl bg-emerald-600 px-5 py-2 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isRevoking ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Revocando...
+                  </>
+                ) : (
+                  "Confirmar Revocación"
+                )}
               </button>
             </div>
           </div>

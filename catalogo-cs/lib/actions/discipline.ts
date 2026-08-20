@@ -33,9 +33,10 @@ export type DisciplinarySanction = {
   id: string;
   subjectType: PersonType;
   subjectId: string;
-  type: "suspension" | "permanent_ban";
+  type: "suspension" | "permanent_ban" | "fine";
   status: "active" | "revoked" | "expired";
   reason: string;
+  fineAmount?: number | null;
   startsAt: string;
   endsAt: string | null;
   createdAt: string;
@@ -99,8 +100,9 @@ export async function closeConductReport(
 export async function createSanction(input: {
   subjectType: PersonType;
   subjectId: string;
-  type: "suspension" | "permanent_ban";
+  type: "suspension" | "permanent_ban" | "fine";
   reason: string;
+  fineAmount?: number;
   conductReportId?: string;
   startsAt?: string;
   endsAt?: string;

@@ -24,6 +24,7 @@ function mapToModelo(emp: any): Modelo {
     contactLabel: emp.contactLabel || "Contacto",
     disponible: emp.disponible,
     catalogoActivo: emp.catalogoActivo !== false,
+    sancionada: Boolean(emp.sancionada),
     availabilityStatus: emp.availabilityStatus,
     estimatedAvailableAt: emp.estimatedAvailableAt ?? null,
     canScheduleNext: emp.canScheduleNext,
