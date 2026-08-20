@@ -770,10 +770,7 @@ export class TelegramAuthUpdate {
   }
 
   @On('photo')
-  async onPhotoMessage(
-    @Ctx() ctx: Context,
-    @Next() next: () => Promise<void>,
-  ) {
+  async onPhotoMessage(@Ctx() ctx: Context, @Next() next: () => Promise<void>) {
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) {
       await next();

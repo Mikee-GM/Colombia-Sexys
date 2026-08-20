@@ -47,8 +47,8 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
 
     // Escanear cada 10 minutos
     this.timer = setInterval(() => void this.runCycle(), 10 * 60 * 1000);
-    if (typeof (this.timer as any)?.unref === 'function') {
-      (this.timer as any).unref();
+    if (typeof this.timer?.unref === 'function') {
+      this.timer.unref();
     }
     const initialTimer: any = setTimeout(() => void this.runCycle(), 10_000);
     if (typeof initialTimer?.unref === 'function') {

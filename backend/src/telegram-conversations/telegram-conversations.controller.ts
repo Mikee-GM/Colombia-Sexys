@@ -51,4 +51,28 @@ export class TelegramConversationsController {
       dto.message,
     );
   }
+
+  @Post('service/:serviceId/pause-ai')
+  pauseAi(@Param('serviceId') serviceId: string, @Req() req: any) {
+    return this.conversationsService.pauseAi(serviceId, req.user);
+  }
+
+  @Post('service/:serviceId/resume-ai')
+  resumeAi(@Param('serviceId') serviceId: string, @Req() req: any) {
+    return this.conversationsService.resumeAi(serviceId, req.user);
+  }
+
+  @Post('service/:serviceId/admin-message')
+  sendAdminMessage(
+    @Param('serviceId') serviceId: string,
+    @Body() dto: { message: string; asIdentity?: 'empleada' | 'jefe' | 'ia' },
+    @Req() req: any,
+  ) {
+    return this.conversationsService.sendAdminMessage(
+      serviceId,
+      req.user,
+      dto.message,
+      dto.asIdentity || 'jefe',
+    );
+  }
 }

@@ -1,58 +1,49 @@
-import { BriefcaseBusiness, Car, Users } from "lucide-react";
-
-import ActivityFeed from "@/components/dashboard/activity-feed";
-import LiveMapDynamic from "@/components/dashboard/LiveMapDynamic";
 import PageHeader from "@/components/ui/page-header";
-import StatCard from "@/components/ui/stat-card";
-import { getDrivers } from "@/lib/data/drivers";
-import { getEmployees } from "@/lib/data/employees";
-import { getServices, isActiveService } from "@/lib/data/services";
+import GodEyeDashboard from "@/components/admin/god-eye/GodEyeDashboard";
+import {
+  getGodEyeOverviewAction,
+  getGodEyeActorsAction,
+} from "@/lib/actions/god-eye";
+import { getPendingAppeals } from "@/lib/actions/discipline";
 
 export default async function DashboardPage() {
-  const [employees, drivers, servicesResult] = await Promise.all([
-    getEmployees(),
-    getDrivers(),
-    getServices().then(
-      (services) => ({ ok: true as const, services }),
-      (error: unknown) => ({ ok: false as const, error }),
-    ),
+  const [overview, actors, appeals] = await Promise.all([
+    getGodEyeOverviewAction().catch(() => ({
+      metrics: {
+        activeServices: 0,
+        employeesTotal: 0,
+        employeesAvailable: 0,
+        employeesBusy: 0,
+        driversTotal: 0,
+        driversActive: 0,
+        pendingReceipts: 0,
+        recentNegativeRatings: 0,
+        cashInStreet: 0,
+        activeSanctions: 0,
+        pendingAppeals: 0,
+      },
+      activeServices: [],
+    })),
+    getGodEyeActorsAction().catch(() => ({
+      employees: [],
+      drivers: [],
+      bosses: [],
+    })),
+    getPendingAppeals().catch(() => []),
   ]);
-  const services = servicesResult.ok ? servicesResult.services : [];
-  const activeServices = services.filter(isActiveService);
 
   return (
     <>
       <PageHeader
-        title="Panel General"
-        description="Metricas en tiempo real y estado de la flota."
+        title="Ojo de Dios · Panel Táctico"
+        description="Supervisión 360°, diagnóstico causal de quejas, control de IA y resolución de conflictos en tiempo real."
       />
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <StatCard
-          title="Servicios Activos"
-          value={servicesResult.ok ? activeServices.length : "—"}
-          icon={BriefcaseBusiness}
-        />
-        <StatCard title="Empleadas" value={employees.length} icon={Users} />
-        <StatCard title="Choferes" value={drivers.length} icon={Car} />
-      </div>
-
-      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-12">
-        <div className="xl:col-span-8">
-          <LiveMapDynamic employees={employees} drivers={drivers} />
-        </div>
-
-        <div className="xl:col-span-4">
-          <ActivityFeed
-            services={services}
-            error={
-              servicesResult.ok
-                ? undefined
-                : "No se pudieron cargar servicios. Revisa que haya sesion admin/jefe."
-            }
-          />
-        </div>
-      </div>
+      <GodEyeDashboard
+        initialOverview={overview}
+        initialActors={actors}
+        initialAppeals={appeals}
+      />
     </>
   );
 }

@@ -68,16 +68,78 @@ export class TelegramConversationsService {
     return this.record(service, 'jefe', message);
   }
 
+  async sendAdminMessage(
+    serviceId: string,
+    actor: Usuarios,
+    raw: string,
+    asIdentity: 'empleada' | 'jefe' | 'ia' = 'jefe',
+  ) {
+    const service = await this.getAuthorizedService(serviceId, actor);
+    const message = raw.trim();
+    if (!message) throw new ConflictException('El mensaje está vacío');
+    const clientChatId =
+      service.clienteTelegramId || service.cliente?.telegramChatId;
+    if (!clientChatId) {
+      throw new ConflictException('El cliente no tiene Telegram vinculado');
+    }
+
+    await this.bot.telegram.sendMessage(clientChatId, message);
+    if (service.jefe?.grupoTelegramId && service.telegramThreadId) {
+      await this.bot.telegram.sendMessage(
+        service.jefe.grupoTelegramId,
+        `[Admin como ${asIdentity}]: ${message}`,
+        { message_thread_id: Number(service.telegramThreadId) },
+      );
+    }
+    return this.record(service, asIdentity, message);
+  }
+
+  async pauseAi(serviceId: string, actor: Usuarios) {
+    const service = await this.getAuthorizedService(serviceId, actor);
+    service.iaActiva = false;
+    const updated = await this.servicesRepository.save(service);
+    this.realtimeEvents.emitToBosses(
+      [
+        service.jefeId,
+        service.empleada?.jefeId,
+        service.empleada?.jefeSecundarioId,
+      ],
+      {
+        type: 'service_ai_paused',
+        data: { serviceId, iaActiva: false },
+      },
+    );
+    return { ok: true, serviceId, iaActiva: false };
+  }
+
+  async resumeAi(serviceId: string, actor: Usuarios) {
+    const service = await this.getAuthorizedService(serviceId, actor);
+    service.iaActiva = true;
+    const updated = await this.servicesRepository.save(service);
+    this.realtimeEvents.emitToBosses(
+      [
+        service.jefeId,
+        service.empleada?.jefeId,
+        service.empleada?.jefeSecundarioId,
+      ],
+      {
+        type: 'service_ai_resumed',
+        data: { serviceId, iaActiva: true },
+      },
+    );
+    return { ok: true, serviceId, iaActiva: true };
+  }
+
   async record(
     service: Servicios,
-    sender: 'ia' | 'jefe' | 'cliente',
+    sender: 'ia' | 'jefe' | 'cliente' | 'empleada',
     message: string,
   ) {
     const saved = await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: service.clienteId,
         servicioId: service.id,
-        emisor: sender,
+        emisor: sender as any,
         mensaje: message,
         iaActiva: service.iaActiva,
       }),

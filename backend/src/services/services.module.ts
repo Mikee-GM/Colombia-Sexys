@@ -17,6 +17,9 @@ import { PaymentReceiptValidations } from './entities/payment-receipt-validation
 import { DisciplineModule } from '../discipline/discipline.module';
 import { UploadModule } from '../upload/upload.module';
 
+import { GodEyeService } from './god-eye.service';
+import { GodEyeController } from './god-eye.controller';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -36,8 +39,8 @@ import { UploadModule } from '../upload/upload.module';
     DisciplineModule,
     UploadModule,
   ],
-  controllers: [ServicesController],
-  providers: [ServicesService],
-  exports: [ServicesService],
+  controllers: [ServicesController, GodEyeController],
+  providers: [ServicesService, GodEyeService],
+  exports: [ServicesService, GodEyeService],
 })
 export class ServicesModule {}
