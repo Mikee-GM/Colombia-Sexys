@@ -223,8 +223,10 @@ export class GodEyeService {
               s.total_final AS "totalFinal",
               s.hora_inicio_servicio AS "horaInicioServicio",
               s.hora_fin_servicio AS "horaFinServicio",
-              s.hotel_o_domicilio AS "hotelODomicilio",
-              s.ubicacion,
+              s.location_name_snapshot AS "hotelODomicilio",
+              s.location_address_snapshot AS "ubicacion",
+              s.location_name_snapshot AS "locationName",
+              s.location_address_snapshot AS "locationAddress",
               s.notas,
               s.created_at AS "createdAt",
               c.id AS "clienteId",
@@ -306,14 +308,15 @@ export class GodEyeService {
         this.dataSource.query(
           `SELECT
               id,
-              semana_inicio AS "semanaInicio",
-              semana_fin AS "semanaFin",
-              net_amount AS "netAmount",
-              status,
-              created_at AS "createdAt"
+              week_start AS "semanaInicio",
+              week_end AS "semanaFin",
+              net_employee_pay AS "netAmount",
+              gross_employee_pay AS "grossAmount",
+              cash_offset AS "cashOffset",
+              confirmed_at AS "confirmedAt"
             FROM employee_weekly_settlements
             WHERE employee_id = $1
-            ORDER BY semana_inicio DESC
+            ORDER BY week_start DESC
             LIMIT 1`,
           [id],
         ),
@@ -380,14 +383,11 @@ export class GodEyeService {
         this.dataSource.query(
           `SELECT
               c.id,
-              c.titulo,
-              c.descripcion,
-              c.puntos,
-              c.tipo,
-              c.meta,
-              c.activo,
-              c.fecha_inicio AS "fechaInicio",
-              c.fecha_fin AS "fechaFin",
+              c.title AS "titulo",
+              c.metric AS "tipo",
+              c.status AS "estado",
+              c.starts_at AS "fechaInicio",
+              c.ends_at AS "fechaFin",
               cp.created_at AS "inscritoAt"
             FROM challenge_participants cp
             JOIN challenges c ON c.id = cp.challenge_id
