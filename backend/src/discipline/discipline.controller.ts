@@ -64,7 +64,8 @@ export class DisciplineController {
   @Get('dossiers/:subjectType/:subjectId')
   @Roles('admin', 'jefe')
   dossier(
-    @Param('subjectType') subjectType: 'client' | 'employee' | 'driver',
+    @Param('subjectType')
+    subjectType: 'client' | 'employee' | 'driver' | 'boss',
     @Param('subjectId', ParseUUIDPipe) subjectId: string,
     @Req() req: any,
   ) {
@@ -83,7 +84,8 @@ export class DisciplineController {
   @Roles('admin', 'jefe')
   sanctions(
     @Req() req: any,
-    @Query('subjectType') subjectType?: 'client' | 'employee' | 'driver',
+    @Query('subjectType')
+    subjectType?: 'client' | 'employee' | 'driver' | 'boss',
     @Query('subjectId') subjectId?: string,
   ) {
     return this.discipline.listSanctions(req.user, subjectType, subjectId);

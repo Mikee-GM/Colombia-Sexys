@@ -125,13 +125,20 @@ export class GodEyeService {
           e.created_at AS "createdAt",
           e.jefe_id AS "jefeId",
           e.jefe_secundario_id AS "jefeSecundarioId",
+          e.apartment_id AS "apartmentId",
           u.email AS "jefeEmail",
           u.telegram_chat_id AS "jefeTelegram",
+          u2.email AS "jefeSecundarioEmail",
+          usr.telefono AS "telefono",
           usr.telegram_chat_id AS "telegramChatId",
-          usr.activo AS "usuarioActivo"
+          usr.activo AS "usuarioActivo",
+          apt.nombre AS "apartmentNombre",
+          apt.direccion AS "apartmentDireccion"
         FROM empleadas e
         LEFT JOIN usuarios u ON u.id = e.jefe_id
+        LEFT JOIN usuarios u2 ON u2.id = e.jefe_secundario_id
         LEFT JOIN usuarios usr ON usr.id = e.usuario_id
+        LEFT JOIN apartments apt ON apt.id = e.apartment_id
         WHERE e.id = $1`,
         [id],
       );
@@ -142,9 +149,15 @@ export class GodEyeService {
         ratings,
         reports,
         sanctions,
-        servicesHistory,
+        services,
         extras,
         cashObligations,
+        liquidationDebts,
+        recentSettlement,
+        onboardingRows,
+        candidateScreeningRows,
+        weeklyPhotos,
+        challenges,
       ] = await Promise.all([
         this.dataSource.query(
           `SELECT
@@ -186,6 +199,7 @@ export class GodEyeService {
           `SELECT
               id,
               type,
+              fine_amount AS "fineAmount",
               status,
               reason,
               starts_at AS "startsAt",
@@ -200,17 +214,58 @@ export class GodEyeService {
         this.dataSource.query(
           `SELECT
               s.id,
+              s.service_type AS "serviceType",
               s.estado,
               s.metodo_pago AS "metodoPago",
               s.duracion_pactada_horas AS "duracionPactadaHoras",
+              s.duracion_final_horas AS "duracionFinalHoras",
+              s.precio_base_hora_pactado AS "precioBaseHoraPactado",
               s.total_final AS "totalFinal",
+              s.hora_inicio_servicio AS "horaInicioServicio",
+              s.hora_fin_servicio AS "horaFinServicio",
+              s.hotel_o_domicilio AS "hotelODomicilio",
+              s.ubicacion,
+              s.notas,
               s.created_at AS "createdAt",
-              c.nombre_telegram AS "clienteNombre"
+              c.id AS "clienteId",
+              c.nombre_telegram AS "clienteNombre",
+              c.telefono AS "clienteTelefono",
+              j.email AS "jefeEmail",
+              COALESCE(
+                (
+                  SELECT json_agg(json_build_object(
+                    'id', v.id,
+                    'tipo', v.tipo,
+                    'estado', v.estado,
+                    'tarifa', v.tarifa,
+                    'proveedorTransporte', v.proveedor_transporte,
+                    'choferNombre', ch.nombre,
+                    'choferTelefono', ch.telefono,
+                    'vehiculoModelo', ch.vehiculo_modelo
+                  ))
+                  FROM viajes v
+                  LEFT JOIN choferes ch ON ch.id = v.chofer_id
+                  WHERE v.servicio_id = s.id
+                ),
+                '[]'::json
+              ) AS "viajes",
+              COALESCE(
+                (
+                  SELECT json_agg(json_build_object(
+                    'nombre', es.nombre,
+                    'precio', es.precio
+                  ))
+                  FROM extras_servicio es
+                  WHERE es.servicio_id = s.id
+                ),
+                '[]'::json
+              ) AS "extrasServicio"
             FROM servicios s
             LEFT JOIN clientes c ON c.id = s.cliente_id
+            LEFT JOIN usuarios j ON j.id = s.jefe_id
             WHERE s.empleada_id = $1
             ORDER BY s.created_at DESC
-            LIMIT 10`,
+            LIMIT 25`,
           [id],
         ),
         this.dataSource.query(
@@ -223,16 +278,155 @@ export class GodEyeService {
         this.dataSource.query(
           `SELECT
               id,
+              service_id AS "serviceId",
               amount AS "montoOriginal",
+              paid_amount AS "montoPagado",
               (amount - paid_amount) AS "montoRestante",
               status,
               created_at AS "createdAt"
             FROM employee_cash_obligations
-            WHERE employee_id = $1 AND status = 'pending'
-            ORDER BY created_at DESC`,
+            WHERE employee_id = $1
+            ORDER BY created_at DESC
+            LIMIT 10`,
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
+              id,
+              amount,
+              description,
+              status,
+              created_at AS "createdAt"
+            FROM liquidation_debts
+            WHERE employee_id = $1
+            ORDER BY created_at DESC
+            LIMIT 10`,
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
+              id,
+              semana_inicio AS "semanaInicio",
+              semana_fin AS "semanaFin",
+              net_amount AS "netAmount",
+              status,
+              created_at AS "createdAt"
+            FROM employee_weekly_settlements
+            WHERE employee_id = $1
+            ORDER BY semana_inicio DESC
+            LIMIT 1`,
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
+              eo.id,
+              eo.status,
+              eo.attempt_count AS "attemptCount",
+              eo.best_score AS "bestScore",
+              eo.trust_score AS "trustScore",
+              eo.assigned_at AS "assignedAt",
+              eo.completed_at AS "completedAt",
+              COALESCE(
+                (
+                  SELECT json_agg(json_build_object(
+                    'id', qa.id,
+                    'attemptNumber', qa.attempt_number,
+                    'status', qa.status,
+                    'score', qa.score,
+                    'correctAnswers', qa.correct_answers,
+                    'totalQuestions', qa.total_questions,
+                    'startedAt', qa.started_at,
+                    'completedAt', qa.completed_at
+                  ) ORDER BY qa.attempt_number ASC)
+                  FROM questionnaire_attempts qa
+                  WHERE qa.onboarding_id = eo.id
+                ),
+                '[]'::json
+              ) AS "attempts"
+            FROM employee_onboardings eo
+            WHERE eo.employee_id = $1 OR eo.user_id = (SELECT usuario_id FROM empleadas WHERE id = $1)
+            ORDER BY eo.assigned_at DESC
+            LIMIT 1`,
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
+              cs.id,
+              cs.status,
+              cs.candidate_name AS "candidateName",
+              cs.candidate_phone AS "candidatePhone",
+              cs.created_at AS "createdAt",
+              cs.started_at AS "startedAt",
+              cs.completed_at AS "completedAt"
+            FROM candidate_screenings cs
+            WHERE cs.promoted_employee_id = $1
+            ORDER BY cs.created_at DESC
+            LIMIT 1`,
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
+              wps.id,
+              wps.url,
+              wps.estado,
+              wps.semana_inicio AS "semanaInicio",
+              wps.created_at AS "createdAt"
+            FROM weekly_photo_submissions wps
+            WHERE wps.empleada_id = $1
+            ORDER BY wps.created_at DESC
+            LIMIT 10`,
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
+              c.id,
+              c.titulo,
+              c.descripcion,
+              c.puntos,
+              c.tipo,
+              c.meta,
+              c.activo,
+              c.fecha_inicio AS "fechaInicio",
+              c.fecha_fin AS "fechaFin",
+              cp.created_at AS "inscritoAt"
+            FROM challenge_participants cp
+            JOIN challenges c ON c.id = cp.challenge_id
+            WHERE cp.participant_id = $1
+            ORDER BY c.created_at DESC
+            LIMIT 5`,
           [id],
         ),
       ]);
+
+      const totalCashDue = cashObligations
+        .filter((o: any) => o.status === 'pending')
+        .reduce((sum: number, o: any) => sum + Number(o.montoRestante || 0), 0);
+
+      const totalDebt = liquidationDebts
+        .filter((d: any) => d.status === 'pending')
+        .reduce((sum: number, d: any) => sum + Number(d.amount || 0), 0);
+
+      const finances = {
+        totalCashDue,
+        totalDebt,
+        totalOwed: totalCashDue + totalDebt,
+        cashObligations,
+        liquidationDebts,
+        recentSettlement: recentSettlement[0] || null,
+      };
+
+      const onboarding = onboardingRows[0]
+        ? {
+            ...onboardingRows[0],
+            screening: candidateScreeningRows[0] || null,
+          }
+        : candidateScreeningRows[0]
+          ? {
+              status: candidateScreeningRows[0].status,
+              screening: candidateScreeningRows[0],
+              attempts: [],
+            }
+          : null;
 
       return {
         actorType: 'employee',
@@ -240,9 +434,14 @@ export class GodEyeService {
         ratings,
         reports,
         sanctions,
-        servicesHistory,
+        services,
+        servicesHistory: services,
         extras,
         cashObligations,
+        finances,
+        onboarding,
+        weeklyPhotos,
+        challenges,
       };
     }
 
@@ -362,9 +561,10 @@ export class GodEyeService {
       const boss = bossRows[0];
       if (!boss) throw new NotFoundException('Jefe no encontrado');
 
-      const [employees, managedServices, reports] = await Promise.all([
-        this.dataSource.query(
-          `SELECT
+      const [employees, managedServices, reports, sanctions] =
+        await Promise.all([
+          this.dataSource.query(
+            `SELECT
             id,
             nombre_artistico AS "nombreArtistico",
             disponible,
@@ -373,10 +573,10 @@ export class GodEyeService {
           FROM empleadas
           WHERE jefe_id = $1 OR jefe_secundario_id = $1
           ORDER BY nombre_artistico ASC`,
-          [id],
-        ),
-        this.dataSource.query(
-          `SELECT
+            [id],
+          ),
+          this.dataSource.query(
+            `SELECT
             s.id,
             s.estado,
             s.total_final AS "totalFinal",
@@ -389,10 +589,10 @@ export class GodEyeService {
           WHERE s.jefe_id = $1
           ORDER BY s.created_at DESC
           LIMIT 15`,
-          [id],
-        ),
-        this.dataSource.query(
-          `SELECT
+            [id],
+          ),
+          this.dataSource.query(
+            `SELECT
             r.id,
             r.subject_type AS "subjectType",
             r.category,
@@ -406,9 +606,26 @@ export class GodEyeService {
           WHERE s.jefe_id = $1
           ORDER BY r.created_at DESC
           LIMIT 10`,
-          [id],
-        ),
-      ]);
+            [id],
+          ),
+          this.dataSource.query(
+            `SELECT
+            id,
+            type,
+            fine_amount AS "fineAmount",
+            status,
+            reason,
+            starts_at AS "startsAt",
+            ends_at AS "endsAt",
+            revocation_reason AS "revocationReason",
+            created_at AS "createdAt"
+          FROM disciplinary_sanctions
+          WHERE subject_type = 'boss' AND subject_id = $1
+          ORDER BY created_at DESC
+          LIMIT 10`,
+            [id],
+          ),
+        ]);
 
       return {
         actorType: 'boss',
@@ -416,6 +633,7 @@ export class GodEyeService {
         employees,
         managedServices,
         reports,
+        sanctions,
       };
     }
 
@@ -678,7 +896,13 @@ export class GodEyeService {
           'boss' AS type,
           u.rol,
           u.activo,
-          false AS "sancionada"
+          EXISTS(
+            SELECT 1 FROM disciplinary_sanctions s
+            WHERE s.subject_type = 'boss'
+              AND s.subject_id = u.id
+              AND s.status = 'active'
+              AND (s.ends_at IS NULL OR s.ends_at > NOW())
+          ) AS "sancionada"
         FROM usuarios u
         WHERE u.rol IN ('jefe', 'admin')
         ORDER BY u.email ASC

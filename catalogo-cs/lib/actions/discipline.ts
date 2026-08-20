@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
 import type { EmployeeRatingComment } from "@/lib/types";
 
-export type PersonType = "client" | "employee" | "driver";
+export type PersonType = "client" | "employee" | "driver" | "boss";
 export type RatingDirection =
   | "client_to_employee"
   | "employee_to_client"

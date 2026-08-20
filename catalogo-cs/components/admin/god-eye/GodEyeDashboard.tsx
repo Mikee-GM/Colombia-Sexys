@@ -3,31 +3,49 @@
 import {
   Activity,
   AlertTriangle,
+  Award,
   Banknote,
+  Briefcase,
+  Calendar,
+  Camera,
   Car,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
   Clock,
   Coins,
   CreditCard,
+  DollarSign,
+  Eye,
   FileCheck,
   Flame,
+  GraduationCap,
+  HelpCircle,
+  Layers,
+  MapPin,
   MessageSquare,
   PauseCircle,
+  Percent,
+  Phone,
   PlayCircle,
   Radio,
+  Receipt,
   RefreshCw,
   Scale,
+  Search,
   Send,
   Shield,
   ShieldAlert,
   Sparkles,
+  Star,
+  TrendingUp,
+  Trophy,
   UserCheck,
   Users,
-  XCircle,
-  ChevronRight,
-  TrendingUp,
-  Search,
   X,
+  XCircle,
 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState, useTransition } from "react";
@@ -78,6 +96,14 @@ export default function GodEyeDashboard({
   );
   const [dossier, setDossier] = useState<GodEyeActorDossier | null>(null);
   const [loadingDossier, setLoadingDossier] = useState(false);
+
+  // Sub-pestaña para expediente 360°
+  const [dossierSection, setDossierSection] = useState<
+    "services" | "finances" | "onboarding" | "photos_challenges" | "reputation"
+  >("services");
+  const [serviceStatusFilter, setServiceStatusFilter] = useState<
+    "all" | "active" | "completed" | "cancelled"
+  >("all");
 
   const cleanSearch = actorSearchQuery.trim().toLowerCase();
   const filteredEmployees = actors.employees.filter(
@@ -649,12 +675,19 @@ export default function GodEyeDashboard({
                         <span className="font-semibold text-zinc-200 truncate">{boss.name}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-2">
-                        <span
-                          className={`h-2.5 w-2.5 rounded-full ${
-                            boss.activo ? "bg-emerald-400" : "bg-zinc-600"
-                          }`}
-                          title={boss.activo ? "Activo" : "Inactivo"}
-                        />
+                        {boss.sancionada ? (
+                          <span className="flex items-center gap-1 rounded-full bg-red-950/80 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-400">
+                            <ShieldAlert className="h-3 w-3" />
+                            Sancionado
+                          </span>
+                        ) : (
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              boss.activo ? "bg-emerald-400" : "bg-zinc-600"
+                            }`}
+                            title={boss.activo ? "Activo" : "Inactivo"}
+                          />
+                        )}
                         <span className="text-xs uppercase text-zinc-400 font-semibold">
                           {boss.rol}
                         </span>
@@ -678,9 +711,10 @@ export default function GodEyeDashboard({
               </div>
             ) : dossier ? (
               <div className="flex flex-col gap-4">
+                {/* CABECERA DEL EXPEDIENTE */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 flex items-center justify-center">
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-900 flex items-center justify-center">
                       {dossier.profile?.fotoPerfilUrl ? (
                         <Image
                           src={dossier.profile.fotoPerfilUrl}
@@ -689,155 +723,919 @@ export default function GodEyeDashboard({
                           className="object-cover"
                         />
                       ) : (
-                        <Users className="h-6 w-6 text-zinc-400" />
+                        <Users className="h-7 w-7 text-zinc-400" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-bold text-white text-base truncate" title={dossier.profile?.nombreArtistico || dossier.profile?.nombre || dossier.profile?.email}>
-                        {dossier.profile?.nombreArtistico ||
-                          dossier.profile?.nombre ||
-                          dossier.profile?.email}
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3
+                          className="font-bold text-white text-base truncate"
+                          title={
+                            dossier.profile?.nombreArtistico ||
+                            dossier.profile?.nombre ||
+                            dossier.profile?.email
+                          }
+                        >
+                          {dossier.profile?.nombreArtistico ||
+                            dossier.profile?.nombre ||
+                            dossier.profile?.email}
+                        </h3>
+                        {dossier.actorType === "employee" && (
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              dossier.profile?.disponible
+                                ? "bg-emerald-400"
+                                : "bg-zinc-600"
+                            }`}
+                            title={
+                              dossier.profile?.disponible
+                                ? "Disponible"
+                                : "No disponible"
+                            }
+                          />
+                        )}
+                      </div>
                       <p className="text-xs text-zinc-400 truncate">
                         {dossier.profile?.nombreReal
                           ? `Nombre real: ${dossier.profile.nombreReal}`
-                          : dossier.profile?.telefono || (dossier.profile?.rol ? `Rol: ${dossier.profile.rol}` : "")}
+                          : dossier.profile?.telefono ||
+                            (dossier.profile?.rol
+                              ? `Rol: ${dossier.profile.rol}`
+                              : "")}
                       </p>
+                      {/* Badges de estado rápido */}
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                        {dossier.profile?.apartmentNombre && (
+                          <span className="flex items-center gap-1 rounded-md bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-zinc-300">
+                            <MapPin className="h-3 w-3 text-[#C5A55A]" />
+                            {dossier.profile.apartmentNombre}
+                          </span>
+                        )}
+                        {dossier.actorType === "employee" && dossier.finances && (
+                          dossier.finances.totalOwed > 0 ? (
+                            <span className="flex items-center gap-1 rounded-md bg-red-950/80 border border-red-500/50 px-2 py-0.5 font-bold text-red-300">
+                              <AlertTriangle className="h-3 w-3 text-red-400" />
+                              Debe ${dossier.finances.totalOwed.toLocaleString()} MXN
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 rounded-md bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 font-bold text-emerald-300">
+                              <Check className="h-3 w-3 text-emerald-400" />
+                              Al día ($0 deuda)
+                            </span>
+                          )
+                        )}
+                        {dossier.onboarding?.trustScore && (
+                          <span className="flex items-center gap-1 rounded-md bg-[#C5A55A]/10 border border-[#C5A55A]/30 px-2 py-0.5 text-[#E8D5A3]">
+                            <Award className="h-3 w-3 text-[#C5A55A]" />
+                            Trust: {dossier.onboarding.trustScore}/5
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  {actorTab !== "boss" && (
-                    <button
-                      onClick={() => setShowSanctionModal(true)}
-                      className="flex shrink-0 self-start sm:self-center items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-950/40 px-3 py-1.5 text-xs font-bold text-red-300 transition-colors hover:bg-red-900"
-                    >
-                      <ShieldAlert className="h-4 w-4" />
-                      Sancionar
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setShowSanctionModal(true)}
+                    className="flex shrink-0 self-start sm:self-center items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-950/40 px-3 py-1.5 text-xs font-bold text-red-300 transition-colors hover:bg-red-900"
+                  >
+                    <ShieldAlert className="h-4 w-4" />
+                    Sancionar
+                  </button>
                 </div>
 
-                {/* Métricas rápidas del actor */}
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {dossier.profile?.precioBaseHora && (
-                    <div className="rounded-xl border border-zinc-800/80 bg-zinc-950 p-3">
-                      <span className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">
-                        Tarifa Base
-                      </span>
-                      <p className="font-bold text-[#C5A55A] text-base mt-0.5">
-                        ${dossier.profile.precioBaseHora}/hr
-                      </p>
+                {/* VISTA SEGÚN TIPO DE ACTOR */}
+                {dossier.actorType === "employee" ? (
+                  <div className="flex flex-col gap-3">
+                    {/* BARRA DE NAVEGACIÓN DE SUB-PESTAÑAS */}
+                    <div className="flex flex-wrap gap-1.5 border-b border-zinc-800 pb-2">
+                      <button
+                        onClick={() => setDossierSection("services")}
+                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                          dossierSection === "services"
+                            ? "bg-[#C5A55A] text-black shadow-md"
+                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                        }`}
+                      >
+                        <Layers className="h-3.5 w-3.5" />
+                        Servicios ({dossier.services?.length || 0})
+                      </button>
+                      <button
+                        onClick={() => setDossierSection("finances")}
+                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                          dossierSection === "finances"
+                            ? "bg-[#C5A55A] text-black shadow-md"
+                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                        }`}
+                      >
+                        <Banknote className="h-3.5 w-3.5" />
+                        Finanzas & Deudas
+                        {dossier.finances?.totalOwed ? (
+                          <span className="rounded-full bg-red-500/30 px-1.5 text-[10px] text-red-200">
+                            ${dossier.finances.totalOwed}
+                          </span>
+                        ) : null}
+                      </button>
+                      <button
+                        onClick={() => setDossierSection("onboarding")}
+                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                          dossierSection === "onboarding"
+                            ? "bg-[#C5A55A] text-black shadow-md"
+                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                        }`}
+                      >
+                        <GraduationCap className="h-3.5 w-3.5" />
+                        Exámenes & Onboarding
+                        {dossier.onboarding?.attempts?.length ? (
+                          <span className="rounded-full bg-zinc-800 px-1.5 text-[10px] text-zinc-300">
+                            {dossier.onboarding.attempts.length}
+                          </span>
+                        ) : null}
+                      </button>
+                      <button
+                        onClick={() => setDossierSection("photos_challenges")}
+                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                          dossierSection === "photos_challenges"
+                            ? "bg-[#C5A55A] text-black shadow-md"
+                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                        }`}
+                      >
+                        <Camera className="h-3.5 w-3.5" />
+                        Fotos & Retos
+                      </button>
+                      <button
+                        onClick={() => setDossierSection("reputation")}
+                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                          dossierSection === "reputation"
+                            ? "bg-[#C5A55A] text-black shadow-md"
+                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                        }`}
+                      >
+                        <Scale className="h-3.5 w-3.5" />
+                        Reputación & Sanciones
+                      </button>
                     </div>
-                  )}
-                  {dossier.profile?.jefeEmail && (
-                    <div className="rounded-xl border border-zinc-800/80 bg-zinc-950 p-3">
-                      <span className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">
-                        Jefe Asignado
-                      </span>
-                      <p className="truncate font-semibold text-zinc-200 text-sm mt-0.5" title={dossier.profile.jefeEmail}>
-                        {dossier.profile.jefeEmail}
-                      </p>
-                    </div>
-                  )}
-                </div>
 
-                {/* Reseñas / Calificaciones recibidas */}
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
-                    Últimas Calificaciones & Reseñas
-                  </h4>
-                  <div className="mt-2 flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
-                    {dossier.ratings && dossier.ratings.length > 0 ? (
-                      dossier.ratings.map((r: any) => (
-                        <div
-                          key={r.id}
-                          className="rounded-xl border border-zinc-900 bg-zinc-950 p-3 text-xs"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-amber-400 text-sm">
-                              {"⭐".repeat(r.stars)}
-                            </span>
-                            <span className="text-xs text-zinc-500">
-                              {r.direction}
-                            </span>
+                    {/* CONTENIDO DE SUB-PESTAÑA 1: SERVICIOS */}
+                    {dossierSection === "services" && (
+                      <div className="flex flex-col gap-3">
+                        {/* Filtros de servicios */}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex gap-1">
+                            {(["all", "active", "completed", "cancelled"] as const).map((filterKey) => (
+                              <button
+                                key={filterKey}
+                                onClick={() => setServiceStatusFilter(filterKey)}
+                                className={`rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors ${
+                                  serviceStatusFilter === filterKey
+                                    ? "bg-zinc-700 text-white"
+                                    : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+                                }`}
+                              >
+                                {filterKey === "all"
+                                  ? `Todos (${dossier.services?.length || 0})`
+                                  : filterKey === "active"
+                                  ? `Activos (${
+                                      dossier.services?.filter((s: any) =>
+                                        ["pendiente", "en_curso"].includes(s.estado),
+                                      ).length || 0
+                                    })`
+                                  : filterKey === "completed"
+                                  ? `Completados (${
+                                      dossier.services?.filter(
+                                        (s: any) => s.estado === "completado",
+                                      ).length || 0
+                                    })`
+                                  : `Cancelados (${
+                                      dossier.services?.filter(
+                                        (s: any) => s.estado === "cancelado",
+                                      ).length || 0
+                                    })`}
+                              </button>
+                            ))}
                           </div>
-                          {r.comment && (
-                            <p className="mt-1.5 italic text-zinc-200 text-sm">
-                              &ldquo;{r.comment}&rdquo;
+                          <span className="text-[11px] text-zinc-500">
+                            Tarifa base: ${dossier.profile?.precioBaseHora || 0}/h
+                          </span>
+                        </div>
+
+                        {/* Lista de servicios */}
+                        <div className="flex max-h-[380px] flex-col gap-2.5 overflow-y-auto pr-1">
+                          {dossier.services &&
+                          dossier.services.filter((s: any) => {
+                            if (serviceStatusFilter === "active")
+                              return ["pendiente", "en_curso"].includes(s.estado);
+                            if (serviceStatusFilter === "completed")
+                              return s.estado === "completado";
+                            if (serviceStatusFilter === "cancelled")
+                              return s.estado === "cancelado";
+                            return true;
+                          }).length > 0 ? (
+                            dossier.services
+                              .filter((s: any) => {
+                                if (serviceStatusFilter === "active")
+                                  return ["pendiente", "en_curso"].includes(s.estado);
+                                if (serviceStatusFilter === "completed")
+                                  return s.estado === "completado";
+                                if (serviceStatusFilter === "cancelled")
+                                  return s.estado === "cancelado";
+                                return true;
+                              })
+                              .map((s: any) => (
+                                <div
+                                  key={s.id}
+                                  className="rounded-xl border border-zinc-800/80 bg-zinc-950 p-3 text-xs flex flex-col gap-2 transition-all hover:border-zinc-700"
+                                >
+                                  {/* Encabezado del servicio */}
+                                  <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={`h-2 w-2 rounded-full ${
+                                          s.estado === "en_curso"
+                                            ? "bg-emerald-400 animate-ping"
+                                            : s.estado === "pendiente"
+                                            ? "bg-amber-400"
+                                            : s.estado === "completado"
+                                            ? "bg-emerald-500"
+                                            : "bg-red-500"
+                                        }`}
+                                      />
+                                      <span className="font-mono text-zinc-400 font-bold">
+                                        #{s.id.slice(0, 8)}
+                                      </span>
+                                      <span
+                                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                          s.estado === "en_curso"
+                                            ? "bg-emerald-500/20 text-emerald-300"
+                                            : s.estado === "pendiente"
+                                            ? "bg-amber-500/20 text-amber-300"
+                                            : s.estado === "completado"
+                                            ? "bg-zinc-800 text-zinc-300"
+                                            : "bg-red-500/20 text-red-300"
+                                        }`}
+                                      >
+                                        {s.estado}
+                                      </span>
+                                      <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-400 uppercase">
+                                        {s.serviceType || "individual"}
+                                      </span>
+                                    </div>
+                                    <span className="text-[11px] text-zinc-500">
+                                      {new Date(s.createdAt).toLocaleString("es-MX", {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
+                                  </div>
+
+                                  {/* Detalles en 2 columnas */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                    {/* Cliente & Chofer */}
+                                    <div className="space-y-1">
+                                      <p className="text-zinc-300 font-medium">
+                                        <span className="text-zinc-500">Cliente:</span>{" "}
+                                        {s.clienteNombre || "Sin nombre"}
+                                        {s.clienteTelefono ? ` (${s.clienteTelefono})` : ""}
+                                      </p>
+                                      {s.viajes && s.viajes.length > 0 ? (
+                                        <div className="space-y-0.5 pt-0.5">
+                                          <span className="text-zinc-500 font-semibold block text-[10px] uppercase">
+                                            Traslados / Chofer:
+                                          </span>
+                                          {s.viajes.map((v: any, idx: number) => (
+                                            <p key={idx} className="text-zinc-300 text-[10px]">
+                                              🚗 <span className="text-amber-400 capitalize">{v.tipo}:</span>{" "}
+                                              {v.choferNombre || "Uber"}
+                                              {v.vehiculoModelo ? ` (${v.vehiculoModelo})` : ""}{" "}
+                                              · ${v.tarifa || 0} ·{" "}
+                                              <span className="text-zinc-400">{v.estado}</span>
+                                            </p>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-zinc-500 italic text-[10px]">
+                                          Sin chofer asignado
+                                        </p>
+                                      )}
+                                    </div>
+
+                                    {/* Cobro, Duración & Total */}
+                                    <div className="space-y-1 text-right sm:text-right">
+                                      <p className="text-zinc-300">
+                                        <span className="text-zinc-500">Pago:</span>{" "}
+                                        <span className="font-semibold uppercase text-zinc-200">
+                                          {s.metodoPago}
+                                        </span>{" "}
+                                        · {s.duracionPactadaHoras}h
+                                        {s.duracionFinalHoras ? ` (real: ${s.duracionFinalHoras}h)` : ""}
+                                      </p>
+                                      <p className="text-sm font-bold text-[#C5A55A]">
+                                        ${s.totalFinal || 0} MXN
+                                      </p>
+                                      {s.extrasServicio && s.extrasServicio.length > 0 && (
+                                        <p className="text-[10px] text-zinc-400">
+                                          Extras: {s.extrasServicio.map((e: any) => `${e.nombre} (+$${e.precio})`).join(", ")}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Ubicación o Notas */}
+                                  {(s.hotelODomicilio || s.ubicacion || s.notas) && (
+                                    <div className="border-t border-zinc-900/80 pt-1.5 text-[10px] text-zinc-400 flex flex-wrap items-center justify-between gap-1">
+                                      {(s.hotelODomicilio || s.ubicacion) && (
+                                        <span className="flex items-center gap-1">
+                                          <MapPin className="h-3 w-3 text-zinc-500" />
+                                          {s.hotelODomicilio} {s.ubicacion ? `(${s.ubicacion})` : ""}
+                                        </span>
+                                      )}
+                                      {s.notas && (
+                                        <span className="italic text-zinc-500">
+                                          &ldquo;{s.notas}&rdquo;
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                          ) : (
+                            <p className="py-6 text-center text-xs text-zinc-500">
+                              No hay servicios registrados para este filtro.
                             </p>
                           )}
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-zinc-500 py-1">
-                        Sin calificaciones registradas.
-                      </p>
+                      </div>
                     )}
-                  </div>
-                </div>
 
-                {/* Historial de Sanciones */}
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
-                    Sanciones & Amonestaciones
-                  </h4>
-                  <div className="mt-2 flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
-                    {dossier.sanctions && dossier.sanctions.length > 0 ? (
-                      dossier.sanctions.map((s: any) => (
-                        <div
-                          key={s.id}
-                          className={`flex items-center justify-between rounded-xl border p-3 text-xs ${
-                            s.status === "active"
-                              ? "border-red-900/50 bg-red-950/20"
-                              : "border-zinc-900 bg-zinc-950/60 opacity-70"
-                          }`}
-                        >
-                          <div className="flex-1 pr-2 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-bold uppercase text-xs ${s.status === "active" ? "text-red-400" : "text-zinc-400"}`}>
-                                {s.type === "fine" ? "Multa Monetaria" : s.type === "suspension" ? "Suspensión" : "Baneo Permanente"}
+                    {/* CONTENIDO DE SUB-PESTAÑA 2: FINANZAS & DEUDAS */}
+                    {dossierSection === "finances" && (
+                      <div className="flex flex-col gap-3">
+                        {/* 3 KPIs financieros */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="rounded-xl border border-red-900/40 bg-red-950/20 p-3">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-red-400">
+                              Deuda Consolidada
+                            </span>
+                            <p className="mt-1 text-base font-bold text-red-300">
+                              ${dossier.finances?.totalOwed?.toLocaleString() || 0} MXN
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                              Efectivo en Calle
+                            </span>
+                            <p className="mt-1 text-base font-bold text-[#C5A55A]">
+                              ${dossier.finances?.totalCashDue?.toLocaleString() || 0} MXN
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                              Deuda Liquidación
+                            </span>
+                            <p className="mt-1 text-base font-bold text-amber-400">
+                              ${dossier.finances?.totalDebt?.toLocaleString() || 0} MXN
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Último corte de liquidación */}
+                        {dossier.finances?.recentSettlement && (
+                          <div className="rounded-xl border border-[#C5A55A]/30 bg-[#C5A55A]/5 p-3 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-[#E8D5A3]">
+                                Último Corte Semanal ({dossier.finances.recentSettlement.semanaInicio} al {dossier.finances.recentSettlement.semanaFin})
                               </span>
-                              {s.fineAmount && Number(s.fineAmount) > 0 && (
-                                <span className="rounded-md bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[11px] font-bold text-red-300">
-                                  -${s.fineAmount} MXN
-                                </span>
-                              )}
-                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                                s.status === "active"
-                                  ? "bg-red-500/20 text-red-300"
-                                  : s.status === "revoked"
-                                  ? "bg-zinc-800 text-zinc-400"
-                                  : "bg-amber-500/10 text-amber-400"
-                              }`}>
-                                {s.status === "active" ? "Activa" : s.status === "revoked" ? "Revocada" : "Expirada"}
+                              <span className="rounded bg-[#C5A55A]/20 px-2 py-0.5 text-[10px] font-bold text-[#E8D5A3] uppercase">
+                                {dossier.finances.recentSettlement.status}
                               </span>
                             </div>
-                            <p className="text-xs text-zinc-200 mt-1">{s.reason}</p>
-                            {s.revocationReason && (
-                              <p className="text-[11px] text-zinc-400 italic mt-0.5">
-                                Motivo revocación: {s.revocationReason}
+                            <p className="mt-1 text-sm font-bold text-white">
+                              Ganancia Neta: ${dossier.finances.recentSettlement.netAmount} MXN
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Desglose de efectivo pendiente */}
+                        <div>
+                          <h5 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                            Obligaciones de Efectivo en Calle
+                          </h5>
+                          <div className="flex max-h-32 flex-col gap-1.5 overflow-y-auto pr-1">
+                            {dossier.finances?.cashObligations && dossier.finances.cashObligations.length > 0 ? (
+                              dossier.finances.cashObligations.map((o: any) => (
+                                <div
+                                  key={o.id}
+                                  className="flex items-center justify-between rounded-lg border border-zinc-900 bg-zinc-950 px-3 py-2 text-xs"
+                                >
+                                  <div>
+                                    <span className="font-semibold text-zinc-200">
+                                      Pendiente: ${o.montoRestante} MXN
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500 ml-2">
+                                      (Total: ${o.montoOriginal} · Abonado: ${o.montoPagado || 0})
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-zinc-500">
+                                    {new Date(o.createdAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-zinc-500 py-1">
+                                Sin obligaciones de efectivo pendientes.
                               </p>
                             )}
                           </div>
-                          {s.status === "active" && (
-                            <button
-                              onClick={() => {
-                                setRevokingSanctionId(s.id);
-                                setShowRevokeModal(true);
-                              }}
-                              className="shrink-0 rounded-lg border border-red-500/30 bg-red-950/40 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-900 transition-colors"
-                            >
-                              Revocar
-                            </button>
-                          )}
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-zinc-500 py-1">
-                        Historial limpio sin sanciones.
-                      </p>
+
+                        {/* Desglose de deudas de liquidación */}
+                        <div>
+                          <h5 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                            Deudas de Liquidación Acumuladas
+                          </h5>
+                          <div className="flex max-h-32 flex-col gap-1.5 overflow-y-auto pr-1">
+                            {dossier.finances?.liquidationDebts && dossier.finances.liquidationDebts.length > 0 ? (
+                              dossier.finances.liquidationDebts.map((d: any) => (
+                                <div
+                                  key={d.id}
+                                  className="flex items-center justify-between rounded-lg border border-zinc-900 bg-zinc-950 px-3 py-2 text-xs"
+                                >
+                                  <div>
+                                    <span className="font-semibold text-red-300">
+                                      ${d.amount} MXN
+                                    </span>
+                                    <span className="text-[10px] text-zinc-400 ml-2">
+                                      {d.description}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-zinc-500">
+                                    {new Date(d.createdAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-zinc-500 py-1">
+                                Sin deudas de liquidación registradas.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CONTENIDO DE SUB-PESTAÑA 3: EXÁMENES & ONBOARDING */}
+                    {dossierSection === "onboarding" && (
+                      <div className="flex flex-col gap-3">
+                        {/* Tarjeta de Onboarding */}
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 text-xs flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <GraduationCap className="h-4 w-4 text-[#C5A55A]" />
+                              <span className="font-bold text-white">
+                                Onboarding de Reglamento Operativo
+                              </span>
+                            </div>
+                            <span
+                              className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                dossier.onboarding?.status === "completed"
+                                  ? "bg-emerald-500/20 text-emerald-300"
+                                  : dossier.onboarding?.status === "in_progress"
+                                  ? "bg-amber-500/20 text-amber-300"
+                                  : "bg-zinc-800 text-zinc-400"
+                              }`}
+                            >
+                              {dossier.onboarding?.status || "No iniciado"}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                            <div className="rounded-lg bg-zinc-900 p-2">
+                              <span className="text-[10px] text-zinc-500 uppercase font-semibold">
+                                Intentos
+                              </span>
+                              <p className="font-bold text-white text-sm mt-0.5">
+                                {dossier.onboarding?.attemptCount || dossier.onboarding?.attempts?.length || 0}
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-zinc-900 p-2">
+                              <span className="text-[10px] text-zinc-500 uppercase font-semibold">
+                                Mejor Puntaje
+                              </span>
+                              <p className="font-bold text-[#C5A55A] text-sm mt-0.5">
+                                {dossier.onboarding?.bestScore || 0}%
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-zinc-900 p-2">
+                              <span className="text-[10px] text-zinc-500 uppercase font-semibold">
+                                Trust Score
+                              </span>
+                              <p className="font-bold text-amber-400 text-sm mt-0.5">
+                                {dossier.onboarding?.trustScore || 1}/5
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Historial de intentos */}
+                        <div>
+                          <h5 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                            Historial de Intentos de Examen
+                          </h5>
+                          <div className="flex max-h-48 flex-col gap-2 overflow-y-auto pr-1">
+                            {dossier.onboarding?.attempts && dossier.onboarding.attempts.length > 0 ? (
+                              dossier.onboarding.attempts.map((att: any) => (
+                                <div
+                                  key={att.id || att.attemptNumber}
+                                  className="rounded-xl border border-zinc-900 bg-zinc-950 p-3 text-xs flex items-center justify-between"
+                                >
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-zinc-200">
+                                        Intento #{att.attemptNumber}
+                                      </span>
+                                      <span
+                                        className={`rounded px-1.5 py-0.2 text-[10px] font-bold ${
+                                          att.status === "completed"
+                                            ? "bg-emerald-500/20 text-emerald-300"
+                                            : "bg-amber-500/20 text-amber-300"
+                                        }`}
+                                      >
+                                        {att.status === "completed" ? "Completado" : "En progreso"}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-zinc-400 mt-1">
+                                      Aciertos: {att.correctAnswers} / {att.totalQuestions} preguntas
+                                      {att.completedAt ? ` · ${new Date(att.completedAt).toLocaleDateString()}` : ""}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-base font-bold text-[#C5A55A]">
+                                      {att.score}%
+                                    </span>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-zinc-500 py-2">
+                                No se han registrado intentos de examen.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Screening de candidata si existe */}
+                        {dossier.onboarding?.screening && (
+                          <div className="rounded-xl border border-zinc-900 bg-zinc-950 p-3 text-xs">
+                            <span className="text-[10px] uppercase font-bold text-zinc-500">
+                              Evaluación Inicial de Candidata
+                            </span>
+                            <div className="mt-1 flex items-center justify-between">
+                              <span className="text-zinc-200 font-medium">
+                                {dossier.onboarding.screening.candidateName}
+                                {dossier.onboarding.screening.candidatePhone ? ` (${dossier.onboarding.screening.candidatePhone})` : ""}
+                              </span>
+                              <span className="rounded bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-400 uppercase">
+                                {dossier.onboarding.screening.status}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* CONTENIDO DE SUB-PESTAÑA 4: FOTOS & RETOS */}
+                    {dossierSection === "photos_challenges" && (
+                      <div className="flex flex-col gap-3">
+                        {/* Fotos Semanales */}
+                        <div>
+                          <h5 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 flex items-center justify-between">
+                            <span>Fotos Semanales Obligatorias</span>
+                            <span className="text-[10px] text-zinc-500 font-normal">
+                              {dossier.weeklyPhotos?.length || 0} Registradas
+                            </span>
+                          </h5>
+                          <div className="flex max-h-36 flex-col gap-1.5 overflow-y-auto pr-1">
+                            {dossier.weeklyPhotos && dossier.weeklyPhotos.length > 0 ? (
+                              dossier.weeklyPhotos.map((p: any) => (
+                                <div
+                                  key={p.id}
+                                  className="flex items-center justify-between rounded-lg border border-zinc-900 bg-zinc-950 px-3 py-2 text-xs"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Camera className="h-3.5 w-3.5 text-[#C5A55A]" />
+                                    <span className="text-zinc-300">
+                                      Semana: {p.semanaInicio || "General"}
+                                    </span>
+                                    <span
+                                      className={`rounded px-1.5 py-0.2 text-[10px] font-bold uppercase ${
+                                        p.estado === "aprobada_publica"
+                                          ? "bg-emerald-500/20 text-emerald-300"
+                                          : p.estado === "aprobada_privada"
+                                          ? "bg-blue-500/20 text-blue-300"
+                                          : p.estado === "pendiente"
+                                          ? "bg-amber-500/20 text-amber-300"
+                                          : "bg-red-500/20 text-red-300"
+                                      }`}
+                                    >
+                                      {p.estado}
+                                    </span>
+                                  </div>
+                                  {p.url && (
+                                    <a
+                                      href={p.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[#C5A55A] hover:underline text-[11px]"
+                                    >
+                                      Ver Foto
+                                    </a>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-zinc-500 py-1">
+                                Sin envíos de fotos registrados.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Retos y Desafíos */}
+                        <div>
+                          <h5 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                            Retos y Desafíos Activos
+                          </h5>
+                          <div className="flex max-h-36 flex-col gap-1.5 overflow-y-auto pr-1">
+                            {dossier.challenges && dossier.challenges.length > 0 ? (
+                              dossier.challenges.map((c: any) => (
+                                <div
+                                  key={c.id}
+                                  className="rounded-lg border border-zinc-900 bg-zinc-950 p-2.5 text-xs flex flex-col gap-1"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-white">
+                                      🏆 {c.titulo}
+                                    </span>
+                                    <span className="rounded bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.2 text-[10px] font-bold text-amber-300">
+                                      +{c.puntos} pts
+                                    </span>
+                                  </div>
+                                  {c.descripcion && (
+                                    <p className="text-[11px] text-zinc-400">
+                                      {c.descripcion}
+                                    </p>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-xs text-zinc-500 py-1">
+                                Sin retos inscritos actualmente.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CONTENIDO DE SUB-PESTAÑA 5: REPUTACIÓN & SANCIONES */}
+                    {dossierSection === "reputation" && (
+                      <div className="flex flex-col gap-3">
+                        {/* Reseñas / Calificaciones recibidas */}
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                            Últimas Calificaciones & Reseñas
+                          </h4>
+                          <div className="mt-2 flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
+                            {dossier.ratings && dossier.ratings.length > 0 ? (
+                              dossier.ratings.map((r: any) => (
+                                <div
+                                  key={r.id}
+                                  className="rounded-xl border border-zinc-900 bg-zinc-950 p-3 text-xs"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-amber-400 text-sm">
+                                      {"⭐".repeat(r.stars)}
+                                    </span>
+                                    <span className="text-xs text-zinc-500">
+                                      {r.direction}
+                                    </span>
+                                  </div>
+                                  {r.comment && (
+                                    <p className="mt-1.5 italic text-zinc-200 text-sm">
+                                      &ldquo;{r.comment}&rdquo;
+                                    </p>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-zinc-500 py-1">
+                                Sin calificaciones registradas.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Historial de Sanciones */}
+                        <div>
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                            Sanciones & Amonestaciones
+                          </h4>
+                          <div className="mt-2 flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
+                            {dossier.sanctions && dossier.sanctions.length > 0 ? (
+                              dossier.sanctions.map((s: any) => (
+                                <div
+                                  key={s.id}
+                                  className={`flex items-center justify-between rounded-xl border p-3 text-xs ${
+                                    s.status === "active"
+                                      ? "border-red-900/50 bg-red-950/20"
+                                      : "border-zinc-900 bg-zinc-950/60 opacity-70"
+                                  }`}
+                                >
+                                  <div className="flex-1 pr-2 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span
+                                        className={`font-bold uppercase text-xs ${
+                                          s.status === "active"
+                                            ? "text-red-400"
+                                            : "text-zinc-400"
+                                        }`}
+                                      >
+                                        {s.type === "fine"
+                                          ? "Multa Monetaria"
+                                          : s.type === "suspension"
+                                          ? "Suspensión"
+                                          : "Baneo Permanente"}
+                                      </span>
+                                      {s.fineAmount && Number(s.fineAmount) > 0 && (
+                                        <span className="rounded-md bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[11px] font-bold text-red-300">
+                                          -${s.fineAmount} MXN
+                                        </span>
+                                      )}
+                                      <span
+                                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                          s.status === "active"
+                                            ? "bg-red-500/20 text-red-300"
+                                            : s.status === "revoked"
+                                            ? "bg-zinc-800 text-zinc-400"
+                                            : "bg-amber-500/10 text-amber-400"
+                                        }`}
+                                      >
+                                        {s.status === "active"
+                                          ? "Activa"
+                                          : s.status === "revoked"
+                                          ? "Revocada"
+                                          : "Expirada"}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-zinc-200 mt-1">{s.reason}</p>
+                                    {s.revocationReason && (
+                                      <p className="text-[11px] text-zinc-400 italic mt-0.5">
+                                        Motivo revocación: {s.revocationReason}
+                                      </p>
+                                    )}
+                                  </div>
+                                  {s.status === "active" && (
+                                    <button
+                                      onClick={() => {
+                                        setRevokingSanctionId(s.id);
+                                        setShowRevokeModal(true);
+                                      }}
+                                      className="shrink-0 rounded-lg border border-red-500/30 bg-red-950/40 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-900 transition-colors"
+                                    >
+                                      Revocar
+                                    </button>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-zinc-500 py-1">
+                                Historial limpio sin sanciones.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
-                </div>
+                ) : (
+                  /* VISTA PARA CHOFERES Y JEFES */
+                  <div className="flex flex-col gap-4">
+                    {/* Reseñas / Calificaciones recibidas */}
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                        Últimas Calificaciones & Reseñas
+                      </h4>
+                      <div className="mt-2 flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
+                        {dossier.ratings && dossier.ratings.length > 0 ? (
+                          dossier.ratings.map((r: any) => (
+                            <div
+                              key={r.id}
+                              className="rounded-xl border border-zinc-900 bg-zinc-950 p-3 text-xs"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-amber-400 text-sm">
+                                  {"⭐".repeat(r.stars)}
+                                </span>
+                                <span className="text-xs text-zinc-500">
+                                  {r.direction}
+                                </span>
+                              </div>
+                              {r.comment && (
+                                <p className="mt-1.5 italic text-zinc-200 text-sm">
+                                  &ldquo;{r.comment}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-zinc-500 py-1">
+                            Sin calificaciones registradas.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Historial de Sanciones */}
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
+                        Sanciones & Amonestaciones
+                      </h4>
+                      <div className="mt-2 flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
+                        {dossier.sanctions && dossier.sanctions.length > 0 ? (
+                          dossier.sanctions.map((s: any) => (
+                            <div
+                              key={s.id}
+                              className={`flex items-center justify-between rounded-xl border p-3 text-xs ${
+                                s.status === "active"
+                                  ? "border-red-900/50 bg-red-950/20"
+                                  : "border-zinc-900 bg-zinc-950/60 opacity-70"
+                              }`}
+                            >
+                              <div className="flex-1 pr-2 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`font-bold uppercase text-xs ${
+                                      s.status === "active"
+                                        ? "text-red-400"
+                                        : "text-zinc-400"
+                                    }`}
+                                  >
+                                    {s.type === "fine"
+                                      ? "Multa Monetaria"
+                                      : s.type === "suspension"
+                                      ? "Suspensión"
+                                      : "Baneo Permanente"}
+                                  </span>
+                                  {s.fineAmount && Number(s.fineAmount) > 0 && (
+                                    <span className="rounded-md bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-[11px] font-bold text-red-300">
+                                      -${s.fineAmount} MXN
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      s.status === "active"
+                                        ? "bg-red-500/20 text-red-300"
+                                        : s.status === "revoked"
+                                        ? "bg-zinc-800 text-zinc-400"
+                                        : "bg-amber-500/10 text-amber-400"
+                                    }`}
+                                  >
+                                    {s.status === "active"
+                                      ? "Activa"
+                                      : s.status === "revoked"
+                                      ? "Revocada"
+                                      : "Expirada"}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-zinc-200 mt-1">{s.reason}</p>
+                                {s.revocationReason && (
+                                  <p className="text-[11px] text-zinc-400 italic mt-0.5">
+                                    Motivo revocación: {s.revocationReason}
+                                  </p>
+                                )}
+                              </div>
+                              {s.status === "active" && (
+                                <button
+                                  onClick={() => {
+                                    setRevokingSanctionId(s.id);
+                                    setShowRevokeModal(true);
+                                  }}
+                                  className="shrink-0 rounded-lg border border-red-500/30 bg-red-950/40 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-900 transition-colors"
+                                >
+                                  Revocar
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-zinc-500 py-1">
+                            Historial limpio sin sanciones.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-sm text-zinc-500">

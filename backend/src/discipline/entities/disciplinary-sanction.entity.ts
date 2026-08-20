@@ -7,7 +7,7 @@ export class DisciplinarySanction {
   id: string;
 
   @Column('varchar', { name: 'subject_type', length: 20 })
-  subjectType: 'client' | 'employee' | 'driver';
+  subjectType: 'client' | 'employee' | 'driver' | 'boss';
 
   @Column('uuid', { name: 'subject_id' })
   subjectId: string;

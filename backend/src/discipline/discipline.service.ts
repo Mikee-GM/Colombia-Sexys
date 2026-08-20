@@ -24,7 +24,7 @@ import {
   RatingDirection,
 } from './entities/interaction-rating.entity';
 
-type PersonType = 'client' | 'employee' | 'driver';
+type PersonType = 'client' | 'employee' | 'driver' | 'boss';
 type Actor = { id: string; rol: 'jefe' | 'empleada' | 'chofer' | 'admin' };
 type ResolvedInteraction = {
   serviceId: string | null;
@@ -352,6 +352,15 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     }
     if (
       (dto.type === 'suspension' || dto.type === 'permanent_ban') &&
+      dto.subjectType === 'boss'
+    ) {
+      await this.dataSource.query(
+        `UPDATE usuarios SET activo = false WHERE id = $1`,
+        [dto.subjectId],
+      );
+    }
+    if (
+      (dto.type === 'suspension' || dto.type === 'permanent_ban') &&
       (dto.subjectType === 'employee' || dto.subjectType === 'driver')
     ) {
       await this.setOperationalAvailability(
@@ -409,6 +418,21 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     sanction.revokedByUserId = admin.id;
     sanction.revocationReason = dto.reason.trim();
     const saved = await this.sanctions.save(sanction);
+    if (
+      (sanction.type === 'permanent_ban' || sanction.type === 'suspension') &&
+      sanction.subjectType === 'boss'
+    ) {
+      const remaining = await this.getActiveSanction(
+        sanction.subjectType,
+        sanction.subjectId,
+      );
+      if (!remaining) {
+        await this.dataSource.query(
+          `UPDATE usuarios SET activo = true WHERE id = $1`,
+          [sanction.subjectId],
+        );
+      }
+    }
     if (
       (sanction.type === 'permanent_ban' || sanction.type === 'suspension') &&
       (sanction.subjectType === 'employee' || sanction.subjectType === 'driver')
@@ -527,6 +551,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listOwnAppealableRatings(subjectType: PersonType, subjectId: string) {
+    if (subjectType === 'boss') return [];
     const column =
       subjectType === 'client'
         ? 'client_id'
@@ -762,6 +787,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       client: row.client_id,
       employee: row.employee_id,
       driver: row.driver_id,
+      boss: row.boss_id,
     };
     if (actorType !== definition.reporterType || ids[actorType] !== actorId) {
       throw new ForbiddenException('No pertenece a esta interacción');
@@ -787,6 +813,9 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   private async identityForActor(
     actor: Actor,
   ): Promise<{ type: PersonType; id: string } | null> {
+    if (actor.rol === 'jefe') {
+      return { type: 'boss', id: actor.id };
+    }
     if (actor.rol === 'empleada') {
       const rows = await this.dataSource.query(
         'SELECT id FROM empleadas WHERE usuario_id = $1',
@@ -805,6 +834,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async ratingSummary(subjectType: PersonType, subjectId: string) {
+    if (subjectType === 'boss') return [];
     const column =
       subjectType === 'client'
         ? 'client_id'
@@ -829,6 +859,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     subjectId: string,
     direction: RatingDirection,
   ) {
+    if (subjectType === 'boss') return;
     const column =
       subjectType === 'client'
         ? 'client_id'
@@ -962,6 +993,15 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
           await this.setOperationalAvailability(subjectType, subjectId, true);
         }
       }
+      if (subjectType === 'boss') {
+        const remaining = await this.getActiveSanction(subjectType, subjectId);
+        if (!remaining) {
+          await this.dataSource.query(
+            `UPDATE usuarios SET activo = true WHERE id = $1`,
+            [subjectId],
+          );
+        }
+      }
       this.realtime.emitToJefes({
         type: 'discipline.sanction.expired',
         sanctionId: sanction.id,
@@ -972,6 +1012,14 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async assertPersonExists(type: PersonType, id: string) {
+    if (type === 'boss') {
+      const rows = await this.dataSource.query(
+        `SELECT id FROM usuarios WHERE id = $1 AND rol IN ('jefe', 'admin')`,
+        [id],
+      );
+      if (!rows[0]) throw new NotFoundException('Jefe no encontrado');
+      return;
+    }
     const table =
       type === 'client'
         ? 'clientes'
@@ -1018,7 +1066,8 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     const rows = await this.dataSource.query(
       `SELECT 1
        WHERE
-         ($2 = 'employee' AND EXISTS (
+         ($2 = 'boss' AND $3 = $1)
+         OR ($2 = 'employee' AND EXISTS (
            SELECT 1 FROM empleadas e WHERE e.id = $3 AND e.jefe_id = $1
          ))
          OR EXISTS (

@@ -43,8 +43,8 @@ export class CloseConductReportDto {
 }
 
 export class CreateSanctionDto {
-  @IsIn(['client', 'employee', 'driver'])
-  subjectType: 'client' | 'employee' | 'driver';
+  @IsIn(['client', 'employee', 'driver', 'boss'])
+  subjectType: 'client' | 'employee' | 'driver' | 'boss';
   @IsUUID() subjectId: string;
   @IsIn(['suspension', 'permanent_ban', 'fine'])
   type: 'suspension' | 'permanent_ban' | 'fine';

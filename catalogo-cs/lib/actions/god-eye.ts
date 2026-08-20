@@ -77,11 +77,42 @@ export type GodEyeActorDossier = {
   ratings?: any[];
   reports?: any[];
   sanctions?: any[];
+  services?: any[];
   servicesHistory?: any[];
   managedServices?: any[];
   trips?: any[];
   extras?: any[];
   cashObligations?: any[];
+  finances?: {
+    totalCashDue: number;
+    totalDebt: number;
+    totalOwed: number;
+    cashObligations: any[];
+    liquidationDebts: any[];
+    recentSettlement?: any;
+  };
+  onboarding?: {
+    id?: string;
+    status: string;
+    attemptCount?: number;
+    bestScore?: number;
+    trustScore?: number;
+    assignedAt?: string;
+    completedAt?: string;
+    attempts?: Array<{
+      id?: string;
+      attemptNumber: number;
+      status: string;
+      score: number;
+      correctAnswers: number;
+      totalQuestions: number;
+      startedAt?: string;
+      completedAt?: string;
+    }>;
+    screening?: any;
+  };
+  weeklyPhotos?: any[];
+  challenges?: any[];
   employees?: any[];
 };
 
