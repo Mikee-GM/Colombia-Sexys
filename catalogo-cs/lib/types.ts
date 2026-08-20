@@ -637,3 +637,33 @@ export type EmployeePortalData = {
   reputation: EmployeePortalReputation;
 };
 
+export type ChallengeParticipantType = "employee" | "driver";
+export type ChallengeMetric = "kpi_score" | "services" | "revenue";
+export type ChallengeStatus = "scheduled" | "active" | "finished" | "cancelled";
+
+export type ChallengeSummary = {
+  id: string;
+  title: string;
+  participantType: ChallengeParticipantType;
+  metric: ChallengeMetric;
+  status: ChallengeStatus;
+  startsAt: string;
+  endsAt: string;
+  createdByUserId: string;
+  winnerParticipantId: string | null;
+  winnerValue: string | null;
+  participantsCount: number;
+  createdAt: string;
+};
+
+export type ChallengeStanding = {
+  participantId: string;
+  name: string;
+  value: number;
+  position: number;
+};
+
+export type ChallengeDetail = ChallengeSummary & {
+  standings: ChallengeStanding[];
+};
+

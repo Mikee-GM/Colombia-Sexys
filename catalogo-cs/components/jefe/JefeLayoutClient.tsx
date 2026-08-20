@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FileWarning, LogOut, MapPinned, ShieldCheck, UsersRound } from "lucide-react";
+import { FileWarning, LogOut, MapPinned, ShieldCheck, Trophy, UsersRound } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
 import SessionKeeper from "@/components/auth/session-keeper";
 import { broadcastLogout } from "@/lib/client-session";
@@ -12,6 +12,7 @@ const links = [
   { href: "/jefe", label: "Mi equipo", icon: UsersRound },
   { href: "/jefe/mapa", label: "Mapa", icon: MapPinned },
   { href: "/jefe/reportes", label: "Reportes", icon: FileWarning },
+  { href: "/jefe/retos", label: "Retos", icon: Trophy },
 ];
 
 export default function JefeLayoutClient({ children }: { children: React.ReactNode }) {
@@ -51,7 +52,7 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
       <div className="min-w-0 flex-1 pb-24 md:pb-0">
         <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-10">{children}</main>
       </div>
-      <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-4 border-t border-zinc-800 bg-[#050505]/95 p-2 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 border-t border-zinc-800 bg-[#050505]/95 p-2 backdrop-blur md:hidden">
         {links.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} className={`flex flex-col items-center gap-1 py-2 text-[10px] font-semibold uppercase tracking-wider ${pathname === href ? "text-[#C5A55A]" : "text-zinc-500"}`}>
             <Icon size={20} /> {label}

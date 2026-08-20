@@ -33,6 +33,7 @@ import { DisciplineModule } from './discipline/discipline.module';
 import { GroupServicesModule } from './group-services/group-services.module';
 import { WeeklyContentModule } from './weekly-content/weekly-content.module';
 import { CandidateScreeningModule } from './candidate-screening/candidate-screening.module';
+import { ChallengesModule } from './challenges/challenges.module';
 
 @Module({
   imports: [
@@ -137,6 +138,7 @@ import { CandidateScreeningModule } from './candidate-screening/candidate-screen
     GroupServicesModule,
     WeeklyContentModule,
     CandidateScreeningModule,
+    ChallengesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

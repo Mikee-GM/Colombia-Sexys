@@ -9,8 +9,8 @@ export default async function MapPage() {
   return (
     <>
       <PageHeader
-        title="Live Operations Map"
-        description="Drivers and employees from BackendCitas."
+        title="Mapa en Tiempo Real"
+        description=""
       />
 
       <LiveMapDynamic employees={employees} drivers={drivers} />

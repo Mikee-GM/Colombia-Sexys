@@ -24,6 +24,7 @@ import {
   Scale,
   Shield,
   TrendingUp,
+  Trophy,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -44,7 +45,7 @@ const navGroups: NavGroup[] = [
     title: "Operaciones en Vivo",
     items: [
       { label: "Ojo de Dios", href: "/admin/dashboard", icon: Eye },
-      { label: "Mapa de Flota", href: "/admin/map", icon: MapPin },
+      { label: "Mapa", href: "/admin/map", icon: MapPin },
       { label: "Servicios", href: "/admin/services", icon: Activity },
       { label: "Evidencias", href: "/admin/evidence", icon: FileCheck },
     ],
@@ -70,6 +71,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Reportes & Disciplina", href: "/admin/reports", icon: Scale },
       { label: "Indicadores (KPIs)", href: "/admin/kpis", icon: TrendingUp },
+      { label: "Retos", href: "/admin/retos", icon: Trophy },
       { label: "Transporte", href: "/admin/transport", icon: Award },
       { label: "Reglamentos", href: "/admin/regulations", icon: BookOpen },
     ],
