@@ -1381,6 +1381,18 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'calcular_distancia_haversine(:lat, :lng, CAST(chofer.ubicacion_lat AS double precision), CAST(chofer.ubicacion_lng AS double precision))',
         'distancia',
       )
+      .addSelect(
+        `COALESCE((
+           SELECT AVG(stars) FROM interaction_ratings
+           WHERE direction = 'employee_to_driver' AND driver_id = chofer.id
+         ), 2.5) / 5 * 100
+         - COALESCE((
+           SELECT COUNT(*) FROM conduct_reports
+           WHERE subject_type = 'driver' AND subject_id = chofer.id AND outcome = 'confirmado'
+             AND created_at >= now() - interval '90 days'
+         ), 0) * 8`,
+        'score',
+      )
       .setParameter('lat', searchLat)
       .setParameter('lng', searchLng)
       .orderBy('distancia', 'ASC')
@@ -1394,9 +1406,27 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const nearestDriver = result.entities[0];
-    const nearestRaw = result.raw[0];
-    const distancia = parseFloat(nearestRaw.distancia);
+    // El ranking de desempeño (score = calificación − reportes confirmados) actúa como
+    // desempate: entre choferes dentro de una banda de proximidad al más cercano, gana
+    // el de mejor score. La distancia sigue siendo el factor dominante fuera de esa banda.
+    const dispatchBandKm = this.configService.get<number>(
+      'DRIVER_DISPATCH_RANKING_BAND_KM',
+      1.5,
+    );
+    const candidates = result.entities.map((entity, index) => ({
+      entity,
+      distancia: parseFloat(result.raw[index].distancia),
+      score: parseFloat(result.raw[index].score),
+    }));
+    const closestDistance = candidates[0].distancia;
+    const shortlist = candidates.filter(
+      (candidate) => candidate.distancia <= closestDistance + dispatchBandKm,
+    );
+    shortlist.sort((a, b) => b.score - a.score || a.distancia - b.distancia);
+    const chosen = shortlist[0];
+
+    const nearestDriver = chosen.entity;
+    const distancia = chosen.distancia;
 
     // Actualizar viaje con el chofer asignado temporalmente, agregar a la lista de notificados
     viaje.choferId = nearestDriver.id;
@@ -1723,12 +1753,45 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           { parse_mode: 'Markdown' },
         );
 
-        const disponibles = await this.serviciosRepository.manager
+        const candidatePool = await this.serviciosRepository.manager
           .getRepository(Empleadas)
           .find({
             where: { disponible: true, catalogoActivo: true },
-            take: 3,
+            take: 15,
           });
+        const confirmedRows: Array<{ subject_id: string; confirmed: number }> =
+          candidatePool.length === 0
+            ? []
+            : await this.serviciosRepository.manager.query(
+                `SELECT subject_id, COUNT(*)::int AS confirmed
+                 FROM conduct_reports
+                 WHERE subject_type = 'employee' AND outcome = 'confirmado'
+                   AND created_at >= now() - interval '90 days'
+                   AND subject_id = ANY($1::uuid[])
+                 GROUP BY subject_id`,
+                [candidatePool.map((emp) => emp.id)],
+              );
+        const confirmedByEmployee = new Map(
+          confirmedRows.map((row) => [row.subject_id, row.confirmed]),
+        );
+        // Se ofrecen primero las empleadas con mejor score (calificación − reportes
+        // confirmados), no en orden arbitrario de base de datos.
+        const disponibles = candidatePool
+          .map((emp) => {
+            const rating =
+              emp.promedioCalificacion != null
+                ? Number(emp.promedioCalificacion)
+                : 2.5;
+            const confirmed = confirmedByEmployee.get(emp.id) ?? 0;
+            const score = Math.max(
+              0,
+              Math.round((rating / 5) * 100 - confirmed * 8),
+            );
+            return { emp, score };
+          })
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3)
+          .map((entry) => entry.emp);
 
         if (disponibles.length > 0) {
           for (const emp of disponibles) {

@@ -204,9 +204,47 @@ export class EmployeesService {
     const publicEmployees = employees.filter(
       (employee) => !sanctioned.has(employee.id) && employee.usuario?.activo,
     );
-    return this.attachCatalogAvailability(
-      await this.attachTrustScores(publicEmployees),
+    const ranked = await this.rankEmployeesByScore(publicEmployees);
+    return this.attachCatalogAvailability(await this.attachTrustScores(ranked));
+  }
+
+  /**
+   * Ordena empleadas por el mismo score usado en los KPIs (calificación − reportes
+   * confirmados), para que el catálogo y las listas de candidatas prioricen a las
+   * de mejor desempeño en vez de un orden arbitrario de base de datos.
+   */
+  private async rankEmployeesByScore(
+    employees: Empleadas[],
+  ): Promise<Empleadas[]> {
+    if (employees.length === 0) return employees;
+    const confirmedRows: Array<{ subject_id: string; confirmed: number }> =
+      await this.dataSource.query(
+        `SELECT subject_id, COUNT(*)::int AS confirmed
+         FROM conduct_reports
+         WHERE subject_type = 'employee' AND outcome = 'confirmado'
+           AND created_at >= now() - interval '90 days'
+           AND subject_id = ANY($1::uuid[])
+         GROUP BY subject_id`,
+        [employees.map((employee) => employee.id)],
+      );
+    const confirmedByEmployee = new Map(
+      confirmedRows.map((row) => [row.subject_id, row.confirmed]),
     );
+    const withScore = employees.map((employee) => {
+      const rating =
+        employee.promedioCalificacion != null
+          ? Number(employee.promedioCalificacion)
+          : 2.5;
+      const confirmed = confirmedByEmployee.get(employee.id) ?? 0;
+      const score = Math.max(0, Math.round((rating / 5) * 100 - confirmed * 8));
+      return { employee, score };
+    });
+    withScore.sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.employee.nombreArtistico.localeCompare(b.employee.nombreArtistico),
+    );
+    return withScore.map((entry) => entry.employee);
   }
 
   async findOne(id: string): Promise<Empleadas> {
@@ -674,13 +712,31 @@ export class EmployeesService {
       countsMap.set(row.empleadaId, parseInt(row.count, 10) || 0);
     }
 
+    const reportRows: Array<{ subject_id: string; confirmed: number }> =
+      allWithTrust.length === 0
+        ? []
+        : await this.dataSource.query(
+            `SELECT subject_id, COUNT(*)::int AS confirmed
+             FROM conduct_reports
+             WHERE subject_type = 'employee' AND outcome = 'confirmado'
+               AND created_at >= now() - interval '90 days'
+               AND subject_id = ANY($1::uuid[])
+             GROUP BY subject_id`,
+            [allWithTrust.map((m) => m.id)],
+          );
+    const reportsByEmployee = new Map(
+      reportRows.map((row) => [row.subject_id, row.confirmed]),
+    );
+
     const scored = allWithTrust.map((m) => {
       const sCount = countsMap.get(m.id) || 0;
       const rating = Number(
         m.clientRatingAverage || m.promedioCalificacion || 5.0,
       );
       const trust = Number(m.trustScore || 1.0);
-      const score = sCount * 10 + rating * 5 + trust * 20;
+      const confirmedReports = reportsByEmployee.get(m.id) ?? 0;
+      const score =
+        sCount * 10 + rating * 5 + trust * 20 - confirmedReports * 8;
       return {
         id: m.id,
         nombreArtistico: m.nombreArtistico,

@@ -238,7 +238,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         usuario: { activo: true },
       },
       relations: { usuario: true, empleadaFotos: true, jefe: true },
-      order: { nombreArtistico: 'ASC' },
     });
     if (!employees.length) return [];
 
@@ -275,7 +274,49 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     const blocked = new Set<string>(
       conflicts.map((row: { employee_id: string }) => row.employee_id),
     );
-    return employees.filter((employee) => !blocked.has(employee.id));
+    const candidates = employees.filter(
+      (employee) => !blocked.has(employee.id),
+    );
+    return this.rankEmployeesByScore(candidates);
+  }
+
+  /**
+   * Ordena candidatas por el mismo score usado en los KPIs (calificación − reportes
+   * confirmados) en vez de orden alfabético, para que el jefe vea primero a las de
+   * mejor desempeño al armar un servicio grupal.
+   */
+  private async rankEmployeesByScore(
+    employees: Empleadas[],
+  ): Promise<Empleadas[]> {
+    if (employees.length === 0) return employees;
+    const confirmedRows: Array<{ subject_id: string; confirmed: number }> =
+      await this.dataSource.query(
+        `SELECT subject_id, COUNT(*)::int AS confirmed
+         FROM conduct_reports
+         WHERE subject_type = 'employee' AND outcome = 'confirmado'
+           AND created_at >= now() - interval '90 days'
+           AND subject_id = ANY($1::uuid[])
+         GROUP BY subject_id`,
+        [employees.map((employee) => employee.id)],
+      );
+    const confirmedByEmployee = new Map(
+      confirmedRows.map((row) => [row.subject_id, row.confirmed]),
+    );
+    const withScore = employees.map((employee) => {
+      const rating =
+        employee.promedioCalificacion != null
+          ? Number(employee.promedioCalificacion)
+          : 2.5;
+      const confirmed = confirmedByEmployee.get(employee.id) ?? 0;
+      const score = Math.max(0, Math.round((rating / 5) * 100 - confirmed * 8));
+      return { employee, score };
+    });
+    withScore.sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.employee.nombreArtistico.localeCompare(b.employee.nombreArtistico),
+    );
+    return withScore.map((entry) => entry.employee);
   }
 
   async updateRequest(id: string, dto: UpdateGroupRequestDto, actor: Actor) {
