@@ -1095,7 +1095,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       relations: { fotosExclusivas: true },
     });
     const tieneFotosExclusivas = Boolean(
-      empleadaConFotos?.fotosExclusivas && empleadaConFotos.fotosExclusivas.length > 0,
+      empleadaConFotos?.fotosExclusivas &&
+      empleadaConFotos.fotosExclusivas.length > 0,
     );
 
     const promptParams = {
@@ -4975,7 +4976,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         relations: { fotosExclusivas: true },
       });
       const tieneFotosExclusivas = Boolean(
-        empleadaConFotos?.fotosExclusivas && empleadaConFotos.fotosExclusivas.length > 0,
+        empleadaConFotos?.fotosExclusivas &&
+        empleadaConFotos.fotosExclusivas.length > 0,
       );
 
       const generalPrompt = getGeneralChatSystemPrompt({
@@ -5054,7 +5056,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               );
               return;
             } else {
-              const noPhotoMsg = cleanText || 'Ay amor, por el momento no tengo fotos adicionales a la mano, pero en persona me verás completita y la vamos a pasar riquísimo... 🔥';
+              const noPhotoMsg =
+                cleanText ||
+                'Ay amor, por el momento no tengo fotos adicionales a la mano, pero en persona me verás completita y la vamos a pasar riquísimo... 🔥';
               await this.sendDelayedReply(ctx, noPhotoMsg);
               history.push({
                 role: 'model',
