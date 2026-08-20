@@ -4795,6 +4795,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       descripcion: empleada.descripcion,
       extras: extrasData,
       ubicacionesPreestablecidas: ubicacionesData,
+      duracionPactada: session.duracionPactadaHoras,
+      metodoPago: session.metodoPago,
     });
     const systemPrompt = session.selectedEmployeeBusy
       ? `Eres el asistente de la agencia, no eres la empleada y nunca debes hablar como si lo fueras. ${generalPrompt}`
