@@ -667,3 +667,30 @@ export type ChallengeDetail = ChallengeSummary & {
   standings: ChallengeStanding[];
 };
 
+export type DriverShift = {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  daysOfWeek: number[];
+  capacity: number | null;
+  active: boolean;
+  createdByUserId: string;
+  createdAt: string;
+};
+
+export type DriverShiftSummary = DriverShift & { assignedCount: number };
+
+export type DriverShiftPerson = { id: string; nombre: string; score: number };
+
+export type DriverShiftDetail = DriverShift & {
+  assignedDrivers: DriverShiftPerson[];
+};
+
+export type DriverShiftCandidates = {
+  shiftId: string;
+  capacity: number | null;
+  assignedCount: number;
+  candidates: DriverShiftPerson[];
+};
+

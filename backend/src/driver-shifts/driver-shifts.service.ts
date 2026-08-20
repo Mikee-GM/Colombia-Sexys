@@ -1,0 +1,230 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { Choferes } from '../drivers/entities/driver.entity';
+import { TelegramService } from '../telegram/telegram.service';
+import {
+  AssignDriverShiftDto,
+  CreateDriverShiftDto,
+  UpdateDriverShiftDto,
+} from './dto/driver-shifts.dto';
+import { DriverShiftAssignment } from './entities/driver-shift-assignment.entity';
+import { DriverShift } from './entities/driver-shift.entity';
+
+@Injectable()
+export class DriverShiftsService {
+  constructor(
+    @InjectRepository(DriverShift)
+    private readonly shifts: Repository<DriverShift>,
+    @InjectRepository(DriverShiftAssignment)
+    private readonly assignments: Repository<DriverShiftAssignment>,
+    @InjectRepository(Choferes)
+    private readonly choferesRepository: Repository<Choferes>,
+    private readonly dataSource: DataSource,
+    private readonly telegram: TelegramService,
+  ) {}
+
+  async createShift(
+    dto: CreateDriverShiftDto,
+    createdByUserId: string,
+  ): Promise<DriverShift> {
+    if (dto.startsAt === dto.endsAt) {
+      throw new BadRequestException(
+        'La hora de inicio y fin del turno no pueden ser iguales',
+      );
+    }
+    return this.shifts.save(
+      this.shifts.create({
+        title: dto.title.trim(),
+        startsAt: dto.startsAt,
+        endsAt: dto.endsAt,
+        daysOfWeek: [...new Set(dto.daysOfWeek)].sort(),
+        capacity: dto.capacity ?? null,
+        createdByUserId,
+      }),
+    );
+  }
+
+  async updateShift(
+    id: string,
+    dto: UpdateDriverShiftDto,
+  ): Promise<DriverShift> {
+    const shift = await this.getShiftOrFail(id);
+    const startsAt = dto.startsAt ?? shift.startsAt;
+    const endsAt = dto.endsAt ?? shift.endsAt;
+    if (startsAt === endsAt) {
+      throw new BadRequestException(
+        'La hora de inicio y fin del turno no pueden ser iguales',
+      );
+    }
+    if (dto.title !== undefined) shift.title = dto.title.trim();
+    shift.startsAt = startsAt;
+    shift.endsAt = endsAt;
+    if (dto.daysOfWeek !== undefined) {
+      shift.daysOfWeek = [...new Set(dto.daysOfWeek)].sort();
+    }
+    if (dto.capacity !== undefined) shift.capacity = dto.capacity;
+    return this.shifts.save(shift);
+  }
+
+  async deactivateShift(id: string): Promise<DriverShift> {
+    const shift = await this.getShiftOrFail(id);
+    shift.active = false;
+    return this.shifts.save(shift);
+  }
+
+  async listShifts() {
+    const shifts = await this.shifts.find({ order: { createdAt: 'DESC' } });
+    if (shifts.length === 0) return [];
+    const counts = await this.assignments
+      .createQueryBuilder('a')
+      .select('a.shiftId', 'shiftId')
+      .addSelect('COUNT(*)::int', 'count')
+      .where('a.shiftId IN (:...ids)', { ids: shifts.map((s) => s.id) })
+      .groupBy('a.shiftId')
+      .getRawMany<{ shiftId: string; count: number }>();
+    const countByShift = new Map(counts.map((c) => [c.shiftId, c.count]));
+    return shifts.map((shift) => ({
+      ...shift,
+      assignedCount: countByShift.get(shift.id) ?? 0,
+    }));
+  }
+
+  async getShift(id: string) {
+    const shift = await this.getShiftOrFail(id);
+    const rows = await this.assignments.find({ where: { shiftId: id } });
+    const driverIds = rows.map((row) => row.driverId);
+    const scored = await this.scoreDrivers(driverIds);
+    const assignedDrivers = scored.sort((a, b) => b.score - a.score);
+    return { ...shift, assignedDrivers };
+  }
+
+  /** Choferes elegibles para este turno (activos, no asignados ya), ordenados por score descendente. */
+  async listCandidates(shiftId: string) {
+    const shift = await this.getShiftOrFail(shiftId);
+    const alreadyAssigned = await this.assignments.find({
+      where: { shiftId },
+    });
+    const excludedIds = new Set(alreadyAssigned.map((row) => row.driverId));
+    const drivers = await this.choferesRepository.find({
+      where: { disponible: true },
+      select: { id: true, nombre: true },
+    });
+    const eligible = drivers.filter((driver) => !excludedIds.has(driver.id));
+    const scored = await this.scoreDrivers(eligible.map((d) => d.id));
+    return {
+      shiftId: shift.id,
+      capacity: shift.capacity,
+      assignedCount: alreadyAssigned.length,
+      candidates: scored.sort((a, b) => b.score - a.score),
+    };
+  }
+
+  async assignDriver(
+    shiftId: string,
+    dto: AssignDriverShiftDto,
+  ): Promise<DriverShift> {
+    const shift = await this.getShiftOrFail(shiftId);
+    const driver = await this.choferesRepository.findOneBy({
+      id: dto.driverId,
+    });
+    if (!driver) throw new NotFoundException('Chofer no encontrado');
+    const existing = await this.assignments.findOneBy({
+      shiftId,
+      driverId: dto.driverId,
+    });
+    if (existing) {
+      throw new ConflictException('El chofer ya está asignado a este turno');
+    }
+    if (shift.capacity != null) {
+      const currentCount = await this.assignments.countBy({ shiftId });
+      if (currentCount >= shift.capacity) {
+        throw new ConflictException(
+          'El turno está en su capacidad máxima; retira a un chofer de menor desempeño antes de agregar a otro',
+        );
+      }
+    }
+    await this.assignments.save(
+      this.assignments.create({ shiftId, driverId: dto.driverId }),
+    );
+    await this.notifyDriver(
+      dto.driverId,
+      `Se te asignó el turno "${shift.title}" (${shift.startsAt}-${shift.endsAt}, ${this.formatDays(shift.daysOfWeek)}). ` +
+        `Fuera de ese horario no recibirás ofertas de viaje automáticas.`,
+    );
+    return shift;
+  }
+
+  async unassignDriver(shiftId: string, driverId: string): Promise<void> {
+    const existing = await this.assignments.findOneBy({ shiftId, driverId });
+    if (!existing) {
+      throw new NotFoundException('El chofer no está asignado a este turno');
+    }
+    const shift = await this.getShiftOrFail(shiftId);
+    await this.assignments.remove(existing);
+    await this.notifyDriver(
+      driverId,
+      `Se te retiró del turno "${shift.title}". Si no tienes otros turnos asignados, vuelves a estar disponible para ofertas de viaje en cualquier horario.`,
+    );
+  }
+
+  private async notifyDriver(driverId: string, message: string) {
+    const rows: Array<{ telegram_chat_id: string | null }> =
+      await this.dataSource.query(
+        `SELECT u.telegram_chat_id FROM choferes c
+         JOIN usuarios u ON u.id = c.usuario_id WHERE c.id = $1`,
+        [driverId],
+      );
+    const chatId = rows[0]?.telegram_chat_id;
+    if (!chatId) return;
+    try {
+      await this.telegram.sendMessage(String(chatId), message);
+    } catch {
+      // best-effort, no interrumpe el flujo por un fallo de Telegram
+    }
+  }
+
+  private formatDays(daysOfWeek: number[]): string {
+    const labels = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+    return [...daysOfWeek]
+      .sort((a, b) => a - b)
+      .map((day) => labels[day])
+      .join(', ');
+  }
+
+  private async getShiftOrFail(id: string): Promise<DriverShift> {
+    const shift = await this.shifts.findOneBy({ id });
+    if (!shift) throw new NotFoundException('Turno no encontrado');
+    return shift;
+  }
+
+  /** Mismo score que los KPIs de choferes: calificación (0-5 → 0-100) menos reportes confirmados en 90 días. */
+  private async scoreDrivers(
+    driverIds: string[],
+  ): Promise<Array<{ id: string; nombre: string; score: number }>> {
+    if (driverIds.length === 0) return [];
+    const rows: Array<{ id: string; nombre: string; score: string }> =
+      await this.dataSource.query(
+        `SELECT c.id, c.nombre,
+           GREATEST(0, ROUND(
+             COALESCE((SELECT AVG(stars) FROM interaction_ratings
+               WHERE direction = 'employee_to_driver' AND driver_id = c.id), 2.5) / 5 * 100
+             - COALESCE((SELECT COUNT(*) FROM conduct_reports
+               WHERE subject_type = 'driver' AND subject_id = c.id AND outcome = 'confirmado'
+                 AND created_at >= now() - interval '90 days'), 0) * 8
+           )) AS score
+         FROM choferes c WHERE c.id = ANY($1::uuid[])`,
+        [driverIds],
+      );
+    return rows.map((row) => ({
+      id: row.id,
+      nombre: row.nombre,
+      score: Number(row.score),
+    }));
+  }
+}

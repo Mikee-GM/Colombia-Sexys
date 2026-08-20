@@ -7,6 +7,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, LessThanOrEqual, MoreThan, Repository } from 'typeorm';
 import { RealtimeEventsService } from '../realtime/realtime.service';
@@ -54,6 +55,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     private readonly sanctions: Repository<DisciplinarySanction>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeEventsService,
+    private readonly configService: ConfigService,
   ) {}
 
   onModuleInit() {
@@ -124,6 +126,15 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         interaction.subjectId,
         dto.direction,
       );
+      if (
+        interaction.subjectType === 'employee' ||
+        interaction.subjectType === 'driver'
+      ) {
+        await this.evaluateLowScoreThreshold(
+          interaction.subjectType,
+          interaction.subjectId,
+        );
+      }
       this.emitDisciplineEvent(interaction, 'discipline.rating.created', {
         ratingId: saved.id,
         direction: saved.direction,
@@ -302,6 +313,15 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         report.subjectType,
         report.subjectId,
       );
+      if (
+        report.subjectType === 'employee' ||
+        report.subjectType === 'driver'
+      ) {
+        await this.evaluateLowScoreThreshold(
+          report.subjectType,
+          report.subjectId,
+        );
+      }
     }
     this.realtime.emitToJefes({
       type: 'discipline.report.closed',
@@ -809,14 +829,64 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         count === 3 &&
         (subjectType === 'employee' || subjectType === 'driver')
       ) {
-        await this.autoSuspendOnReportThreshold(subjectType, subjectId);
+        await this.applyAutomaticSuspension(
+          subjectType,
+          subjectId,
+          'Suspensión automática por acumular 3 reportes confirmados en los últimos 90 días.',
+        );
       }
     }
   }
 
-  private async autoSuspendOnReportThreshold(
+  /**
+   * Bloqueo automático ligado al desempeño general (no solo al conteo de reportes):
+   * si el score de una empleada o chofer (el mismo usado en los KPIs: calificación −
+   * reportes confirmados) cae por debajo del umbral configurado, se suspende igual
+   * que con el umbral de 3 reportes.
+   */
+  private async evaluateLowScoreThreshold(
     subjectType: 'employee' | 'driver',
     subjectId: string,
+  ) {
+    const ratingDirection =
+      subjectType === 'employee' ? 'client_to_employee' : 'employee_to_driver';
+    const ratingColumn =
+      subjectType === 'employee' ? 'employee_id' : 'driver_id';
+    const appealFilter =
+      subjectType === 'employee'
+        ? "AND appeal_status NOT IN ('pending','overturned')"
+        : '';
+    const [row] = await this.dataSource.query(
+      `SELECT
+         (SELECT AVG(stars) FROM interaction_ratings
+           WHERE direction = $1 AND ${ratingColumn} = $2 ${appealFilter}) AS avg_stars,
+         (SELECT COUNT(*) FROM conduct_reports
+           WHERE subject_type = $3 AND subject_id = $2 AND outcome = 'confirmado'
+             AND created_at >= now() - interval '90 days') AS confirmed`,
+      [ratingDirection, subjectId, subjectType],
+    );
+    if (row.avg_stars == null) return; // sin calificaciones aún, no hay score que evaluar
+    const score = Math.max(
+      0,
+      Math.round((Number(row.avg_stars) / 5) * 100 - Number(row.confirmed) * 8),
+    );
+    const threshold = this.configService.get<number>(
+      'DISCIPLINE_LOW_SCORE_SUSPENSION_THRESHOLD',
+      20,
+    );
+    if (score < threshold) {
+      await this.applyAutomaticSuspension(
+        subjectType,
+        subjectId,
+        `Suspensión automática por desempeño por debajo del umbral (score ${score}/100, mínimo ${threshold}).`,
+      );
+    }
+  }
+
+  private async applyAutomaticSuspension(
+    subjectType: 'employee' | 'driver',
+    subjectId: string,
+    reason: string,
   ) {
     const active = await this.getActiveSanction(subjectType, subjectId);
     if (active) return;
@@ -827,8 +897,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         subjectType,
         subjectId,
         type: 'suspension',
-        reason:
-          'Suspensión automática por acumular 3 reportes confirmados en los últimos 90 días.',
+        reason,
         startsAt,
         endsAt,
       }),

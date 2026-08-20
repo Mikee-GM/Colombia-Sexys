@@ -34,6 +34,7 @@ import { GroupServicesModule } from './group-services/group-services.module';
 import { WeeklyContentModule } from './weekly-content/weekly-content.module';
 import { CandidateScreeningModule } from './candidate-screening/candidate-screening.module';
 import { ChallengesModule } from './challenges/challenges.module';
+import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
 
 @Module({
   imports: [
@@ -79,6 +80,10 @@ import { ChallengesModule } from './challenges/challenges.module';
         SCHEDULE_TRAVEL_SPEED_KMH: Joi.number().positive().default(25),
         SCHEDULE_PREPARATION_MINUTES: Joi.number().min(0).default(10),
         DRIVER_DISPATCH_RANKING_BAND_KM: Joi.number().positive().default(1.5),
+        DISCIPLINE_LOW_SCORE_SUSPENSION_THRESHOLD: Joi.number()
+          .min(0)
+          .max(100)
+          .default(20),
         ONBOARDING_SCAN_INTERVAL_MS: Joi.number()
           .integer()
           .min(10_000)
@@ -140,6 +145,7 @@ import { ChallengesModule } from './challenges/challenges.module';
     WeeklyContentModule,
     CandidateScreeningModule,
     ChallengesModule,
+    DriverShiftsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

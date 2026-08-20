@@ -1362,6 +1362,45 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       )`,
     );
 
+    // Turnos: un chofer sin ningún turno asignado sigue elegible siempre (compatibilidad
+    // con choferes que no usan el sistema de turnos). Uno que sí tiene turnos asignados
+    // solo es elegible si ahora mismo está dentro de uno de sus turnos activos.
+    const nowInMexicoCity = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }),
+    );
+    const currentDow = nowInMexicoCity.getDay();
+    const yesterdayDow = (currentDow + 6) % 7;
+    const currentTime = `${String(nowInMexicoCity.getHours()).padStart(2, '0')}:${String(
+      nowInMexicoCity.getMinutes(),
+    ).padStart(2, '0')}`;
+    query
+      .andWhere(
+        `(
+          NOT EXISTS (SELECT 1 FROM driver_shift_assignments dsa WHERE dsa.driver_id = chofer.id)
+          OR EXISTS (
+            SELECT 1 FROM driver_shift_assignments dsa
+            JOIN driver_shifts ds ON ds.id = dsa.shift_id
+            WHERE dsa.driver_id = chofer.id
+              AND ds.active = true
+              AND (
+                (ds.starts_at <= ds.ends_at
+                  AND :currentTime BETWEEN ds.starts_at AND ds.ends_at
+                  AND :currentDow = ANY(ds.days_of_week))
+                OR
+                (ds.starts_at > ds.ends_at
+                  AND (
+                    (:currentTime >= ds.starts_at AND :currentDow = ANY(ds.days_of_week))
+                    OR
+                    (:currentTime <= ds.ends_at AND :yesterdayDow = ANY(ds.days_of_week))
+                  ))
+              )
+          )
+        )`,
+      )
+      .setParameter('currentTime', currentTime)
+      .setParameter('currentDow', currentDow)
+      .setParameter('yesterdayDow', yesterdayDow);
+
     if (notificadosIds.length > 0) {
       query.andWhere('chofer.id NOT IN (:...notificadosIds)', {
         notificadosIds,
