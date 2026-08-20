@@ -138,10 +138,16 @@ export class GodEyeService {
       const employee = employeeRows[0];
       if (!employee) throw new NotFoundException('Empleada no encontrada');
 
-      const [ratings, reports, sanctions, servicesHistory, extras, cashObligations] =
-        await Promise.all([
-          this.dataSource.query(
-            `SELECT
+      const [
+        ratings,
+        reports,
+        sanctions,
+        servicesHistory,
+        extras,
+        cashObligations,
+      ] = await Promise.all([
+        this.dataSource.query(
+          `SELECT
               r.id,
               r.direction,
               r.stars,
@@ -156,10 +162,10 @@ export class GodEyeService {
             WHERE r.employee_id = $1
             ORDER BY r.created_at DESC
             LIMIT 15`,
-            [id],
-          ),
-          this.dataSource.query(
-            `SELECT
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
               id,
               direction,
               reporter_type AS "reporterType",
@@ -174,10 +180,10 @@ export class GodEyeService {
             WHERE subject_type = 'employee' AND subject_id = $1
             ORDER BY created_at DESC
             LIMIT 10`,
-            [id],
-          ),
-          this.dataSource.query(
-            `SELECT
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
               id,
               type,
               status,
@@ -189,10 +195,10 @@ export class GodEyeService {
             FROM disciplinary_sanctions
             WHERE subject_type = 'employee' AND subject_id = $1
             ORDER BY created_at DESC`,
-            [id],
-          ),
-          this.dataSource.query(
-            `SELECT
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
               s.id,
               s.estado,
               s.metodo_pago AS "metodoPago",
@@ -205,17 +211,17 @@ export class GodEyeService {
             WHERE s.empleada_id = $1
             ORDER BY s.created_at DESC
             LIMIT 10`,
-            [id],
-          ),
-          this.dataSource.query(
-            `SELECT id, nombre, precio, activo
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT id, nombre, precio, activo
              FROM extras_catalogo
              WHERE empleada_id = $1
              ORDER BY precio DESC`,
-            [id],
-          ),
-          this.dataSource.query(
-            `SELECT
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
               id,
               monto_adeudo_original AS "montoOriginal",
               monto_adeudo_restante AS "montoRestante",
@@ -224,9 +230,9 @@ export class GodEyeService {
             FROM employee_cash_obligations
             WHERE empleada_id = $1 AND status IN ('pending', 'partial')
             ORDER BY created_at DESC`,
-            [id],
-          ),
-        ]);
+          [id],
+        ),
+      ]);
 
       return {
         actorType: 'employee',
@@ -554,7 +560,11 @@ export class GodEyeService {
     for (const rating of ratings) {
       if (rating.stars <= 2) {
         const comment = (rating.comment || '').toLowerCase();
-        if (comment.includes('tarde') || comment.includes('demor') || comment.includes('esper')) {
+        if (
+          comment.includes('tarde') ||
+          comment.includes('demor') ||
+          comment.includes('esper')
+        ) {
           causes.push({
             category: 'queja_impuntualidad',
             culprit: 'driver',
@@ -562,7 +572,12 @@ export class GodEyeService {
             title: 'Queja de Cliente: Impuntualidad',
             description: `El cliente dejó ${rating.stars} estrellas señalando retraso: "${rating.comment}"`,
           });
-        } else if (comment.includes('cobro') || comment.includes('dinero') || comment.includes('extra') || comment.includes('caro')) {
+        } else if (
+          comment.includes('cobro') ||
+          comment.includes('dinero') ||
+          comment.includes('extra') ||
+          comment.includes('caro')
+        ) {
           causes.push({
             category: 'discrepancia_pago',
             culprit: 'employee',
@@ -584,7 +599,10 @@ export class GodEyeService {
 
     // 3. Fricciones entre Empleada y Chofer
     for (const report of reports) {
-      if (report.category === 'trato_inadecuado' || report.category === 'cobro') {
+      if (
+        report.category === 'trato_inadecuado' ||
+        report.category === 'cobro'
+      ) {
         causes.push({
           category: 'conflicto_interno',
           culprit: report.subjectType === 'driver' ? 'driver' : 'employee',
@@ -607,7 +625,9 @@ export class GodEyeService {
         ratingsCount: ratings.length,
         reportsCount: reports.length,
         chatMessagesCount: conversations.length,
-        primaryDiagnosis: causes[0]?.title || 'No se detectaron anomalías severas en los registros.',
+        primaryDiagnosis:
+          causes[0]?.title ||
+          'No se detectaron anomalías severas en los registros.',
       },
     };
   }

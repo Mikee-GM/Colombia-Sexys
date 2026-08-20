@@ -604,7 +604,7 @@ export default function GodEyeDashboard({
                           </div>
                           {r.comment && (
                             <p className="mt-1 italic text-zinc-300">
-                              "{r.comment}"
+                              &ldquo;{r.comment}&rdquo;
                             </p>
                           )}
                         </div>
@@ -941,7 +941,7 @@ export default function GodEyeDashboard({
                   </div>
                   {app.comment && (
                     <p className="mt-2 italic text-zinc-400">
-                      Queja original: "{app.comment}"
+                      Queja original: &ldquo;{app.comment}&rdquo;
                     </p>
                   )}
                   {app.appealReason && (
