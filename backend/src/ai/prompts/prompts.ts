@@ -14,7 +14,7 @@ export const getHireSystemPrompt = (params: EmpleadaPromptParams): string => {
 
   const locationsList =
     params.ubicacionesPreestablecidas &&
-      params.ubicacionesPreestablecidas.length > 0
+    params.ubicacionesPreestablecidas.length > 0
       ? params.ubicacionesPreestablecidas.map((l) => `- ${l}`).join('\n')
       : 'Ubicaciones habituales del sistema disponibles para selección.';
 
