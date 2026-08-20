@@ -2916,7 +2916,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       this.logger.log(`No system user found for telegramChatId=${telegramId}`);
     }
 
-    if (ctx.chat?.type === 'private' && ctx.session?.step === 'GROUP_WITH_BOSS') {
+    if (
+      ctx.chat?.type === 'private' &&
+      ctx.session?.step === 'GROUP_WITH_BOSS'
+    ) {
       const groupRequest =
         await this.groupServicesService.findActiveRequestByClientTelegram(
           telegramId,
@@ -3369,19 +3372,22 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         currency: 'MXN',
       });
       const totalBase = duracionPactadaHoras * Number(empleada.precioBaseHora);
-      const transportCharge = Number(nuevoServicio.customerTransportCharge ?? 0);
+      const transportCharge = Number(
+        nuevoServicio.customerTransportCharge ?? 0,
+      );
       const total = totalBase + transportCharge;
 
-      let msgExito = `📋 *Resumen de nuestra cita:*\n\n`;
-      msgExito += `⏱ *Tiempo:* ${duracionPactadaHoras} hora(s)\n`;
+      let msgExito = `*Resumen de nuestra cita:*\n\n`;
+      msgExito += `*Tiempo:* ${duracionPactadaHoras} hora(s)\n`;
       if (transportCharge > 0) {
-        msgExito += `💰 *Total a pagar:* ${formatoMoneda.format(total)} (incluye transporte)\n`;
+        msgExito += `*Total a pagar:* ${formatoMoneda.format(total)} (incluye transporte)\n`;
       } else {
-        msgExito += `💰 *Total a pagar:* ${formatoMoneda.format(total)}\n`;
+        msgExito += `*Total a pagar:* ${formatoMoneda.format(total)}\n`;
       }
-      const ubicacionNombre = nuevoServicio.locationNameSnapshot || 'Ubicación enviada';
-      msgExito += `📍 *Lugar:* ${ubicacionNombre}\n`;
-      msgExito += `💵 *Método de pago:* ${metodoPago.toUpperCase()}\n\n`;
+      const ubicacionNombre =
+        nuevoServicio.locationNameSnapshot || 'Ubicación enviada';
+      msgExito += `*Lugar:* ${ubicacionNombre}\n`;
+      msgExito += `*Método de pago:* ${metodoPago.toUpperCase()}\n\n`;
       msgExito += `¿Todo correcto mor? Yo me voy arreglando para salir a verte rapidito 🔥 Dame un momentico mientras mi chofer confirma la ruta y te aviso.`;
 
       const msg = await ctx.telegram.sendMessage(telegramId, msgExito, {
