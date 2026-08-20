@@ -4705,6 +4705,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const userMessage = buffer.messages.join('\n').trim();
     if (!userMessage) return;
 
+    const executeBuffer = async () => {
     await this.recordDraftConversation(ctx, 'cliente', userMessage);
 
     const normalizedAnswer = userMessage.toLowerCase();
@@ -4993,6 +4994,19 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ctx,
         'Oye lindo, se me cortó un segundo la señal 🙈 ¿Me recuerdas cuántas horitas querías y cómo vas a pagar (efectivo, tarjeta o transferencia)?',
       );
+    }
+    };
+
+    try {
+      await executeBuffer();
+    } finally {
+      const sessionKey = ctx.from && ctx.chat ? `${ctx.from.id}:${ctx.chat.id}` : undefined;
+      if (sessionKey && ctx.session) {
+        await this.telegramSessionRepository.save({
+          key: sessionKey,
+          data: ctx.session,
+        });
+      }
     }
   }
 }
