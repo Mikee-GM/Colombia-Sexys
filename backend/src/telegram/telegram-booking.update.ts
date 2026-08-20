@@ -359,6 +359,7 @@ export function detectGroupServiceIntent(
     .toLowerCase();
   if (
     /\bservicio\s+grupal\b/.test(normalized) ||
+    /\btrios?\b/.test(normalized) ||
     /\b(grupo\s+de\s+(chicas|empleadas)|varias\s+(chicas|empleadas|modelos)|mas\s+de\s+una\s+(chica|empleada|modelo)|(dos|tres|cuatro)\s+(chicas|empleadas|modelos))\b/.test(
       normalized,
     )
@@ -4485,13 +4486,17 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ctx.session?.bookingSessionId,
       );
     } catch (err: any) {
+      this.logger.error('Error creando solicitud grupal:', err);
       if (err instanceof ConflictException) {
         await ctx.reply(
           'Uy amor, me acaban de avisar que ahorita todas mis amigas andan ocupadas. Si quieres nos vemos tú y yo solitos, ¿cuántas horitas te gustaría?',
         );
-        return;
+      } else {
+        await ctx.reply(
+          'Uy lindo, déjame checarlo bien y te confirmo en un momentito.',
+        );
       }
-      throw err;
+      return;
     }
     ctx.session = {
       ...(ctx.session ?? {}),
@@ -4500,40 +4505,44 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       groupIntentClarificationPending: false,
     };
 
-    const bossGroupId = request.boss?.grupoTelegramId;
-    if (bossGroupId && !request.telegramThreadId) {
-      const clientName =
-        client.nombreTelegram || ctx.from?.first_name || 'Cliente';
-      const topic = await ctx.telegram.createForumTopic(
-        bossGroupId,
-        `Grupo: ${clientName}`,
-      );
-      await this.groupServicesService.setTelegramThread(
-        request.id,
-        topic.message_thread_id.toString(),
-      );
-      await ctx.telegram.sendMessage(
-        bossGroupId,
-        `Solicitud de servicio grupal\nCliente: ${clientName}\nLa IA fue desactivada. Organiza participantes, ubicación, horas, pago y transporte desde el panel del jefe.`,
-        { message_thread_id: topic.message_thread_id },
-      );
-      const history = await this.conversationsRepository.find({
-        where: { groupRequestId: request.id },
-        order: { enviadoAt: 'ASC' },
-      });
-      for (const item of history) {
-        const label =
-          item.emisor === 'cliente'
-            ? 'Cliente'
-            : item.emisor === 'ia'
-              ? 'IA'
-              : 'Sistema';
+    try {
+      const bossGroupId = request.boss?.grupoTelegramId;
+      if (bossGroupId && !request.telegramThreadId) {
+        const clientName =
+          client.nombreTelegram || ctx.from?.first_name || 'Cliente';
+        const topic = await ctx.telegram.createForumTopic(
+          bossGroupId,
+          `Grupo: ${clientName}`,
+        );
+        await this.groupServicesService.setTelegramThread(
+          request.id,
+          topic.message_thread_id.toString(),
+        );
         await ctx.telegram.sendMessage(
           bossGroupId,
-          `${label}: ${item.mensaje}`,
+          `Solicitud de servicio grupal\nCliente: ${clientName}\nLa IA fue desactivada. Organiza participantes, ubicación, horas, pago y transporte desde el panel del jefe.`,
           { message_thread_id: topic.message_thread_id },
         );
+        const history = await this.conversationsRepository.find({
+          where: { groupRequestId: request.id },
+          order: { enviadoAt: 'ASC' },
+        });
+        for (const item of history) {
+          const label =
+            item.emisor === 'cliente'
+              ? 'Cliente'
+              : item.emisor === 'ia'
+                ? 'IA'
+                : 'Sistema';
+          await ctx.telegram.sendMessage(
+            bossGroupId,
+            `${label}: ${item.mensaje}`,
+            { message_thread_id: topic.message_thread_id },
+          );
+        }
       }
+    } catch (topicErr) {
+      this.logger.error('Error creando tema de foro para solicitud grupal:', topicErr);
     }
     await this.groupServicesService.recordRequestConversation(
       request,
