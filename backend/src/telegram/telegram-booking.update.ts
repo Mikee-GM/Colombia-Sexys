@@ -419,7 +419,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     @InjectRepository(ExtrasServicio)
     private readonly extrasServicioRepository: Repository<ExtrasServicio>,
     @InjectRepository(AuthorizedBankAccounts)
-    private readonly bankAccountsRepository: Repository<AuthorizedBankAccounts>,
+    private readonly authorizedBankAccountsRepository: Repository<AuthorizedBankAccounts>,
     @InjectRepository(PaymentReceiptValidations)
     private readonly paymentReceiptValidationsRepository: Repository<PaymentReceiptValidations>,
     @InjectRepository(ConversacionesTelegram)
