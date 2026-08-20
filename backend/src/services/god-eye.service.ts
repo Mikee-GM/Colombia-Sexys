@@ -255,10 +255,11 @@ export class GodEyeService {
               COALESCE(
                 (
                   SELECT json_agg(json_build_object(
-                    'nombre', es.nombre,
-                    'precio', es.precio
+                    'nombre', COALESCE(ec.nombre, 'Extra'),
+                    'precio', es.precio_cobrado
                   ))
                   FROM extras_servicio es
+                  LEFT JOIN extras_catalogo ec ON ec.id = es.extra_catalogo_id
                   WHERE es.servicio_id = s.id
                 ),
                 '[]'::json
