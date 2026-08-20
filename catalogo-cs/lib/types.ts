@@ -90,6 +90,7 @@ export type Client = {
   id: string;
   telegramChatId: string;
   nombreTelegram: string | null;
+  telefono?: string | null;
   createdAt?: string;
   primerContactoAt?: string;
 };

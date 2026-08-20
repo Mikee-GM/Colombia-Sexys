@@ -1,12 +1,8 @@
+"use server";
+
 import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
-import type { ConversationMessage, Service, ServiceStatus } from "@/lib/types";
-
-export const activeServiceStatuses: ServiceStatus[] = ["en_curso"];
-
-export function isActiveService(service: Service) {
-  return activeServiceStatuses.includes(service.estado);
-}
+import type { ConversationMessage, Service } from "@/lib/types";
 
 export async function getServices() {
   return apiFetch<Service[]>("/services");
