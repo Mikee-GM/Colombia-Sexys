@@ -49,6 +49,9 @@ export type GodEyeActorSummary = {
     avatar: string | null;
     jefeEmail: string | null;
     sancionada?: boolean;
+    rankingPosition?: number | null;
+    totalEmployees?: number;
+    rankingScore?: number | null;
   }>;
   drivers: Array<{
     id: string;
@@ -75,6 +78,31 @@ export type GodEyeActorDossier = {
   actorType: "employee" | "driver" | "boss";
   profile: any;
   ratings?: any[];
+  ratingsSummary?: {
+    client: {
+      count: number;
+      average: number;
+      stars_5: number;
+      stars_4: number;
+      stars_3: number;
+      stars_2: number;
+      stars_1: number;
+    };
+    driver: {
+      count: number;
+      average: number;
+      stars_5: number;
+      stars_4: number;
+      stars_3: number;
+      stars_2: number;
+      stars_1: number;
+    };
+  };
+  ranking?: {
+    position: number;
+    total: number;
+    score: number | null;
+  } | null;
   reports?: any[];
   sanctions?: any[];
   services?: any[];

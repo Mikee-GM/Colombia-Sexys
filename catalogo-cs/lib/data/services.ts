@@ -12,6 +12,21 @@ export async function getPendingServices() {
   return apiFetch<Service[]>("/services/pendientes");
 }
 
+export async function getServiceByIdAction(serviceId: string) {
+  try {
+    const data = await apiFetch<Service>(`/services/${serviceId}`);
+    return { success: true, data };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo obtener el detalle del servicio",
+    };
+  }
+}
+
 export async function decideServiceAction(
   serviceId: string,
   decision: "aceptar" | "rechazar",

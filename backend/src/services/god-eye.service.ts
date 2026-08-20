@@ -147,6 +147,7 @@ export class GodEyeService {
 
       const [
         ratings,
+        ratingsSummaryRows,
         reports,
         sanctions,
         services,
@@ -158,6 +159,7 @@ export class GodEyeService {
         candidateScreeningRows,
         weeklyPhotos,
         challenges,
+        rankingMap,
       ] = await Promise.all([
         this.dataSource.query(
           `SELECT
@@ -174,7 +176,22 @@ export class GodEyeService {
             LEFT JOIN choferes d ON d.id = r.driver_id
             WHERE r.employee_id = $1
             ORDER BY r.created_at DESC
-            LIMIT 15`,
+            LIMIT 30`,
+          [id],
+        ),
+        this.dataSource.query(
+          `SELECT
+              direction,
+              COUNT(*)::int AS count,
+              COALESCE(ROUND(AVG(stars)::numeric, 1), 0)::float AS average,
+              COUNT(*) FILTER (WHERE stars = 5)::int AS stars_5,
+              COUNT(*) FILTER (WHERE stars = 4)::int AS stars_4,
+              COUNT(*) FILTER (WHERE stars = 3)::int AS stars_3,
+              COUNT(*) FILTER (WHERE stars = 2)::int AS stars_2,
+              COUNT(*) FILTER (WHERE stars = 1)::int AS stars_1
+            FROM interaction_ratings
+            WHERE employee_id = $1 AND (appeal_status IS NULL OR appeal_status != 'overturned')
+            GROUP BY direction`,
           [id],
         ),
         this.dataSource.query(
@@ -398,6 +415,7 @@ export class GodEyeService {
             LIMIT 5`,
           [id],
         ),
+        this.getEmployeeRankingMap(),
       ]);
 
       const totalCashDue = cashObligations
@@ -430,10 +448,43 @@ export class GodEyeService {
             }
           : null;
 
+      // Desglose de estrellas por Clientes vs Choferes
+      const clientRow = ratingsSummaryRows.find(
+        (r: any) => r.direction === 'client_to_employee',
+      );
+      const driverRow = ratingsSummaryRows.find(
+        (r: any) => r.direction === 'driver_to_employee',
+      );
+
+      const ratingsSummary = {
+        client: {
+          count: clientRow ? Number(clientRow.count) : 0,
+          average: clientRow ? Number(clientRow.average) : 0,
+          stars_5: clientRow ? Number(clientRow.stars_5) : 0,
+          stars_4: clientRow ? Number(clientRow.stars_4) : 0,
+          stars_3: clientRow ? Number(clientRow.stars_3) : 0,
+          stars_2: clientRow ? Number(clientRow.stars_2) : 0,
+          stars_1: clientRow ? Number(clientRow.stars_1) : 0,
+        },
+        driver: {
+          count: driverRow ? Number(driverRow.count) : 0,
+          average: driverRow ? Number(driverRow.average) : 0,
+          stars_5: driverRow ? Number(driverRow.stars_5) : 0,
+          stars_4: driverRow ? Number(driverRow.stars_4) : 0,
+          stars_3: driverRow ? Number(driverRow.stars_3) : 0,
+          stars_2: driverRow ? Number(driverRow.stars_2) : 0,
+          stars_1: driverRow ? Number(driverRow.stars_1) : 0,
+        },
+      };
+
+      const ranking = rankingMap.get(id) || null;
+
       return {
         actorType: 'employee',
         profile: employee,
         ratings,
+        ratingsSummary,
+        ranking,
         reports,
         sanctions,
         services,
@@ -850,8 +901,72 @@ export class GodEyeService {
     };
   }
 
+  private async getEmployeeRankingMap(): Promise<
+    Map<string, { position: number; total: number; score: number | null }>
+  > {
+    try {
+      const [employees, confirmedReports] = await Promise.all([
+        this.dataSource.query(`
+          SELECT id, promedio_calificacion AS "promedioCalificacion", total_servicios_valorados AS "totalServiciosValorados"
+          FROM empleadas
+        `),
+        this.dataSource.query(`
+          SELECT employee_id, COUNT(*)::int AS confirmed
+          FROM employee_reports
+          WHERE status = 'resuelto' AND created_at >= NOW() - INTERVAL '90 days'
+          GROUP BY employee_id
+        `),
+      ]);
+
+      const confirmedMap = new Map(
+        confirmedReports.map((r: any) => [r.employee_id, Number(r.confirmed)]),
+      );
+
+      const ranked = employees.map((emp: any) => {
+        const confirmed = Number(confirmedMap.get(emp.id) || 0);
+        const promedio =
+          emp.promedioCalificacion != null
+            ? Number(emp.promedioCalificacion)
+            : null;
+        const score =
+          promedio != null
+            ? Math.max(0, Math.round((Number(promedio) / 5) * 100 - Number(confirmed) * 8))
+            : null;
+        return { id: emp.id, score };
+      });
+
+      ranked.sort((a: any, b: any) => {
+        if (a.score == null && b.score == null) return 0;
+        if (a.score == null) return 1;
+        if (b.score == null) return -1;
+        return b.score - a.score;
+      });
+
+      const total =
+        ranked.filter((r: any) => r.score != null).length || ranked.length;
+      const positions = new Map<
+        string,
+        { position: number; total: number; score: number | null }
+      >();
+
+      let pos = 0;
+      for (const r of ranked) {
+        if (r.score != null) {
+          pos += 1;
+          positions.set(r.id, { position: pos, total, score: r.score });
+        } else {
+          positions.set(r.id, { position: total, total, score: null });
+        }
+      }
+
+      return positions;
+    } catch {
+      return new Map();
+    }
+  }
+
   async listAllActors() {
-    const [employees, drivers, bosses] = await Promise.all([
+    const [employees, drivers, bosses, rankingMap] = await Promise.all([
       this.dataSource.query(`
         SELECT
           e.id,
@@ -909,10 +1024,21 @@ export class GodEyeService {
         WHERE u.rol IN ('jefe', 'admin')
         ORDER BY u.email ASC
       `),
+      this.getEmployeeRankingMap(),
     ]);
 
+    const employeesWithRanking = employees.map((emp: any) => {
+      const r = rankingMap.get(emp.id);
+      return {
+        ...emp,
+        rankingPosition: r?.position ?? null,
+        totalEmployees: r?.total ?? employees.length,
+        rankingScore: r?.score ?? null,
+      };
+    });
+
     return {
-      employees,
+      employees: employeesWithRanking,
       drivers,
       bosses,
     };
