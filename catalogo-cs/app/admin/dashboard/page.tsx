@@ -35,8 +35,8 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader
-        title="Ojo de Dios · Panel Táctico"
-        description="Supervisión 360°, diagnóstico causal de quejas, control de IA y resolución de conflictos en tiempo real."
+        title="Ojo de Dios"
+        description=""
       />
 
       <GodEyeDashboard
