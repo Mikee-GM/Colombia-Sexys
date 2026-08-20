@@ -48,6 +48,7 @@ import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
+import { TelegramSession } from './entities/telegram-session.entity';
 
 interface SessionData {
   step?:
@@ -411,16 +412,20 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly serviciosRepository: Repository<Servicios>,
     @InjectRepository(Viajes)
     private readonly viajesRepository: Repository<Viajes>,
-    @InjectRepository(AuthorizedBankAccounts)
-    private readonly authorizedBankAccountsRepository: Repository<AuthorizedBankAccounts>,
-    @InjectRepository(PaymentReceiptValidations)
-    private readonly paymentReceiptValidationsRepository: Repository<PaymentReceiptValidations>,
+    @InjectRepository(Choferes)
+    private readonly choferesRepository: Repository<Choferes>,
     @InjectRepository(ExtrasCatalogo)
     private readonly extrasCatalogoRepository: Repository<ExtrasCatalogo>,
     @InjectRepository(ExtrasServicio)
     private readonly extrasServicioRepository: Repository<ExtrasServicio>,
+    @InjectRepository(AuthorizedBankAccounts)
+    private readonly bankAccountsRepository: Repository<AuthorizedBankAccounts>,
+    @InjectRepository(PaymentReceiptValidations)
+    private readonly paymentReceiptValidationsRepository: Repository<PaymentReceiptValidations>,
     @InjectRepository(ConversacionesTelegram)
     private readonly conversationsRepository: Repository<ConversacionesTelegram>,
+    @InjectRepository(TelegramSession)
+    private readonly telegramSessionRepository: Repository<TelegramSession>,
     private readonly realtimeEventsService: RealtimeEventsService,
     private readonly jwtService: JwtService,
     @Inject(forwardRef(() => ServicesService))
