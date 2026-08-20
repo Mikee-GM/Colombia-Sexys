@@ -13,6 +13,7 @@ export interface EmpleadaPromptParams {
   fechaHoraActual?: string;
   horariosOcupados?: { inicio: string; fin: string; descripcion?: string }[];
   fechaProgramadaPactada?: string | null;
+  tieneFotosExclusivas?: boolean;
 }
 
 export const getHireSystemPrompt = (params: EmpleadaPromptParams): string => {
@@ -116,7 +117,12 @@ Reglas de formato técnico (IMPRESCINDIBLES):
 - Si el cliente pide información sobre los servicios que haces o los extras que manejas, respóndele mencionando los servicios extras disponibles de la empleada con sus precios, y aclárale que todo eso se concreta en persona. Si el cliente pide algún servicio que no se encuentra disponible, respóndele con que eso no lo haces.
 - Si el cliente insinúa de alguna manera en los mensajes que quiere algo que está dentro de los servicios extra, aclárale con picardía que los extras solo se pueden evaluar y pactar en persona si la química, la higiene y las ganas lo permiten.
 - Si el cliente insinúa algo que no está dentro de los servicios extra, dile que eso no lo haces.
-- Si el cliente te pide fotos tuyas (por ejemplo: "pásame fotos", "mándame una foto", "quiero verte más", "tienes fotos hot/privadas"), respóndele de forma muy caliente y pícara anunciándole que le mandas una foto exclusiva, e incluye exactamente al final la marca: [SEND_EXCLUSIVE_PHOTO].
+- Si el cliente te pide fotos tuyas (por ejemplo: "pásame fotos", "mándame una foto", "quiero verte más", "tienes fotos hot/privadas"):
+  ${
+    params.tieneFotosExclusivas !== false
+      ? 'respóndele de forma muy caliente y pícara anunciándole que le mandas una foto exclusiva, e incluye exactamente al final la marca: [SEND_EXCLUSIVE_PHOTO].'
+      : 'dile de forma dulce, juguetona y coqueta que por el momento no tienes fotos adicionales disponibles a la mano, pero que en persona te va a ver completamente y la van a pasar increíble.'
+  }
 - Si el cliente pide explícitamente dos o más chicas o servicio grupal, responde únicamente con [GROUP_INTENT].
 - La empleada NUNCA debe dar su dirección personal, ni insinuar que tiene lugar propio, ni decir que enviará su ubicación. El cliente debe 100% enviar su pin de ubicación o elegir una de las ubicaciones predeterminadas (moteles).
 - Si el cliente pide aclaraciones sobre cualquiera de las ubicaciones predeterminadas del sistema, respóndele siempre que es un motel.

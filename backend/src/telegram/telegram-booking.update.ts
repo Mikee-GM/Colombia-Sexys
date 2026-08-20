@@ -1090,6 +1090,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       (l) => `${l.name}${l.address ? ` (${l.address})` : ''}`,
     );
 
+    const empleadaConFotos = await this.empleadasRepository.findOne({
+      where: { id: empleada.id },
+      relations: { fotosExclusivas: true },
+    });
+    const tieneFotosExclusivas = Boolean(
+      empleadaConFotos?.fotosExclusivas && empleadaConFotos.fotosExclusivas.length > 0,
+    );
+
     const promptParams = {
       nombreArtistico: empleada.nombreArtistico,
       precioBaseHora: empleada.precioBaseHora,
@@ -1100,6 +1108,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         timeZone: 'America/Mexico_City',
       }),
       horariosOcupados: busySchedules,
+      tieneFotosExclusivas,
     };
 
     const systemPrompt = activeService
@@ -4961,6 +4970,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         (l) => `${l.name}${l.address ? ` (${l.address})` : ''}`,
       );
 
+      const empleadaConFotos = await this.empleadasRepository.findOne({
+        where: { id: empleada.id },
+        relations: { fotosExclusivas: true },
+      });
+      const tieneFotosExclusivas = Boolean(
+        empleadaConFotos?.fotosExclusivas && empleadaConFotos.fotosExclusivas.length > 0,
+      );
+
       const generalPrompt = getGeneralChatSystemPrompt({
         nombreArtistico: empleada.nombreArtistico,
         precioBaseHora: empleada.precioBaseHora,
@@ -4978,6 +4995,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               timeZone: 'America/Mexico_City',
             })
           : null,
+        tieneFotosExclusivas,
       });
       const systemPrompt = session.selectedEmployeeBusy
         ? `Eres el asistente de la agencia, no eres la empleada y nunca debes hablar como si lo fueras. ${generalPrompt}`
@@ -5016,11 +5034,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               where: { id: empleada.id },
               relations: { fotosExclusivas: true, empleadaFotos: true },
             });
-            const photosToSend =
-              empleadaModel?.fotosExclusivas &&
-              empleadaModel.fotosExclusivas.length > 0
-                ? empleadaModel.fotosExclusivas
-                : empleadaModel?.empleadaFotos || [];
+            const photosToSend = empleadaModel?.fotosExclusivas || [];
 
             if (photosToSend.length > 0) {
               const randomPhoto =
@@ -5038,6 +5052,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 'ia',
                 `[Foto exclusiva enviada] ${cleanText}`,
               );
+              return;
+            } else {
+              const noPhotoMsg = cleanText || 'Ay amor, por el momento no tengo fotos adicionales a la mano, pero en persona me verás completita y la vamos a pasar riquísimo... 🔥';
+              await this.sendDelayedReply(ctx, noPhotoMsg);
+              history.push({
+                role: 'model',
+                parts: [{ text: noPhotoMsg }],
+              });
+              session.chatHistory = history;
+              await this.recordDraftConversation(ctx, 'ia', noPhotoMsg);
               return;
             }
           } catch (photoErr) {
