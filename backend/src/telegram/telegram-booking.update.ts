@@ -332,7 +332,9 @@ export function extractHireDuration(text: string): number | undefined {
   const word = Object.keys(wordDurations).find(
     (candidate) =>
       normalized === candidate ||
-      new RegExp(`\\b${candidate}\\s+(?:h|hr|hrs|hora|horas)\\b`).test(normalized),
+      new RegExp(`\\b${candidate}\\s+(?:h|hr|hrs|hora|horas)\\b`).test(
+        normalized,
+      ),
   );
   return word ? wordDurations[word] : undefined;
 }
