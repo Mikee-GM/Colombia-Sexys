@@ -632,9 +632,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }),
     ]);
     if (!client || !employee) return false;
-    await ctx.reply(`Método de pago: *${method.toUpperCase()}*.`, {
-      parse_mode: 'Markdown',
-    });
     await this.finalizeBooking(
       ctx,
       client,
@@ -2919,7 +2916,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       this.logger.log(`No system user found for telegramChatId=${telegramId}`);
     }
 
-    if (ctx.chat?.type === 'private') {
+    if (ctx.chat?.type === 'private' && ctx.session?.step === 'GROUP_WITH_BOSS') {
       const groupRequest =
         await this.groupServicesService.findActiveRequestByClientTelegram(
           telegramId,
@@ -3020,8 +3017,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
       if (ctx.session.metodoPago) {
         const metodoPrevio = ctx.session.metodoPago;
-        priceMsg += `\n\nQuedamos en pago por *${metodoPrevio.toUpperCase()}*.`;
-        await this.sendDelayedReply(ctx, priceMsg);
         await this.applyDraftPaymentMethod(ctx, metodoPrevio);
         return;
       }
@@ -3369,11 +3364,25 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         }
       }
 
-      const msgExito = await this.aiMessageService.generate(
-        'booking_received',
-        { employeeName: empleada.nombreArtistico },
-        'Listo, dame un momentico y miro si puedo ir contigo',
-      );
+      const formatoMoneda = new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+      });
+      const totalBase = duracionPactadaHoras * Number(empleada.precioBaseHora);
+      const transportCharge = Number(nuevoServicio.customerTransportCharge ?? 0);
+      const total = totalBase + transportCharge;
+
+      let msgExito = `📋 *Resumen de nuestra cita:*\n\n`;
+      msgExito += `⏱ *Tiempo:* ${duracionPactadaHoras} hora(s)\n`;
+      if (transportCharge > 0) {
+        msgExito += `💰 *Total a pagar:* ${formatoMoneda.format(total)} (incluye transporte)\n`;
+      } else {
+        msgExito += `💰 *Total a pagar:* ${formatoMoneda.format(total)}\n`;
+      }
+      const ubicacionNombre = nuevoServicio.locationNameSnapshot || 'Ubicación enviada';
+      msgExito += `📍 *Lugar:* ${ubicacionNombre}\n`;
+      msgExito += `💵 *Método de pago:* ${metodoPago.toUpperCase()}\n\n`;
+      msgExito += `¿Todo correcto mor? Yo me voy arreglando para salir a verte rapidito 🔥 Dame un momentico mientras mi chofer confirma la ruta y te aviso.`;
 
       const msg = await ctx.telegram.sendMessage(telegramId, msgExito, {
         ...Markup.removeKeyboard(),
