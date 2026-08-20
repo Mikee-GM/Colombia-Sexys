@@ -231,7 +231,8 @@ export class GodEyeService {
               s.created_at AS "createdAt",
               c.id AS "clienteId",
               c.nombre_telegram AS "clienteNombre",
-              c.telefono AS "clienteTelefono",
+              c.telegram_chat_id::text AS "clienteTelegramChatId",
+              c.telegram_chat_id::text AS "clienteTelefono",
               j.email AS "jefeEmail",
               COALESCE(
                 (
