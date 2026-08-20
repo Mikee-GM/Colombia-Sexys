@@ -31,13 +31,13 @@ export class GodEyeService {
       this.dataSource.query(`
         SELECT
           COUNT(*)::int AS total,
-          COUNT(*) FILTER (WHERE estado IN ('disponible', 'ocupado', 'en_viaje'))::int AS activos
+          COUNT(*) FILTER (WHERE disponible = true)::int AS activos
         FROM choferes
       `),
       this.dataSource.query(`
         SELECT COUNT(*)::int AS count
         FROM payment_receipt_validations
-        WHERE status = 'pending'
+        WHERE estado IN ('PENDIENTE', 'REVISION_MANUAL', 'pending')
       `),
       this.dataSource.query(`
         SELECT COUNT(*)::int AS count
@@ -46,9 +46,9 @@ export class GodEyeService {
           AND created_at >= NOW() - INTERVAL '24 hours'
       `),
       this.dataSource.query(`
-        SELECT COALESCE(SUM(monto_adeudo_restante), 0)::numeric AS total_cash
+        SELECT COALESCE(SUM(amount - paid_amount), 0)::numeric AS total_cash
         FROM employee_cash_obligations
-        WHERE status IN ('pending', 'partial')
+        WHERE status = 'pending'
       `),
       this.dataSource.query(`
         SELECT COUNT(*)::int AS count
@@ -223,12 +223,12 @@ export class GodEyeService {
         this.dataSource.query(
           `SELECT
               id,
-              monto_adeudo_original AS "montoOriginal",
-              monto_adeudo_restante AS "montoRestante",
+              amount AS "montoOriginal",
+              (amount - paid_amount) AS "montoRestante",
               status,
               created_at AS "createdAt"
             FROM employee_cash_obligations
-            WHERE empleada_id = $1 AND status IN ('pending', 'partial')
+            WHERE employee_id = $1 AND status = 'pending'
             ORDER BY created_at DESC`,
           [id],
         ),
@@ -252,12 +252,13 @@ export class GodEyeService {
           d.id,
           d.nombre,
           d.telefono,
+          d.vehiculo_marca AS "vehiculoMarca",
           d.vehiculo_modelo AS "vehiculoModelo",
-          d.vehiculo_placas AS "vehiculoPlacas",
+          d.vehiculo_placa AS "vehiculoPlaca",
           d.vehiculo_color AS "vehiculoColor",
-          d.estado,
-          d.latitud,
-          d.longitud,
+          d.disponible,
+          d.ubicacion_lat AS "latitud",
+          d.ubicacion_lng AS "longitud",
           d.created_at AS "createdAt",
           u.telegram_chat_id AS "telegramChatId",
           u.activo AS "usuarioActivo"
@@ -321,9 +322,7 @@ export class GodEyeService {
             v.id,
             v.tipo,
             v.estado,
-            v.origen_direccion AS "origenDireccion",
-            v.destino_direccion AS "destinoDireccion",
-            v.costo_estimado AS "costoEstimado",
+            v.tarifa AS "costoEstimado",
             v.created_at AS "createdAt",
             e.nombre_artistico AS "empleadaNombre"
           FROM viajes v
@@ -462,7 +461,6 @@ export class GodEyeService {
           v.proveedor_transporte AS "proveedorTransporte",
           v.hora_notificacion AS "horaNotificacion",
           v.hora_aceptacion AS "horaAceptacion",
-          v.hora_llegada AS "horaLlegada",
           v.hora_inicio_viaje AS "horaInicioViaje",
           v.hora_fin_viaje AS "horaFinViaje",
           d.id AS "choferId",
@@ -471,7 +469,7 @@ export class GodEyeService {
         FROM viajes v
         LEFT JOIN choferes d ON d.id = v.chofer_id
         WHERE v.servicio_id = $1
-        ORDER BY v.created_at ASC`,
+        ORDER BY v.hora_notificacion ASC`,
         [serviceId],
       ),
       this.dataSource.query(
@@ -531,9 +529,9 @@ export class GodEyeService {
 
     // 1. Detección de retraso de transporte
     for (const trip of trips) {
-      if (trip.horaNotificacion && trip.horaLlegada) {
+      if (trip.horaNotificacion && trip.horaFinViaje) {
         const notif = new Date(trip.horaNotificacion).getTime();
-        const arrival = new Date(trip.horaLlegada).getTime();
+        const arrival = new Date(trip.horaFinViaje).getTime();
         const diffMinutes = Math.round((arrival - notif) / 60000);
         if (diffMinutes > 40) {
           causes.push({
@@ -652,7 +650,7 @@ export class GodEyeService {
           d.id,
           d.nombre AS name,
           'driver' AS type,
-          d.estado,
+          d.disponible,
           d.telefono,
           d.vehiculo_modelo AS "vehiculoModelo"
         FROM choferes d

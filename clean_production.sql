@@ -9,7 +9,8 @@
 -- 4. Evaluaciones/candidatas de screening antiguas o incompletas
 -- 5. Liquidaciones, deudas y obligaciones de efectivo residuales
 -- 6. Reportes disciplinarios y ratings de servicios pasados
--- 7. Borrado opcional/específico de modelos deseadas (empleadas)
+-- 7. Borrado de modelos deseadas ('perzi', 'Mike', 'Perzi')
+-- 8. Agrega columna 'options' a screening_questions si no existe
 --
 -- PRESERVA:
 -- - Usuarios (Admins, Jefes, Choferes, y Modelos activas que no se especifiquen)
@@ -20,6 +21,11 @@
 -- ============================================================================
 
 BEGIN;
+
+-- ----------------------------------------------------------------------------
+-- PASO 0: Asegurar columnas requeridas en el esquema
+-- ----------------------------------------------------------------------------
+ALTER TABLE screening_questions ADD COLUMN IF NOT EXISTS options jsonb DEFAULT '[]'::jsonb;
 
 -- ----------------------------------------------------------------------------
 -- PASO 1: Desconectar relaciones circulares temporales
@@ -93,15 +99,10 @@ TRUNCATE TABLE client_memberships CASCADE;
 TRUNCATE TABLE clientes CASCADE;
 
 -- ----------------------------------------------------------------------------
--- PASO 9: Borrado Selectivo de Modelos Específicas
--- (Coloca aquí los nombres artísticos o reales de las modelos que deseas eliminar)
+-- PASO 9: Borrado Selectivo de Modelos Específicas: 'perzi', 'Mike', 'Perzi'
 -- ----------------------------------------------------------------------------
-
--- Modelos a eliminar: 'perzi', 'Mike', 'Perzi'
 DO $$
 DECLARE
-    -- Lista de nombres de modelos a eliminar (insensible a mayúsculas/minúsculas)
-    modelos_a_eliminar TEXT[] := ARRAY['perzi', 'mike', 'perzi'];
     emp_record RECORD;
 BEGIN
     FOR emp_record IN 
@@ -157,10 +158,6 @@ COMMIT;
 -- 1. Conéctate por SSH a tu VPS:
 --    ssh root@<IP_DE_TU_VPS>
 --
--- 2. Entra al contenedor de Postgres o ejecuta el script con psql:
---    docker compose exec -T db psql -U <DATABASE_USER> -d <DATABASE_NAME> < clean_production.sql
---
---    O directamente entrando a la consola interactiva:
---    docker compose exec db psql -U colombia_user -d colombia_db
---    (y pegas el contenido de este script)
+-- 2. Ejecuta:
+--    docker compose exec -T db psql -U "$DATABASE_USER" -d "$DATABASE_NAME" < clean_production.sql
 -- ============================================================================
