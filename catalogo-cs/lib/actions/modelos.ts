@@ -125,6 +125,7 @@ export async function createModeloAction(
     extras: (payload.extras || []).map((ext) => ({
       nombre: ext.nombre,
       precio: ext.precio,
+      modelosVinculadasIds: ext.modelosVinculadasIds || [],
     })),
   };
 
@@ -160,6 +161,7 @@ export async function updateModeloAction(
     extras: (payload.extras || []).map((ext) => ({
       nombre: ext.nombre,
       precio: ext.precio,
+      modelosVinculadasIds: ext.modelosVinculadasIds || [],
     })),
   };
 
