@@ -23,10 +23,13 @@ export type GodEyeOverview = {
     estado: string;
     metodoPago: string;
     duracionPactadaHoras: number;
+    duracionFinalHoras?: number | null;
     precioBaseHoraPactado: number;
     totalFinal: number;
     iaActiva: boolean;
     horaInicioServicio: string | null;
+    horaFinServicio?: string | null;
+    estadoLiquidacion?: string;
     createdAt: string;
     notas: string | null;
     clienteId: string;
@@ -36,6 +39,10 @@ export type GodEyeOverview = {
     empleadaFoto: string | null;
     jefeId: string;
     jefeEmail: string;
+    viajes?: any[];
+    pendingReceiptsCount?: number;
+    calificacion?: number | null;
+    comentariosCalificacion?: string | null;
   }>;
 };
 

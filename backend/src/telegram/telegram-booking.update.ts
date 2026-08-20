@@ -2287,7 +2287,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ]),
     );
 
-    // 2. Limpieza de chat del cliente (Eliminar mensaje anterior) y enviar solicitud de calificación
+    // 2. Limpieza de chat del cliente (Eliminar mensaje anterior)
     if (servicio.cliente?.telegramChatId) {
       if (servicio.telegramClienteMensajeId) {
         try {
@@ -2298,33 +2298,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         } catch (err) {
           console.error('Error al eliminar mensaje del cliente:', err);
         }
-      }
-
-      try {
-        const ratingKeyboard = Markup.inlineKeyboard([
-          ...[1, 2, 3, 4, 5].map((rating) => [
-            Markup.button.callback(
-              `${rating} - ${'⭐'.repeat(rating)}`,
-              `calificar_servicio:${servicio.id}:${rating}`,
-            ),
-          ]),
-          [
-            Markup.button.callback(
-              '⚠️ Reportar empleada',
-              `er_client_start:${servicio.id}`,
-            ),
-          ],
-        ]);
-        await ctx.telegram.sendMessage(
-          servicio.cliente.telegramChatId,
-          `✨ *El servicio con ${servicio.empleada?.nombreArtistico || 'la empleada'} ha finalizado.*\n\nPor favor, tómate un momento para calificar tu experiencia:`,
-          { parse_mode: 'Markdown', ...ratingKeyboard },
-        );
-      } catch (err) {
-        console.error(
-          'Error al enviar la solicitud de calificación al cliente:',
-          err,
-        );
       }
     }
 

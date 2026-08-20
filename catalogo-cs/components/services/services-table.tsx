@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, MessageCircle, Pencil, Search } from "lucide-react";
+import { Eye, Search } from "lucide-react";
 import ServiceStatusBadge from "./service-status-badge";
 import ServiceDetailDialog from "./service-detail-dialog";
-import type { Service, ServiceStatus } from "@/lib/types";
+import type { Service } from "@/lib/types";
 import { formatAvailabilityTime } from "@/lib/availability";
+import { getServices } from "@/lib/data/services";
 
 type Props = {
   initialServices?: Service[];
@@ -18,6 +19,10 @@ export default function ServicesTable({ initialServices = [] }: Props) {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  useEffect(() => {
+    setServices(initialServices);
+  }, [initialServices]);
 
   const filteredServices = services.filter((service) => {
     const matchesSearch =
@@ -31,7 +36,13 @@ export default function ServicesTable({ initialServices = [] }: Props) {
     return matchesSearch && matchesStatus;
   });
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
+    try {
+      const fresh = await getServices();
+      if (fresh) setServices(fresh);
+    } catch (err) {
+      console.error("Error refreshing services:", err);
+    }
     router.refresh();
   };
 

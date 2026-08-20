@@ -4,7 +4,23 @@ import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
 import type { ConversationMessage, Service } from "@/lib/types";
 
+function revalidateAdminViews() {
+  try {
+    revalidatePath("/admin/services");
+    revalidatePath("/admin/dashboard");
+    revalidatePath("/admin/god-eye");
+    revalidatePath("/admin/transport");
+    revalidatePath("/admin");
+  } catch {
+    // ignore outside request context
+  }
+}
+
 export async function getServices() {
+  return apiFetch<Service[]>("/services");
+}
+
+export async function getServicesAction() {
   return apiFetch<Service[]>("/services");
 }
 
@@ -44,7 +60,7 @@ export async function decideServiceAction(
             })
           : undefined,
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true, data: result };
   } catch (error) {
     return {
@@ -68,7 +84,7 @@ export async function updateServiceAction(
       method: "PATCH",
       body: JSON.stringify(data),
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true, data: updated };
   } catch (error) {
     return {
@@ -84,7 +100,7 @@ export async function updateServiceAction(
 export async function cancelServiceAction(serviceId: string) {
   try {
     await apiFetch(`/services/${serviceId}/cancel`, { method: "POST" });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true };
   } catch (error) {
     return {
@@ -131,7 +147,7 @@ export async function chooseReturnTransportAction(
       method: "POST",
       body: JSON.stringify({ transportType }),
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true, data };
   } catch (error) {
     return {
@@ -150,7 +166,7 @@ export async function changeTripTransportAction(
       method: "PATCH",
       body: JSON.stringify({ transportType }),
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true, data };
   } catch (error) {
     return {
@@ -169,7 +185,7 @@ export async function confirmUberFareAction(tripId: string, amount: number) {
       method: "POST",
       body: JSON.stringify({ amount }),
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true };
   } catch (error) {
     return {
@@ -190,7 +206,7 @@ export async function uploadUberScreenshotAction(formData: FormData) {
       method: "POST",
       body: payload,
     });
-    revalidatePath("/admin/services");
+    revalidateAdminViews();
     return { success: true };
   } catch (error) {
     return {
@@ -199,3 +215,4 @@ export async function uploadUberScreenshotAction(formData: FormData) {
     };
   }
 }
+

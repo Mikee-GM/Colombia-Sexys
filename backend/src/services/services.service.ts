@@ -874,7 +874,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         const clientMessage = await this.aiMessageService.generate(
           'service_accepted',
           { employeeName: servicio.empleada.nombreArtistico },
-          'Oyeee, sí puedo ir contigo, nos vemos en un ratico 😊',
+          'Oyeee, sí puedo ir contigo, nos vemos en un ratico',
         );
         await this.bot.telegram.sendMessage(
           servicio.cliente.telegramChatId,
@@ -979,7 +979,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         const clientMessage = await this.aiMessageService.generate(
           'service_rejected',
           { employeeName: servicio.empleada?.nombreArtistico },
-          'Qué pena contigo, esta vez no voy a poder ir 😕',
+          'Qué pena contigo, esta vez no voy a poder ir',
         );
         await this.bot.telegram.sendMessage(
           servicio.clienteTelegramId,
@@ -2453,14 +2453,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relations: { cliente: true, empleada: { usuario: true } },
     });
     if (!servicio || servicio.estado !== 'finalizado') return;
-    const award =
-      await this.loyaltyService.awardForFinalizedService(servicioId);
     const text =
       `✅ *Total definitivo del servicio*\n\n` +
       `• Servicio base: $${Number(servicio.totalBase).toFixed(2)}\n` +
       `• Transporte: $${Number(servicio.totalTransporte).toFixed(2)}\n` +
-      `• *Total a pagar: $${Number(servicio.totalFinal).toFixed(2)}*\n` +
-      `• Puntos ganados: ${award.pointsEarned}\n\n` +
+      `• *Total a pagar: $${Number(servicio.totalFinal).toFixed(2)}*\n\n` +
       `Por favor, califica el servicio:`;
     if (servicio.cliente?.telegramChatId) {
       const keyboard = Markup.inlineKeyboard([
@@ -2704,14 +2701,19 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     if (!bossAction && trip.tipo === 'ida') {
       const event = action;
-      const message =
-        action === 'employee_arrived'
-          ? '📍 Ya llegué al punto que cuadramos, aquí te espero 😊'
-          : '🚗 Ya voy en camino, nos vemos pronto 😊';
       if (trip.servicio.cliente?.telegramChatId) {
+        const clientMessage = await this.aiMessageService.generate(
+          action === 'employee_arrived'
+            ? 'employee_arrived'
+            : 'employee_on_the_way',
+          { employeeName: trip.servicio.empleada?.nombreArtistico },
+          action === 'employee_arrived'
+            ? 'Ya llegué al punto que cuadramos, aquí te espero'
+            : 'Ya voy en camino, nos vemos pronto',
+        );
         await this.bot.telegram.sendMessage(
           trip.servicio.cliente.telegramChatId,
-          message,
+          clientMessage,
         );
       }
       this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {

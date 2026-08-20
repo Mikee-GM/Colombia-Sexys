@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   getGodEyeOverviewAction,
   getGodEyeActorsAction,
@@ -80,14 +81,233 @@ interface Props {
   initialAppeals: RatingAppeal[];
 }
 
+export type ServiceAlert = {
+  id: string;
+  label: string;
+  severity: "critical" | "warning" | "info";
+  icon: React.ComponentType<{ className?: string; size?: number }>;
+  description: string;
+};
+
+export function getServiceAlerts(srv: any): ServiceAlert[] {
+  const alerts: ServiceAlert[] = [];
+  if (!srv) return alerts;
+
+  // 1. Estado pendiente de aceptación
+  if (srv.estado === "pendiente") {
+    const elapsedMinutes = Math.max(
+      0,
+      Math.floor((Date.now() - new Date(srv.createdAt).getTime()) / 60000),
+    );
+    if (elapsedMinutes > 15) {
+      alerts.push({
+        id: "pending_long",
+        label: `Espera prolongada (+${elapsedMinutes}m)`,
+        severity: "critical",
+        icon: AlertTriangle,
+        description: `El servicio lleva ${elapsedMinutes} minutos en estado pendiente sin ser aceptado o rechazado.`,
+      });
+    } else {
+      alerts.push({
+        id: "pending",
+        label: "Por Aceptar",
+        severity: "warning",
+        icon: Clock,
+        description: "Servicio pendiente de aceptación o asignación de transporte.",
+      });
+    }
+  }
+
+  // 2. IA Pausada (requiere atención humana)
+  if (srv.iaActiva === false) {
+    alerts.push({
+      id: "ai_paused",
+      label: "IA Pausada",
+      severity: "warning",
+      icon: PauseCircle,
+      description: "El bot de IA está en pausa. El chat con el cliente requiere atención manual del jefe/admin.",
+    });
+  }
+
+  // 3. Problemas de Transporte
+  const trips: any[] = Array.isArray(srv.viajes) ? srv.viajes : [];
+
+  // Sin chofer / transporte si está en curso o pendiente
+  if (
+    trips.length === 0 &&
+    (srv.estado === "en_curso" || srv.estado === "pendiente")
+  ) {
+    alerts.push({
+      id: "no_transport",
+      label: "Sin Transporte",
+      severity: "warning",
+      icon: Car,
+      description: "No se ha generado ni asignado ningún viaje de transporte para este servicio.",
+    });
+  }
+
+  // Uber sin captura o sin tarifa
+  const uberTrips = trips.filter(
+    (t: any) =>
+      t.proveedorTransporte === "uber" && t.estado !== "cancelado",
+  );
+  const uberWithoutScreenshot = uberTrips.filter(
+    (t: any) => !t.uberScreenshotUrl && !t.telegramUberFileId,
+  );
+  const uberWithoutFare = uberTrips.filter(
+    (t: any) => !t.tarifa || Number(t.tarifa) <= 0,
+  );
+
+  if (uberWithoutScreenshot.length > 0) {
+    alerts.push({
+      id: "uber_no_screenshot",
+      label: `Falta Captura Uber (${uberWithoutScreenshot.length})`,
+      severity: "critical",
+      icon: Camera,
+      description: "Hay traslados de Uber sin captura de pantalla de comprobante registrada.",
+    });
+  }
+
+  if (uberWithoutFare.length > 0) {
+    alerts.push({
+      id: "uber_no_fare",
+      label: `Tarifa Uber $0 (${uberWithoutFare.length})`,
+      severity: "warning",
+      icon: DollarSign,
+      description: "Hay traslados de Uber con tarifa en $0 o sin confirmar.",
+    });
+  }
+
+  // Viaje cancelado
+  const cancelledTrips = trips.filter((t: any) => t.estado === "cancelado");
+  if (cancelledTrips.length > 0) {
+    alerts.push({
+      id: "cancelled_trip",
+      label: `Viaje Cancelado (${cancelledTrips.length})`,
+      severity: "critical",
+      icon: XCircle,
+      description: "Uno o más traslados asociados al servicio fueron cancelados.",
+    });
+  }
+
+  // Transporte de regreso pendiente
+  if (
+    srv.estadoLiquidacion === "transporte_pendiente" ||
+    (srv.estado === "completado" &&
+      !trips.some((t: any) => t.tipo === "regreso"))
+  ) {
+    alerts.push({
+      id: "return_pending",
+      label: "Regreso Pendiente",
+      severity: "warning",
+      icon: RefreshCw,
+      description: "El servicio terminó o está por terminar y no se ha asignado transporte de retorno.",
+    });
+  }
+
+  // 4. Comprobante de pago pendiente de validar
+  if (srv.pendingReceiptsCount && Number(srv.pendingReceiptsCount) > 0) {
+    alerts.push({
+      id: "receipt_pending",
+      label: `Comprobante Pendiente (${srv.pendingReceiptsCount})`,
+      severity: "warning",
+      icon: CreditCard,
+      description: "Hay comprobantes de transferencia bancaria pendientes de validación.",
+    });
+  }
+
+  // 5. Exceso de tiempo / retraso en curso
+  if (srv.estado === "en_curso" && srv.horaInicioServicio) {
+    const elapsedHours =
+      (Date.now() - new Date(srv.horaInicioServicio).getTime()) / 3600000;
+    const agreedHours = Number(srv.duracionPactadaHoras) || 1;
+    if (elapsedHours > agreedHours + 0.25) {
+      const extraMinutes = Math.round((elapsedHours - agreedHours) * 60);
+      alerts.push({
+        id: "time_exceeded",
+        label: `Tiempo Excedido (+${extraMinutes}m)`,
+        severity: "critical",
+        icon: Flame,
+        description: `El servicio ha superado las ${agreedHours}h pactadas por más de ${extraMinutes} minutos.`,
+      });
+    }
+  }
+
+  // 6. Calificación baja / Queja
+  if (srv.calificacion != null && Number(srv.calificacion) <= 2) {
+    alerts.push({
+      id: "low_rating",
+      label: `Queja (${srv.calificacion}⭐)`,
+      severity: "critical",
+      icon: AlertTriangle,
+      description: `El cliente dejó una calificación de ${srv.calificacion}/5 estrellas.`,
+    });
+  }
+
+  return alerts;
+}
+
+export function ServiceProblemBadges({ service }: { service: any }) {
+  const alerts = getServiceAlerts(service);
+
+  if (alerts.length === 0) {
+    if (service.estado === "en_curso") {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] sm:text-[11px] font-bold text-emerald-300">
+          <CheckCircle2 size={12} className="text-emerald-400" /> Operación normal
+        </span>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5 pt-0.5">
+      {alerts.map((alt) => {
+        const Icon = alt.icon;
+        const colorClasses =
+          alt.severity === "critical"
+            ? "border-red-500/40 bg-red-500/15 text-red-300 hover:bg-red-500/25"
+            : alt.severity === "warning"
+            ? "border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+            : "border-blue-500/40 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25";
+
+        return (
+          <span
+            key={alt.id}
+            title={alt.description}
+            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] sm:text-[11px] font-extrabold transition-colors cursor-help ${colorClasses}`}
+          >
+            <Icon size={12} className="shrink-0" />
+            {alt.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function GodEyeDashboard({
   initialOverview,
   initialActors,
   initialAppeals,
 }: Props) {
+  const router = useRouter();
   const [overview, setOverview] = useState<GodEyeOverview>(initialOverview);
   const [actors, setActors] = useState<GodEyeActorSummary>(initialActors);
   const [appeals, setAppeals] = useState<RatingAppeal[]>(initialAppeals);
+
+  useEffect(() => {
+    setOverview(initialOverview);
+  }, [initialOverview]);
+
+  useEffect(() => {
+    setActors(initialActors);
+  }, [initialActors]);
+
+  useEffect(() => {
+    setAppeals(initialAppeals);
+  }, [initialAppeals]);
 
   // Actor seleccionado
   const [actorTab, setActorTab] = useState<"employee" | "driver" | "boss">(
@@ -115,6 +335,11 @@ export default function GodEyeDashboard({
   const [managingService, setManagingService] = useState<Service | null>(null);
   const [loadingServiceDetail, setLoadingServiceDetail] = useState(false);
 
+  // Filtro de servicios activos en columna 2
+  const [activeServiceFilter, setActiveServiceFilter] = useState<
+    "all" | "alerts" | "clean"
+  >("all");
+
   const cleanSearch = actorSearchQuery.trim().toLowerCase();
   const filteredEmployees = actors.employees.filter(
     (emp) =>
@@ -136,6 +361,13 @@ export default function GodEyeDashboard({
       (boss.email && boss.email.toLowerCase().includes(cleanSearch)) ||
       (boss.rol && boss.rol.toLowerCase().includes(cleanSearch)),
   );
+
+  const filteredActiveServices = overview.activeServices.filter((srv) => {
+    const alerts = getServiceAlerts(srv);
+    if (activeServiceFilter === "alerts") return alerts.length > 0;
+    if (activeServiceFilter === "clean") return alerts.length === 0;
+    return true;
+  });
 
   // Servicio / Incidente seleccionado para investigación causal
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(
@@ -160,6 +392,10 @@ export default function GodEyeDashboard({
   const [sanctionReason, setSanctionReason] = useState("");
   const [sanctionHours, setSanctionHours] = useState(24);
   const [sanctionFineAmount, setSanctionFineAmount] = useState<number | "">(500);
+  const [isApplyingSanction, setIsApplyingSanction] = useState(false);
+
+  // Modal de detalle de sanción
+  const [selectedSanctionDetail, setSelectedSanctionDetail] = useState<any | null>(null);
 
   const [isPending, startTransition] = useTransition();
   const [notification, setNotification] = useState<{
@@ -221,27 +457,25 @@ export default function GodEyeDashboard({
 
   // Refrescar métricas globales
   const refreshAll = async () => {
-    startTransition(async () => {
-      try {
-        const [newOverview, newActors, newAppeals] = await Promise.all([
-          getGodEyeOverviewAction(),
-          getGodEyeActorsAction(),
-          getPendingAppeals(),
-        ]);
-        setOverview(newOverview);
-        setActors(newActors);
-        setAppeals(newAppeals);
-        if (selectedServiceId) {
-          loadIncident(selectedServiceId);
-        }
-        if (selectedActorId) {
-          loadDossier(actorTab, selectedActorId);
-        }
-        notify("Datos del Ojo de Dios actualizados");
-      } catch {
-        notify("Error al refrescar datos", "error");
+    try {
+      const [newOverview, newActors, newAppeals] = await Promise.all([
+        getGodEyeOverviewAction(),
+        getGodEyeActorsAction(),
+        getPendingAppeals(),
+      ]);
+      setOverview(newOverview);
+      setActors(newActors);
+      setAppeals(newAppeals);
+      if (selectedServiceId) {
+        await loadIncident(selectedServiceId);
       }
-    });
+      if (selectedActorId) {
+        await loadDossier(actorTab, selectedActorId);
+      }
+    } catch (err) {
+      console.error("Error refreshing God Eye data:", err);
+    }
+    router.refresh();
   };
 
   useEffect(() => {
@@ -286,11 +520,12 @@ export default function GodEyeDashboard({
 
   // Aplicar sanción rápida
   const handleApplySanction = async () => {
-    if (!selectedActorId || !sanctionReason.trim()) return;
+    if (!selectedActorId || !sanctionReason.trim() || isApplyingSanction) return;
     if (sanctionType === "fine" && (!sanctionFineAmount || Number(sanctionFineAmount) <= 0)) {
       notify("El monto de la multa debe ser mayor a 0", "error");
       return;
     }
+    setIsApplyingSanction(true);
     try {
       const startsAt = new Date().toISOString();
       const endsAt =
@@ -302,7 +537,7 @@ export default function GodEyeDashboard({
         subjectType: actorTab as any,
         subjectId: selectedActorId,
         type: sanctionType,
-        reason: sanctionReason,
+        reason: sanctionReason.trim(),
         fineAmount: sanctionType === "fine" ? Number(sanctionFineAmount) : undefined,
         startsAt,
         endsAt,
@@ -318,6 +553,8 @@ export default function GodEyeDashboard({
       refreshAll();
     } catch (err: any) {
       notify(err.message || "Error al aplicar sanción", "error");
+    } finally {
+      setIsApplyingSanction(false);
     }
   };
 
@@ -490,11 +727,11 @@ export default function GodEyeDashboard({
         </button>
       </div>
 
-      {/* 🎛️ CUADRÍCULA PRINCIPAL TÁCTICA (3 COLUMNAS INTERACTIVAS) */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-        {/* COLUMNA 1: SELECTOR & EXPEDIENTE 360° (4 Cols) */}
-        <div className="flex flex-col gap-4 xl:col-span-4">
-          <div className="rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-xl">
+      {/* 🎛️ FILA 1: ACTORES DEL SISTEMA (IZQUIERDA) & EXPEDIENTE 360° (DERECHA) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* COLUMNA 1: 1. ACTORES DEL SISTEMA (4 Cols) */}
+        <div className="flex flex-col lg:col-span-4 xl:col-span-4">
+          <div className="flex flex-col h-full rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
               <span className="text-sm font-extrabold uppercase tracking-wider text-zinc-200">
                 1. Actores del Sistema
@@ -588,7 +825,7 @@ export default function GodEyeDashboard({
             </div>
 
             {/* Lista compacta de selección rápida */}
-            <div className="mt-3 flex max-h-52 flex-col gap-2 overflow-y-auto pr-1">
+            <div className="mt-3 flex flex-1 min-h-[300px] max-h-[520px] flex-col gap-2 overflow-y-auto pr-1">
               {actorTab === "employee" &&
                 (filteredEmployees.length > 0 ? (
                   filteredEmployees.map((emp) => (
@@ -746,9 +983,11 @@ export default function GodEyeDashboard({
                 ))}
             </div>
           </div>
+        </div>
 
-          {/* FICHA 360° DEL ACTOR SELECCIONADO */}
-          <div className="flex-1 rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-2xl">
+        {/* COLUMNA 2: FICHA 360° DEL ACTOR SELECCIONADO (8 Cols) */}
+        <div className="flex flex-col lg:col-span-8 xl:col-span-8">
+          <div className="flex flex-1 flex-col rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-2xl h-full">
             {loadingDossier ? (
               <div className="flex h-64 items-center justify-center text-base font-semibold text-zinc-400">
                 <RefreshCw className="mr-2.5 h-5 w-5 animate-spin text-[#C5A55A]" />
@@ -1093,6 +1332,9 @@ export default function GodEyeDashboard({
                                       </button>
                                     </div>
                                   </div>
+
+                                  {/* Badges de problemas e indicadores de salud del servicio */}
+                                  <ServiceProblemBadges service={s} />
 
                                   {/* Detalles en 2 columnas */}
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
@@ -1707,14 +1949,15 @@ export default function GodEyeDashboard({
                               dossier.sanctions.map((s: any) => (
                                 <div
                                   key={s.id}
-                                  className={`flex items-center justify-between rounded-2xl border p-3.5 text-xs sm:text-sm ${
+                                  onClick={() => setSelectedSanctionDetail(s)}
+                                  className={`group relative flex items-center justify-between gap-3 rounded-2xl border p-3.5 text-xs sm:text-sm cursor-pointer transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/60 ${
                                     s.status === "active"
-                                      ? "border-red-900/60 bg-red-950/30"
-                                      : "border-zinc-900 bg-zinc-950/60 opacity-70"
+                                      ? "border-red-900/60 bg-red-950/30 hover:border-red-700/80"
+                                      : "border-zinc-900 bg-zinc-950/60 opacity-75 hover:opacity-100"
                                   }`}
                                 >
-                                  <div className="flex-1 pr-2 min-w-0">
-                                    <div className="flex items-center gap-2">
+                                  <div className="flex-1 pr-2 min-w-0 overflow-hidden">
+                                    <div className="flex items-center gap-2 flex-wrap">
                                       <span
                                         className={`font-extrabold uppercase text-xs sm:text-sm ${
                                           s.status === "active"
@@ -1749,24 +1992,33 @@ export default function GodEyeDashboard({
                                           : "Expirada"}
                                       </span>
                                     </div>
-                                    <p className="text-xs sm:text-sm text-zinc-200 mt-1">{s.reason}</p>
+                                    <p className="text-xs sm:text-sm text-zinc-200 mt-1 truncate block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                                      {s.reason || "Sin motivo especificado"}
+                                    </p>
                                     {s.revocationReason && (
-                                      <p className="text-xs text-zinc-400 italic mt-0.5">
+                                      <p className="text-xs text-zinc-400 italic mt-0.5 truncate block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
                                         Motivo revocación: {s.revocationReason}
                                       </p>
                                     )}
                                   </div>
-                                  {s.status === "active" && (
-                                    <button
-                                      onClick={() => {
-                                        setRevokingSanctionId(s.id);
-                                        setShowRevokeModal(true);
-                                      }}
-                                      className="shrink-0 rounded-xl border border-red-500/40 bg-red-950/50 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-900 transition-colors"
-                                    >
-                                      Revocar
-                                    </button>
-                                  )}
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {s.status === "active" && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setRevokingSanctionId(s.id);
+                                          setShowRevokeModal(true);
+                                        }}
+                                        className="rounded-xl border border-red-500/40 bg-red-950/50 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-900 transition-colors shadow-sm"
+                                      >
+                                        Revocar
+                                      </button>
+                                    )}
+                                    <ChevronRight
+                                      size={16}
+                                      className="text-zinc-600 group-hover:text-[#C5A55A] transition-colors"
+                                    />
+                                  </div>
                                 </div>
                               ))
                             ) : (
@@ -1827,14 +2079,15 @@ export default function GodEyeDashboard({
                           dossier.sanctions.map((s: any) => (
                             <div
                               key={s.id}
-                              className={`flex items-center justify-between rounded-2xl border p-3.5 text-xs sm:text-sm ${
+                              onClick={() => setSelectedSanctionDetail(s)}
+                              className={`group relative flex items-center justify-between gap-3 rounded-2xl border p-3.5 text-xs sm:text-sm cursor-pointer transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/60 ${
                                 s.status === "active"
-                                  ? "border-red-900/50 bg-red-950/20"
-                                  : "border-zinc-900 bg-zinc-950/60 opacity-70"
+                                  ? "border-red-900/50 bg-red-950/20 hover:border-red-700/80"
+                                  : "border-zinc-900 bg-zinc-950/60 opacity-75 hover:opacity-100"
                               }`}
                             >
-                              <div className="flex-1 pr-2 min-w-0">
-                                <div className="flex items-center gap-2">
+                              <div className="flex-1 pr-2 min-w-0 overflow-hidden">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span
                                     className={`font-extrabold uppercase text-xs sm:text-sm ${
                                       s.status === "active"
@@ -1863,19 +2116,33 @@ export default function GodEyeDashboard({
                                     {s.status === "active" ? "Activa" : "Revocada/Expirada"}
                                   </span>
                                 </div>
-                                <p className="text-xs sm:text-sm text-zinc-200 mt-1">{s.reason}</p>
+                                <p className="text-xs sm:text-sm text-zinc-200 mt-1 truncate block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                                  {s.reason || "Sin motivo especificado"}
+                                </p>
+                                {s.revocationReason && (
+                                  <p className="text-xs text-zinc-400 italic mt-0.5 truncate block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
+                                    Motivo revocación: {s.revocationReason}
+                                  </p>
+                                )}
                               </div>
-                              {s.status === "active" && (
-                                <button
-                                  onClick={() => {
-                                    setRevokingSanctionId(s.id);
-                                    setShowRevokeModal(true);
-                                  }}
-                                  className="shrink-0 rounded-xl border border-red-500/40 bg-red-950/50 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-900 transition-colors"
-                                >
-                                  Revocar
-                                </button>
-                              )}
+                              <div className="flex items-center gap-2 shrink-0">
+                                {s.status === "active" && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setRevokingSanctionId(s.id);
+                                      setShowRevokeModal(true);
+                                    }}
+                                    className="rounded-xl border border-red-500/40 bg-red-950/50 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-900 transition-colors shadow-sm"
+                                  >
+                                    Revocar
+                                  </button>
+                                )}
+                                <ChevronRight
+                                  size={16}
+                                  className="text-zinc-600 group-hover:text-[#C5A55A] transition-colors"
+                                />
+                              </div>
                             </div>
                           ))
                         ) : (
@@ -1895,71 +2162,155 @@ export default function GodEyeDashboard({
             )}
           </div>
         </div>
+      </div>
 
-        {/* COLUMNA 2: INVESTIGACIÓN CAUSAL & RADAR DE SERVICIOS (5 Cols) */}
-        <div className="flex flex-col gap-4 xl:col-span-5">
+      {/* 🎛️ FILA 2: SERVICIOS & DIAGNÓSTICO (IZQUIERDA) & INTERCEPTOR DE CHAT (DERECHA) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* COLUMNA IZQUIERDA: 2. SERVICIOS & TRIANGULACIÓN + DIAGNÓSTICO CAUSAL (6 Cols) */}
+        <div className="flex flex-col gap-6 lg:col-span-6 xl:col-span-6">
           {/* Selector de servicios activos / con incidentes */}
           <div className="rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
               <span className="text-sm font-extrabold uppercase tracking-wider text-zinc-200">
                 2. Servicios & Triangulación de Incidentes
               </span>
-              <span className="text-xs text-zinc-300 font-bold bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-lg">
-                {overview.activeServices.length} Activos
-              </span>
+              <div className="flex items-center gap-1 rounded-xl bg-zinc-900 p-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setActiveServiceFilter("all")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                    activeServiceFilter === "all"
+                      ? "bg-[#C5A55A] text-black shadow"
+                      : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  Todos ({overview.activeServices.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveServiceFilter("alerts")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                    activeServiceFilter === "alerts"
+                      ? "bg-amber-500 text-black shadow"
+                      : "text-amber-400/90 hover:text-amber-300"
+                  }`}
+                >
+                  ⚠️ Alertas (
+                  {
+                    overview.activeServices.filter(
+                      (s) => getServiceAlerts(s).length > 0,
+                    ).length
+                  }
+                  )
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveServiceFilter("clean")}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+                    activeServiceFilter === "clean"
+                      ? "bg-emerald-500 text-black shadow"
+                      : "text-emerald-400/90 hover:text-emerald-300"
+                  }`}
+                >
+                  ✅ Normales (
+                  {
+                    overview.activeServices.filter(
+                      (s) => getServiceAlerts(s).length === 0,
+                    ).length
+                  }
+                  )
+                </button>
+              </div>
             </div>
 
-            <div className="mt-3.5 flex max-h-52 flex-col gap-2.5 overflow-y-auto pr-1">
-              {overview.activeServices.length > 0 ? (
-                overview.activeServices.map((srv) => (
-                  <div
-                    key={srv.id}
-                    onClick={() => loadIncident(srv.id)}
-                    className={`flex items-center justify-between rounded-2xl px-4 py-3 text-left transition-all cursor-pointer ${
-                      selectedServiceId === srv.id
-                        ? "border border-[#C5A55A] bg-[#C5A55A]/15 text-white shadow-md"
-                        : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-bold text-zinc-100 text-sm sm:text-base truncate">
-                          {srv.empleadaNombre} · {srv.clienteNombre}
-                        </span>
-                        <span className="text-xs sm:text-sm text-zinc-300 font-medium mt-0.5">
+            <div className="mt-3.5 flex max-h-64 flex-col gap-2.5 overflow-y-auto pr-1">
+              {filteredActiveServices.length > 0 ? (
+                filteredActiveServices.map((srv) => {
+                  const alerts = getServiceAlerts(srv);
+                  const hasCritical = alerts.some((a) => a.severity === "critical");
+                  const hasWarning = alerts.some((a) => a.severity === "warning");
+
+                  return (
+                    <div
+                      key={srv.id}
+                      onClick={() => loadIncident(srv.id)}
+                      className={`flex flex-col gap-2 rounded-2xl p-3.5 text-left transition-all cursor-pointer ${
+                        selectedServiceId === srv.id
+                          ? "border border-[#C5A55A] bg-[#C5A55A]/15 text-white shadow-md"
+                          : hasCritical
+                          ? "border border-red-900/60 bg-red-950/20 text-zinc-300 hover:border-red-700"
+                          : hasWarning
+                          ? "border border-amber-900/50 bg-amber-950/15 text-zinc-300 hover:border-amber-700"
+                          : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                              srv.estado === "en_curso"
+                                ? "bg-emerald-400 animate-ping"
+                                : "bg-amber-400"
+                            }`}
+                          />
+                          <span className="font-bold text-zinc-100 text-sm sm:text-base truncate">
+                            {srv.empleadaNombre} · {srv.clienteNombre}
+                          </span>
+                          <span className="text-xs text-zinc-500 font-mono">
+                            #{srv.id.slice(0, 6).toUpperCase()}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`rounded-lg px-2 py-0.5 text-[11px] font-bold ${
+                              srv.iaActiva
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : "bg-red-500/20 text-red-300 border border-red-500/30"
+                            }`}
+                          >
+                            {srv.iaActiva ? "🤖 IA ON" : "🛑 IA OFF"}
+                          </span>
+                          {/* Botón rápido para abrir modal de gestión */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenServiceDetail(srv.id);
+                            }}
+                            disabled={loadingServiceDetail}
+                            className="rounded-xl border border-zinc-700 bg-zinc-900 p-1.5 text-zinc-300 hover:border-[#C5A55A] hover:text-[#E8D5A3] transition-all shadow-sm"
+                            title="Ver y Gestionar Servicio Completo"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-[#C5A55A]" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-zinc-300 font-medium">
+                        <span>
                           Duración: {srv.duracionPactadaHoras}h · ${srv.totalFinal} ({srv.metodoPago})
                         </span>
+                        <span className="text-[11px] text-zinc-500">
+                          {new Date(srv.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
                       </div>
+
+                      {/* Badges de problemas e indicadores */}
+                      <ServiceProblemBadges service={srv} />
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-2">
-                      <span
-                        className={`rounded-lg px-2.5 py-1 text-xs font-bold ${
-                          srv.iaActiva
-                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                            : "bg-red-500/20 text-red-300 border border-red-500/30"
-                        }`}
-                      >
-                        {srv.iaActiva ? "🤖 IA ON" : "🛑 IA PAUSADA"}
-                      </span>
-                      {/* Botón rápido para abrir modal de gestión */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenServiceDetail(srv.id);
-                        }}
-                        disabled={loadingServiceDetail}
-                        className="rounded-xl border border-zinc-700 bg-zinc-900 p-2 text-zinc-300 hover:border-[#C5A55A] hover:text-[#E8D5A3] transition-all shadow-sm"
-                        title="Ver y Gestionar Servicio Completo"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-sm text-zinc-500 text-center py-6">
-                  No hay servicios activos en curso en este momento.
+                  {activeServiceFilter === "alerts"
+                    ? "🎉 ¡Excelente! No hay servicios activos con alertas o problemas."
+                    : activeServiceFilter === "clean"
+                    ? "No hay servicios sin alertas activas."
+                    : "No hay servicios activos en curso en este momento."}
                 </p>
               )}
             </div>
@@ -2066,9 +2417,9 @@ export default function GodEyeDashboard({
           </div>
         </div>
 
-        {/* COLUMNA 3: INTERCEPTOR DE CHAT EN VIVO & OVERRIDES (3 Cols) */}
-        <div className="flex flex-col gap-4 xl:col-span-3">
-          <div className="flex flex-1 flex-col rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-2xl">
+        {/* COLUMNA DERECHA: 3. INTERCEPTOR DE CHAT EN VIVO & OVERRIDES (6 Cols) */}
+        <div className="flex flex-col lg:col-span-6 xl:col-span-6">
+          <div className="flex flex-1 flex-col rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-2xl h-full">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <span className="text-sm font-extrabold uppercase tracking-wider text-zinc-200">
                 3. Interceptor de Chat
@@ -2179,7 +2530,7 @@ export default function GodEyeDashboard({
         </div>
       </div>
 
-      {/* ⚖️ PANEL INFERIOR: BANDEJA DE APELACIONES & RESOLUCIÓN */}
+      {/* ⚖️ FILA 3: BANDEJA DE APELACIONES & RESOLUCIÓN (ANCHO COMPLETO) */}
       <div className="rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-2xl">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3.5">
           <div className="flex items-center gap-2.5">
@@ -2319,16 +2670,33 @@ export default function GodEyeDashboard({
 
             <div className="mt-6 flex justify-end gap-2.5">
               <button
-                onClick={() => setShowSanctionModal(false)}
+                type="button"
+                disabled={isApplyingSanction}
+                onClick={() => {
+                  setShowSanctionModal(false);
+                  setSanctionReason("");
+                }}
                 className="rounded-xl px-4 py-2.5 text-sm font-bold text-zinc-400 hover:text-white"
               >
                 Cancelar
               </button>
               <button
+                type="button"
+                disabled={
+                  !sanctionReason.trim() ||
+                  (sanctionType === "fine" && (!sanctionFineAmount || Number(sanctionFineAmount) <= 0)) ||
+                  isApplyingSanction
+                }
                 onClick={handleApplySanction}
-                className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-500 shadow-md"
+                className="flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 disabled:shadow-none disabled:border disabled:border-zinc-700/50"
               >
-                Confirmar Sanción
+                {isApplyingSanction ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" /> Aplicando...
+                  </>
+                ) : (
+                  "Confirmar Sanción"
+                )}
               </button>
             </div>
           </div>
@@ -2386,6 +2754,204 @@ export default function GodEyeDashboard({
                 ) : (
                   "Confirmar Revocación"
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📋 MODAL DE DETALLE COMPLETO DE SANCIÓN */}
+      {selectedSanctionDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+              <div className="flex items-center gap-3">
+                <span
+                  className={`p-2 rounded-xl border ${
+                    selectedSanctionDetail.type === "fine"
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                      : selectedSanctionDetail.type === "permanent_ban"
+                      ? "bg-red-500/20 border-red-500/40 text-red-400"
+                      : "bg-red-500/10 border-red-500/30 text-red-300"
+                  }`}
+                >
+                  {selectedSanctionDetail.type === "fine" ? (
+                    <Coins size={20} />
+                  ) : (
+                    <ShieldAlert size={20} />
+                  )}
+                </span>
+                <div>
+                  <h3 className="text-base sm:text-lg font-extrabold text-white">
+                    Detalle de Sanción Disciplinaria
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    ID: #{selectedSanctionDetail.id.slice(-8).toUpperCase()}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedSanctionDetail(null)}
+                className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Grid de Estado y Tipo */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">
+                  Tipo
+                </span>
+                <span className="text-xs sm:text-sm font-extrabold text-zinc-200">
+                  {selectedSanctionDetail.type === "fine"
+                    ? "Multa Monetaria"
+                    : selectedSanctionDetail.type === "suspension"
+                    ? "Suspensión"
+                    : "Baneo Permanente"}
+                </span>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">
+                  Estado
+                </span>
+                <span
+                  className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
+                    selectedSanctionDetail.status === "active"
+                      ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                      : selectedSanctionDetail.status === "revoked"
+                      ? "bg-zinc-800 text-zinc-300 border border-zinc-700"
+                      : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                  }`}
+                >
+                  {selectedSanctionDetail.status === "active"
+                    ? "Activa"
+                    : selectedSanctionDetail.status === "revoked"
+                    ? "Revocada"
+                    : "Expirada"}
+                </span>
+              </div>
+
+              {selectedSanctionDetail.fineAmount && Number(selectedSanctionDetail.fineAmount) > 0 ? (
+                <div className="rounded-2xl border border-red-500/30 bg-red-950/20 p-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-red-400 block mb-1">
+                    Monto Descontado
+                  </span>
+                  <span className="text-xs sm:text-sm font-extrabold text-red-300">
+                    -${selectedSanctionDetail.fineAmount} MXN
+                  </span>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1">
+                    Vigencia
+                  </span>
+                  <span className="text-xs sm:text-sm font-semibold text-zinc-300">
+                    {selectedSanctionDetail.type === "permanent_ban"
+                      ? "Permanente"
+                      : selectedSanctionDetail.endsAt
+                      ? "Temporal"
+                      : "Indefinida"}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Fechas */}
+            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-zinc-400">
+                <span>Fecha de aplicación:</span>
+                <span className="font-semibold text-zinc-200">
+                  {selectedSanctionDetail.createdAt
+                    ? new Date(selectedSanctionDetail.createdAt).toLocaleString("es-MX", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                    : "No registrada"}
+                </span>
+              </div>
+              {selectedSanctionDetail.startsAt && (
+                <div className="flex justify-between items-center text-zinc-400">
+                  <span>Inicio de vigencia:</span>
+                  <span className="font-semibold text-zinc-200">
+                    {new Date(selectedSanctionDetail.startsAt).toLocaleString("es-MX", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
+                </div>
+              )}
+              {selectedSanctionDetail.endsAt && (
+                <div className="flex justify-between items-center text-zinc-400">
+                  <span>Fin de vigencia:</span>
+                  <span className="font-semibold text-zinc-200">
+                    {new Date(selectedSanctionDetail.endsAt).toLocaleString("es-MX", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Motivo Completo */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold uppercase tracking-wider text-[#C5A55A] flex items-center gap-1.5">
+                <FileCheck size={14} /> Motivo Completo de la Sanción
+              </label>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-xs sm:text-sm text-zinc-200 whitespace-pre-wrap break-words leading-relaxed max-h-44 overflow-y-auto">
+                {selectedSanctionDetail.reason || "Sin motivo especificado."}
+              </div>
+            </div>
+
+            {/* Información de Revocación si existe */}
+            {(selectedSanctionDetail.status === "revoked" || selectedSanctionDetail.revocationReason) && (
+              <div className="rounded-2xl border border-emerald-900/40 bg-emerald-950/20 p-4 space-y-1.5">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 size={14} /> Información de Revocación
+                </span>
+                <p className="text-xs sm:text-sm text-zinc-200 whitespace-pre-wrap break-words leading-relaxed">
+                  {selectedSanctionDetail.revocationReason || "Sanción revocada sin motivo registrado."}
+                </p>
+                {selectedSanctionDetail.revokedAt && (
+                  <p className="text-[11px] text-zinc-400 pt-1">
+                    Revocada el:{" "}
+                    {new Date(selectedSanctionDetail.revokedAt).toLocaleString("es-MX", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Footer con Acciones */}
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80">
+              {selectedSanctionDetail.status === "active" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevokingSanctionId(selectedSanctionDetail.id);
+                    setShowRevokeModal(true);
+                    setSelectedSanctionDetail(null);
+                  }}
+                  className="rounded-xl border border-red-500/40 bg-red-950/50 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-300 hover:bg-red-900 transition-colors shadow-sm"
+                >
+                  Revocar Sanción
+                </button>
+              ) : (
+                <div />
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedSanctionDetail(null)}
+                className="rounded-xl px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-zinc-300 hover:bg-zinc-900 hover:text-white transition-all border border-zinc-800"
+              >
+                Cerrar
               </button>
             </div>
           </div>

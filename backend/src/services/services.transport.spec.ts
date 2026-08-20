@@ -32,6 +32,10 @@ describe('ServicesService transport settlement', () => {
     },
   };
   const loyalty = { awardForFinalizedService: jest.fn() };
+  const aiMessageService = {
+    generate: jest.fn().mockResolvedValue('Mensaje IA'),
+    generateAgencyMessage: jest.fn().mockResolvedValue('Mensaje Agencia'),
+  };
   const liquidationSync = {
     syncOfficeRecord: jest.fn().mockResolvedValue(null),
   };
@@ -51,7 +55,7 @@ describe('ServicesService transport settlement', () => {
     realtime as any,
     bot as any,
     {} as any,
-    {} as any,
+    aiMessageService as any,
     loyalty as any,
     liquidationSync as any,
     { get: jest.fn() } as any,

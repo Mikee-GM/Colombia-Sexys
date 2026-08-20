@@ -69,10 +69,13 @@ export class GodEyeService {
         s.estado,
         s.metodo_pago AS "metodoPago",
         s.duracion_pactada_horas AS "duracionPactadaHoras",
+        s.duracion_final_horas AS "duracionFinalHoras",
         s.precio_base_hora_pactado AS "precioBaseHoraPactado",
         s.total_final AS "totalFinal",
         s.ia_activa AS "iaActiva",
         s.hora_inicio_servicio AS "horaInicioServicio",
+        s.hora_fin_servicio AS "horaFinServicio",
+        s.estado_liquidacion AS "estadoLiquidacion",
         s.created_at AS "createdAt",
         s.notas,
         c.id AS "clienteId",
@@ -81,14 +84,38 @@ export class GodEyeService {
         e.nombre_artistico AS "empleadaNombre",
         e.foto_perfil_url AS "empleadaFoto",
         u.id AS "jefeId",
-        u.email AS "jefeEmail"
+        u.email AS "jefeEmail",
+        COALESCE(
+          (
+            SELECT json_agg(json_build_object(
+              'id', v.id,
+              'tipo', v.tipo,
+              'estado', v.estado,
+              'tarifa', v.tarifa,
+              'proveedorTransporte', v.proveedor_transporte,
+              'uberScreenshotUrl', v.uber_screenshot_url,
+              'telegramUberFileId', v.telegram_uber_file_id,
+              'fareConfirmedAt', v.fare_confirmed_at,
+              'choferNombre', ch.nombre
+            ))
+            FROM viajes v
+            LEFT JOIN choferes ch ON ch.id = v.chofer_id
+            WHERE v.servicio_id = s.id
+          ),
+          '[]'::json
+        ) AS "viajes",
+        (
+          SELECT COUNT(*)::int
+          FROM payment_receipt_validations prv
+          WHERE prv.servicio_id = s.id AND prv.estado = 'pendiente'
+        ) AS "pendingReceiptsCount"
       FROM servicios s
       LEFT JOIN clientes c ON c.id = s.cliente_id
       LEFT JOIN empleadas e ON e.id = s.empleada_id
       LEFT JOIN usuarios u ON u.id = s.jefe_id
       WHERE s.estado IN ('pendiente', 'en_curso')
       ORDER BY s.created_at DESC
-      LIMIT 20
+      LIMIT 25
     `);
 
     return {
@@ -240,6 +267,10 @@ export class GodEyeService {
               s.total_final AS "totalFinal",
               s.hora_inicio_servicio AS "horaInicioServicio",
               s.hora_fin_servicio AS "horaFinServicio",
+              s.estado_liquidacion AS "estadoLiquidacion",
+              s.ia_activa AS "iaActiva",
+              s.calificacion,
+              s.comentarios_calificacion AS "comentariosCalificacion",
               s.location_name_snapshot AS "hotelODomicilio",
               s.location_address_snapshot AS "ubicacion",
               s.location_name_snapshot AS "locationName",
@@ -259,6 +290,9 @@ export class GodEyeService {
                     'estado', v.estado,
                     'tarifa', v.tarifa,
                     'proveedorTransporte', v.proveedor_transporte,
+                    'uberScreenshotUrl', v.uber_screenshot_url,
+                    'telegramUberFileId', v.telegram_uber_file_id,
+                    'fareConfirmedAt', v.fare_confirmed_at,
                     'choferNombre', ch.nombre,
                     'choferTelefono', ch.telefono,
                     'vehiculoModelo', ch.vehiculo_modelo
@@ -269,6 +303,11 @@ export class GodEyeService {
                 ),
                 '[]'::json
               ) AS "viajes",
+              (
+                SELECT COUNT(*)::int
+                FROM payment_receipt_validations prv
+                WHERE prv.servicio_id = s.id AND prv.estado = 'pendiente'
+              ) AS "pendingReceiptsCount",
               COALESCE(
                 (
                   SELECT json_agg(json_build_object(
@@ -559,10 +598,12 @@ export class GodEyeService {
           `SELECT
             id,
             type,
+            fine_amount AS "fineAmount",
             status,
             reason,
             starts_at AS "startsAt",
             ends_at AS "endsAt",
+            revocation_reason AS "revocationReason",
             created_at AS "createdAt"
           FROM disciplinary_sanctions
           WHERE subject_type = 'driver' AND subject_id = $1
@@ -930,7 +971,12 @@ export class GodEyeService {
             : null;
         const score =
           promedio != null
-            ? Math.max(0, Math.round((Number(promedio) / 5) * 100 - Number(confirmed) * 8))
+            ? Math.max(
+                0,
+                Math.round(
+                  (Number(promedio) / 5) * 100 - Number(confirmed) * 8,
+                ),
+              )
             : null;
         return { id: emp.id, score };
       });

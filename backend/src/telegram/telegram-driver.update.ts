@@ -1073,7 +1073,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
             employeeName: trip.servicio.empleada.nombreArtistico,
             driverName: chofer.nombre,
           },
-          'Ya voy para allá, nos vemos en un ratico 😊',
+          'Ya voy para allá, nos vemos en un ratico',
         );
         await ctx.telegram.sendMessage(
           trip.servicio.cliente.telegramChatId,
@@ -1448,7 +1448,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
         const clientMessage = await this.aiMessageService.generate(
           'employee_arrived',
           { employeeName: trip.servicio.empleada.nombreArtistico },
-          'Ya llegué al punto que cuadramos, aquí te espero 😊',
+          'Ya llegué al punto que cuadramos, aquí te espero',
         );
         await ctx.telegram.sendMessage(
           trip.servicio.cliente.telegramChatId,
