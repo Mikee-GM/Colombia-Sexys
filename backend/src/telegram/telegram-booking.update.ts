@@ -343,6 +343,7 @@ export function extractHirePaymentMethod(
   text: string,
 ): SessionData['metodoPago'] | undefined {
   const normalized = text.toLowerCase();
+  if (/\bmixto\b/.test(normalized)) return 'mixto';
   if (/\befectivo\b/.test(normalized)) return 'efectivo';
   if (/\btarjeta\b/.test(normalized)) return 'tarjeta';
   if (/\btransferencia\b/.test(normalized)) return 'transferencia';
