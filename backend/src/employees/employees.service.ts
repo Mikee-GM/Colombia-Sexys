@@ -21,6 +21,7 @@ import { UploadService } from '../upload/upload.service';
 import { EmployeeOnboarding } from '../employee-onboarding/entities/employee-onboarding.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { WeeklyContentService } from '../weekly-content/weekly-content.service';
+import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 
 @Injectable()
 export class EmployeesService {
@@ -955,6 +956,52 @@ export class EmployeesService {
       .map((f) => f.url)
       .filter(Boolean);
 
+    // 4. Cash Delivery / Obligations
+    const cashObligationEntities = await this.dataSource
+      .getRepository(EmployeeCashObligation)
+      .find({
+        where: { employeeId: empleada.id, status: 'pending' },
+        order: { createdAt: 'DESC' },
+      });
+
+    const obligations = cashObligationEntities.map((o) => {
+      const amt = Number(o.amount) || 0;
+      const paid = Number(o.paidAmount) || 0;
+      const pending = Math.max(0, amt - paid);
+      return {
+        id: o.id,
+        serviceId: o.serviceId,
+        amount: amt,
+        paidAmount: paid,
+        pendingAmount: pending,
+        calculationStatus: o.calculationStatus,
+        pendingReason: o.pendingReason || null,
+        customerTotal: Number(o.customerTotal) || 0,
+        uberDeduction: Number(o.uberDeduction) || 0,
+        serviceDate: o.serviceDate
+          ? new Date(o.serviceDate).toISOString()
+          : new Date().toISOString(),
+        createdAt: o.createdAt
+          ? new Date(o.createdAt).toISOString()
+          : new Date().toISOString(),
+      };
+    });
+
+    const totalCashPending = obligations.reduce(
+      (sum, item) => sum + item.pendingAmount,
+      0,
+    );
+    const hasProvisionalCash = obligations.some(
+      (item) => item.calculationStatus === 'provisional',
+    );
+
+    const cashDelivery = {
+      totalPending: Math.round(totalCashPending * 100) / 100,
+      pendingServicesCount: obligations.length,
+      hasProvisional: hasProvisionalCash,
+      obligations,
+    };
+
     return {
       profile: {
         id: empleada.id,
@@ -989,6 +1036,7 @@ export class EmployeesService {
         totalHistoricalHours,
         percentageRate: 60,
       },
+      cashDelivery,
       activeService: activeServiceDto,
       recentServices: mappedRecentServices,
       reputation: {

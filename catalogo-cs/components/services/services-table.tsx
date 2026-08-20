@@ -151,11 +151,24 @@ export default function ServicesTable({ initialServices = [] }: Props) {
                     </td>
 
                     <td className="p-4">
-                      <ServiceStatusBadge status={service.estado} />
-                      {service.horaInicioEstimada && (
-                        <p className="mt-1 text-[11px] text-zinc-500">
-                          Llegada: {formatAvailabilityTime(service.horaInicioEstimada)}
+                      <div className="flex items-center gap-1.5">
+                        <ServiceStatusBadge status={service.estado} />
+                        {service.tipoAgenda === "programado" && (
+                          <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-purple-300">
+                            📅 Cita
+                          </span>
+                        )}
+                      </div>
+                      {service.tipoAgenda === "programado" && service.fechaProgramada ? (
+                        <p className="mt-1 text-[11px] text-purple-300 font-medium">
+                          Cita: {new Date(service.fechaProgramada).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
                         </p>
+                      ) : (
+                        service.horaInicioEstimada && (
+                          <p className="mt-1 text-[11px] text-zinc-500">
+                            Llegada: {formatAvailabilityTime(service.horaInicioEstimada)}
+                          </p>
+                        )
                       )}
                     </td>
 

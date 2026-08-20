@@ -106,6 +106,8 @@ interface SessionData {
   appealRatingId?: string;
   appealSubjectType?: 'client' | 'employee' | 'driver';
   appealSubjectId?: string;
+  fechaProgramada?: string;
+  tipoAgenda?: 'inmediato' | 'programado';
 }
 
 interface BotContext extends Context {
@@ -895,6 +897,52 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     await this.recordDraftConversation(ctx, 'sistema', message);
   }
 
+  private async getEmployeeBusySchedules(
+    empleadaId: string,
+  ): Promise<{ inicio: string; fin: string; descripcion?: string }[]> {
+    try {
+      const upcomingServices = await this.serviciosRepository.find({
+        where: {
+          empleadaId,
+          estado: In(['pendiente', 'agendado', 'en_curso']),
+        },
+        order: { fechaProgramada: 'ASC', createdAt: 'ASC' },
+      });
+
+      const schedules: { inicio: string; fin: string; descripcion?: string }[] =
+        [];
+      for (const s of upcomingServices) {
+        const start =
+          s.fechaProgramada ||
+          s.horaInicioEstimada ||
+          s.horaInicioServicio ||
+          s.createdAt;
+        if (!start) continue;
+        const startDate = new Date(start);
+        const durationHours = Number(s.duracionPactadaHoras) || 1;
+        const endDate = new Date(
+          startDate.getTime() + (durationHours * 60 + 45) * 60_000,
+        );
+        schedules.push({
+          inicio: startDate.toLocaleString('es-MX', {
+            timeZone: 'America/Mexico_City',
+            dateStyle: 'short',
+            timeStyle: 'short',
+          }),
+          fin: endDate.toLocaleString('es-MX', {
+            timeZone: 'America/Mexico_City',
+            timeStyle: 'short',
+          }),
+          descripcion:
+            s.estado === 'en_curso' ? 'En servicio activo' : 'Cita agendada',
+        });
+      }
+      return schedules;
+    } catch {
+      return [];
+    }
+  }
+
   async startHireSession(ctx: any, empleadaId: string) {
     const empleada = await this.empleadasRepository.findOne({
       where: { id: empleadaId },
@@ -995,11 +1043,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       await this.recordDraftConversation(ctx, 'sistema', waitingMessage);
     }
 
-    const [empleadaExtras, presetLocations] = await Promise.all([
+    const [empleadaExtras, presetLocations, busySchedules] = await Promise.all([
       this.extrasCatalogoRepository.find({
         where: { empleadaId: empleada.id, activo: true },
       }),
       this.transportOperations.activeLocations(),
+      this.getEmployeeBusySchedules(empleada.id),
     ]);
 
     const extrasData = empleadaExtras.map((e) => ({
@@ -1016,6 +1065,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       descripcion: empleada.descripcion,
       extras: extrasData,
       ubicacionesPreestablecidas: ubicacionesData,
+      fechaHoraActual: new Date().toLocaleString('es-MX', {
+        timeZone: 'America/Mexico_City',
+      }),
+      horariosOcupados: busySchedules,
     };
 
     const systemPrompt = activeService
@@ -3213,6 +3266,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }
 
       // ─── FLUJO NORMAL ────────────────────────────────────────────────────────
+      const isProgramado = ctx.session?.tipoAgenda === 'programado';
+      const fechaProg = ctx.session?.fechaProgramada
+        ? new Date(ctx.session.fechaProgramada)
+        : undefined;
+
       const nuevoServicio = await this.servicesService.reserveNext({
         clienteId: client.id,
         empleadaId: empleada.id,
@@ -3231,6 +3289,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         locationAddressSnapshot: ctx.session?.locationAddressSnapshot ?? null,
         customerTransportCharge: ctx.session?.customerTransportCharge ?? 0,
         totalTransporte: ctx.session?.customerTransportCharge ?? 0,
+        fechaProgramada: fechaProg,
+        tipoAgenda: isProgramado ? 'programado' : 'inmediato',
       });
       if (receiptValidationId) {
         await this.paymentReceiptValidationsRepository.update(
@@ -3260,18 +3320,35 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             topic.message_thread_id,
           );
 
+          const fechaProgFormatted = nuevoServicio.fechaProgramada
+            ? new Date(nuevoServicio.fechaProgramada).toLocaleString('es-MX', {
+                timeZone: 'America/Mexico_City',
+              })
+            : null;
+
           const detailsMsg =
-            `📋 *Información del Servicio:*\n\n` +
+            (isProgramado
+              ? `📅 *SOLICITUD DE CITA PROGRAMADA*\n\n`
+              : `📋 *Información del Servicio:*\n\n`) +
             `• *Cliente:* ${clientName} (ID: ${telegramId})\n` +
             `• *Empleada:* ${empleada.nombreArtistico}\n` +
+            (isProgramado && fechaProgFormatted
+              ? `• *Fecha/Hora de Cita:* ${fechaProgFormatted}\n`
+              : '') +
             `• *Duración:* ${duracionPactadaHoras} horas\n` +
             `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
             `• *Tarifa:* $${empleada.precioBaseHora}/hr\n` +
             (notasUbicacionSafe
               ? `• *Ubicación/Notas:* ${notasUbicacionSafe}\n`
               : '') +
-            `• *Estado:* ${nuevoServicio.servicioPrevioId ? 'Pendiente para agendar' : 'Pendiente'}` +
-            (nuevoServicio.horaInicioEstimada
+            `• *Estado:* ${
+              nuevoServicio.servicioPrevioId
+                ? 'Pendiente para agendar'
+                : isProgramado
+                  ? 'Pendiente (Cita Programada)'
+                  : 'Pendiente'
+            }` +
+            (!isProgramado && nuevoServicio.horaInicioEstimada
               ? `\n• *Llegada estimada:* ${nuevoServicio.horaInicioEstimada.toLocaleTimeString(
                   'es-MX',
                   {
@@ -3350,7 +3427,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       );
       const total = totalBase + transportCharge;
 
-      let msgExito = `*Resumen de nuestra cita:*\n\n`;
+      let msgExito = isProgramado
+        ? `*Resumen de nuestra cita programada:*\n\n`
+        : `*Resumen de nuestra cita:*\n\n`;
+      if (isProgramado && nuevoServicio.fechaProgramada) {
+        msgExito += `*Fecha y hora:* ${new Date(nuevoServicio.fechaProgramada).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}\n`;
+      }
       msgExito += `*Tiempo:* ${duracionPactadaHoras} hora(s)\n`;
       if (transportCharge > 0) {
         msgExito += `*Total a pagar:* ${formatoMoneda.format(total)} (incluye transporte)\n`;
@@ -3361,7 +3443,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         nuevoServicio.locationNameSnapshot || 'Ubicación enviada';
       msgExito += `*Lugar:* ${ubicacionNombre}\n`;
       msgExito += `*Método de pago:* ${metodoPago.toUpperCase()}\n\n`;
-      msgExito += `¿Todo correcto mor? Yo me voy arreglando para salir a verte rapidito 🔥 Dame un momentico mientras mi chofer confirma la ruta y te aviso.`;
+      if (isProgramado) {
+        msgExito += `¿Todo correcto mor? Tu cita quedó solicitada. Un ratico antes de la hora te avisaré para confirmar que voy saliendo.`;
+      } else {
+        msgExito += `¿Todo correcto mor? Yo me voy arreglando para salir a verte rapidito 🔥 Dame un momentico mientras mi chofer confirma la ruta y te aviso.`;
+      }
 
       const msg = await ctx.telegram.sendMessage(telegramId, msgExito, {
         ...Markup.removeKeyboard(),
@@ -4770,12 +4856,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const history = session.chatHistory || [];
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      const [empleadaExtras, presetLocations] = await Promise.all([
-        this.extrasCatalogoRepository.find({
-          where: { empleadaId: empleada.id, activo: true },
-        }),
-        this.transportOperations.activeLocations(),
-      ]);
+      const [empleadaExtras, presetLocations, busySchedules] =
+        await Promise.all([
+          this.extrasCatalogoRepository.find({
+            where: { empleadaId: empleada.id, activo: true },
+          }),
+          this.transportOperations.activeLocations(),
+          this.getEmployeeBusySchedules(empleada.id),
+        ]);
 
       const extrasData = empleadaExtras.map((e) => ({
         nombre: e.nombre,
@@ -4793,6 +4881,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ubicacionesPreestablecidas: ubicacionesData,
         duracionPactada: session.duracionPactadaHoras,
         metodoPago: session.metodoPago,
+        fechaHoraActual: new Date().toLocaleString('es-MX', {
+          timeZone: 'America/Mexico_City',
+        }),
+        horariosOcupados: busySchedules,
+        fechaProgramadaPactada: session.fechaProgramada
+          ? new Date(session.fechaProgramada).toLocaleString('es-MX', {
+              timeZone: 'America/Mexico_City',
+            })
+          : null,
       });
       const systemPrompt = session.selectedEmployeeBusy
         ? `Eres el asistente de la agencia, no eres la empleada y nunca debes hablar como si lo fueras. ${generalPrompt}`
@@ -4883,6 +4980,23 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               parsedDuracion <= 24
             ) {
               session.duracionPactadaHoras = parsedDuracion;
+              if (
+                parsedData.fechaProgramada &&
+                typeof parsedData.fechaProgramada === 'string'
+              ) {
+                const parsedDate = new Date(parsedData.fechaProgramada);
+                if (
+                  !isNaN(parsedDate.getTime()) &&
+                  parsedDate.getTime() > Date.now()
+                ) {
+                  session.fechaProgramada = parsedDate.toISOString();
+                  session.tipoAgenda = 'programado';
+                }
+              } else {
+                session.fechaProgramada = undefined;
+                session.tipoAgenda = 'inmediato';
+              }
+
               if (userProvidedPayment) {
                 session.metodoPago = userProvidedPayment;
               } else if (

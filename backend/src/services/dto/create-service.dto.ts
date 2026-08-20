@@ -53,4 +53,20 @@ export class CreateServiceDto {
   @IsOptional()
   @IsString()
   notas?: string;
+
+  @ApiPropertyOptional({
+    description: 'Fecha y hora para servicio programado',
+    example: '2026-08-21T18:00:00.000Z',
+  })
+  @IsOptional()
+  fechaProgramada?: Date | string;
+
+  @ApiPropertyOptional({
+    description: 'Tipo de agenda',
+    enum: ['inmediato', 'programado'],
+    default: 'inmediato',
+  })
+  @IsOptional()
+  @IsEnum(['inmediato', 'programado'])
+  tipoAgenda?: 'inmediato' | 'programado';
 }

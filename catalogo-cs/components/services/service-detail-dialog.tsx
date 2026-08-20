@@ -209,6 +209,11 @@ export default function ServiceDetailDialog({
                 SERVICIO #{service.id.slice(-6).toUpperCase()}
               </span>
               <ServiceStatusBadge status={service.estado} />
+              {service.tipoAgenda === "programado" && (
+                <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-300">
+                  📅 Cita Programada
+                </span>
+              )}
             </div>
             <h2 className="text-xl font-heading font-semibold text-white mt-1">
               {service.empleada?.nombreArtistico || "Sin empleada asignada"}
@@ -462,7 +467,13 @@ export default function ServiceDetailDialog({
                         {service.locationAddressSnapshot}
                       </p>
                     )}
-                    {service.horaInicioEstimada && (
+                    {service.tipoAgenda === "programado" && service.fechaProgramada && (
+                      <p className="text-xs text-purple-300 font-medium flex items-center gap-1">
+                        <Clock3 size={13} className="text-purple-400 shrink-0" />
+                        Cita pactada: {new Date(service.fechaProgramada).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
+                      </p>
+                    )}
+                    {service.horaInicioEstimada && service.tipoAgenda !== "programado" && (
                       <p className="text-xs text-zinc-400 flex items-center gap-1">
                         <Clock3 size={13} className="text-zinc-500" />
                         Llegada estimada: {formatAvailabilityTime(service.horaInicioEstimada)}

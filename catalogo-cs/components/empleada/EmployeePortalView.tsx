@@ -91,6 +91,14 @@ export default function EmployeePortalView({ initialData }: EmployeePortalViewPr
                 </span>
                 <span>•</span>
                 <span>Tarifa: {formatCurrency(data.profile.precioBaseHora)}/hr</span>
+                {(data.cashDelivery?.totalPending || 0) > 0 && (
+                  <>
+                    <span>•</span>
+                    <span className="text-amber-300 font-semibold flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                      <span>💵</span> Debe: {formatCurrency(data.cashDelivery?.totalPending || 0)}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -173,7 +181,7 @@ export default function EmployeePortalView({ initialData }: EmployeePortalViewPr
             )}
 
             {/* KPI STATS CARDS */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
               <div className="bg-[#141721] p-4 rounded-xl border border-white/5 shadow-sm relative overflow-hidden">
                 <div className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">
                   Ganancias Mes
@@ -210,7 +218,37 @@ export default function EmployeePortalView({ initialData }: EmployeePortalViewPr
                 </div>
               </div>
 
-              <div className="bg-[#141721] p-4 rounded-xl border border-white/5 shadow-sm relative overflow-hidden">
+              <div
+                className={`p-4 rounded-xl border shadow-sm relative overflow-hidden ${
+                  (data.cashDelivery?.totalPending || 0) > 0
+                    ? "bg-gradient-to-br from-amber-950/40 to-[#141721] border-amber-500/40"
+                    : "bg-[#141721] border-white/5"
+                }`}
+              >
+                <div className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">
+                  Efectivo por Entregar
+                </div>
+                <div
+                  className={`text-xl sm:text-2xl font-extrabold mt-1 ${
+                    (data.cashDelivery?.totalPending || 0) > 0
+                      ? "text-amber-300"
+                      : "text-emerald-400"
+                  }`}
+                >
+                  {formatCurrency(data.cashDelivery?.totalPending || 0)}
+                </div>
+                <div className="text-[10px] text-gray-500 mt-1">
+                  {(data.cashDelivery?.totalPending || 0) > 0
+                    ? `${data.cashDelivery?.pendingServicesCount} ${
+                        data.cashDelivery?.pendingServicesCount === 1
+                          ? "servicio pendiente"
+                          : "servicios pendientes"
+                      }`
+                    : "Al día (sin deudas)"}
+                </div>
+              </div>
+
+              <div className="bg-[#141721] p-4 rounded-xl border border-white/5 shadow-sm relative overflow-hidden col-span-2 sm:col-span-1">
                 <div className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">
                   Calificación
                 </div>
@@ -222,6 +260,141 @@ export default function EmployeePortalView({ initialData }: EmployeePortalViewPr
                   {data.reputation.ratingCount} valoraciones
                 </div>
               </div>
+            </div>
+
+            {/* SECCIÓN DETALLADA DE CONTROL DE EFECTIVO */}
+            <div
+              className={`p-5 rounded-xl border ${
+                (data.cashDelivery?.totalPending || 0) > 0
+                  ? "bg-gradient-to-br from-amber-950/30 via-[#141721] to-black border-amber-500/40 shadow-lg"
+                  : "bg-[#141721] border-white/5"
+              } space-y-4`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${
+                      (data.cashDelivery?.totalPending || 0) > 0
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                    }`}
+                  >
+                    💵
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-white">
+                        Control de Efectivo por Entregar
+                      </h3>
+                      {(data.cashDelivery?.totalPending || 0) > 0 ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase tracking-wider">
+                          {data.cashDelivery?.pendingServicesCount}{" "}
+                          {data.cashDelivery?.pendingServicesCount === 1
+                            ? "servicio"
+                            : "servicios"}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
+                          Al Día
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {(data.cashDelivery?.totalPending || 0) > 0
+                        ? "Efectivo cobrado en tus servicios que debes entregar a administración o a tu jefe."
+                        : "No tienes cobros en efectivo pendientes de liquidar con administración."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-left sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5">
+                  <div className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">
+                    Saldo Pendiente
+                  </div>
+                  <div
+                    className={`text-2xl font-black mt-0.5 ${
+                      (data.cashDelivery?.totalPending || 0) > 0
+                        ? "text-amber-300"
+                        : "text-emerald-400"
+                    }`}
+                  >
+                    {formatCurrency(data.cashDelivery?.totalPending || 0)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Alerta de montos provisionales si aplica */}
+              {data.cashDelivery?.hasProvisional && (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
+                  <span>ℹ️</span>
+                  <span>
+                    Hay servicios con deducciones de transporte en estado provisional, en espera de confirmación de Uber por tu jefe.
+                  </span>
+                </div>
+              )}
+
+              {/* Desglose de servicios con efectivo pendiente */}
+              {data.cashDelivery?.obligations &&
+                data.cashDelivery.obligations.length > 0 && (
+                  <div className="pt-2 border-t border-white/5 space-y-2">
+                    <div className="text-xs font-semibold text-gray-300">
+                      Desglose de entregas pendientes:
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {data.cashDelivery.obligations.map((item) => (
+                        <div
+                          key={item.id}
+                          className="p-3 rounded-lg bg-black/40 border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-[#C5A55A]">
+                                Servicio #{item.serviceId.slice(-6).toUpperCase()}
+                              </span>
+                              <span className="text-gray-400">
+                                • {formatDate(item.serviceDate)}
+                              </span>
+                              {item.calculationStatus === "provisional" && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+                                  Provisional
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-gray-400 text-[11px] mt-1 flex flex-wrap gap-x-3">
+                              <span>
+                                Cobro cliente: {formatCurrency(item.customerTotal)}
+                              </span>
+                              {item.uberDeduction > 0 && (
+                                <span className="text-emerald-400">
+                                  Deducción Uber: -{formatCurrency(item.uberDeduction)}
+                                </span>
+                              )}
+                              {item.paidAmount > 0 && (
+                                <span className="text-blue-400">
+                                  Abonado: {formatCurrency(item.paidAmount)}
+                                </span>
+                              )}
+                            </div>
+                            {item.pendingReason && (
+                              <p className="text-[10px] text-amber-400 mt-1">
+                                {item.pendingReason}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-1.5 sm:pt-0 border-white/5">
+                            <span className="text-[10px] text-gray-400">
+                              Por entregar:
+                            </span>
+                            <span className="text-sm font-bold text-amber-300">
+                              {formatCurrency(item.pendingAmount)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
             </div>
 
             {/* INFORMACIÓN DE ESQUEMA Y CONTENIDO SEMANAL */}

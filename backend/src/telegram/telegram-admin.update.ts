@@ -630,6 +630,69 @@ export class TelegramAdminUpdate {
     }
   }
 
+  @Action(/^sched_trans:(.+):(chofer|uber)$/)
+  async onScheduledTransportChoice(@Ctx() ctx: Context) {
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
+
+    const user = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+
+    if (!user || (user.rol !== 'jefe' && user.rol !== 'admin')) {
+      await ctx.answerCbQuery(
+        '❌ No tienes permisos para realizar esta acción.',
+        { show_alert: true },
+      );
+      return;
+    }
+
+    const match = (ctx as any).match;
+    const serviceId = match[1];
+    const transportType = match[2] as 'chofer' | 'uber';
+
+    try {
+      const res = await this.servicesService.dispatchScheduledTrip(
+        serviceId,
+        transportType,
+      );
+
+      await ctx.answerCbQuery(
+        `✅ Traslado iniciado con ${transportType === 'uber' ? 'Uber' : 'Chofer'}`,
+      );
+
+      const originalText = (ctx.callbackQuery?.message as any)?.text || '';
+      const resolutionMsg = `\n\n📢 *Traslado despachado:* ${
+        transportType === 'uber' ? 'Uber' : 'Chofer'
+      } por ${user.email}${res.uberLink ? `\n🔗 *Enlace Uber:* [Pedir Uber](${res.uberLink})` : ''}`;
+
+      const inlineButtons: any[] = [];
+      if (transportType === 'uber' && res.uberLink) {
+        inlineButtons.push([Markup.button.url('Pedir Uber', res.uberLink)]);
+        if (res.viajeId) {
+          inlineButtons.push([
+            Markup.button.callback(
+              'Adjuntar captura',
+              `uber_attach:${res.viajeId}`,
+            ),
+          ]);
+        }
+      }
+
+      await ctx.editMessageText(originalText + resolutionMsg, {
+        parse_mode: 'Markdown',
+        ...(inlineButtons.length > 0
+          ? { reply_markup: Markup.inlineKeyboard(inlineButtons).reply_markup }
+          : {}),
+      });
+    } catch (err: any) {
+      console.error('Error al despachar cita programada:', err);
+      await ctx.answerCbQuery(err.message || 'Error al iniciar el traslado.', {
+        show_alert: true,
+      });
+    }
+  }
+
   @Action(/^canc_ja:(.+)$/)
   async onCancJefeAutorizar(@Ctx() ctx: Context) {
     await ctx.answerCbQuery('Acción cancelada.');

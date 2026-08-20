@@ -162,6 +162,60 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         .setLock('pessimistic_write')
         .where('employee.id = :id', { id: createData.empleadaId })
         .getOneOrFail();
+
+      if (
+        createData.tipoAgenda === 'programado' ||
+        createData.fechaProgramada
+      ) {
+        const scheduledDate = new Date(createData.fechaProgramada!);
+        const durationHours = Number(createData.duracionPactadaHoras) || 1;
+        const scheduledEnd = new Date(
+          scheduledDate.getTime() + (durationHours * 60 + 45) * 60_000,
+        );
+        const scheduledStartWithBuffer = new Date(
+          scheduledDate.getTime() - 45 * 60_000,
+        );
+
+        const existingServices = await manager.find(Servicios, {
+          where: {
+            empleadaId: createData.empleadaId,
+            estado: In(['pendiente', 'agendado', 'en_curso']),
+          },
+        });
+
+        for (const existing of existingServices) {
+          const start =
+            existing.fechaProgramada ||
+            existing.horaInicioEstimada ||
+            existing.horaInicioServicio ||
+            existing.createdAt;
+          if (!start) continue;
+          const startDate = new Date(start);
+          const end = new Date(
+            startDate.getTime() +
+              (Number(existing.duracionPactadaHoras) * 60 + 45) * 60_000,
+          );
+          const startWithBuffer = new Date(startDate.getTime() - 45 * 60_000);
+
+          if (
+            scheduledDate.getTime() < end.getTime() &&
+            scheduledEnd.getTime() > startWithBuffer.getTime()
+          ) {
+            throw new ConflictException(
+              'La empleada ya tiene un compromiso agendado en ese horario',
+            );
+          }
+        }
+
+        const draft = manager.create(Servicios, {
+          ...createData,
+          tipoAgenda: 'programado',
+          fechaProgramada: scheduledDate,
+          horaInicioEstimada: scheduledDate,
+        });
+        return manager.save(Servicios, draft);
+      }
+
       const active = await manager.findOne(Servicios, {
         where: { empleadaId: createData.empleadaId, estado: 'en_curso' },
         order: { createdAt: 'DESC' },
@@ -745,7 +799,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     servicio.jefeId = jefeId;
     servicio.notasJefe = bossNotes?.trim() || null;
-    if (servicio.servicioPrevioId) {
+
+    const isFutureScheduled =
+      servicio.tipoAgenda === 'programado' &&
+      servicio.fechaProgramada &&
+      new Date(servicio.fechaProgramada).getTime() > Date.now() + 45 * 60_000;
+
+    if (servicio.servicioPrevioId || isFutureScheduled) {
       servicio.estado = 'agendado';
       servicio.transporteAgendado = tipoTransporte;
       await this.serviciosRepository.save(servicio);
@@ -754,11 +814,25 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         data: servicio,
       });
       const employeeChatId = servicio.empleada?.usuario?.telegramChatId;
-      if (employeeChatId && servicio.notasJefe) {
-        await this.bot.telegram.sendMessage(
-          employeeChatId,
-          `📝 Notas del jefe para tu siguiente servicio:\n${servicio.notasJefe}`,
-        );
+      if (employeeChatId) {
+        const fechaStr = servicio.fechaProgramada
+          ? new Date(servicio.fechaProgramada).toLocaleString('es-MX', {
+              timeZone: 'America/Mexico_City',
+            })
+          : 'próximamente';
+        let msg = isFutureScheduled
+          ? `📅 *Cita Programada Confirmada:*\n\nTienes una cita con ${servicio.cliente?.nombreTelegram || 'Cliente'} para el ${fechaStr}.\n• *Duración:* ${servicio.duracionPactadaHoras} horas\n• *Transporte asignado:* ${tipoTransporte.toUpperCase()}`
+          : `📝 Notas del jefe para tu siguiente servicio:\n${servicio.notasJefe}`;
+        if (isFutureScheduled && servicio.notasJefe) {
+          msg += `\n• *Notas del jefe:* ${servicio.notasJefe}`;
+        }
+        try {
+          await this.bot.telegram.sendMessage(employeeChatId, msg, {
+            parse_mode: 'Markdown',
+          });
+        } catch (err) {
+          this.logger.error('Error notificando empleada cita agendada:', err);
+        }
       }
       return servicio;
     }
@@ -908,6 +982,118 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       uberLink,
       viajeId: viajeGuardado.id,
     };
+  }
+
+  async dispatchScheduledTrip(
+    servicioId: string,
+    tipoTransporte: 'chofer' | 'uber' = 'chofer',
+  ): Promise<{ uberLink?: string; viajeId?: string }> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: { cliente: true, empleada: { usuario: true } },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (servicio.estado !== 'agendado') {
+      throw new ConflictException('El servicio no está en estado agendado');
+    }
+
+    servicio.estado = 'en_curso';
+    if (!servicio.horaInicioServicio) {
+      servicio.horaInicioServicio = new Date();
+    }
+    servicio.transporteAgendado = tipoTransporte;
+    await this.serviciosRepository.save(servicio);
+
+    if (servicio.empleadaId) {
+      await this.serviciosRepository.manager
+        .getRepository(Empleadas)
+        .update(servicio.empleadaId, { disponible: false });
+    }
+
+    const nuevoViaje = this.viajesRepository.create({
+      servicioId: servicio.id,
+      choferId: null,
+      tipo: 'ida',
+      zona: 'domicilio',
+      tarifa: tipoTransporte === 'uber' ? 0 : this.driverPayoutFor(servicio),
+      driverPayout:
+        tipoTransporte === 'uber' ? 0 : this.driverPayoutFor(servicio),
+      estado: tipoTransporte === 'uber' ? 'aceptado' : 'notificado',
+      proveedorTransporte: tipoTransporte,
+    });
+    const viajeGuardado = await this.viajesRepository.save(nuevoViaje);
+
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'service_accepted',
+      data: { id: servicio.id, viajeId: viajeGuardado.id },
+    });
+
+    this.realtimeEventsService.emitToEmployee(servicio.empleadaId, {
+      type: 'new_service',
+      data: servicio,
+    });
+
+    let uberLink: string | undefined;
+    if (tipoTransporte === 'uber') {
+      uberLink = this.buildUberLinkForTrip(servicio, 'ida');
+    } else {
+      try {
+        await this.dispatchViaje(viajeGuardado.id);
+      } catch (dispatchErr) {
+        this.logger.error(
+          'Error al iniciar despacho de choferes para cita programada:',
+          dispatchErr,
+        );
+      }
+    }
+
+    const empUser = servicio.empleada?.usuario;
+    if (empUser?.telegramChatId && empUser.telegramChatId !== '111111111') {
+      try {
+        const inlineButtons: any[] = [
+          [
+            Markup.button.callback(
+              '🏁 Finalizar Servicio',
+              `finalizar_servicio:${servicio.id}`,
+            ),
+          ],
+          [
+            Markup.button.callback(
+              '➕ Agregar Extra',
+              `agregar_extra_list:${servicio.id}`,
+            ),
+          ],
+        ];
+        if (tipoTransporte === 'uber') {
+          inlineButtons.unshift([
+            Markup.button.callback(
+              'Ya estoy en el Uber',
+              `eu:${viajeGuardado.id}:i`,
+            ),
+            Markup.button.callback('Ya llegué', `eu:${viajeGuardado.id}:f`),
+          ]);
+        }
+        await this.bot.telegram.sendMessage(
+          empUser.telegramChatId,
+          `💼 *¡Servicio en Curso!* 🟢\n\n` +
+            `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
+            `• *Duración:* ${servicio.duracionPactadaHoras} horas\n` +
+            `• *Método de Pago:* ${servicio.metodoPago.toUpperCase()}\n\n` +
+            (servicio.notasJefe
+              ? `• *Notas del jefe:* ${servicio.notasJefe}\n\n`
+              : '') +
+            `Cuando hayas terminado el servicio, presiona el botón de abajo para finalizarlo:`,
+          {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard(inlineButtons),
+          },
+        );
+      } catch (err) {
+        this.logger.error('Error notificando empleada por Telegram:', err);
+      }
+    }
+
+    return { uberLink, viajeId: viajeGuardado.id };
   }
 
   async rechazar(id: string, jefeId: string): Promise<Servicios> {

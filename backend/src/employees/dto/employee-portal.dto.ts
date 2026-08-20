@@ -64,6 +64,27 @@ export interface EmployeePortalReputation {
   }[];
 }
 
+export interface EmployeePortalCashObligationItem {
+  id: string;
+  serviceId: string;
+  amount: number;
+  paidAmount: number;
+  pendingAmount: number;
+  calculationStatus: 'provisional' | 'ready' | 'paid';
+  pendingReason: string | null;
+  customerTotal: number;
+  uberDeduction: number;
+  serviceDate: string;
+  createdAt: string;
+}
+
+export interface EmployeePortalCashDelivery {
+  totalPending: number;
+  pendingServicesCount: number;
+  hasProvisional: boolean;
+  obligations: EmployeePortalCashObligationItem[];
+}
+
 export interface EmployeePortalData {
   profile: {
     id: string;
@@ -82,6 +103,7 @@ export interface EmployeePortalData {
   };
   ranking: EmployeePortalRanking;
   earnings: EmployeePortalEarnings;
+  cashDelivery: EmployeePortalCashDelivery;
   activeService: EmployeePortalActiveService | null;
   recentServices: EmployeePortalServiceItem[];
   reputation: EmployeePortalReputation;

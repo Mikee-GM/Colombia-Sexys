@@ -346,6 +346,35 @@ export class Servicios {
   })
   horaInicioEstimada: Date | null;
 
+  @Column('timestamp with time zone', {
+    name: 'fecha_programada',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Fecha y hora pactada para servicios programados',
+    type: String,
+    format: 'date-time',
+  })
+  fechaProgramada: Date | null;
+
+  @Column('varchar', {
+    name: 'tipo_agenda',
+    length: 20,
+    default: 'inmediato',
+  })
+  @ApiProperty({
+    description: 'Modalidad de agenda del servicio',
+    enum: ['inmediato', 'programado'],
+    default: 'inmediato',
+  })
+  tipoAgenda: 'inmediato' | 'programado';
+
+  @Column('boolean', {
+    name: 'notificacion_previa_enviada',
+    default: false,
+  })
+  notificacionPreviaEnviada: boolean;
+
   @Column('varchar', {
     name: 'transporte_agendado',
     length: 10,
