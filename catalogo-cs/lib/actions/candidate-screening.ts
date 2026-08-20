@@ -12,10 +12,13 @@ export async function getScreeningQuestions() {
   return apiFetch<ScreeningQuestion[]>("/candidate-screening/questions");
 }
 
-export async function createScreeningQuestion(text: string) {
+export async function createScreeningQuestion(
+  data: string | { text: string; options?: Array<{ text: string; isCorrect?: boolean }> },
+) {
+  const payload = typeof data === "string" ? { text: data } : data;
   const question = await apiFetch<ScreeningQuestion>(
     "/candidate-screening/questions",
-    { method: "POST", body: JSON.stringify({ text }) },
+    { method: "POST", body: JSON.stringify(payload) },
   );
   revalidatePath("/admin/candidatas");
   return question;
@@ -23,7 +26,11 @@ export async function createScreeningQuestion(text: string) {
 
 export async function updateScreeningQuestion(
   id: string,
-  data: { text?: string; active?: boolean },
+  data: {
+    text?: string;
+    active?: boolean;
+    options?: Array<{ text: string; isCorrect?: boolean }>;
+  },
 ) {
   const question = await apiFetch<ScreeningQuestion>(
     `/candidate-screening/questions/${id}`,

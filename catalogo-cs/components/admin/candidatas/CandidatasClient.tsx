@@ -45,6 +45,11 @@ export default function CandidatasClient({
   const [screenings, setScreenings] = useState(initialScreenings);
   const [questions, setQuestions] = useState(initialQuestions);
   const [newQuestionText, setNewQuestionText] = useState("");
+  const [newQuestionOptions, setNewQuestionOptions] = useState<Array<{ text: string; isCorrect: boolean }>>([
+    { text: "", isCorrect: true },
+    { text: "", isCorrect: false },
+  ]);
+  const [includeOptionsInNew, setIncludeOptionsInNew] = useState(false);
   const [savingQuestion, setSavingQuestion] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -58,14 +63,57 @@ export default function CandidatasClient({
 
   const activeQuestions = questions.filter((q) => q.active);
 
+  const handleAddNewOptionField = () => {
+    setNewQuestionOptions((prev) => [...prev, { text: "", isCorrect: false }]);
+  };
+
+  const handleRemoveNewOptionField = (index: number) => {
+    setNewQuestionOptions((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleNewOptionChange = (index: number, text: string) => {
+    setNewQuestionOptions((prev) =>
+      prev.map((opt, i) => (i === index ? { ...opt, text } : opt)),
+    );
+  };
+
+  const handleSetCorrectNewOption = (index: number) => {
+    setNewQuestionOptions((prev) =>
+      prev.map((opt, i) => ({ ...opt, isCorrect: i === index })),
+    );
+  };
+
   const handleAddQuestion = async () => {
     if (!newQuestionText.trim()) return;
+
+    let optionsToSave: Array<{ text: string; isCorrect: boolean }> | undefined = undefined;
+    if (includeOptionsInNew) {
+      const validOptions = newQuestionOptions.filter((o) => o.text.trim().length > 0);
+      if (validOptions.length < 2) {
+        toast.error("Debes ingresar al menos 2 opciones de respuesta válidas");
+        return;
+      }
+      const hasCorrect = validOptions.some((o) => o.isCorrect);
+      if (!hasCorrect) {
+        validOptions[0].isCorrect = true;
+      }
+      optionsToSave = validOptions;
+    }
+
     setSavingQuestion(true);
     try {
-      const question = await createScreeningQuestion(newQuestionText.trim());
+      const question = await createScreeningQuestion({
+        text: newQuestionText.trim(),
+        options: optionsToSave,
+      });
       setQuestions((prev) => [...prev, question]);
       setSelectedQuestionIds((prev) => new Set(prev).add(question.id));
       setNewQuestionText("");
+      setNewQuestionOptions([
+        { text: "", isCorrect: true },
+        { text: "", isCorrect: false },
+      ]);
+      setIncludeOptionsInNew(false);
       toast.success("Pregunta agregada al banco");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo agregar la pregunta");
@@ -195,57 +243,177 @@ export default function CandidatasClient({
       </section>
 
       <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-400">
-          Banco de preguntas
-        </h2>
-        <div className="space-y-2">
-          {questions.map((question) => (
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-400">
+            Banco de preguntas ({questions.length})
+          </h2>
+        </div>
+
+        <div className="space-y-4">
+          {questions.map((question, qIdx) => (
             <div
               key={question.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-black/30 p-3"
+              className="rounded-2xl border border-zinc-800 bg-black/40 p-4 space-y-3"
             >
-              <p className={`text-sm ${question.active ? "text-zinc-200" : "text-zinc-600 line-through"}`}>
-                {question.text}
-              </p>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleToggleQuestionActive(question)}
-                  className="rounded-full border border-zinc-700 px-3 py-1 text-[10px] font-semibold uppercase text-zinc-400 hover:border-brand-gold/50"
-                >
-                  {question.active ? "Desactivar" : "Activar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteQuestion(question.id)}
-                  className="rounded-full border border-red-900/50 px-3 py-1 text-[10px] font-semibold uppercase text-red-400 hover:bg-red-950/30"
-                >
-                  Eliminar
-                </button>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2">
+                  <span className="text-xs font-mono font-bold text-[#C5A55A] mt-0.5">
+                    #{qIdx + 1}
+                  </span>
+                  <div>
+                    <p className={`text-sm font-medium ${question.active ? "text-zinc-100" : "text-zinc-600 line-through"}`}>
+                      {question.text}
+                    </p>
+                    {question.options && question.options.length > 0 && (
+                      <span className="inline-block mt-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded">
+                        Opción múltiple ({question.options.length} opciones)
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleQuestionActive(question)}
+                    className="rounded-full border border-zinc-700 px-3 py-1 text-[10px] font-semibold uppercase text-zinc-400 hover:border-brand-gold/50 transition-colors"
+                  >
+                    {question.active ? "Desactivar" : "Activar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteQuestion(question.id)}
+                    className="rounded-full border border-red-900/50 px-3 py-1 text-[10px] font-semibold uppercase text-red-400 hover:bg-red-950/30 transition-colors"
+                  >
+                    Eliminar
+                  </button>
+                </div>
               </div>
+
+              {/* Render de opciones si tiene */}
+              {question.options && question.options.length > 0 && (
+                <div className="pl-6 pt-2 border-t border-zinc-900/80 space-y-1.5">
+                  <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                    Opciones de Respuesta:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {question.options.map((opt, oIdx) => (
+                      <div
+                        key={oIdx}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs ${
+                          opt.isCorrect
+                            ? "border-emerald-500/50 bg-emerald-950/20 text-emerald-300"
+                            : "border-zinc-800 bg-zinc-950 text-zinc-400"
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold">
+                          {opt.isCorrect ? "✓" : "•"}
+                        </span>
+                        <span className="truncate">{opt.text}</span>
+                        {opt.isCorrect && (
+                          <span className="ml-auto text-[9px] font-bold uppercase text-emerald-400">
+                            Correcta
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           {questions.length === 0 && (
-            <p className="py-4 text-center text-sm italic text-zinc-600">
+            <p className="py-6 text-center text-sm italic text-zinc-600">
               El banco de preguntas está vacío.
             </p>
           )}
         </div>
-        <div className="mt-4 flex gap-2">
-          <input
-            value={newQuestionText}
-            onChange={(e) => setNewQuestionText(e.target.value)}
-            placeholder="Nueva pregunta..."
-            className="flex-1 rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-brand-gold focus:outline-none"
-          />
-          <button
-            type="button"
-            disabled={savingQuestion || !newQuestionText.trim()}
-            onClick={handleAddQuestion}
-            className="rounded-lg border border-brand-gold px-4 py-2 text-xs font-semibold uppercase text-brand-gold disabled:border-zinc-800 disabled:text-zinc-600"
-          >
-            {savingQuestion ? "Guardando..." : "Agregar"}
-          </button>
+
+        {/* Formulario para agregar nueva pregunta con soporte de opciones */}
+        <div className="mt-6 border-t border-zinc-800/80 pt-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold uppercase tracking-widest text-[#C5A55A]">
+              Agregar Nueva Pregunta al Banco
+            </label>
+            <button
+              type="button"
+              onClick={() => setIncludeOptionsInNew(!includeOptionsInNew)}
+              className={`text-xs font-semibold px-3 py-1 rounded-full border transition-colors ${
+                includeOptionsInNew
+                  ? "bg-[#C5A55A]/20 border-[#C5A55A] text-[#E8D5A3]"
+                  : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-white"
+              }`}
+            >
+              {includeOptionsInNew ? "✓ Con Opciones de Respuesta" : "+ Agregar Opciones de Respuesta"}
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <input
+              value={newQuestionText}
+              onChange={(e) => setNewQuestionText(e.target.value)}
+              placeholder="Escribe la pregunta para la candidata..."
+              className="w-full rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none"
+            />
+
+            {includeOptionsInNew && (
+              <div className="p-4 rounded-2xl border border-zinc-800 bg-black/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">
+                    Opciones de Respuesta (Marca la opción correcta si aplica)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddNewOptionField}
+                    className="text-xs text-[#C5A55A] hover:underline font-bold"
+                  >
+                    + Añadir otra opción
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {newQuestionOptions.map((opt, oIdx) => (
+                    <div key={oIdx} className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="correct-new-question"
+                        checked={opt.isCorrect}
+                        onChange={() => handleSetCorrectNewOption(oIdx)}
+                        className="w-4 h-4 text-[#C5A55A] bg-zinc-950 border-zinc-700 focus:ring-[#C5A55A] cursor-pointer"
+                        title="Marcar como respuesta correcta"
+                      />
+                      <input
+                        type="text"
+                        value={opt.text}
+                        onChange={(e) => handleNewOptionChange(oIdx, e.target.value)}
+                        placeholder={`Opción ${oIdx + 1}...`}
+                        className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white focus:border-[#C5A55A] focus:outline-none"
+                      />
+                      {newQuestionOptions.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveNewOptionField(oIdx)}
+                          className="text-zinc-500 hover:text-red-400 text-xs px-2 py-1 font-bold"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                disabled={savingQuestion || !newQuestionText.trim()}
+                onClick={handleAddQuestion}
+                className="rounded-full bg-[#C5A55A] text-black px-6 py-2.5 text-xs font-bold uppercase tracking-wider hover:bg-[#D4AF37] transition-all disabled:opacity-50"
+              >
+                {savingQuestion ? "Guardando..." : "Guardar Pregunta"}
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 

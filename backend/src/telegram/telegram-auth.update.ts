@@ -181,9 +181,70 @@ export class TelegramAuthUpdate {
     const session = ((ctx as any).session ??= {});
     session.step = 'AWAITING_CANDIDATE_ANSWER';
     session.candidateScreeningId = screeningId;
-    await ctx.reply(
-      `Pregunta ${next.index}/${next.total}:\n${next.question.text}`,
+
+    const question = next.question;
+    const hasOptions =
+      question.options &&
+      Array.isArray(question.options) &&
+      question.options.length > 0;
+
+    if (hasOptions) {
+      const buttons = question.options!.map((opt, idx) => [
+        Markup.button.callback(
+          opt.text,
+          `candidate_answer:${screeningId}:${idx}`,
+        ),
+      ]);
+      await ctx.reply(
+        `Pregunta ${next.index}/${next.total}:\n\n${question.text}`,
+        Markup.inlineKeyboard(buttons),
+      );
+    } else {
+      await ctx.reply(
+        `Pregunta ${next.index}/${next.total}:\n${question.text}`,
+      );
+    }
+  }
+
+  @Action(/^candidate_answer:(.+):(\d+)$/)
+  async onCandidateOptionAnswer(@Ctx() ctx: Context) {
+    const match = (ctx as any).match;
+    if (!match) return;
+    const screeningId = match[1];
+    const optionIndex = parseInt(match[2], 10);
+
+    const session = (ctx as any).session;
+    const next =
+      await this.candidateScreeningService.getNextQuestion(screeningId);
+    if (
+      !next ||
+      !next.question.options ||
+      !next.question.options[optionIndex]
+    ) {
+      await ctx.answerCbQuery('Opción no válida o ya respondida.');
+      return;
+    }
+
+    const selectedOption = next.question.options[optionIndex];
+    await ctx.answerCbQuery(`Seleccionaste: ${selectedOption.text}`);
+
+    const result = await this.candidateScreeningService.submitAnswer(
+      screeningId,
+      selectedOption.text,
     );
+
+    if (result.completed) {
+      if (session) {
+        session.step = undefined;
+        session.candidateScreeningId = undefined;
+      }
+      await ctx.reply(
+        '¡Gracias por tus respuestas! Las enviamos a administración, en breve te contactaremos.',
+      );
+      return;
+    }
+
+    await this.sendNextCandidateQuestion(ctx, screeningId);
   }
 
   @On('text')
@@ -218,9 +279,7 @@ export class TelegramAuthUpdate {
       );
       return;
     }
-    await ctx.reply(
-      `Pregunta ${result.question.index}/${result.question.total}:\n${result.question.question.text}`,
-    );
+    await this.sendNextCandidateQuestion(ctx, session.candidateScreeningId);
   }
 
   private async resolveAppealIdentity(

@@ -24,6 +24,14 @@ export class ScreeningQuestion {
   @ApiProperty()
   order: number;
 
+  @Column('jsonb', {
+    name: 'options',
+    nullable: true,
+    default: () => "'[]'::jsonb",
+  })
+  @ApiProperty({ required: false })
+  options?: Array<{ text: string; isCorrect?: boolean }>;
+
   @Column('timestamp with time zone', {
     name: 'created_at',
     default: () => 'now()',

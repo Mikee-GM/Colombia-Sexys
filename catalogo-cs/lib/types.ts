@@ -90,6 +90,7 @@ export type Client = {
   id: string;
   telegramChatId: string;
   nombreTelegram: string | null;
+  telefono?: string | null;
   createdAt?: string;
   primerContactoAt?: string;
 };
@@ -463,11 +464,18 @@ export type DriverPortalData = {
   };
 };
 
+export type ScreeningQuestionOption = {
+  id?: string;
+  text: string;
+  isCorrect?: boolean;
+};
+
 export type ScreeningQuestion = {
   id: string;
   text: string;
   active: boolean;
   order: number;
+  options?: ScreeningQuestionOption[];
   createdAt: string;
 };
 
@@ -478,6 +486,7 @@ export type CandidateScreeningAnswer = {
   questionId: string;
   questionText: string;
   answerText: string;
+  selectedOptionText?: string;
   answeredAt: string;
 };
 

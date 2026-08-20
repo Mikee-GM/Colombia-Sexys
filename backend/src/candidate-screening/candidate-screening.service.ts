@@ -45,6 +45,7 @@ export class CandidateScreeningService {
       this.questions.create({
         text: dto.text.trim(),
         order: (maxOrder?.max ?? 0) + 1,
+        options: dto.options || [],
       }),
     );
   }
@@ -54,6 +55,7 @@ export class CandidateScreeningService {
     if (!question) throw new NotFoundException('Pregunta no encontrada');
     if (dto.text !== undefined) question.text = dto.text.trim();
     if (dto.active !== undefined) question.active = dto.active;
+    if (dto.options !== undefined) question.options = dto.options;
     return this.questions.save(question);
   }
 
