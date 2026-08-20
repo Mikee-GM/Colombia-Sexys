@@ -4473,11 +4473,26 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       );
       return;
     }
-    const request = await this.groupServicesService.createFromDetectedIntent(
-      client.id,
-      initialEmployeeId,
-      ctx.session?.bookingSessionId,
-    );
+    const message =
+      '¡Uy qué rico! Déjame ver qué amiguitas mías están disponibles para que armemos algo bien delicioso y te aviso en un momentito.';
+    await ctx.reply(message, Markup.removeKeyboard());
+
+    let request;
+    try {
+      request = await this.groupServicesService.createFromDetectedIntent(
+        client.id,
+        initialEmployeeId,
+        ctx.session?.bookingSessionId,
+      );
+    } catch (err: any) {
+      if (err instanceof ConflictException) {
+        await ctx.reply(
+          'Uy amor, me acaban de avisar que ahorita todas mis amigas andan ocupadas. Si quieres nos vemos tú y yo solitos, ¿cuántas horitas te gustaría?',
+        );
+        return;
+      }
+      throw err;
+    }
     ctx.session = {
       ...(ctx.session ?? {}),
       step: 'GROUP_WITH_BOSS',
@@ -4520,9 +4535,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         );
       }
     }
-    const message =
-      '¡Uy qué rico! Déjame ver qué amiguitas mías están disponibles para que armemos algo bien delicioso y te aviso en un momentito.';
-    await ctx.reply(message, Markup.removeKeyboard());
     await this.groupServicesService.recordRequestConversation(
       request,
       'sistema',
