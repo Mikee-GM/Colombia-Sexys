@@ -101,6 +101,16 @@ export class TelegramOnboardingUpdate {
               ...menu,
             },
           );
+
+          if (user.rol === 'empleada') {
+            await ctx.reply(
+              `📸 *¡Una cosa más!*\n\n` +
+                `Para que los clientes puedan ver fotos especiales tuyas cuando pregunten por ti, necesitamos que nos envíes algunas *fotos exclusivas* directamente por este chat.\n\n` +
+                `Envía entre 3 y 5 fotos atractivas y de buena calidad. Estas fotos NO se publican en la página web, son solo para clientes que preguntan por ti en Telegram.\n\n` +
+                `¡Envíalas cuando estés lista! ✨`,
+              { parse_mode: 'Markdown' },
+            );
+          }
         }
       }
     } catch (error) {

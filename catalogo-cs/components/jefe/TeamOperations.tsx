@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { ButtonHTMLAttributes, Dispatch, SetStateAction } from "react";
-import { Award, Banknote, Ban, Car, Check, CircleDollarSign, Clock3, ExternalLink, FileCheck2, MapPin, MessageCircle, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { Award, Banknote, Ban, Camera, Car, Check, CircleDollarSign, Clock3, ExternalLink, FileCheck2, MapPin, MessageCircle, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { toast } from "sonner";
+import Image from "next/image";
+import imageCompression from "browser-image-compression";
+import { getPrivatePhotosAction, addPrivatePhotoAction, deletePrivatePhotoAction } from "@/lib/actions/modelos";
+import { uploadImagesAction } from "@/lib/actions/upload";
 import EvaluationHistorySheet from "@/components/admin/evaluations/evaluation-history-sheet";
 import CreateServiceDialog from "@/components/services/create-service-dialog";
 import ServiceStatusBadge from "@/components/services/service-status-badge";
@@ -48,6 +52,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [creatingService, setCreatingService] = useState(false);
   const [selectedEvaluationUser, setSelectedEvaluationUser] = useState<{ id: string; name: string } | null>(null);
+  const [photosEmployee, setPhotosEmployee] = useState<Employee | null>(null);
   const [pending, startTransition] = useTransition();
 
   const chatServiceRef = useRef<Service | null>(null);
@@ -231,13 +236,14 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     </header>
     <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl border border-zinc-800 bg-zinc-950 p-1.5 sm:grid-cols-5">{([['equipo', 'Disponibilidad'], ['grupos', `Grupos (${groupRequests.length})`], ['activos', `Activos (${active.length})`], ['historial', 'Historial'], ['efectivo', 'Efectivo']] as const).map(([value, label]) => <button key={value} onClick={() => setTab(value)} className={`rounded-lg px-2 py-3 text-[10px] font-semibold uppercase tracking-wider ${tab === value ? "bg-[#C5A55A] text-black" : "text-zinc-500 hover:text-white"}`}>{label}</button>)}</div>
     {tab === "historial" && <label className="mb-5 block"><span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Filtrar por empleada</span><select value={historyEmployeeId} onChange={(event) => setHistoryEmployeeId(event.target.value)} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-[#C5A55A] sm:max-w-sm"><option value="all">Todas las empleadas</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.nombreArtistico}</option>)}</select></label>}
-    {tab === "equipo" ? <section><label className="mb-5 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-4 text-sm text-white outline-none placeholder:text-zinc-600" /></label><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleEmployees.map((employee) => <article key={employee.id} className={`overflow-hidden rounded-2xl border bg-zinc-950 ${employee.disponible ? "border-[#C5A55A]/55" : "border-zinc-800"}`}><div className="h-36 bg-cover bg-center" style={employee.fotoPerfilUrl ? { backgroundImage: `linear-gradient(to top, #090909, transparent), url(${employee.fotoPerfilUrl})` } : { background: "linear-gradient(135deg,#18181b,#050505)" }} /><div className="p-5"><div className="mb-4 flex items-start justify-between"><div><h2 className="font-heading text-2xl font-semibold">{employee.nombreArtistico}</h2><p className="mt-1 flex items-center gap-1 text-xs text-zinc-500"><MapPin size={12} />{employee.ubicacionLat ? "Ubicación recibida" : "Sin ubicación"}</p>{employee.availabilityStatus === "ocupada" && <p className="mt-2 text-xs text-[#E8D5A3]">Ocupada{employee.estimatedAvailableAt ? ` hasta ${formatAvailabilityTime(employee.estimatedAvailableAt)}` : ""}</p>}<EmployeeRatingSummary employee={employee} /></div><span className={`h-3 w-3 rounded-full ${employee.disponible ? "bg-emerald-400" : "bg-zinc-700"}`} /></div><div className="space-y-2"><button disabled={pending} onClick={() => toggleAvailability(employee)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C5A55A] py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] disabled:opacity-50">{employee.disponible ? <UserRoundX size={18} /> : <UserRoundCheck size={18} />}{employee.disponible ? "Marcar no disponible" : "Marcar disponible"}</button><button type="button" onClick={() => setSelectedEvaluationUser({ id: employee.usuarioId || employee.id, name: employee.nombreArtistico })} className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:border-[#C5A55A] hover:text-[#C5A55A] transition-all"><Award size={16} />Historial de Exámenes</button></div></div></article>)}</div></section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={cancelService} onChat={openChat} onRefresh={reloadServices} />}
+    {tab === "equipo" ? <section><label className="mb-5 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-4 text-sm text-white outline-none placeholder:text-zinc-600" /></label><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleEmployees.map((employee) => <article key={employee.id} className={`overflow-hidden rounded-2xl border bg-zinc-950 ${employee.disponible ? "border-[#C5A55A]/55" : "border-zinc-800"}`}><div className="h-36 bg-cover bg-center" style={employee.fotoPerfilUrl ? { backgroundImage: `linear-gradient(to top, #090909, transparent), url(${employee.fotoPerfilUrl})` } : { background: "linear-gradient(135deg,#18181b,#050505)" }} /><div className="p-5"><div className="mb-4 flex items-start justify-between"><div><h2 className="font-heading text-2xl font-semibold">{employee.nombreArtistico}</h2><p className="mt-1 flex items-center gap-1 text-xs text-zinc-500"><MapPin size={12} />{employee.ubicacionLat ? "Ubicación recibida" : "Sin ubicación"}</p>{employee.availabilityStatus === "ocupada" && <p className="mt-2 text-xs text-[#E8D5A3]">Ocupada{employee.estimatedAvailableAt ? ` hasta ${formatAvailabilityTime(employee.estimatedAvailableAt)}` : ""}</p>}<EmployeeRatingSummary employee={employee} /></div><span className={`h-3 w-3 rounded-full ${employee.disponible ? "bg-emerald-400" : "bg-zinc-700"}`} /></div><div className="space-y-2"><button disabled={pending} onClick={() => toggleAvailability(employee)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C5A55A] py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] disabled:opacity-50">{employee.disponible ? <UserRoundX size={18} /> : <UserRoundCheck size={18} />}{employee.disponible ? "Marcar no disponible" : "Marcar disponible"}</button><button type="button" onClick={() => setPhotosEmployee(employee)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:border-[#C5A55A] hover:text-[#C5A55A] transition-all"><Camera size={16} />Fotos Exclusivas</button><button type="button" onClick={() => setSelectedEvaluationUser({ id: employee.usuarioId || employee.id, name: employee.nombreArtistico })} className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:border-[#C5A55A] hover:text-[#C5A55A] transition-all"><Award size={16} />Historial de Exámenes</button></div></div></article>)}</div></section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={cancelService} onChat={openChat} onRefresh={reloadServices} />}
 
     {chatService && <ChatPanel service={chatService} messages={messages} setMessages={setMessages} onClose={() => setChatService(null)} />}
     {acceptingService && <AcceptServiceDialog service={acceptingService} previousService={services.find((item) => item.id === acceptingService.servicioPrevioId)} disabled={pending} onClose={() => setAcceptingService(null)} onAccept={(transport, notes) => decide(acceptingService, "aceptar", transport, notes)} />}
     {editingService && <EditPendingServiceDialog service={editingService} onClose={() => setEditingService(null)} onSaved={handleSaveServiceEdit} />}
     <CreateServiceDialog open={creatingService} onClose={() => setCreatingService(false)} initialEmployees={employees} onCreated={() => { reloadServices(); }} />
     <EvaluationHistorySheet userId={selectedEvaluationUser?.id ?? null} workerName={selectedEvaluationUser?.name} open={Boolean(selectedEvaluationUser)} onOpenChange={(open) => !open && setSelectedEvaluationUser(null)} />
+    {photosEmployee && <ExclusivePhotosPanel employee={photosEmployee} onClose={() => setPhotosEmployee(null)} />}
   </>;
 }
 
@@ -405,6 +411,145 @@ function ChatPanel({ service, messages, setMessages, onClose }: { service: Servi
     jefe: { label: "Jefe", className: "ml-auto bg-[#C5A55A] text-black" },
   };
   return <aside className="fixed inset-x-3 bottom-3 z-50 flex max-h-[75vh] flex-col rounded-2xl border border-[#C5A55A]/60 bg-[#050505] shadow-2xl md:left-auto md:right-6 md:w-[420px]"><header className="flex items-center justify-between border-b border-zinc-800 p-4"><div><p className="font-heading text-xl">Conversación</p><p className="text-xs text-zinc-500">{service.cliente?.nombreTelegram || "Cliente"}</p></div><button onClick={onClose} aria-label="Cerrar"><X size={19} /></button></header>{hasPriorContext && <div className="border-b border-zinc-800 bg-[#C5A55A]/5 px-4 py-3 text-xs leading-relaxed text-[#E8D5A3]">Esta conversación comenzó antes de que el servicio fuera creado. El historial previo se muestra para conservar el contexto.</div>}<div className="flex-1 space-y-3 overflow-y-auto p-4">{messages.length === 0 && <p className="py-10 text-center text-sm text-zinc-600">Todavía no hay mensajes.</p>}{messages.map((message) => { const presentation = senderPresentation[message.emisor]; return <div key={message.id} className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${presentation.className}`}><p className="mb-1 text-[9px] font-semibold uppercase tracking-[0.14em] opacity-60">{presentation.label}</p><p className="whitespace-pre-wrap">{message.mensaje}</p><time className="mt-1 block text-[10px] opacity-60">{new Date(message.enviadoAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" })}</time></div>; })}</div><div className="flex gap-2 border-t border-zinc-800 p-3"><textarea value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} maxLength={4000} placeholder="Escribe un mensaje" className="min-h-11 flex-1 resize-none rounded-xl border border-zinc-800 bg-black px-3 py-2 text-sm outline-none focus:border-[#C5A55A]" /><button onClick={send} className="rounded-xl bg-[#C5A55A] px-4 text-black" aria-label="Enviar"><Send size={18} /></button></div></aside>;
+}
+
+function ExclusivePhotosPanel({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+  const [photos, setPhotos] = useState<{ id: string; url: string; orden: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+
+  const fetchPhotos = async () => {
+    setLoading(true);
+    try {
+      const data = await getPrivatePhotosAction(employee.id);
+      setPhotos(data);
+    } catch {
+      toast.error("Error al cargar fotos exclusivas");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPhotos();
+  }, [employee.id]);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setUploading(true);
+      const compressed = await imageCompression(file, {
+        maxSizeMB: 0.5,
+        maxWidthOrHeight: 1080,
+        useWebWorker: true,
+      });
+      const formData = new FormData();
+      formData.append("files", compressed);
+      const [uploadedUrl] = await uploadImagesAction(formData);
+      await addPrivatePhotoAction(employee.id, uploadedUrl);
+      toast.success("Foto exclusiva añadida");
+      await fetchPhotos();
+    } catch (err: any) {
+      toast.error(err.message || "Error al subir foto exclusiva");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("¿Eliminar esta foto exclusiva?")) return;
+    try {
+      await deletePrivatePhotoAction(id);
+      toast.success("Foto exclusiva eliminada");
+      setPhotos((current) => current.filter((p) => p.id !== id));
+    } catch (err: any) {
+      toast.error(err.message || "Error al eliminar");
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm"
+      onMouseDown={(e) => e.target === e.currentTarget && !uploading && onClose()}
+    >
+      <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-[#090909] p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Fotos Exclusivas</p>
+            <h3 className="mt-1 font-heading text-2xl text-white">{employee.nombreArtistico}</h3>
+            <p className="mt-1 text-xs text-zinc-500">Estas fotos son enviadas por Telegram a clientes que las solicitan. No se publican en la web.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-zinc-800 p-2 text-zinc-500 hover:text-white"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="mb-5">
+          <div className="relative inline-block overflow-hidden">
+            <button
+              type="button"
+              disabled={uploading}
+              className="flex items-center gap-2 rounded-xl bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black hover:bg-[#D4AF37] disabled:opacity-50 transition-colors"
+            >
+              <Camera size={16} />
+              {uploading ? "Subiendo..." : "Subir Foto Exclusiva"}
+            </button>
+            <input
+              type="file"
+              accept="image/*"
+              disabled={uploading}
+              onChange={handleUpload}
+              className="absolute inset-0 cursor-pointer opacity-0"
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="py-16 text-center text-sm text-zinc-500">Cargando fotos exclusivas...</div>
+        ) : photos.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-zinc-800 py-16 text-center">
+            <Camera size={32} className="mx-auto text-zinc-700" />
+            <p className="mt-3 text-sm text-zinc-400">No hay fotos exclusivas para esta modelo.</p>
+            <p className="mt-1 text-xs text-zinc-600">Sube fotos o pídele a la modelo que las envíe por Telegram.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {photos.map((photo) => (
+              <div
+                key={photo.id}
+                className="group relative aspect-[3/4] overflow-hidden rounded-xl border border-zinc-800 bg-black"
+              >
+                <Image src={photo.url} alt="Foto exclusiva" fill className="object-cover" unoptimized />
+                <button
+                  type="button"
+                  onClick={() => handleDelete(photo.id)}
+                  className="absolute right-2 top-2 rounded-lg bg-black/80 p-2 text-red-400 opacity-0 transition-all hover:bg-red-950 group-hover:opacity-100"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end border-t border-zinc-800 pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-zinc-800 px-6 py-3 text-xs font-bold uppercase tracking-wider text-zinc-300 hover:bg-zinc-900"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ActionButton({ children, outline = false, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { outline?: boolean }) { return <button {...props} className={`inline-flex items-center gap-1 rounded-lg px-4 py-3 text-xs font-bold uppercase tracking-wider disabled:opacity-50 ${outline ? "border border-[#C5A55A] text-[#C5A55A]" : "bg-[#C5A55A] text-black"}`}>{children}</button>; }
