@@ -78,6 +78,7 @@ import { ChallengesModule } from './challenges/challenges.module';
         MAX_DAILY_AI_CALLS: Joi.number().default(15),
         SCHEDULE_TRAVEL_SPEED_KMH: Joi.number().positive().default(25),
         SCHEDULE_PREPARATION_MINUTES: Joi.number().min(0).default(10),
+        DRIVER_DISPATCH_RANKING_BAND_KM: Joi.number().positive().default(1.5),
         ONBOARDING_SCAN_INTERVAL_MS: Joi.number()
           .integer()
           .min(10_000)
