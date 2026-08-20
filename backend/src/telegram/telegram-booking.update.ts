@@ -1037,7 +1037,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         return;
       }
       this.logger.error('Error starting LLM chat session:', err);
-      const fallbackMsg = `¡Hola papi! Soy *${empleada.nombreArtistico}*, estoy totalmente disponible para ti mor. Mi tarifa es de $${empleada.precioBaseHora}/hr y la vamos a pasar delicioso, cuéntame qué se te antoja.`;
+      const fallbackMsg = `¡Hola papi! Soy *${empleada.nombreArtistico}*, estoy libre para ti mor. Mi tarifa es de $${empleada.precioBaseHora}/hr, ¿cuántas horas me vas a contratar?`;
       await this.sendDelayedReply(ctx, fallbackMsg);
       await this.recordDraftConversation(ctx, 'ia', fallbackMsg);
       // Initialize basic history on error fallback
