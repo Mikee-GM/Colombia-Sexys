@@ -4152,12 +4152,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         existingBuffer.ctx = ctx;
         existingBuffer.timer = setTimeout(() => {
           this.flushClientMessageBuffer(telegramId, empleada);
-        }, 1800);
+        }, 4000);
         return;
       } else {
         const timer = setTimeout(() => {
           this.flushClientMessageBuffer(telegramId, empleada);
-        }, 1800);
+        }, 4000);
         this.clientMessageBuffers.set(telegramId, {
           messages: [userMessage],
           timer,
