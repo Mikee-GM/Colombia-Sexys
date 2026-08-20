@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddFineTypeToDisciplinarySanctions1787100000000
-  implements MigrationInterface
-{
+export class AddFineTypeToDisciplinarySanctions1787100000000 implements MigrationInterface {
   name = 'AddFineTypeToDisciplinarySanctions1787100000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

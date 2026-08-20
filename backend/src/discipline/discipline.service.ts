@@ -320,7 +320,10 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         'La suspensión requiere una fecha final posterior al inicio',
       );
     }
-    if (dto.type === 'fine' && (!dto.fineAmount || Number(dto.fineAmount) <= 0)) {
+    if (
+      dto.type === 'fine' &&
+      (!dto.fineAmount || Number(dto.fineAmount) <= 0)
+    ) {
       throw new BadRequestException('La multa requiere un monto mayor a 0');
     }
     await this.assertPersonExists(dto.subjectType, dto.subjectId);
@@ -434,11 +437,14 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         .createQueryBuilder()
         .delete()
         .from('liquidation_records')
-        .where('employee_id = :empId AND is_fine = true AND fine_amount = :amt AND place LIKE :plc', {
-          empId: sanction.subjectId,
-          amt: sanction.fineAmount,
-          plc: `%${sanction.reason.trim()}%`,
-        })
+        .where(
+          'employee_id = :empId AND is_fine = true AND fine_amount = :amt AND place LIKE :plc',
+          {
+            empId: sanction.subjectId,
+            amt: sanction.fineAmount,
+            plc: `%${sanction.reason.trim()}%`,
+          },
+        )
         .execute();
     }
     this.realtime.emitToJefes({
