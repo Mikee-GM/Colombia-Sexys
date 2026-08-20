@@ -12,11 +12,19 @@ import {
 
 export class CreateScreeningQuestionDto {
   @IsString() @MinLength(3) @MaxLength(2000) text: string;
+  @IsOptional() @IsArray() options?: Array<{
+    text: string;
+    isCorrect?: boolean;
+  }>;
 }
 
 export class UpdateScreeningQuestionDto {
   @IsOptional() @IsString() @MinLength(3) @MaxLength(2000) text?: string;
   @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsArray() options?: Array<{
+    text: string;
+    isCorrect?: boolean;
+  }>;
 }
 
 export class ReorderScreeningQuestionsDto {

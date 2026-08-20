@@ -658,14 +658,6 @@ export default function ModelModal({
                 />
               </div>
 
-              <TextareaField
-                label="Descripcion"
-                value={form.descripcion}
-                onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
-                placeholder="Breve bio o descripcion del perfil..."
-                rows={3}
-              />
-
               <div className="grid grid-cols-2 gap-4">
                 <SelectField
                   label="Jefe Asignado"
@@ -889,8 +881,19 @@ export default function ModelModal({
               </div>
             </div>
 
-            {/* Columna Derecha: Fotos */}
-            <div className="space-y-6 border-t lg:border-t-0 lg:border-l border-zinc-800 pt-6 lg:pt-0 lg:pl-8">
+            {/* Columna Derecha: Descripción y Fotos */}
+            <div className="space-y-6 border-t lg:border-t-0 lg:border-l border-zinc-800 pt-6 lg:pt-0 lg:pl-8 flex flex-col">
+              {/* Apartado de Descripción (Espacioso a la derecha) */}
+              <div>
+                <TextareaField
+                  label="Descripción del Perfil"
+                  value={form.descripcion}
+                  onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+                  placeholder="Escribe la biografía completa, gustos, medidas, detalles y personalidad de la modelo..."
+                  rows={6}
+                />
+              </div>
+
               {/* Foto Principal */}
               <div>
                 <label className="block text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase mb-2">
