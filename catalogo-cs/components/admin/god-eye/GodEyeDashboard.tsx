@@ -2651,6 +2651,28 @@ export default function GodEyeDashboard({
                   placeholder="Ej: Impuntualidad reiterada en servicio #12..."
                   className="mt-1.5 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none"
                 />
+                <div className="mt-1.5 flex items-center justify-between px-0.5 text-[11px]">
+                  <span
+                    className={`flex items-center gap-1 font-medium transition-colors ${
+                      sanctionReason.trim().length >= 3
+                        ? "text-emerald-400"
+                        : "text-amber-400"
+                    }`}
+                  >
+                    {sanctionReason.trim().length >= 3 ? (
+                      <>
+                        <CheckCircle2 className="h-3 w-3" /> Mínimo alcanzado
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="h-3 w-3" /> Mínimo 3 caracteres ({3 - sanctionReason.trim().length} restantes)
+                      </>
+                    )}
+                  </span>
+                  <span className="text-zinc-500 font-mono ml-auto">
+                    {sanctionReason.trim().length} caracteres
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -2669,7 +2691,7 @@ export default function GodEyeDashboard({
               <button
                 type="button"
                 disabled={
-                  !sanctionReason.trim() ||
+                  sanctionReason.trim().length < 3 ||
                   (sanctionType === "fine" && (!sanctionFineAmount || Number(sanctionFineAmount) <= 0)) ||
                   isApplyingSanction
                 }
@@ -2713,6 +2735,28 @@ export default function GodEyeDashboard({
                   placeholder="Ej: Aclaración de malentendido con cliente / cumplimiento anticipado..."
                   className="mt-1.5 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none"
                 />
+                <div className="mt-1.5 flex items-center justify-between px-0.5 text-[11px]">
+                  <span
+                    className={`flex items-center gap-1 font-medium transition-colors ${
+                      revokeReason.trim().length >= 3
+                        ? "text-emerald-400"
+                        : "text-amber-400"
+                    }`}
+                  >
+                    {revokeReason.trim().length >= 3 ? (
+                      <>
+                        <CheckCircle2 className="h-3 w-3" /> Mínimo alcanzado
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="h-3 w-3" /> Mínimo 3 caracteres ({3 - revokeReason.trim().length} restantes)
+                      </>
+                    )}
+                  </span>
+                  <span className="text-zinc-500 font-mono ml-auto">
+                    {revokeReason.trim().length} caracteres
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -2729,9 +2773,9 @@ export default function GodEyeDashboard({
                 Cancelar
               </button>
               <button
-                disabled={isRevoking || !revokeReason.trim()}
+                disabled={isRevoking || revokeReason.trim().length < 3}
                 onClick={handleRevokeSanction}
-                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50 flex items-center gap-2 shadow-md"
+                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 disabled:shadow-none flex items-center gap-2 shadow-md"
               >
                 {isRevoking ? (
                   <>

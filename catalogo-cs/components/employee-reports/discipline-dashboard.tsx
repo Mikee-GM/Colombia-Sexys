@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ShieldAlert, Star } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, ShieldAlert, Star } from "lucide-react";
 import { toast } from "sonner";
 import {
   closeConductReport,
@@ -16,6 +16,7 @@ import {
   type RatingAppeal,
   type RatingDirection,
 } from "@/lib/actions/discipline";
+import PromptDialog from "@/components/ui/PromptDialog";
 
 const personLabels: Record<PersonType, string> = {
   client: "Cliente",
@@ -55,6 +56,28 @@ export default function DisciplineDashboard({
   const [selected, setSelected] = useState<Dossier | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // Estados para diálogos personalizados
+  const [closeReportData, setCloseReportData] = useState<{
+    report: ConductReport;
+    outcome: "confirmado" | "no_sustentado";
+  } | null>(null);
+
+  const [sanctionData, setSanctionData] = useState<{
+    dossier: Dossier;
+    type: "suspension" | "permanent_ban";
+    days?: number;
+  } | null>(null);
+
+  const [revokeData, setRevokeData] = useState<{
+    item: DisciplinarySanction;
+    dossier: Dossier;
+  } | null>(null);
+
+  const [customSuspensionDossier, setCustomSuspensionDossier] = useState<Dossier | null>(null);
+  const [customStartsAt, setCustomStartsAt] = useState("");
+  const [customEndsAt, setCustomEndsAt] = useState("");
+  const [customReason, setCustomReason] = useState("");
+
   const filtered = useMemo(
     () =>
       reports.filter(
@@ -79,13 +102,14 @@ export default function DisciplineDashboard({
     });
   }
 
-  function close(report: ConductReport, outcome: "confirmado" | "no_sustentado") {
-    const resolution = window.prompt("Escribe el resultado de la revisión");
-    if (!resolution || resolution.trim().length < 3) return;
+  function handleConfirmClose(resolution: string) {
+    if (!closeReportData) return;
+    const { report, outcome } = closeReportData;
     startTransition(async () => {
       try {
-        await closeConductReport(report.id, outcome, resolution.trim());
-        toast.success("Reporte cerrado");
+        await closeConductReport(report.id, outcome, resolution);
+        toast.success("Reporte cerrado exitosamente");
+        setCloseReportData(null);
         window.location.reload();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "No se pudo cerrar el reporte");
@@ -93,24 +117,26 @@ export default function DisciplineDashboard({
     });
   }
 
-  function sanction(dossier: Dossier, type: "suspension" | "permanent_ban", days?: number) {
-    const reason = window.prompt("Motivo de la sanción");
-    if (!reason || reason.trim().length < 3) return;
+  function handleConfirmSanction(reason: string) {
+    if (!sanctionData) return;
+    const { dossier, type, days } = sanctionData;
     const startsAt = new Date();
     const endsAt = days
       ? new Date(startsAt.getTime() + days * 86_400_000).toISOString()
       : undefined;
+
     startTransition(async () => {
       try {
         await createSanction({
           subjectType: dossier.subjectType,
           subjectId: dossier.subjectId,
           type,
-          reason: reason.trim(),
+          reason,
           startsAt: startsAt.toISOString(),
           endsAt,
         });
         toast.success("Sanción aplicada");
+        setSanctionData(null);
         setSelected(await getDossier(dossier.subjectType, dossier.subjectId));
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "No se pudo aplicar la sanción");
@@ -118,23 +144,41 @@ export default function DisciplineDashboard({
     });
   }
 
-  function customSuspension(dossier: Dossier) {
-    const startsAt = window.prompt("Inicio en formato ISO", new Date().toISOString());
-    const endsAt = window.prompt("Fin en formato ISO");
-    const reason = window.prompt("Motivo de la suspensión");
-    if (!startsAt || !endsAt || !reason || reason.trim().length < 3) return;
+  function handleConfirmRevoke(reason: string) {
+    if (!revokeData) return;
+    const { item, dossier } = revokeData;
+    startTransition(async () => {
+      try {
+        await revokeSanction(item.id, reason);
+        toast.success("Sanción revocada");
+        setRevokeData(null);
+        setSelected(await getDossier(dossier.subjectType, dossier.subjectId));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "No se pudo revocar la sanción");
+      }
+    });
+  }
+
+  function handleConfirmCustomSuspension() {
+    if (!customSuspensionDossier || !customStartsAt || !customEndsAt || customReason.trim().length < 3) return;
     startTransition(async () => {
       try {
         await createSanction({
-          subjectType: dossier.subjectType,
-          subjectId: dossier.subjectId,
+          subjectType: customSuspensionDossier.subjectType,
+          subjectId: customSuspensionDossier.subjectId,
           type: "suspension",
-          reason: reason.trim(),
-          startsAt,
-          endsAt,
+          reason: customReason.trim(),
+          startsAt: new Date(customStartsAt).toISOString(),
+          endsAt: new Date(customEndsAt).toISOString(),
         });
         toast.success("Suspensión programada");
-        setSelected(await getDossier(dossier.subjectType, dossier.subjectId));
+        const subjectType = customSuspensionDossier.subjectType;
+        const subjectId = customSuspensionDossier.subjectId;
+        setCustomSuspensionDossier(null);
+        setCustomStartsAt("");
+        setCustomEndsAt("");
+        setCustomReason("");
+        setSelected(await getDossier(subjectType, subjectId));
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "No se pudo programar la suspensión");
       }
@@ -233,7 +277,22 @@ export default function DisciplineDashboard({
               </div>
               <div className="flex flex-wrap gap-2">
                 <Action onClick={() => openDossier(report)} disabled={pending}>Ver expediente</Action>
-                {(role === "admin" || role === "jefe") && report.status !== "cerrado" && <><Action onClick={() => close(report, "confirmado")} disabled={pending}>Confirmar</Action><Action onClick={() => close(report, "no_sustentado")} disabled={pending}>No sustentado</Action></>}
+                {(role === "admin" || role === "jefe") && report.status !== "cerrado" && (
+                  <>
+                    <Action
+                      onClick={() => setCloseReportData({ report, outcome: "confirmado" })}
+                      disabled={pending}
+                    >
+                      Confirmar
+                    </Action>
+                    <Action
+                      onClick={() => setCloseReportData({ report, outcome: "no_sustentado" })}
+                      disabled={pending}
+                    >
+                      No sustentado
+                    </Action>
+                  </>
+                )}
               </div>
             </article>
           ))}
@@ -259,20 +318,192 @@ export default function DisciplineDashboard({
           </div>
           {role === "admin" && (
             <div className="mt-5 flex flex-wrap gap-2 border-t border-zinc-800 pt-5">
-              {[1, 3, 7, 30].map((days) => <Action key={days} onClick={() => sanction(selected, "suspension", days)} disabled={pending}>Suspender {days} {days === 1 ? "día" : "días"}</Action>)}
-              <Action onClick={() => customSuspension(selected)} disabled={pending}>Suspensión personalizada</Action>
-              <button onClick={() => sanction(selected, "permanent_ban")} disabled={pending} className="border border-red-700 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:opacity-40">Baneo permanente</button>
+              {[1, 3, 7, 30].map((days) => (
+                <Action
+                  key={days}
+                  onClick={() => setSanctionData({ dossier: selected, type: "suspension", days })}
+                  disabled={pending}
+                >
+                  Suspender {days} {days === 1 ? "día" : "días"}
+                </Action>
+              ))}
+              <Action
+                onClick={() => {
+                  setCustomSuspensionDossier(selected);
+                  setCustomStartsAt(new Date().toISOString().slice(0, 16));
+                  setCustomEndsAt("");
+                  setCustomReason("");
+                }}
+                disabled={pending}
+              >
+                Suspensión personalizada
+              </Action>
+              <button
+                onClick={() => setSanctionData({ dossier: selected, type: "permanent_ban" })}
+                disabled={pending}
+                className="border border-red-700 px-3 py-2 text-xs text-red-300 hover:bg-red-950 disabled:opacity-40"
+              >
+                Baneo permanente
+              </button>
             </div>
           )}
           <div className="mt-5 space-y-2">
             {selected.sanctions.map((item) => (
               <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 border border-zinc-800 p-3 text-xs">
                 <span className="text-zinc-300">{item.type === "suspension" ? "Suspensión" : "Baneo permanente"} · {item.status}</span>
-                {role === "admin" && item.status === "active" && <button disabled={pending} onClick={() => { const reason = window.prompt("Motivo de revocación"); if (!reason) return; startTransition(async () => { await revokeSanction(item.id, reason); setSelected(await getDossier(selected.subjectType, selected.subjectId)); }); }} className="text-[#C5A55A] hover:text-[#E8D5A3]">Revocar</button>}
+                {role === "admin" && item.status === "active" && (
+                  <button
+                    disabled={pending}
+                    onClick={() => setRevokeData({ item, dossier: selected })}
+                    className="text-[#C5A55A] hover:text-[#E8D5A3]"
+                  >
+                    Revocar
+                  </button>
+                )}
               </div>
             ))}
           </div>
         </section>
+      )}
+
+      {/* 🟢 DIÁLOGO PERSONALIZADO: CERRAR REPORTE (CONFIRMAR O NO SUSTENTADO) */}
+      <PromptDialog
+        isOpen={!!closeReportData}
+        title={closeReportData?.outcome === "confirmado" ? "Confirmar Reporte de Conducta" : "Descartar Reporte (No sustentado)"}
+        description={`Escribe la resolución o dictamen oficial para ${closeReportData?.outcome === "confirmado" ? "dar por verídico este reporte y proceder conforme a reglamento" : "descartar este reporte por falta de sustento"}.`}
+        placeholder="Ej: Se revisó la evidencia fotográfica y se corroboró el incumplimiento del protocolo..."
+        labelConfirm={closeReportData?.outcome === "confirmado" ? "Confirmar Reporte" : "Cerrar como No Sustentado"}
+        variant={closeReportData?.outcome === "confirmado" ? "gold" : "blue"}
+        minLength={3}
+        maxLength={2000}
+        isLoading={pending}
+        onConfirm={handleConfirmClose}
+        onCancel={() => setCloseReportData(null)}
+      />
+
+      {/* 🔴 DIÁLOGO PERSONALIZADO: APLICAR SANCIÓN */}
+      <PromptDialog
+        isOpen={!!sanctionData}
+        title={
+          sanctionData?.type === "suspension"
+            ? `Aplicar Suspensión (${sanctionData.days} ${sanctionData.days === 1 ? "día" : "días"})`
+            : "Aplicar Baneo Permanente"
+        }
+        description="Ingresa el motivo que justificará esta sanción disciplinaria en el expediente."
+        placeholder="Ej: Falta reiterada en el protocolo de atención y quejas formales de clientes..."
+        labelConfirm="Confirmar Sanción"
+        variant="red"
+        minLength={3}
+        maxLength={2000}
+        isLoading={pending}
+        onConfirm={handleConfirmSanction}
+        onCancel={() => setSanctionData(null)}
+      />
+
+      {/* 🟢 DIÁLOGO PERSONALIZADO: REVOCAR SANCIÓN */}
+      <PromptDialog
+        isOpen={!!revokeData}
+        title="Revocar Sanción Disciplinaria"
+        description="Ingresa el motivo por el cual se revoca la sanción (se registrará en el expediente)."
+        placeholder="Ej: Cumplimiento de compromisos acordados / aclaración de malentendido..."
+        labelConfirm="Confirmar Revocación"
+        variant="emerald"
+        minLength={3}
+        maxLength={1000}
+        isLoading={pending}
+        onConfirm={handleConfirmRevoke}
+        onCancel={() => setRevokeData(null)}
+      />
+
+      {/* ⏱️ MODAL PERSONALIZADO: SUSPENSIÓN PERSONALIZADA */}
+      {customSuspensionDossier && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl">
+            <h3 className="font-heading text-lg font-bold text-white">Suspensión Personalizada</h3>
+            <p className="mt-1 text-xs text-zinc-400">
+              Define el periodo exacto y el motivo de la suspensión para este expediente.
+            </p>
+
+            <div className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="text-zinc-300 font-bold">Fecha y hora de inicio</label>
+                <input
+                  type="datetime-local"
+                  value={customStartsAt}
+                  onChange={(e) => setCustomStartsAt(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-sm text-white focus:border-[#C5A55A] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-zinc-300 font-bold">Fecha y hora de finalización</label>
+                <input
+                  type="datetime-local"
+                  value={customEndsAt}
+                  onChange={(e) => setCustomEndsAt(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-sm text-white focus:border-[#C5A55A] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-zinc-300 font-bold">Motivo de la suspensión</label>
+                <textarea
+                  rows={3}
+                  value={customReason}
+                  onChange={(e) => setCustomReason(e.target.value)}
+                  placeholder="Ej: Suspensión por acuerdo mutuo hasta evaluación..."
+                  className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-sm text-white focus:border-[#C5A55A] focus:outline-none"
+                />
+                <div className="mt-1 flex items-center justify-between text-[11px]">
+                  <span
+                    className={`flex items-center gap-1 font-medium ${
+                      customReason.trim().length >= 3 ? "text-emerald-400" : "text-amber-400"
+                    }`}
+                  >
+                    {customReason.trim().length >= 3 ? (
+                      <>
+                        <CheckCircle2 className="h-3 w-3" /> Mínimo alcanzado
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-3 w-3" /> Mínimo 3 caracteres ({3 - customReason.trim().length} restantes)
+                      </>
+                    )}
+                  </span>
+                  <span className="text-zinc-500 font-mono">{customReason.trim().length} caracteres</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2.5 border-t border-zinc-800/60 pt-3">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => setCustomSuspensionDossier(null)}
+                className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-400 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={
+                  !customStartsAt ||
+                  !customEndsAt ||
+                  customReason.trim().length < 3 ||
+                  pending
+                }
+                onClick={handleConfirmCustomSuspension}
+                className="rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 flex items-center gap-1.5"
+              >
+                {pending ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando...
+                  </>
+                ) : (
+                  "Aplicar Suspensión"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

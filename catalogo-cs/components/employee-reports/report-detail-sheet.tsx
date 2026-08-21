@@ -230,7 +230,13 @@ export default function ReportDetailSheet({
             <DialogTitle>{closing === "resolve" ? "Resolver reporte" : "Descartar reporte"}</DialogTitle>
             <DialogDescription className="text-zinc-500">La explicación quedará registrada permanentemente en el historial.</DialogDescription>
           </DialogHeader>
-          <textarea autoFocus value={resolution} onChange={(event) => setResolution(event.target.value)} maxLength={4000} rows={5} placeholder="Describe la resolución…" className="w-full resize-none border border-zinc-800 bg-black p-3 text-sm outline-none focus:border-[#C5A55A]" />
+          <textarea autoFocus value={resolution} onChange={(event) => setResolution(event.target.value)} maxLength={4000} rows={4} placeholder="Describe la resolución…" className="w-full resize-none border border-zinc-800 bg-black p-3 text-sm outline-none focus:border-[#C5A55A]" />
+          <div className="flex items-center justify-between text-[11px]">
+            <span className={`font-medium ${resolution.trim().length >= 3 ? "text-emerald-400" : "text-amber-400"}`}>
+              {resolution.trim().length >= 3 ? "✓ Mínimo alcanzado" : `Mínimo 3 caracteres (${3 - resolution.trim().length} restantes)`}
+            </span>
+            <span className="text-zinc-500 font-mono">{resolution.trim().length} caracteres</span>
+          </div>
           <DialogFooter className="border-zinc-800 bg-transparent">
             <button onClick={() => setClosing(null)} className="border border-zinc-700 px-4 py-2 text-xs text-zinc-400">Cancelar</button>
             <button disabled={pending || resolution.trim().length < 3} onClick={() => { if (!report || !closing) return; const action = closing; scheduleAction(async () => { const result = await closeEmployeeReport(report.id, action, resolution.trim()); if (result.success) { setClosing(null); setResolution(""); } return result; }, action === "resolve" ? "Reporte resuelto" : "Reporte descartado"); }} className="bg-[#C5A55A] px-4 py-2 text-xs font-bold text-black disabled:opacity-40">Confirmar</button>

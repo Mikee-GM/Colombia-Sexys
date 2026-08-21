@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Ban, Car, Clock3, ExternalLink, FileCheck2, ImageIcon, MapPin, Plus, Send, Smartphone, Trash2, UsersRound } from "lucide-react";
+import { AlertCircle, Ban, Car, CheckCircle2, Clock3, ExternalLink, FileCheck2, ImageIcon, Loader2, MapPin, Plus, Send, Smartphone, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import {
   addGroupManualTransportCharge,
@@ -831,6 +831,13 @@ function ActiveGroupEditor({
   const [provider, setProvider] = useState<"chofer" | "uber">("chofer");
   const [charge, setCharge] = useState("");
   const [chargeReason, setChargeReason] = useState("");
+  const [removingParticipant, setRemovingParticipant] = useState<{
+    serviceId: string;
+    employeeId: string;
+    employeeName: string;
+  } | null>(null);
+  const [removeReason, setRemoveReason] = useState("");
+  const [removeTransportAmount, setRemoveTransportAmount] = useState("0");
   const [returnUnits, setReturnUnits] = useState<GroupTransportUnitInput[]>(
     () => {
       const existing = (service.viajes ?? [])
@@ -992,24 +999,14 @@ function ActiveGroupEditor({
                       className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-500 hover:border-red-900 hover:text-red-400"
                       disabled={pending}
                       onClick={() => {
-                        const reason = window.prompt(
-                          "Motivo para retirar a la empleada",
-                        );
-                        if (!reason) return;
-                        const amount = window.prompt(
-                          "Cargo manual de transporte, si aplica",
-                          "0",
-                        );
-                        run(
-                          () =>
-                            removeGroupParticipant(
-                              service.id,
-                              participant.employeeId,
-                              reason,
-                              Number(amount || 0) || undefined,
-                            ),
-                          "Participante retirada",
-                        );
+                        setRemovingParticipant({
+                          serviceId: service.id,
+                          employeeId: participant.employeeId,
+                          employeeName:
+                            participant.employee?.nombreArtistico || "Empleada",
+                        });
+                        setRemoveReason("");
+                        setRemoveTransportAmount("0");
                       }}
                     >
                       Retirar
@@ -1270,6 +1267,99 @@ function ActiveGroupEditor({
           </button>
         </div>
       </section>
+
+      {removingParticipant && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl">
+            <h3 className="font-heading text-lg font-bold text-white">
+              Retirar a {removingParticipant.employeeName}
+            </h3>
+            <p className="mt-1 text-xs text-zinc-400">
+              Registra el motivo para retirar a la participante del servicio grupal y el cargo de transporte si aplica.
+            </p>
+
+            <div className="mt-4 space-y-3 text-xs">
+              <div>
+                <label className="text-zinc-300 font-bold">Motivo del retiro (requerido)</label>
+                <textarea
+                  rows={3}
+                  value={removeReason}
+                  onChange={(e) => setRemoveReason(e.target.value)}
+                  placeholder="Ej: Problemas de salud / solicitud del cliente..."
+                  className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-sm text-white focus:border-[#C5A55A] focus:outline-none"
+                />
+                <div className="mt-1 flex items-center justify-between text-[11px]">
+                  <span
+                    className={`flex items-center gap-1 font-medium ${
+                      removeReason.trim().length >= 3 ? "text-emerald-400" : "text-amber-400"
+                    }`}
+                  >
+                    {removeReason.trim().length >= 3 ? (
+                      <>
+                        <CheckCircle2 className="h-3 w-3" /> Mínimo alcanzado
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-3 w-3" /> Mínimo 3 caracteres ({3 - removeReason.trim().length} restantes)
+                      </>
+                    )}
+                  </span>
+                  <span className="text-zinc-500 font-mono">{removeReason.trim().length} caracteres</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-zinc-300 font-bold">Cargo manual de transporte ($ MXN, si aplica)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={removeTransportAmount}
+                  onChange={(e) => setRemoveTransportAmount(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 text-sm text-white focus:border-[#C5A55A] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2.5 border-t border-zinc-800/60 pt-3">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => setRemovingParticipant(null)}
+                className="rounded-xl px-4 py-2 text-xs font-bold text-zinc-400 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={removeReason.trim().length < 3 || pending}
+                onClick={() => {
+                  if (!removingParticipant) return;
+                  const { serviceId, employeeId } = removingParticipant;
+                  setRemovingParticipant(null);
+                  run(
+                    () =>
+                      removeGroupParticipant(
+                        serviceId,
+                        employeeId,
+                        removeReason.trim(),
+                        Number(removeTransportAmount || 0) || undefined,
+                      ),
+                    "Participante retirada",
+                  );
+                }}
+                className="rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 flex items-center gap-1.5"
+              >
+                {pending ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Procesando...
+                  </>
+                ) : (
+                  "Confirmar Retiro"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
