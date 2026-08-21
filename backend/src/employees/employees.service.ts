@@ -176,7 +176,8 @@ export class EmployeesService {
     });
     const withTrust = await this.attachTrustScores(employees);
     const withAvailability = await this.attachCatalogAvailability(withTrust);
-    return await this.attachWeeklyContentMetrics(withAvailability);
+    const withBots = await this.attachBotUsernames(withAvailability);
+    return await this.attachWeeklyContentMetrics(withBots);
   }
 
   async findAllActive(): Promise<Empleadas[]> {
@@ -208,7 +209,11 @@ export class EmployeesService {
       (employee) => !sanctioned.has(employee.id) && employee.usuario?.activo,
     );
     const ranked = await this.rankEmployeesByScore(publicEmployees);
-    return this.attachCatalogAvailability(await this.attachTrustScores(ranked));
+    return this.attachBotUsernames(
+      await this.attachCatalogAvailability(
+        await this.attachTrustScores(ranked),
+      ),
+    );
   }
 
   /**
@@ -267,8 +272,10 @@ export class EmployeesService {
       throw new NotFoundException(`Empleada con ID ${id} no encontrado`);
     }
 
-    const [employeeWithAvailability] = await this.attachCatalogAvailability(
-      await this.attachTrustScores([empleada]),
+    const [employeeWithAvailability] = await this.attachBotUsernames(
+      await this.attachCatalogAvailability(
+        await this.attachTrustScores([empleada]),
+      ),
     );
     const [finalEmployee] = await this.attachWeeklyContentMetrics([
       employeeWithAvailability,
@@ -401,6 +408,38 @@ export class EmployeesService {
         !isSanctioned && Boolean(active) && !queuedEmployees.has(employee.id);
       return employee;
     });
+  }
+
+  /**
+   * Stampa el username del bot propio de cada modelo. El catálogo lo usa para
+   * mandar al cliente al bot correcto en vez de al central.
+   */
+  private async attachBotUsernames(
+    employees: Empleadas[],
+  ): Promise<Empleadas[]> {
+    if (employees.length === 0) return employees;
+    try {
+      const rows: Array<{ employee_id: string; bot_username: string | null }> =
+        await this.dataSource.query(
+          `SELECT employee_id, bot_username
+           FROM employee_telegram_bots
+           WHERE status = 'activo' AND bot_username IS NOT NULL`,
+        );
+      const byEmployee = new Map(
+        rows.map((row) => [row.employee_id, row.bot_username]),
+      );
+      for (const employee of employees) {
+        employee.telegramBotUsername = byEmployee.get(employee.id) ?? null;
+      }
+    } catch {
+      // Durante el despliegue el backend puede levantar antes de que corra la
+      // migración. El catálogo no debe caerse por eso: sin bots dedicados, los
+      // enlaces apuntan al bot central, que es el comportamiento de siempre.
+      for (const employee of employees) {
+        employee.telegramBotUsername = null;
+      }
+    }
+    return employees;
   }
 
   private async attachTrustScores(

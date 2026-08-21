@@ -5,6 +5,10 @@ import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { session } from 'telegraf';
 import { Repository } from 'typeorm';
 import { TelegramService } from './telegram.service';
+import { TelegramCryptoService } from './telegram-crypto.service';
+import { TelegramBotRegistryService } from './telegram-bot-registry.service';
+import { TelegramBotsController } from './telegram-bots.controller';
+import { EmployeeTelegramBot } from './entities/employee-telegram-bot.entity';
 import { TelegramAuthUpdate } from './telegram-auth.update';
 import { TelegramBookingUpdate } from './telegram-booking.update';
 import { TelegramDriverUpdate } from './telegram-driver.update';
@@ -53,6 +57,7 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
       ConversacionesTelegram,
       AuthorizedBankAccounts,
       PaymentReceiptValidations,
+      EmployeeTelegramBot,
     ]),
     AuthModule,
     LoyaltyModule,
@@ -89,6 +94,18 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
               : undefined,
           middlewares: [
             session({
+              // Cada bot dedicado necesita su propio hilo de conversación: sin
+              // este prefijo, hablar con dos modelas distintas compartiría la
+              // misma sesión. El bot central conserva el formato original de la
+              // clave para no tumbar las conversaciones ya abiertas.
+              getSessionKey: (ctx) => {
+                if (!ctx.from || !ctx.chat) return undefined;
+                const base = `${ctx.from.id}:${ctx.chat.id}`;
+                const employeeId = (
+                  ctx as { dedicatedBotEmployeeId?: string }
+                ).dedicatedBotEmployeeId;
+                return employeeId ? `${employeeId}:${base}` : base;
+              },
               store: {
                 get: async (key) => {
                   const sess = await sessionRepository.findOne({
@@ -110,8 +127,11 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
       inject: [ConfigService, getRepositoryToken(TelegramSession)],
     }),
   ],
+  controllers: [TelegramBotsController],
   providers: [
     TelegramService,
+    TelegramCryptoService,
+    TelegramBotRegistryService,
     TelegramAuthUpdate,
     TelegramBookingUpdate,
     TelegramDriverUpdate,
@@ -121,6 +141,11 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
     TelegramOnboardingUpdate,
     TelegramOnboardingScheduler,
   ],
-  exports: [TelegramService, TelegrafModule, TelegramBookingService],
+  exports: [
+    TelegramService,
+    TelegrafModule,
+    TelegramBookingService,
+    TelegramBotRegistryService,
+  ],
 })
 export class TelegramModule {}

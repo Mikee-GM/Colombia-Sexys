@@ -34,6 +34,7 @@ import { DisciplineService } from '../discipline/discipline.service';
 import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entity';
 import { SaveBankAccountDto } from './dto/bank-account.dto';
 import { UploadService } from '../upload/upload.service';
+import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
 
 export type EvidenceItem = {
@@ -93,7 +94,18 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly disciplineService: DisciplineService,
     private readonly uploadService: UploadService,
+    private readonly botRegistry: TelegramBotRegistryService,
   ) {}
+
+  /**
+   * Bot por el que hay que hablarle al cliente y a la empleada de un servicio.
+   * Cada modelo tiene su propio bot y un bot solo puede escribirle a quien lo
+   * haya iniciado, así que el central solo sirve de respaldo mientras la modelo
+   * no tenga el suyo cargado. Los grupos, choferes y jefes siguen en el central.
+   */
+  private botFor(employeeId?: string | null): Telegraf<Context> {
+    return this.botRegistry.botForEmployeeOrCentral(employeeId);
+  }
 
   private estimatedEnd(service: Servicios): Date | null {
     return estimateServiceEnd(
@@ -827,7 +839,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           msg += `\n• *Notas del jefe:* ${servicio.notasJefe}`;
         }
         try {
-          await this.bot.telegram.sendMessage(employeeChatId, msg, {
+          await this.botFor(servicio.empleadaId).telegram.sendMessage(employeeChatId, msg, {
             parse_mode: 'Markdown',
           });
         } catch (err) {
@@ -915,7 +927,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             ]);
           }
 
-          const empMsg = await this.bot.telegram.sendMessage(
+          const empMsg = await this.botFor(servicio.empleadaId).telegram.sendMessage(
             targetChatId,
             `💼 *¡Servicio en Curso!* 🟢\n\n` +
               `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
@@ -950,7 +962,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           { employeeName: servicio.empleada.nombreArtistico },
           'Oyeee, sí puedo ir contigo, nos vemos en un ratico',
         );
-        await this.bot.telegram.sendMessage(
+        await this.botFor(servicio.empleadaId).telegram.sendMessage(
           servicio.cliente.telegramChatId,
           clientMessage,
         );
@@ -1073,7 +1085,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             Markup.button.callback('Ya llegué', `eu:${viajeGuardado.id}:f`),
           ]);
         }
-        await this.bot.telegram.sendMessage(
+        await this.botFor(servicio.empleadaId).telegram.sendMessage(
           empUser.telegramChatId,
           `💼 *¡Servicio en Curso!* 🟢\n\n` +
             `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
@@ -1167,7 +1179,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           { employeeName: servicio.empleada?.nombreArtistico },
           'Qué pena contigo, esta vez no voy a poder ir',
         );
-        await this.bot.telegram.sendMessage(
+        await this.botFor(servicio.empleadaId).telegram.sendMessage(
           servicio.clienteTelegramId,
           clientMessage,
         );
@@ -1251,7 +1263,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           { employeeName: next.empleada?.nombreArtistico },
           `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} ya está disponible y se encuentra en la misma ubicación.`,
         );
-        await this.bot.telegram.sendMessage(
+        await this.botFor(next.empleadaId).telegram.sendMessage(
           next.cliente.telegramChatId,
           message,
         );
@@ -1291,7 +1303,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         const employeeChatId = next.empleada?.usuario?.telegramChatId;
         if (employeeChatId) {
           if (trip.proveedorTransporte === 'uber') {
-            await this.bot.telegram.sendMessage(
+            await this.botFor(next.empleadaId).telegram.sendMessage(
               employeeChatId,
               'Tu siguiente servicio está listo. Tu transporte será en Uber. Usa los botones para confirmar cada etapa de tu trayecto.',
               {
@@ -1307,7 +1319,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               },
             );
           } else {
-            await this.bot.telegram.sendMessage(
+            await this.botFor(next.empleadaId).telegram.sendMessage(
               employeeChatId,
               'Tu siguiente servicio está listo. Te notificaremos cuando tu chofer esté en camino.',
             );
@@ -1320,7 +1332,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           { employeeName: next.empleada?.nombreArtistico },
           `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} terminó su servicio anterior y ahora va en camino.`,
         );
-        await this.bot.telegram.sendMessage(
+        await this.botFor(next.empleadaId).telegram.sendMessage(
           next.cliente.telegramChatId,
           message,
         );
@@ -1343,7 +1355,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     const chatId = service?.empleada?.usuario?.telegramChatId;
     if (!service || !chatId) return;
-    await this.bot.telegram.sendMessage(
+    await this.botFor(service.empleadaId).telegram.sendMessage(
       chatId,
       `💼 *Siguiente servicio iniciado*\n\n` +
         `• *Cliente:* ${service.cliente?.nombreTelegram || 'Desconocido'}\n` +
@@ -1424,7 +1436,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           const threadId = undefined;
 
           if (targetChatId) {
-            await this.bot.telegram.sendMessage(
+            await this.botFor(service.empleadaId).telegram.sendMessage(
               targetChatId,
               `⏳ *Aviso de Finalización* ⏳\n\n` +
                 `Tu servicio está programado para finalizar en aproximadamente 15 minutos.\n\n` +
@@ -1958,7 +1970,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
       if (targetChatId) {
         try {
-          await this.bot.telegram.sendMessage(
+          await this.botFor(servicio.empleadaId).telegram.sendMessage(
             targetChatId,
             `❌ *Servicio Cancelado por Tardanza:*\nSe agotó el tiempo de espera límite y no abordaste el vehículo. El servicio con el cliente ha sido cancelado.`,
             { message_thread_id: threadId, parse_mode: 'Markdown' },
@@ -1971,7 +1983,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     if (servicio.cliente?.telegramChatId) {
       try {
-        await this.bot.telegram.sendMessage(
+        await this.botFor(servicio.empleadaId).telegram.sendMessage(
           servicio.cliente.telegramChatId,
           `❌ *Servicio Cancelado:*\nLamentamos informarte que la empleada *${servicio.empleada.nombreArtistico}* no pudo estar disponible a tiempo y el servicio ha sido cancelado.\n\n` +
             `Te recomendamos ver otras opciones de empleadas disponibles ahora mismo:`,
@@ -2020,7 +2032,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
         if (disponibles.length > 0) {
           for (const emp of disponibles) {
-            await this.bot.telegram.sendMessage(
+            await this.botFor(servicio.empleadaId).telegram.sendMessage(
               servicio.cliente.telegramChatId,
               `👩‍🍳 *${emp.nombreArtistico}*\n` +
                 `• Tarifa: $${emp.precioBaseHora}/hr\n` +
@@ -2039,7 +2051,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             );
           }
         } else {
-          await this.bot.telegram.sendMessage(
+          await this.botFor(servicio.empleadaId).telegram.sendMessage(
             servicio.cliente.telegramChatId,
             `Lo sentimos, no hay otras empleadas disponibles en este momento. Por favor, intenta de nuevo más tarde.`,
           );
@@ -2517,7 +2529,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     const chatId = trip.servicio.empleada?.usuario?.telegramChatId;
     if (chatId) {
-      await this.bot.telegram.sendPhoto(chatId, fileId, {
+      const employeeBot = this.botFor(trip.servicio.empleadaId);
+      // Un `file_id` solo sirve dentro del bot que recibió el archivo. La
+      // captura la sube un jefe o un admin por el bot central, así que si la
+      // empleada tiene bot propio hay que mandarle la copia ya subida a R2 en
+      // vez del `file_id`, que para su bot no existe.
+      const photo =
+        employeeBot === this.botRegistry.central ? fileId : evidence.url;
+      await employeeBot.telegram.sendPhoto(chatId, photo, {
         caption: `📱 Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.`,
       });
     }
@@ -2547,7 +2566,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       uberScreenshotUrl: evidence.url,
       uberScreenshotUploadedAt: uploadedAt,
     });
-    const message = await this.bot.telegram.sendPhoto(
+    const message = await this.botFor(trip.servicio.empleadaId).telegram.sendPhoto(
       chatId,
       { source: file.buffer, filename: file.originalname },
       {
@@ -2701,7 +2720,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ]);
       try {
         if (servicio.telegramResumenDefinitivoId) {
-          await this.bot.telegram.editMessageText(
+          await this.botFor(servicio.empleadaId).telegram.editMessageText(
             servicio.cliente.telegramChatId,
             Number(servicio.telegramResumenDefinitivoId),
             undefined,
@@ -2709,7 +2728,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             { parse_mode: 'Markdown', ...keyboard },
           );
         } else {
-          const message = await this.bot.telegram.sendMessage(
+          const message = await this.botFor(servicio.empleadaId).telegram.sendMessage(
             servicio.cliente.telegramChatId,
             text,
             {
@@ -2722,7 +2741,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           });
         }
       } catch {
-        const message = await this.bot.telegram.sendMessage(
+        const message = await this.botFor(servicio.empleadaId).telegram.sendMessage(
           servicio.cliente.telegramChatId,
           text,
           {
@@ -2745,7 +2764,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         `• *Total a cobrar: $${Number(servicio.totalFinal).toFixed(2)}*`;
       try {
         if (servicio.telegramEmpleadaMensajeId) {
-          await this.bot.telegram.editMessageText(
+          await this.botFor(servicio.empleadaId).telegram.editMessageText(
             employeeChatId,
             Number(servicio.telegramEmpleadaMensajeId),
             undefined,
@@ -2753,7 +2772,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             { parse_mode: 'Markdown' },
           );
         } else {
-          const message = await this.bot.telegram.sendMessage(
+          const message = await this.botFor(servicio.empleadaId).telegram.sendMessage(
             employeeChatId,
             employeeText,
             { parse_mode: 'Markdown' },
@@ -2763,7 +2782,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           });
         }
       } catch {
-        const message = await this.bot.telegram.sendMessage(
+        const message = await this.botFor(servicio.empleadaId).telegram.sendMessage(
           employeeChatId,
           employeeText,
           { parse_mode: 'Markdown' },
@@ -2905,7 +2924,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         action === 'uber_arrived'
           ? '📍 Tu Uber ya llegó. Cuando subas, presiona “Ya estoy en el Uber”.'
           : '🚗 Tu Uber va en camino a recogerte.';
-      await this.bot.telegram.sendMessage(employeeChatId, message, {
+      await this.botFor(trip.servicio.empleadaId).telegram.sendMessage(employeeChatId, message, {
         ...Markup.inlineKeyboard(
           action === 'uber_arrived'
             ? [
@@ -2936,7 +2955,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             ? 'Ya llegué al punto que cuadramos, aquí te espero'
             : 'Ya voy en camino, nos vemos pronto',
         );
-        await this.bot.telegram.sendMessage(
+        await this.botFor(trip.servicio.empleadaId).telegram.sendMessage(
           trip.servicio.cliente.telegramChatId,
           clientMessage,
         );

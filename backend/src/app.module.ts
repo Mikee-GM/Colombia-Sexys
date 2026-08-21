@@ -66,6 +66,14 @@ import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
         AUTH_COOKIE_SAME_SITE: Joi.string().valid('lax', 'none').default('lax'),
         TELEGRAM_BOT_TOKEN: Joi.string().required(),
         TELEGRAM_PROVIDER_TOKEN: Joi.string().allow('').optional(),
+        // Opcional a propósito: sin ella el sistema arranca igual y sigue
+        // funcionando con el bot central. Solo hace falta para poder vincular
+        // bots dedicados a las modelos.
+        TELEGRAM_TOKEN_ENCRYPTION_KEY: Joi.string()
+          .min(32)
+          .allow('')
+          .optional(),
+        TELEGRAM_WEBHOOK_BASE_URL: Joi.string().uri().allow('').optional(),
         DEFAULT_ADMIN_EMAIL: Joi.string().email().required(),
         DEFAULT_ADMIN_PASSWORD: Joi.string().min(12).required(),
         R2_ENDPOINT: Joi.string().uri().required(),

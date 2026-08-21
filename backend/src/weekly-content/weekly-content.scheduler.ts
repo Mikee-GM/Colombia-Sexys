@@ -122,6 +122,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
             `📸 *¡Hola ${emp.nombreArtistico}! Es momento de actualizar tus fotos semanales.*\n\n` +
               `Por favor envía directamente por este chat tus fotos recientes (de buena calidad y atractivas) para renovar tu catálogo del fin de semana.\n` +
               `Tienes hasta el sábado para enviarlas. ¡Quedamos atentos a tus fotos! ✨`,
+            emp.id,
           );
         } catch (err) {
           this.logger.warn(
@@ -152,6 +153,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
           `⚠️ *Recordatorio de Fotos Semanales*\n\n` +
             `Hola ${schedule.empleada.nombreArtistico}, aún no hemos recibido tus fotos para la renovación de tu catálogo de esta semana.\n` +
             `Recuerda enviarlas a la brevedad por este chat para evitar incidencias en tu perfil.`,
+          schedule.empleadaId,
         );
       } catch (err) {
         this.logger.warn(
@@ -197,6 +199,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
             `❌ *Aviso de Incumplimiento*\n\n` +
               `Hola ${schedule.empleada.nombreArtistico}, ha vencido el plazo límite de 48h para la entrega de tus fotos semanales.\n` +
               `Se ha registrado una falta por incumplimiento en tu historial disciplinario. Por favor comunícate con tu jefe o administración.`,
+            schedule.empleadaId,
           );
         } catch (err) {
           this.logger.warn(

@@ -28,6 +28,14 @@ export class Empleadas {
   @ApiPropertyOptional({ enum: ['disponible', 'ocupada', 'inactiva'] })
   availabilityStatus?: 'disponible' | 'ocupada' | 'inactiva';
 
+  /**
+   * Username del bot de Telegram propio de la modelo, si tiene uno activo. Es
+   * público (el catálogo lo usa para armar su enlace de contacto); el token
+   * nunca sale de la tabla `employee_telegram_bots`.
+   */
+  @ApiPropertyOptional({ description: 'Username del bot propio' })
+  telegramBotUsername?: string | null;
+
   @ApiPropertyOptional()
   sancionada?: boolean;
 

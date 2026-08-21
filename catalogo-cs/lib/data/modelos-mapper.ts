@@ -24,7 +24,7 @@ export function mapToModelo(emp: any): Modelo {
     pendingWeeklyPhotosCount: emp.pendingWeeklyPhotosCount || 0,
     weeklyContentStatus: emp.weeklyContentStatus || "al_dia",
     linkX: emp.linkX || "",
-    contactLink: getEmployeeHireTelegramUrl(emp.id),
+    contactLink: getEmployeeHireTelegramUrl(emp.id, emp.telegramBotUsername),
     contactLabel: emp.contactLabel || "Contacto",
     disponible: emp.disponible,
     catalogoActivo: emp.catalogoActivo !== false,

@@ -447,7 +447,12 @@ export class ChallengesService {
         `Compites por ${metricLabel} contra: ${opponents || 'otros participantes'}.\n` +
         `Termina el ${endsAtLabel}.`;
       try {
-        await this.telegram.sendMessage(chatId, message);
+        await this.telegram.sendMessage(
+          chatId,
+          message,
+          // En retos de empleadas, cada una recibe por su propio bot.
+          challenge.participantType === 'employee' ? row.participantId : null,
+        );
       } catch {
         // best-effort, no interrumpe el ciclo por un fallo de Telegram
       }
@@ -480,7 +485,14 @@ export class ChallengesService {
           : `El reto "${challenge.title}" terminó. Ganó ${winner.name}.`;
       const message = `${headline}\n\nResultado final (${metricLabel}):\n${resultLines}`;
       try {
-        await this.telegram.sendMessage(chatId, message);
+        await this.telegram.sendMessage(
+          chatId,
+          message,
+          // En retos de empleadas, cada una recibe por su propio bot.
+          challenge.participantType === 'employee'
+            ? standing.participantId
+            : null,
+        );
       } catch {
         // best-effort, no interrumpe el ciclo por un fallo de Telegram
       }

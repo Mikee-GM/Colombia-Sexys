@@ -11,6 +11,7 @@ import { ConversacionesTelegram } from './entities/telegram-conversation.entity'
 import { Servicios } from '../services/entities/service.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
+import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 
 @Injectable()
 export class TelegramConversationsService {
@@ -21,7 +22,16 @@ export class TelegramConversationsService {
     private readonly servicesRepository: Repository<Servicios>,
     @InjectBot() private readonly bot: Telegraf<Context>,
     private readonly realtimeEvents: RealtimeEventsService,
+    private readonly botRegistry: TelegramBotRegistryService,
   ) {}
+
+  /**
+   * Al cliente hay que escribirle por el bot de la modelo con la que está
+   * hablando: un bot solo puede mandar mensajes a quien lo haya iniciado.
+   */
+  private clientBot(service: Servicios): Telegraf<Context> {
+    return this.botRegistry.botForEmployeeOrCentral(service.empleadaId);
+  }
 
   async findByService(
     serviceId: string,
@@ -57,7 +67,7 @@ export class TelegramConversationsService {
       throw new ConflictException('El cliente no tiene Telegram vinculado');
     }
 
-    await this.bot.telegram.sendMessage(clientChatId, message);
+    await this.clientBot(service).telegram.sendMessage(clientChatId, message);
     if (service.jefe?.grupoTelegramId && service.telegramThreadId) {
       await this.bot.telegram.sendMessage(
         service.jefe.grupoTelegramId,
@@ -83,7 +93,7 @@ export class TelegramConversationsService {
       throw new ConflictException('El cliente no tiene Telegram vinculado');
     }
 
-    await this.bot.telegram.sendMessage(clientChatId, message);
+    await this.clientBot(service).telegram.sendMessage(clientChatId, message);
     if (service.jefe?.grupoTelegramId && service.telegramThreadId) {
       await this.bot.telegram.sendMessage(
         service.jefe.grupoTelegramId,

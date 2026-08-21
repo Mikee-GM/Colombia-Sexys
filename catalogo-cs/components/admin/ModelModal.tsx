@@ -17,6 +17,12 @@ import {
   addPrivatePhotoAction,
   deletePrivatePhotoAction,
 } from "@/lib/actions/modelos";
+import {
+  getEmployeeBotsAction,
+  setEmployeeBotTokenAction,
+  removeEmployeeBotAction,
+  type EmployeeBot,
+} from "@/lib/actions/employee-bots";
 import InputField from "../ui/InputField";
 import TextareaField from "../ui/TextareaField";
 import SelectField from "../ui/SelectField";
@@ -54,6 +60,54 @@ export default function ModelModal({
 }: ModelModalProps) {
   const [newExtraNombre, setNewExtraNombre] = useState("");
   const [newExtraPrecio, setNewExtraPrecio] = useState("");
+
+  // Bot de Telegram propio de la modelo. Vive fuera del formulario principal
+  // porque el token viaja por su propio endpoint y nunca se devuelve completo.
+  const [bot, setBot] = useState<EmployeeBot | null>(null);
+  const [botToken, setBotToken] = useState("");
+  const [botBusy, setBotBusy] = useState(false);
+
+  useEffect(() => {
+    if (!modelo?._id) return;
+    let cancelled = false;
+    void getEmployeeBotsAction().then((bots) => {
+      if (cancelled) return;
+      setBot(bots.find((b) => b.employeeId === modelo._id) ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [modelo?._id]);
+
+  const handleSaveBotToken = async () => {
+    if (!modelo?._id || !botToken.trim()) return;
+    setBotBusy(true);
+    const result = await setEmployeeBotTokenAction(modelo._id, botToken);
+    setBotBusy(false);
+    if (result.ok) {
+      setBot(result.bot);
+      setBotToken("");
+      showNotification(
+        `Bot @${result.bot.botUsername ?? "conectado"} vinculado correctamente.`,
+        "success",
+      );
+    } else {
+      showNotification(result.error, "error");
+    }
+  };
+
+  const handleRemoveBot = async () => {
+    if (!modelo?._id) return;
+    setBotBusy(true);
+    const result = await removeEmployeeBotAction(modelo._id);
+    setBotBusy(false);
+    if (result.ok) {
+      setBot(null);
+      showNotification("Bot desvinculado.", "success");
+    } else {
+      showNotification(result.error ?? "No se pudo quitar el bot.", "error");
+    }
+  };
 
   const [form, setForm] = useState<ModeloPayload>(
     modelo
@@ -739,6 +793,80 @@ export default function ModelModal({
                   onChange={(e) => setForm({ ...form, linkX: e.target.value })}
                   placeholder="https://x.com/..."
                 />
+              </div>
+
+              <div className="border-t border-zinc-800 pt-5">
+                <label className="block text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase mb-2">
+                  Bot de Telegram propio
+                </label>
+                {!modelo?._id ? (
+                  <p className="text-xs text-zinc-500">
+                    Guarda primero la modelo para poder vincularle su bot.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {bot && (
+                      <div className="flex flex-wrap items-center gap-3 bg-black border border-zinc-800 px-4 py-3">
+                        <span
+                          className={`text-[10px] font-bold tracking-widest uppercase px-2 py-1 ${
+                            bot.status === "activo"
+                              ? "bg-emerald-950 text-emerald-400"
+                              : bot.status === "error"
+                                ? "bg-red-950 text-red-400"
+                                : "bg-zinc-900 text-zinc-400"
+                          }`}
+                        >
+                          {bot.status}
+                        </span>
+                        <span className="text-sm text-white font-medium">
+                          {bot.botUsername ? `@${bot.botUsername}` : "Sin username"}
+                        </span>
+                        <span className="text-xs text-zinc-500 font-mono">
+                          Token ••••{bot.tokenHint ?? "????"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleRemoveBot}
+                          disabled={botBusy}
+                          className="ml-auto text-xs text-red-400 hover:text-red-300 disabled:opacity-40"
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    )}
+                    {bot?.status === "error" && bot.lastError && (
+                      <p className="text-xs text-red-400">{bot.lastError}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={botToken}
+                        onChange={(e) => setBotToken(e.target.value)}
+                        placeholder={
+                          bot
+                            ? "Pega un token nuevo para reemplazar el actual"
+                            : "123456789:AAF-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                        }
+                        autoComplete="off"
+                        className={inputClass}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveBotToken}
+                        disabled={botBusy || !botToken.trim()}
+                        className="shrink-0 bg-[#C5A55A] text-black text-xs font-bold tracking-widest uppercase px-5 disabled:opacity-40"
+                      >
+                        {botBusy ? "..." : bot ? "Reemplazar" : "Vincular"}
+                      </button>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      Crea el bot en @BotFather y pega aquí su token. Se guarda
+                      cifrado y el bot queda activo al instante, sin reiniciar
+                      nada. Mientras no tenga bot propio, sus clientes seguirán
+                      atendiéndose por el bot central.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-zinc-800 pt-5">

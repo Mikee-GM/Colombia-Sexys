@@ -46,6 +46,7 @@ import { ExtensionsService } from '../extensions/extensions.service';
 import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
+import { DedicatedBotContext } from './telegram-bot-registry.service';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
 import { TelegramSession } from './entities/telegram-session.entity';
@@ -5627,6 +5628,22 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         'Para contratar a una de nuestras empleadas, por favor utiliza el enlace de contratación directa en nuestra web.',
       );
       return;
+    }
+
+    // En el bot dedicado de una modelo, un cliente que escribe directo (sin
+    // /start ni pasar por el catálogo) sí debe ser atendido: el chat ya
+    // identifica a la modelo. Antes este `return` lo dejaba en visto.
+    const dedicatedEmployeeId = (ctx as DedicatedBotContext)
+      .dedicatedBotEmployeeId;
+    const dedicatedSenderId = ctx.from?.id.toString();
+    if (!ctx.session && dedicatedEmployeeId && dedicatedSenderId) {
+      const staff = await this.usuariosRepository.findOneBy({
+        telegramChatId: dedicatedSenderId,
+      });
+      if (!staff) {
+        await this.startHireSession(ctx, dedicatedEmployeeId);
+        return;
+      }
     }
 
     const session = ctx.session;

@@ -61,6 +61,11 @@ describe('ServicesService transport settlement', () => {
     { get: jest.fn() } as any,
     {} as any,
     uploadService as any,
+    // Sin bot dedicado, el registro cae al central: el mismo mock de siempre.
+    {
+      botForEmployeeOrCentral: jest.fn(() => bot),
+      central: bot,
+    } as any,
   );
 
   beforeEach(() => jest.clearAllMocks());

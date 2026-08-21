@@ -30,6 +30,7 @@ import { EmployeeCashObligation } from '../transport-operations/entities/employe
 import { Viajes } from '../trips/entities/trip.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { ConversacionesTelegram } from '../telegram-conversations/entities/telegram-conversation.entity';
+import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 import {
   AddGroupParticipantDto,
   ChangeGroupDurationDto,
@@ -89,7 +90,19 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
     private readonly bossAssignment: GroupBossAssignmentService,
+    private readonly botRegistry: TelegramBotRegistryService,
   ) {}
+
+  /**
+   * En un servicio grupal intervienen varias modelos, pero el cliente solo
+   * inició el bot de una: aquella desde cuyo chat se detectó la intención de
+   * grupo. Ese es el único bot que puede escribirle.
+   */
+  private clientBot(request: {
+    initialEmployeeId?: string | null;
+  }): Telegraf<Context> {
+    return this.botRegistry.botForEmployeeOrCentral(request.initialEmployeeId);
+  }
 
   onModuleInit(): void {
     this.cleanupTimer = setInterval(
@@ -368,7 +381,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException(
         'El cliente no tiene un chat de Telegram disponible',
       );
-    await this.bot.telegram.sendMessage(
+    await this.clientBot(request).telegram.sendMessage(
       request.client.telegramChatId,
       message.trim(),
     );
@@ -398,7 +411,8 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException(
         'El cliente no tiene un chat de Telegram disponible',
       );
-    await this.bot.telegram.sendMessage(
+    const clientBot = this.clientBot(fullRequest);
+    await clientBot.telegram.sendMessage(
       fullRequest.client.telegramChatId,
       'Selecciona las empleadas que deseas para el servicio grupal. La disponibilidad se reservará cuando confirmes la selección.',
     );
@@ -409,7 +423,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         [Markup.button.callback('Seleccionar', callback)],
       ]);
       if (employee.fotoPerfilUrl) {
-        await this.bot.telegram
+        await clientBot.telegram
           .sendPhoto(
             fullRequest.client.telegramChatId,
             employee.fotoPerfilUrl,
@@ -419,21 +433,21 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
             },
           )
           .catch(() =>
-            this.bot.telegram.sendMessage(
+            clientBot.telegram.sendMessage(
               fullRequest.client.telegramChatId,
               caption,
               keyboard,
             ),
           );
       } else {
-        await this.bot.telegram.sendMessage(
+        await clientBot.telegram.sendMessage(
           fullRequest.client.telegramChatId,
           caption,
           keyboard,
         );
       }
     }
-    await this.bot.telegram.sendMessage(
+    await clientBot.telegram.sendMessage(
       fullRequest.client.telegramChatId,
       'Cuando termines, confirma la selección.',
       Markup.inlineKeyboard([
@@ -454,7 +468,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException(
         'El cliente no tiene un chat de Telegram disponible',
       );
-    await this.bot.telegram.sendMessage(
+    await this.clientBot(request).telegram.sendMessage(
       request.client.telegramChatId,
       'El jefe necesita la ubicación del servicio. Compártela usando el botón.',
       Markup.keyboard([[Markup.button.locationRequest('Compartir ubicación')]])
@@ -1152,7 +1166,9 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       const chatId = participant.employee?.usuario?.telegramChatId;
       if (chatId) {
         const responsible = participant.role === 'responsable';
-        await this.bot.telegram.sendMessage(
+        await this.botRegistry.botForEmployeeOrCentral(
+          participant.employeeId,
+        ).telegram.sendMessage(
           chatId,
           responsible
             ? `Fuiste asignada como responsable de un servicio grupal con ${result.participantes.length} participantes. Puedes consultar transporte, registrar extras y finalizar el servicio.`
@@ -2214,7 +2230,14 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     )
       return;
     const bankDetails = await this.servicesService.bankTransferDetails();
-    await this.bot.telegram.sendMessage(
+    // El servicio grupal nace de una solicitud: el bot por el que se le habla
+    // al cliente es el de la modelo desde cuyo chat se originó, no el de la
+    // responsable del servicio (a esa puede no haberla iniciado nunca).
+    const originRequest = await this.requests.findOne({
+      where: { serviceId: service.id },
+      select: { id: true, initialEmployeeId: true },
+    });
+    await this.clientBot(originRequest ?? {}).telegram.sendMessage(
       service.cliente.telegramChatId,
       `Cotización del servicio grupal\nTotal: $${Number(service.totalFinal).toFixed(2)}\nPagado: $${Number(service.totalPaid).toFixed(2)}\nSaldo por transferir: $${Number(service.pendingBalance).toFixed(2)}\n\n${bankDetails}\n\nEnvía una foto del comprobante en este chat. El servicio o incremento se activará después de validarlo.`,
     );

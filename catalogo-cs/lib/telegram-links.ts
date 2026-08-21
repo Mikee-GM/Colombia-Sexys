@@ -7,8 +7,17 @@ export function getTelegramBotUsername() {
   ).replace(/^@/, "");
 }
 
-export function getEmployeeHireTelegramUrl(employeeId: string) {
-  return `https://t.me/${getTelegramBotUsername()}?start=contratar_${employeeId}`;
+/**
+ * Cada modelo tiene su propio bot. Mientras no se le haya cargado el token,
+ * `botUsername` viene vacio y el enlace cae al bot central, que sigue
+ * atendiendo con normalidad.
+ */
+export function getEmployeeHireTelegramUrl(
+  employeeId: string,
+  botUsername?: string | null,
+) {
+  const bot = (botUsername || "").replace(/^@/, "") || getTelegramBotUsername();
+  return `https://t.me/${bot}?start=contratar_${employeeId}`;
 }
 
 export function getGroupServiceTelegramUrl() {

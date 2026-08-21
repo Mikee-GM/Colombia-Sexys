@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { JwtService } from '@nestjs/jwt';
+import { TelegramBotRegistryService } from './telegram-bot-registry.service';
 
 @Injectable()
 export class TelegramService {
@@ -16,6 +17,7 @@ export class TelegramService {
     @InjectRepository(Servicios)
     private readonly serviciosRepository: Repository<Servicios>,
     private readonly jwtService: JwtService,
+    private readonly botRegistry: TelegramBotRegistryService,
   ) {
     if (this.bot && typeof this.bot.catch === 'function') {
       this.bot.catch((err: any, ctx: Context) => {
@@ -35,9 +37,19 @@ export class TelegramService {
    * Envia un mensaje programático a un usuario por su ID de Telegram.
    * @param telegramId El ID de Telegram del usuario (como string bigint).
    * @param message El mensaje a enviar.
+   * @param employeeId Si el destinatario es una empleada, su id: el mensaje
+   *   sale por el bot propio de ella. Sin esto (choferes, jefes, admin) se usa
+   *   el bot central.
    */
-  async sendMessage(telegramId: string, message: string): Promise<void> {
-    await this.bot.telegram.sendMessage(telegramId, message);
+  async sendMessage(
+    telegramId: string,
+    message: string,
+    employeeId?: string | null,
+  ): Promise<void> {
+    const bot = employeeId
+      ? this.botRegistry.botForEmployeeOrCentral(employeeId)
+      : this.bot;
+    await bot.telegram.sendMessage(telegramId, message);
   }
 
   /**
