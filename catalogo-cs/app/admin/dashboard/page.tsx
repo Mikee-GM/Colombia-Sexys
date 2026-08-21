@@ -35,7 +35,7 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader
-        title="Ojo de Dios"
+        title="Dashboard"
         description=""
       />
 

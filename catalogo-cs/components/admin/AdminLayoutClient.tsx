@@ -47,7 +47,7 @@ const navGroups: NavGroup[] = [
   {
     title: "Operaciones en Vivo",
     items: [
-      { label: "Ojo de Dios", href: "/admin/dashboard", icon: Eye },
+      { label: "Dashboard", href: "/admin/dashboard", icon: Eye },
       { label: "Mapa", href: "/admin/map", icon: MapPin },
       { label: "Servicios", href: "/admin/services", icon: Activity },
       { label: "Evidencias", href: "/admin/evidence", icon: FileCheck },
@@ -154,11 +154,10 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all duration-200 ${
-                      active
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all duration-200 ${active
                         ? "text-black bg-[#C5A55A] shadow-md shadow-[#C5A55A]/20"
                         : "text-zinc-400 hover:text-white hover:bg-zinc-900/60"
-                    }`}
+                      }`}
                   >
                     <Icon className={`w-4 h-4 shrink-0 ${active ? "text-black" : "text-[#C5A55A]"}`} />
                     <span>{item.label}</span>
@@ -243,11 +242,10 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
                       key={item.href}
                       href={item.href}
                       onClick={() => setMenuOpen(false)}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-colors ${
-                        active
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-colors ${active
                           ? "text-black bg-[#C5A55A]"
                           : "text-zinc-400 hover:text-white bg-zinc-950/60 border border-zinc-900"
-                      }`}
+                        }`}
                     >
                       <Icon className={`w-4 h-4 ${active ? "text-black" : "text-[#C5A55A]"}`} />
                       <span>{item.label}</span>

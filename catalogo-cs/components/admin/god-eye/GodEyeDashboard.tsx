@@ -270,8 +270,8 @@ export function ServiceProblemBadges({ service }: { service: any }) {
           alt.severity === "critical"
             ? "border-red-500/40 bg-red-500/15 text-red-300 hover:bg-red-500/25"
             : alt.severity === "warning"
-            ? "border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
-            : "border-blue-500/40 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25";
+              ? "border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+              : "border-blue-500/40 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25";
 
         return (
           <span
@@ -607,11 +607,10 @@ export default function GodEyeDashboard({
       {/* Toast Notification */}
       {notification && (
         <div
-          className={`fixed bottom-6 right-6 z-50 rounded-xl px-5 py-3 text-sm font-semibold shadow-2xl transition-all ${
-            notification.type === "success"
-              ? "border border-[#C5A55A] bg-zinc-950 text-[#C5A55A]"
-              : "border border-red-500 bg-red-950/90 text-red-200"
-          }`}
+          className={`fixed bottom-6 right-6 z-50 rounded-xl px-5 py-3 text-sm font-semibold shadow-2xl transition-all ${notification.type === "success"
+            ? "border border-[#C5A55A] bg-zinc-950 text-[#C5A55A]"
+            : "border border-red-500 bg-red-950/90 text-red-200"
+            }`}
         >
           {notification.msg}
         </div>
@@ -702,11 +701,10 @@ export default function GodEyeDashboard({
               Quejas 24h
             </span>
             <AlertTriangle
-              className={`h-4 w-4 ${
-                metrics.recentNegativeRatings > 0
-                  ? "animate-bounce text-red-500"
-                  : "text-zinc-500"
-              }`}
+              className={`h-4 w-4 ${metrics.recentNegativeRatings > 0
+                ? "animate-bounce text-red-500"
+                : "text-zinc-500"
+                }`}
             />
           </div>
           <p className="mt-2 text-3xl font-extrabold text-red-400">
@@ -743,7 +741,7 @@ export default function GodEyeDashboard({
             <div className="h-2 w-2 animate-ping rounded-full bg-emerald-200" />
           </div>
           <h2 className="text-base font-extrabold tracking-[0.2em] text-[#C5A55A] uppercase">
-            Centro de Mando · Ojo de Dios
+            Dashboard general
           </h2>
         </div>
         <button
@@ -779,11 +777,10 @@ export default function GodEyeDashboard({
                       setDossier(null);
                     }
                   }}
-                  className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-bold transition-all ${
-                    actorTab === "employee"
-                      ? "bg-[#C5A55A] text-black shadow"
-                      : "text-zinc-400 hover:text-white"
-                  }`}
+                  className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-bold transition-all ${actorTab === "employee"
+                    ? "bg-[#C5A55A] text-black shadow"
+                    : "text-zinc-400 hover:text-white"
+                    }`}
                 >
                   Empleadas ({filteredEmployees.length})
                 </button>
@@ -798,11 +795,10 @@ export default function GodEyeDashboard({
                       setDossier(null);
                     }
                   }}
-                  className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-bold transition-all ${
-                    actorTab === "driver"
-                      ? "bg-[#C5A55A] text-black shadow"
-                      : "text-zinc-400 hover:text-white"
-                  }`}
+                  className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-bold transition-all ${actorTab === "driver"
+                    ? "bg-[#C5A55A] text-black shadow"
+                    : "text-zinc-400 hover:text-white"
+                    }`}
                 >
                   Choferes ({filteredDrivers.length})
                 </button>
@@ -817,11 +813,10 @@ export default function GodEyeDashboard({
                       setDossier(null);
                     }
                   }}
-                  className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-bold transition-all ${
-                    actorTab === "boss"
-                      ? "bg-[#C5A55A] text-black shadow"
-                      : "text-zinc-400 hover:text-white"
-                  }`}
+                  className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-bold transition-all ${actorTab === "boss"
+                    ? "bg-[#C5A55A] text-black shadow"
+                    : "text-zinc-400 hover:text-white"
+                    }`}
                 >
                   Jefes ({filteredBosses.length})
                 </button>
@@ -863,11 +858,10 @@ export default function GodEyeDashboard({
                     <button
                       key={emp.id}
                       onClick={() => loadDossier("employee", emp.id)}
-                      className={`flex items-center justify-between rounded-2xl px-3.5 py-2.5 text-left transition-all ${
-                        selectedActorId === emp.id
-                          ? "border border-[#C5A55A] bg-[#C5A55A]/15 text-white shadow-md"
-                          : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
-                      }`}
+                      className={`flex items-center justify-between rounded-2xl px-3.5 py-2.5 text-left transition-all ${selectedActorId === emp.id
+                        ? "border border-[#C5A55A] bg-[#C5A55A]/15 text-white shadow-md"
+                        : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
+                        }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700">
@@ -886,15 +880,14 @@ export default function GodEyeDashboard({
                           <span className="font-bold text-zinc-100 text-sm truncate">{emp.name}</span>
                           {typeof emp.rankingPosition === "number" && (
                             <span
-                              className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${
-                                emp.rankingPosition === 1
-                                  ? "bg-amber-500/20 border border-amber-500/50 text-amber-300"
-                                  : emp.rankingPosition === 2
+                              className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${emp.rankingPosition === 1
+                                ? "bg-amber-500/20 border border-amber-500/50 text-amber-300"
+                                : emp.rankingPosition === 2
                                   ? "bg-slate-300/20 border border-slate-300/50 text-slate-200"
                                   : emp.rankingPosition === 3
-                                  ? "bg-amber-700/20 border border-amber-700/50 text-amber-400"
-                                  : "bg-zinc-900 border border-zinc-800 text-zinc-400"
-                              }`}
+                                    ? "bg-amber-700/20 border border-amber-700/50 text-amber-400"
+                                    : "bg-zinc-900 border border-zinc-800 text-zinc-400"
+                                }`}
                               title={`Puesto #${emp.rankingPosition} de ${emp.totalEmployees || 9} en el ranking`}
                             >
                               <Trophy className="h-3 w-3" />
@@ -911,9 +904,8 @@ export default function GodEyeDashboard({
                           </span>
                         ) : (
                           <span
-                            className={`h-3 w-3 rounded-full ${
-                              emp.disponible ? "bg-emerald-400" : "bg-zinc-600"
-                            }`}
+                            className={`h-3 w-3 rounded-full ${emp.disponible ? "bg-emerald-400" : "bg-zinc-600"
+                              }`}
                             title={emp.disponible ? "Disponible" : "No disponible"}
                           />
                         )}
@@ -935,11 +927,10 @@ export default function GodEyeDashboard({
                     <button
                       key={drv.id}
                       onClick={() => loadDossier("driver", drv.id)}
-                      className={`flex items-center justify-between rounded-2xl px-3.5 py-2.5 text-left transition-all ${
-                        selectedActorId === drv.id
-                          ? "border border-blue-500/60 bg-blue-500/15 text-white shadow-md"
-                          : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
-                      }`}
+                      className={`flex items-center justify-between rounded-2xl px-3.5 py-2.5 text-left transition-all ${selectedActorId === drv.id
+                        ? "border border-blue-500/60 bg-blue-500/15 text-white shadow-md"
+                        : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
+                        }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <Car className="h-5 w-5 shrink-0 text-blue-400" />
@@ -953,9 +944,8 @@ export default function GodEyeDashboard({
                           </span>
                         ) : (
                           <span
-                            className={`h-3 w-3 rounded-full ${
-                              drv.disponible ? "bg-emerald-400" : "bg-zinc-600"
-                            }`}
+                            className={`h-3 w-3 rounded-full ${drv.disponible ? "bg-emerald-400" : "bg-zinc-600"
+                              }`}
                             title={drv.disponible ? "Disponible" : "No disponible"}
                           />
                         )}
@@ -977,11 +967,10 @@ export default function GodEyeDashboard({
                     <button
                       key={boss.id}
                       onClick={() => loadDossier("boss", boss.id)}
-                      className={`flex items-center justify-between rounded-2xl px-3.5 py-2.5 text-left transition-all ${
-                        selectedActorId === boss.id
-                          ? "border border-amber-500/60 bg-amber-500/15 text-white shadow-md"
-                          : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
-                      }`}
+                      className={`flex items-center justify-between rounded-2xl px-3.5 py-2.5 text-left transition-all ${selectedActorId === boss.id
+                        ? "border border-amber-500/60 bg-amber-500/15 text-white shadow-md"
+                        : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
+                        }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <Shield className="h-5 w-5 shrink-0 text-amber-400" />
@@ -995,9 +984,8 @@ export default function GodEyeDashboard({
                           </span>
                         ) : (
                           <span
-                            className={`h-3 w-3 rounded-full ${
-                              boss.activo ? "bg-emerald-400" : "bg-zinc-600"
-                            }`}
+                            className={`h-3 w-3 rounded-full ${boss.activo ? "bg-emerald-400" : "bg-zinc-600"
+                              }`}
                             title={boss.activo ? "Activo" : "Inactivo"}
                           />
                         )}
@@ -1057,11 +1045,10 @@ export default function GodEyeDashboard({
                         </h3>
                         {dossier.actorType === "employee" && (
                           <span
-                            className={`h-3 w-3 rounded-full ${
-                              dossier.profile?.disponible
-                                ? "bg-emerald-400"
-                                : "bg-zinc-600"
-                            }`}
+                            className={`h-3 w-3 rounded-full ${dossier.profile?.disponible
+                              ? "bg-emerald-400"
+                              : "bg-zinc-600"
+                              }`}
                             title={
                               dossier.profile?.disponible
                                 ? "Disponible"
@@ -1074,9 +1061,9 @@ export default function GodEyeDashboard({
                         {dossier.profile?.nombreReal
                           ? `Nombre real: ${dossier.profile.nombreReal}`
                           : dossier.profile?.telefono ||
-                            (dossier.profile?.rol
-                              ? `Rol: ${dossier.profile.rol}`
-                              : "")}
+                          (dossier.profile?.rol
+                            ? `Rol: ${dossier.profile.rol}`
+                            : "")}
                       </p>
 
                       {/* Badges de estado rápido con Ranking, Estrellas separadas y Confianza con Tooltip */}
@@ -1170,22 +1157,20 @@ export default function GodEyeDashboard({
                     <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3">
                       <button
                         onClick={() => setDossierSection("services")}
-                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${
-                          dossierSection === "services"
-                            ? "bg-[#C5A55A] text-black shadow-md"
-                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${dossierSection === "services"
+                          ? "bg-[#C5A55A] text-black shadow-md"
+                          : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                          }`}
                       >
                         <Layers className="h-4 w-4" />
                         Servicios ({dossier.services?.length || 0})
                       </button>
                       <button
                         onClick={() => setDossierSection("finances")}
-                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${
-                          dossierSection === "finances"
-                            ? "bg-[#C5A55A] text-black shadow-md"
-                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${dossierSection === "finances"
+                          ? "bg-[#C5A55A] text-black shadow-md"
+                          : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                          }`}
                       >
                         <Banknote className="h-4 w-4" />
                         Finanzas & Deudas
@@ -1197,11 +1182,10 @@ export default function GodEyeDashboard({
                       </button>
                       <button
                         onClick={() => setDossierSection("onboarding")}
-                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${
-                          dossierSection === "onboarding"
-                            ? "bg-[#C5A55A] text-black shadow-md"
-                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${dossierSection === "onboarding"
+                          ? "bg-[#C5A55A] text-black shadow-md"
+                          : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                          }`}
                       >
                         <GraduationCap className="h-4 w-4" />
                         Exámenes & Onboarding
@@ -1213,22 +1197,20 @@ export default function GodEyeDashboard({
                       </button>
                       <button
                         onClick={() => setDossierSection("photos_challenges")}
-                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${
-                          dossierSection === "photos_challenges"
-                            ? "bg-[#C5A55A] text-black shadow-md"
-                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${dossierSection === "photos_challenges"
+                          ? "bg-[#C5A55A] text-black shadow-md"
+                          : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                          }`}
                       >
                         <Camera className="h-4 w-4" />
                         Fotos & Retos
                       </button>
                       <button
                         onClick={() => setDossierSection("reputation")}
-                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${
-                          dossierSection === "reputation"
-                            ? "bg-[#C5A55A] text-black shadow-md"
-                            : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                        }`}
+                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-bold transition-all ${dossierSection === "reputation"
+                          ? "bg-[#C5A55A] text-black shadow-md"
+                          : "bg-zinc-950 text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                          }`}
                       >
                         <Scale className="h-4 w-4" />
                         Reputación & Sanciones
@@ -1245,31 +1227,27 @@ export default function GodEyeDashboard({
                               <button
                                 key={filterKey}
                                 onClick={() => setServiceStatusFilter(filterKey)}
-                                className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
-                                  serviceStatusFilter === filterKey
-                                    ? "bg-zinc-700 text-white shadow-sm"
-                                    : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-                                }`}
+                                className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${serviceStatusFilter === filterKey
+                                  ? "bg-zinc-700 text-white shadow-sm"
+                                  : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+                                  }`}
                               >
                                 {filterKey === "all"
                                   ? `Todos (${dossier.services?.length || 0})`
                                   : filterKey === "active"
-                                  ? `Activos (${
-                                      dossier.services?.filter((s: any) =>
-                                        ["pendiente", "en_curso"].includes(s.estado),
-                                      ).length || 0
+                                    ? `Activos (${dossier.services?.filter((s: any) =>
+                                      ["pendiente", "en_curso"].includes(s.estado),
+                                    ).length || 0
                                     })`
-                                  : filterKey === "completed"
-                                  ? `Completados (${
-                                      dossier.services?.filter(
+                                    : filterKey === "completed"
+                                      ? `Completados (${dossier.services?.filter(
                                         (s: any) => s.estado === "completado",
                                       ).length || 0
-                                    })`
-                                  : `Cancelados (${
-                                      dossier.services?.filter(
+                                      })`
+                                      : `Cancelados (${dossier.services?.filter(
                                         (s: any) => s.estado === "cancelado",
                                       ).length || 0
-                                    })`}
+                                      })`}
                               </button>
                             ))}
                           </div>
@@ -1281,15 +1259,15 @@ export default function GodEyeDashboard({
                         {/* Lista de servicios */}
                         <div className="flex max-h-[420px] flex-col gap-3 overflow-y-auto pr-1">
                           {dossier.services &&
-                          dossier.services.filter((s: any) => {
-                            if (serviceStatusFilter === "active")
-                              return ["pendiente", "en_curso"].includes(s.estado);
-                            if (serviceStatusFilter === "completed")
-                              return s.estado === "completado";
-                            if (serviceStatusFilter === "cancelled")
-                              return s.estado === "cancelado";
-                            return true;
-                          }).length > 0 ? (
+                            dossier.services.filter((s: any) => {
+                              if (serviceStatusFilter === "active")
+                                return ["pendiente", "en_curso"].includes(s.estado);
+                              if (serviceStatusFilter === "completed")
+                                return s.estado === "completado";
+                              if (serviceStatusFilter === "cancelled")
+                                return s.estado === "cancelado";
+                              return true;
+                            }).length > 0 ? (
                             dossier.services
                               .filter((s: any) => {
                                 if (serviceStatusFilter === "active")
@@ -1309,29 +1287,27 @@ export default function GodEyeDashboard({
                                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-900 pb-2.5">
                                     <div className="flex flex-wrap items-center gap-2">
                                       <span
-                                        className={`h-2.5 w-2.5 rounded-full ${
-                                          s.estado === "en_curso"
-                                            ? "bg-emerald-400 animate-ping"
-                                            : s.estado === "pendiente"
+                                        className={`h-2.5 w-2.5 rounded-full ${s.estado === "en_curso"
+                                          ? "bg-emerald-400 animate-ping"
+                                          : s.estado === "pendiente"
                                             ? "bg-amber-400"
                                             : s.estado === "completado"
-                                            ? "bg-emerald-500"
-                                            : "bg-red-500"
-                                        }`}
+                                              ? "bg-emerald-500"
+                                              : "bg-red-500"
+                                          }`}
                                       />
                                       <span className="font-mono text-zinc-300 font-bold text-sm">
                                         #{s.id.slice(0, 8)}
                                       </span>
                                       <span
-                                        className={`rounded-lg px-2 py-0.5 text-xs font-extrabold uppercase ${
-                                          s.estado === "en_curso"
-                                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                            : s.estado === "pendiente"
+                                        className={`rounded-lg px-2 py-0.5 text-xs font-extrabold uppercase ${s.estado === "en_curso"
+                                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                          : s.estado === "pendiente"
                                             ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                                             : s.estado === "completado"
-                                            ? "bg-zinc-800 text-zinc-200"
-                                            : "bg-red-500/20 text-red-300 border border-red-500/30"
-                                        }`}
+                                              ? "bg-zinc-800 text-zinc-200"
+                                              : "bg-red-500/20 text-red-300 border border-red-500/30"
+                                          }`}
                                       >
                                         {s.estado}
                                       </span>
@@ -1575,13 +1551,12 @@ export default function GodEyeDashboard({
                               </span>
                             </div>
                             <span
-                              className={`rounded-lg px-2.5 py-1 text-xs font-extrabold uppercase ${
-                                dossier.onboarding?.status === "completed"
-                                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                  : dossier.onboarding?.status === "in_progress"
+                              className={`rounded-lg px-2.5 py-1 text-xs font-extrabold uppercase ${dossier.onboarding?.status === "completed"
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : dossier.onboarding?.status === "in_progress"
                                   ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                                   : "bg-zinc-800 text-zinc-300"
-                              }`}
+                                }`}
                             >
                               {dossier.onboarding?.status || "No iniciado"}
                             </span>
@@ -1633,11 +1608,10 @@ export default function GodEyeDashboard({
                                         Intento #{att.attemptNumber}
                                       </span>
                                       <span
-                                        className={`rounded-md px-2 py-0.5 text-xs font-bold ${
-                                          att.status === "completed"
-                                            ? "bg-emerald-500/20 text-emerald-300"
-                                            : "bg-amber-500/20 text-amber-300"
-                                        }`}
+                                        className={`rounded-md px-2 py-0.5 text-xs font-bold ${att.status === "completed"
+                                          ? "bg-emerald-500/20 text-emerald-300"
+                                          : "bg-amber-500/20 text-amber-300"
+                                          }`}
                                       >
                                         {att.status === "completed" ? "Completado" : "En progreso"}
                                       </span>
@@ -1706,15 +1680,14 @@ export default function GodEyeDashboard({
                                       Semana: {p.semanaInicio || "General"}
                                     </span>
                                     <span
-                                      className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${
-                                        p.estado === "aprobada_publica"
-                                          ? "bg-emerald-500/20 text-emerald-300"
-                                          : p.estado === "aprobada_privada"
+                                      className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${p.estado === "aprobada_publica"
+                                        ? "bg-emerald-500/20 text-emerald-300"
+                                        : p.estado === "aprobada_privada"
                                           ? "bg-blue-500/20 text-blue-300"
                                           : p.estado === "pendiente"
-                                          ? "bg-amber-500/20 text-amber-300"
-                                          : "bg-red-500/20 text-red-300"
-                                      }`}
+                                            ? "bg-amber-500/20 text-amber-300"
+                                            : "bg-red-500/20 text-red-300"
+                                        }`}
                                     >
                                       {p.estado}
                                     </span>
@@ -1879,31 +1852,28 @@ export default function GodEyeDashboard({
                             <div className="flex gap-1">
                               <button
                                 onClick={() => setRatingSourceFilter("all")}
-                                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                                  ratingSourceFilter === "all"
-                                    ? "bg-zinc-700 text-white"
-                                    : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-                                }`}
+                                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${ratingSourceFilter === "all"
+                                  ? "bg-zinc-700 text-white"
+                                  : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+                                  }`}
                               >
                                 Todas ({dossier.ratings?.length || 0})
                               </button>
                               <button
                                 onClick={() => setRatingSourceFilter("client")}
-                                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                                  ratingSourceFilter === "client"
-                                    ? "bg-[#C5A55A] text-black"
-                                    : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-                                }`}
+                                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${ratingSourceFilter === "client"
+                                  ? "bg-[#C5A55A] text-black"
+                                  : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+                                  }`}
                               >
                                 Clientes ({dossier.ratingsSummary?.client.count || 0})
                               </button>
                               <button
                                 onClick={() => setRatingSourceFilter("driver")}
-                                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                                  ratingSourceFilter === "driver"
-                                    ? "bg-blue-500 text-white"
-                                    : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-                                }`}
+                                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${ratingSourceFilter === "driver"
+                                  ? "bg-blue-500 text-white"
+                                  : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+                                  }`}
                               >
                                 Choferes ({dossier.ratingsSummary?.driver.count || 0})
                               </button>
@@ -1912,13 +1882,13 @@ export default function GodEyeDashboard({
 
                           <div className="mt-2.5 flex max-h-48 flex-col gap-2.5 overflow-y-auto pr-1">
                             {dossier.ratings &&
-                            dossier.ratings.filter((r: any) => {
-                              if (ratingSourceFilter === "client")
-                                return r.direction === "client_to_employee";
-                              if (ratingSourceFilter === "driver")
-                                return r.direction === "driver_to_employee";
-                              return true;
-                            }).length > 0 ? (
+                              dossier.ratings.filter((r: any) => {
+                                if (ratingSourceFilter === "client")
+                                  return r.direction === "client_to_employee";
+                                if (ratingSourceFilter === "driver")
+                                  return r.direction === "driver_to_employee";
+                                return true;
+                              }).length > 0 ? (
                               dossier.ratings
                                 .filter((r: any) => {
                                   if (ratingSourceFilter === "client")
@@ -1942,17 +1912,16 @@ export default function GodEyeDashboard({
                                         </span>
                                       </div>
                                       <span
-                                        className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${
-                                          r.direction === "client_to_employee"
-                                            ? "bg-[#C5A55A]/20 text-[#E8D5A3]"
-                                            : "bg-blue-500/20 text-blue-300"
-                                        }`}
+                                        className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${r.direction === "client_to_employee"
+                                          ? "bg-[#C5A55A]/20 text-[#E8D5A3]"
+                                          : "bg-blue-500/20 text-blue-300"
+                                          }`}
                                       >
                                         {r.direction === "client_to_employee"
                                           ? "👤 Cliente"
                                           : r.direction === "driver_to_employee"
-                                          ? "🚗 Chofer"
-                                          : r.direction}
+                                            ? "🚗 Chofer"
+                                            : r.direction}
                                       </span>
                                     </div>
                                     {r.comment && (
@@ -1981,26 +1950,24 @@ export default function GodEyeDashboard({
                                 <div
                                   key={s.id}
                                   onClick={() => setSelectedSanctionDetail(s)}
-                                  className={`group relative flex items-center justify-between gap-3 rounded-2xl border p-3.5 text-xs sm:text-sm cursor-pointer transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/60 ${
-                                    s.status === "active"
-                                      ? "border-red-900/60 bg-red-950/30 hover:border-red-700/80"
-                                      : "border-zinc-900 bg-zinc-950/60 opacity-75 hover:opacity-100"
-                                  }`}
+                                  className={`group relative flex items-center justify-between gap-3 rounded-2xl border p-3.5 text-xs sm:text-sm cursor-pointer transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/60 ${s.status === "active"
+                                    ? "border-red-900/60 bg-red-950/30 hover:border-red-700/80"
+                                    : "border-zinc-900 bg-zinc-950/60 opacity-75 hover:opacity-100"
+                                    }`}
                                 >
                                   <div className="flex-1 pr-2 min-w-0 overflow-hidden">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span
-                                        className={`font-extrabold uppercase text-xs sm:text-sm ${
-                                          s.status === "active"
-                                            ? "text-red-400"
-                                            : "text-zinc-400"
-                                        }`}
+                                        className={`font-extrabold uppercase text-xs sm:text-sm ${s.status === "active"
+                                          ? "text-red-400"
+                                          : "text-zinc-400"
+                                          }`}
                                       >
                                         {s.type === "fine"
                                           ? "Multa Monetaria"
                                           : s.type === "suspension"
-                                          ? "Suspensión"
-                                          : "Baneo Permanente"}
+                                            ? "Suspensión"
+                                            : "Baneo Permanente"}
                                       </span>
                                       {s.fineAmount && Number(s.fineAmount) > 0 && (
                                         <span className="rounded-md bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-bold text-red-300">
@@ -2008,19 +1975,18 @@ export default function GodEyeDashboard({
                                         </span>
                                       )}
                                       <span
-                                        className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                                          s.status === "active"
-                                            ? "bg-red-500/20 text-red-300"
-                                            : s.status === "revoked"
+                                        className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${s.status === "active"
+                                          ? "bg-red-500/20 text-red-300"
+                                          : s.status === "revoked"
                                             ? "bg-zinc-800 text-zinc-400"
                                             : "bg-amber-500/10 text-amber-400"
-                                        }`}
+                                          }`}
                                       >
                                         {s.status === "active"
                                           ? "Activa"
                                           : s.status === "revoked"
-                                          ? "Revocada"
-                                          : "Expirada"}
+                                            ? "Revocada"
+                                            : "Expirada"}
                                       </span>
                                     </div>
                                     <p className="text-xs sm:text-sm text-zinc-200 mt-1 truncate block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
@@ -2111,26 +2077,24 @@ export default function GodEyeDashboard({
                             <div
                               key={s.id}
                               onClick={() => setSelectedSanctionDetail(s)}
-                              className={`group relative flex items-center justify-between gap-3 rounded-2xl border p-3.5 text-xs sm:text-sm cursor-pointer transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/60 ${
-                                s.status === "active"
-                                  ? "border-red-900/50 bg-red-950/20 hover:border-red-700/80"
-                                  : "border-zinc-900 bg-zinc-950/60 opacity-75 hover:opacity-100"
-                              }`}
+                              className={`group relative flex items-center justify-between gap-3 rounded-2xl border p-3.5 text-xs sm:text-sm cursor-pointer transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/60 ${s.status === "active"
+                                ? "border-red-900/50 bg-red-950/20 hover:border-red-700/80"
+                                : "border-zinc-900 bg-zinc-950/60 opacity-75 hover:opacity-100"
+                                }`}
                             >
                               <div className="flex-1 pr-2 min-w-0 overflow-hidden">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span
-                                    className={`font-extrabold uppercase text-xs sm:text-sm ${
-                                      s.status === "active"
-                                        ? "text-red-400"
-                                        : "text-zinc-400"
-                                    }`}
+                                    className={`font-extrabold uppercase text-xs sm:text-sm ${s.status === "active"
+                                      ? "text-red-400"
+                                      : "text-zinc-400"
+                                      }`}
                                   >
                                     {s.type === "fine"
                                       ? "Multa Monetaria"
                                       : s.type === "suspension"
-                                      ? "Suspensión"
-                                      : "Baneo Permanente"}
+                                        ? "Suspensión"
+                                        : "Baneo Permanente"}
                                   </span>
                                   {s.fineAmount && Number(s.fineAmount) > 0 && (
                                     <span className="rounded-md bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-bold text-red-300">
@@ -2138,11 +2102,10 @@ export default function GodEyeDashboard({
                                     </span>
                                   )}
                                   <span
-                                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                                      s.status === "active"
-                                        ? "bg-red-500/20 text-red-300"
-                                        : "bg-zinc-800 text-zinc-400"
-                                    }`}
+                                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${s.status === "active"
+                                      ? "bg-red-500/20 text-red-300"
+                                      : "bg-zinc-800 text-zinc-400"
+                                      }`}
                                   >
                                     {s.status === "active" ? "Activa" : "Revocada/Expirada"}
                                   </span>
@@ -2209,22 +2172,20 @@ export default function GodEyeDashboard({
                 <button
                   type="button"
                   onClick={() => setActiveServiceFilter("all")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                    activeServiceFilter === "all"
-                      ? "bg-[#C5A55A] text-black shadow"
-                      : "text-zinc-400 hover:text-white"
-                  }`}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${activeServiceFilter === "all"
+                    ? "bg-[#C5A55A] text-black shadow"
+                    : "text-zinc-400 hover:text-white"
+                    }`}
                 >
                   Todos ({overview.activeServices.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveServiceFilter("alerts")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                    activeServiceFilter === "alerts"
-                      ? "bg-amber-500 text-black shadow"
-                      : "text-amber-400/90 hover:text-amber-300"
-                  }`}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${activeServiceFilter === "alerts"
+                    ? "bg-amber-500 text-black shadow"
+                    : "text-amber-400/90 hover:text-amber-300"
+                    }`}
                 >
                   ⚠️ Alertas (
                   {
@@ -2237,11 +2198,10 @@ export default function GodEyeDashboard({
                 <button
                   type="button"
                   onClick={() => setActiveServiceFilter("clean")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
-                    activeServiceFilter === "clean"
-                      ? "bg-emerald-500 text-black shadow"
-                      : "text-emerald-400/90 hover:text-emerald-300"
-                  }`}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${activeServiceFilter === "clean"
+                    ? "bg-emerald-500 text-black shadow"
+                    : "text-emerald-400/90 hover:text-emerald-300"
+                    }`}
                 >
                   ✅ Normales (
                   {
@@ -2265,24 +2225,22 @@ export default function GodEyeDashboard({
                     <div
                       key={srv.id}
                       onClick={() => loadIncident(srv.id)}
-                      className={`flex flex-col gap-2 rounded-2xl p-3.5 text-left transition-all cursor-pointer ${
-                        selectedServiceId === srv.id
-                          ? "border border-[#C5A55A] bg-[#C5A55A]/15 text-white shadow-md"
-                          : hasCritical
+                      className={`flex flex-col gap-2 rounded-2xl p-3.5 text-left transition-all cursor-pointer ${selectedServiceId === srv.id
+                        ? "border border-[#C5A55A] bg-[#C5A55A]/15 text-white shadow-md"
+                        : hasCritical
                           ? "border border-red-900/60 bg-red-950/20 text-zinc-300 hover:border-red-700"
                           : hasWarning
-                          ? "border border-amber-900/50 bg-amber-950/15 text-zinc-300 hover:border-amber-700"
-                          : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
-                      }`}
+                            ? "border border-amber-900/50 bg-amber-950/15 text-zinc-300 hover:border-amber-700"
+                            : "border border-zinc-900 bg-zinc-950 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
+                        }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <span
-                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                              srv.estado === "en_curso"
-                                ? "bg-emerald-400 animate-ping"
-                                : "bg-amber-400"
-                            }`}
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${srv.estado === "en_curso"
+                              ? "bg-emerald-400 animate-ping"
+                              : "bg-amber-400"
+                              }`}
                           />
                           <span className="font-bold text-zinc-100 text-sm sm:text-base truncate">
                             {srv.empleadaNombre} · {srv.clienteNombre}
@@ -2294,11 +2252,10 @@ export default function GodEyeDashboard({
 
                         <div className="flex items-center gap-2 shrink-0">
                           <span
-                            className={`rounded-lg px-2 py-0.5 text-[11px] font-bold ${
-                              srv.iaActiva
-                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                : "bg-red-500/20 text-red-300 border border-red-500/30"
-                            }`}
+                            className={`rounded-lg px-2 py-0.5 text-[11px] font-bold ${srv.iaActiva
+                              ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                              : "bg-red-500/20 text-red-300 border border-red-500/30"
+                              }`}
                           >
                             {srv.iaActiva ? "🤖 IA ON" : "🛑 IA OFF"}
                           </span>
@@ -2340,8 +2297,8 @@ export default function GodEyeDashboard({
                   {activeServiceFilter === "alerts"
                     ? "🎉 ¡Excelente! No hay servicios activos con alertas o problemas."
                     : activeServiceFilter === "clean"
-                    ? "No hay servicios sin alertas activas."
-                    : "No hay servicios activos en curso en este momento."}
+                      ? "No hay servicios sin alertas activas."
+                      : "No hay servicios activos en curso en este momento."}
                 </p>
               )}
             </div>
@@ -2366,7 +2323,7 @@ export default function GodEyeDashboard({
                 {/* Diagnóstico Primario */}
                 <div className="rounded-2xl border border-amber-500/40 bg-amber-950/20 p-4 shadow-md">
                   <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
-                    Dictamen del Ojo de Dios
+                    Diagnostico
                   </span>
                   <p className="mt-2 text-base sm:text-lg font-bold text-white leading-relaxed">
                     {incidentData.triangulationSummary.primaryDiagnosis}
@@ -2472,11 +2429,10 @@ export default function GodEyeDashboard({
                 onClick={() =>
                   handleToggleAi(incidentData?.service?.ia_activa ?? true)
                 }
-                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shadow-md ${
-                  incidentData?.service?.ia_activa ?? true
-                    ? "bg-red-950 text-red-300 hover:bg-red-900 border border-red-800/40"
-                    : "bg-emerald-950 text-emerald-300 hover:bg-emerald-900 border border-emerald-800/40"
-                }`}
+                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shadow-md ${incidentData?.service?.ia_activa ?? true
+                  ? "bg-red-950 text-red-300 hover:bg-red-900 border border-red-800/40"
+                  : "bg-emerald-950 text-emerald-300 hover:bg-emerald-900 border border-emerald-800/40"
+                  }`}
               >
                 {incidentData?.service?.ia_activa ?? true ? (
                   <>
@@ -2493,15 +2449,14 @@ export default function GodEyeDashboard({
             {/* Mensajes del chat en vivo */}
             <div className="my-3.5 flex max-h-80 flex-1 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-zinc-900 bg-black p-4 text-xs sm:text-sm">
               {incidentData?.conversations &&
-              incidentData.conversations.length > 0 ? (
+                incidentData.conversations.length > 0 ? (
                 incidentData.conversations.map((msg) => (
                   <div
                     key={msg.id}
-                    className={`flex flex-col rounded-2xl p-3 ${
-                      msg.emisor === "cliente"
-                        ? "self-start bg-zinc-900 text-zinc-100 border border-zinc-800"
-                        : "self-end bg-[#C5A55A]/20 text-[#E8D5A3] border border-[#C5A55A]/30"
-                    } max-w-[88%] shadow-sm`}
+                    className={`flex flex-col rounded-2xl p-3 ${msg.emisor === "cliente"
+                      ? "self-start bg-zinc-900 text-zinc-100 border border-zinc-800"
+                      : "self-end bg-[#C5A55A]/20 text-[#E8D5A3] border border-[#C5A55A]/30"
+                      } max-w-[88%] shadow-sm`}
                   >
                     <span className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">
                       {msg.emisor}
@@ -2799,13 +2754,12 @@ export default function GodEyeDashboard({
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
               <div className="flex items-center gap-3">
                 <span
-                  className={`p-2 rounded-xl border ${
-                    selectedSanctionDetail.type === "fine"
-                      ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                      : selectedSanctionDetail.type === "permanent_ban"
+                  className={`p-2 rounded-xl border ${selectedSanctionDetail.type === "fine"
+                    ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                    : selectedSanctionDetail.type === "permanent_ban"
                       ? "bg-red-500/20 border-red-500/40 text-red-400"
                       : "bg-red-500/10 border-red-500/30 text-red-300"
-                  }`}
+                    }`}
                 >
                   {selectedSanctionDetail.type === "fine" ? (
                     <Coins size={20} />
@@ -2841,8 +2795,8 @@ export default function GodEyeDashboard({
                   {selectedSanctionDetail.type === "fine"
                     ? "Multa Monetaria"
                     : selectedSanctionDetail.type === "suspension"
-                    ? "Suspensión"
-                    : "Baneo Permanente"}
+                      ? "Suspensión"
+                      : "Baneo Permanente"}
                 </span>
               </div>
 
@@ -2851,19 +2805,18 @@ export default function GodEyeDashboard({
                   Estado
                 </span>
                 <span
-                  className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${
-                    selectedSanctionDetail.status === "active"
-                      ? "bg-red-500/20 text-red-300 border border-red-500/30"
-                      : selectedSanctionDetail.status === "revoked"
+                  className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-extrabold ${selectedSanctionDetail.status === "active"
+                    ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                    : selectedSanctionDetail.status === "revoked"
                       ? "bg-zinc-800 text-zinc-300 border border-zinc-700"
                       : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
-                  }`}
+                    }`}
                 >
                   {selectedSanctionDetail.status === "active"
                     ? "Activa"
                     : selectedSanctionDetail.status === "revoked"
-                    ? "Revocada"
-                    : "Expirada"}
+                      ? "Revocada"
+                      : "Expirada"}
                 </span>
               </div>
 
@@ -2885,8 +2838,8 @@ export default function GodEyeDashboard({
                     {selectedSanctionDetail.type === "permanent_ban"
                       ? "Permanente"
                       : selectedSanctionDetail.endsAt
-                      ? "Temporal"
-                      : "Indefinida"}
+                        ? "Temporal"
+                        : "Indefinida"}
                   </span>
                 </div>
               )}
@@ -2899,9 +2852,9 @@ export default function GodEyeDashboard({
                 <span className="font-semibold text-zinc-200">
                   {selectedSanctionDetail.createdAt
                     ? new Date(selectedSanctionDetail.createdAt).toLocaleString("es-MX", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })
                     : "No registrada"}
                 </span>
               </div>
