@@ -88,6 +88,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
                 src="/logo-icono.webp"
                 alt="Colombia Sexys"
                 fill
+                sizes="80px"
                 className="object-contain drop-shadow-[0_0_15px_rgba(197,165,90,0.2)]"
                 priority
               />

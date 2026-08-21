@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
     },
   },
   eslint: {
+    // TODO: poner en false. Sigue activo solo porque falta instalar
+    // `eslint-plugin-react-hooks` (ya declarado en devDependencies): hasta que
+    // se ejecute `pnpm install`, `next lint` no arranca. Despues de instalar y
+    // ver el lint en verde, quitar esta bandera para que el build lo valide.
     ignoreDuringBuilds: true,
   },
   images: {

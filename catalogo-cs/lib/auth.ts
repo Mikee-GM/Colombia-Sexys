@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
 import type { AuthUser } from "@/lib/types";
@@ -25,21 +26,31 @@ export async function getCsrfToken(): Promise<string | undefined> {
   return cookieStore.get(CSRF_COOKIE)?.value;
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
-  const cookie = await getBackendCookieHeader();
-  if (!cookie.includes(`${ACCESS_COOKIE}=`)) return null;
+/**
+ * Usuario autenticado de la peticion actual.
+ *
+ * Va envuelto en `cache()` de React para deduplicar por request: una misma
+ * pagina suele comprobar el rol y ademas llamar a varias Server Actions que
+ * vuelven a validarlo, y sin esto cada una dispararia su propio `/auth/me`.
+ * El cache es por peticion, asi que nunca se comparte entre usuarios.
+ */
+export const getCurrentUser = cache(
+  async function getCurrentUser(): Promise<AuthUser | null> {
+    const cookie = await getBackendCookieHeader();
+    if (!cookie.includes(`${ACCESS_COOKIE}=`)) return null;
 
-  try {
-    const response = await fetch(`${getBackendUrl()}/auth/me`, {
-      cache: "no-store",
-      headers: { Cookie: cookie },
-    });
-    if (!response.ok) return null;
-    return (await response.json()) as AuthUser;
-  } catch {
-    return null;
-  }
-}
+    try {
+      const response = await fetch(`${getBackendUrl()}/auth/me`, {
+        cache: "no-store",
+        headers: { Cookie: cookie },
+      });
+      if (!response.ok) return null;
+      return (await response.json()) as AuthUser;
+    } catch {
+      return null;
+    }
+  },
+);
 
 export function isAuthenticated(req: NextRequest): boolean {
   return req.cookies.has(ACCESS_COOKIE);

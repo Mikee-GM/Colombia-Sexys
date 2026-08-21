@@ -2,76 +2,15 @@
 
 import { isRedirectError } from "@/lib/auth";
 import type { Modelo, ModeloPayload } from "@/types";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
-import { getEmployeeHireTelegramUrl } from "@/lib/telegram-links";
+import { mapToModelo } from "@/lib/data/modelos-mapper";
+import { CATALOG_CACHE_TAG } from "@/lib/data/catalog";
 
-// Mapeador de Empleadas (backend) a Modelo (frontend)
-function mapToModelo(emp: any): Modelo {
-  return {
-    _id: emp.id,
-    nombre: emp.nombreArtistico, // Mapeado por compatibilidad
-    nombreReal: emp.nombreReal || "",
-    nombreArtistico: emp.nombreArtistico || "",
-    descripcion: emp.descripcion || "",
-    fotoPrincipal: emp.fotoPerfilUrl || "",
-    fotos: emp.empleadaFotos ? emp.empleadaFotos.map((f: any) => f.url) : [],
-    fotosExclusivas: emp.fotosExclusivas ? emp.fotosExclusivas.map((f: any) => f.url) : [],
-    pendingWeeklyPhotosCount: emp.pendingWeeklyPhotosCount || 0,
-    weeklyContentStatus: emp.weeklyContentStatus || "al_dia",
-    linkX: emp.linkX || "",
-    contactLink: getEmployeeHireTelegramUrl(emp.id),
-    contactLabel: emp.contactLabel || "Contacto",
-    disponible: emp.disponible,
-    catalogoActivo: emp.catalogoActivo !== false,
-    sancionada: Boolean(emp.sancionada),
-    availabilityStatus: emp.availabilityStatus,
-    estimatedAvailableAt: emp.estimatedAvailableAt ?? null,
-    canScheduleNext: emp.canScheduleNext,
-    precioBaseHora: emp.precioBaseHora ? parseFloat(emp.precioBaseHora) : 2500,
-    // TODO: el campo `tipo` fue eliminado del backend — verificar si sigue siendo necesario
-    jefeId: emp.jefeId || null,
-    jefeSecundarioId: emp.jefeSecundarioId || null,
-    apartmentId: emp.apartmentId || null,
-    usuarioId: emp.usuarioId || null,
-    trustScore: typeof emp.trustScore === "number" ? emp.trustScore : null,
-    clientRatingAverage:
-      emp.clientRatingAverage == null ? null : Number(emp.clientRatingAverage),
-    clientRatingCount: Number(emp.clientRatingCount ?? 0),
-    createdAt: emp.createdAt,
-    extras: emp.extrasCatalogos
-      ? emp.extrasCatalogos
-          .filter((ext: any) => ext.activo !== false)
-          .map((ext: any) => ({
-            id: ext.id,
-            nombre: ext.nombre,
-            precio: ext.precio ? parseFloat(ext.precio) : 0,
-            modelosVinculadasIds: Array.isArray(ext.modelosVinculadasIds) ? ext.modelosVinculadasIds : [],
-            speechPersonalizado: ext.speechPersonalizado || "",
-          }))
-      : [],
-  };
-}
-
-export async function getCatalogModelosAction(
-  onlyAvailable = false,
-): Promise<Modelo[]> {
-  try {
-    const data = await apiFetch<any[]>("/catalog/employees", {
-      authenticated: false,
-    });
-    let list = data
-      .map(mapToModelo)
-      .filter((m: Modelo) => m.availabilityStatus !== "inactiva" && m.catalogoActivo !== false);
-    if (onlyAvailable) {
-      list = list.filter((m: Modelo) => m.disponible);
-    }
-    return list.sort(() => 0.5 - Math.random());
-  } catch (error) {
-    console.error("getCatalogModelosAction error:", error);
-    return [];
-  }
-}
+// El catalogo publico se lee con `getCatalogModelos()` desde Server
+// Components (ver lib/data/catalog.ts). No se expone como Server Action:
+// serian POST secuenciales, no cacheables, y cada export "use server" publica
+// un endpoint aunque nadie lo llame.
 
 export async function getModelosAction(
   onlyAvailable = false,
@@ -137,6 +76,7 @@ export async function createModeloAction(
     authenticated: true,
   });
 
+  revalidateTag(CATALOG_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/admin/modelos");
   return mapToModelo(data);
@@ -174,6 +114,7 @@ export async function updateModeloAction(
     authenticated: true,
   });
 
+  revalidateTag(CATALOG_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/admin/modelos");
   return mapToModelo(data);
@@ -185,6 +126,7 @@ export async function deleteModeloAction(id: string): Promise<void> {
     authenticated: true,
   });
 
+  revalidateTag(CATALOG_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/admin/modelos");
 }
@@ -292,6 +234,7 @@ export async function reviewWeeklySubmissionAction(
       authenticated: true,
     },
   );
+  revalidateTag(CATALOG_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/admin/modelos");
   return data;

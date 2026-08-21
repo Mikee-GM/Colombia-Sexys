@@ -3,8 +3,8 @@ import PageHeader from "@/components/ui/page-header";
 export default function CatalogPage() {
   return (
     <PageHeader
-      title="Catalog"
-      description="Catalog data will be connected after the backend module is reviewed."
+      title="Catalogo"
+      description="Los datos del catalogo se conectaran cuando el modulo del backend este revisado."
     />
   );
 }

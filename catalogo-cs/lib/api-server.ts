@@ -17,11 +17,17 @@ export function getApiBaseUrl() {
 
 type ApiFetchOptions = RequestInit & {
   authenticated?: boolean;
+  /**
+   * Opciones de cache del Data Cache de Next. Solo tienen efecto en peticiones
+   * publicas: cualquier peticion autenticada se fuerza a `no-store` para no
+   * compartir datos privados entre usuarios.
+   */
+  next?: NextFetchRequestConfig;
 };
 
 export async function apiFetch<T>(
   path: string,
-  { authenticated = true, headers, ...options }: ApiFetchOptions = {},
+  { authenticated = true, headers, cache, next, ...options }: ApiFetchOptions = {},
 ): Promise<T> {
   const cookie = authenticated ? await getBackendCookieHeader() : "";
   const csrfToken = authenticated ? await getCsrfToken() : undefined;
@@ -30,12 +36,20 @@ export async function apiFetch<T>(
     redirect("/admin");
   }
 
+  // Las respuestas autenticadas nunca se cachean: llevan datos por usuario.
+  // Las publicas pueden pedir ISR pasando `next: { revalidate }`.
+  const cacheOptions: Pick<RequestInit, "cache"> & {
+    next?: NextFetchRequestConfig;
+  } = authenticated || (!cache && !next)
+    ? { cache: "no-store" }
+    : { ...(cache ? { cache } : {}), ...(next ? { next } : {}) };
+
   let response: Response;
   try {
     const isFormData = options.body instanceof FormData;
     response = await fetch(`${getApiBaseUrl()}${path}`, {
       ...options,
-      cache: "no-store",
+      ...cacheOptions,
       headers: {
         ...(!isFormData ? { "Content-Type": "application/json" } : {}),
         ...(cookie ? { Cookie: cookie } : {}),

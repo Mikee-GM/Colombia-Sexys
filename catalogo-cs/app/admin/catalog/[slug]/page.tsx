@@ -10,7 +10,7 @@ export default async function CatalogDetailPage({ params }: Props) {
   return (
     <PageHeader
       title={slug}
-      description="Catalog profile pending backend integration."
+      description="El perfil del catalogo esta pendiente de integracion con el backend."
     />
   );
 }

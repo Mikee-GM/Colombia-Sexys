@@ -1,5 +1,22 @@
 import type { Metadata } from "next";
+import { Cinzel, Montserrat } from "next/font/google";
 import "./globals.css";
+
+// Autoalojadas por next/font: sin peticion a fonts.googleapis.com, con
+// preload y metricas de fallback ajustadas para no provocar CLS.
+const cinzel = Cinzel({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-cinzel",
+});
+
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-montserrat",
+});
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://rvcs-pruebas.com.mx";
 
@@ -57,7 +74,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
+    <html lang="es" className={`${cinzel.variable} ${montserrat.variable}`}>
       <body className="bg-black text-white font-body antialiased">
         {children}
       </body>

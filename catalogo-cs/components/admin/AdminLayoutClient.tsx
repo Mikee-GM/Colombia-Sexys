@@ -134,7 +134,7 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
       <aside className="w-64 border-r border-zinc-800/80 bg-[#050505] flex flex-col hidden md:flex shrink-0">
         <div className="p-6 border-b border-zinc-800/80 flex flex-col items-center">
           <div className="w-12 h-12 relative mb-3">
-            <Image src="/logo-icono.webp" alt="Logo" fill className="object-contain" />
+            <Image src="/logo-icono.webp" alt="Logo" fill sizes="48px" className="object-contain" />
           </div>
           <p className="text-[10px] font-bold tracking-[0.25em] text-[#C5A55A] uppercase">
             Panel Admin
@@ -205,7 +205,7 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
       <div className="md:hidden fixed top-0 inset-x-0 h-16 border-b border-zinc-800 bg-[#050505]/95 backdrop-blur-md z-40 flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 relative">
-            <Image src="/logo-icono.webp" alt="Logo" fill className="object-contain" />
+            <Image src="/logo-icono.webp" alt="Logo" fill sizes="48px" className="object-contain" />
           </div>
           <span className="text-xs font-bold tracking-widest text-[#C5A55A] uppercase">
             Panel Admin

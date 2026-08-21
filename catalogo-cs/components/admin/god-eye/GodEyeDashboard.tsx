@@ -989,6 +989,7 @@ export default function GodEyeDashboard({
                               src={emp.avatar}
                               alt={emp.name}
                               fill
+                              sizes="32px"
                               className="object-cover"
                             />
                           ) : (
@@ -1142,6 +1143,7 @@ export default function GodEyeDashboard({
                           src={dossier.profile.fotoPerfilUrl}
                           alt="Avatar"
                           fill
+                          sizes="64px"
                           className="object-cover"
                         />
                       ) : (

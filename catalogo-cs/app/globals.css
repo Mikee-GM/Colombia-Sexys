@@ -1,9 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap');
+/* Las fuentes se cargan con next/font en app/layout.tsx: se autoalojan, se
+   precargan y aportan metricas de fallback (sin request a Google ni CLS).
+   Las variables --font-cinzel / --font-montserrat las inyecta el layout. */
 @import "tailwindcss";
 
 @theme {
-  --font-heading: "Cinzel", serif;
-  --font-body: "Montserrat", sans-serif;
+  --font-heading: var(--font-cinzel), "Cormorant Garamond", serif;
+  --font-body: var(--font-montserrat), sans-serif;
   --color-gold: #C5A55A;
   --color-gold-light: #D4AF37;
   --color-gold-luminous: #E8D5A3;
@@ -17,7 +19,7 @@ html {
 }
 
 body {
-  font-family: var(--font-body), "Montserrat", sans-serif;
+  font-family: var(--font-body);
   background-color: #000000;
   color: #ffffff;
 }
@@ -95,7 +97,7 @@ body {
 
 /* Tipografia heading */
 .font-heading {
-  font-family: var(--font-heading), "Cormorant Garamond", serif;
+  font-family: var(--font-heading);
 }
 
 /* Input premium focus */
