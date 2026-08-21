@@ -101,9 +101,8 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
               getSessionKey: (ctx) => {
                 if (!ctx.from || !ctx.chat) return undefined;
                 const base = `${ctx.from.id}:${ctx.chat.id}`;
-                const employeeId = (
-                  ctx as { dedicatedBotEmployeeId?: string }
-                ).dedicatedBotEmployeeId;
+                const employeeId = (ctx as { dedicatedBotEmployeeId?: string })
+                  .dedicatedBotEmployeeId;
                 return employeeId ? `${employeeId}:${base}` : base;
               },
               store: {

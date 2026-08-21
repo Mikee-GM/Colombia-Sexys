@@ -1166,32 +1166,32 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       const chatId = participant.employee?.usuario?.telegramChatId;
       if (chatId) {
         const responsible = participant.role === 'responsable';
-        await this.botRegistry.botForEmployeeOrCentral(
-          participant.employeeId,
-        ).telegram.sendMessage(
-          chatId,
-          responsible
-            ? `Fuiste asignada como responsable de un servicio grupal con ${result.participantes.length} participantes. Puedes consultar transporte, registrar extras y finalizar el servicio.`
-            : `Fuiste requerida para un servicio grupal. En este servicio únicamente puedes registrar extras de tu catálogo.`,
-          Markup.inlineKeyboard([
-            ...(responsible
-              ? [
-                  [
-                    Markup.button.callback(
-                      'Finalizar servicio',
-                      `finalizar_servicio:${serviceId}`,
-                    ),
-                  ],
-                ]
-              : []),
-            [
-              Markup.button.callback(
-                'Agregar extra',
-                `agregar_extra_list:${serviceId}`,
-              ),
-            ],
-          ]),
-        );
+        await this.botRegistry
+          .botForEmployeeOrCentral(participant.employeeId)
+          .telegram.sendMessage(
+            chatId,
+            responsible
+              ? `Fuiste asignada como responsable de un servicio grupal con ${result.participantes.length} participantes. Puedes consultar transporte, registrar extras y finalizar el servicio.`
+              : `Fuiste requerida para un servicio grupal. En este servicio únicamente puedes registrar extras de tu catálogo.`,
+            Markup.inlineKeyboard([
+              ...(responsible
+                ? [
+                    [
+                      Markup.button.callback(
+                        'Finalizar servicio',
+                        `finalizar_servicio:${serviceId}`,
+                      ),
+                    ],
+                  ]
+                : []),
+              [
+                Markup.button.callback(
+                  'Agregar extra',
+                  `agregar_extra_list:${serviceId}`,
+                ),
+              ],
+            ]),
+          );
       }
     }
     return result;
