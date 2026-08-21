@@ -594,6 +594,8 @@ export class EmployeesService {
       promedioCalificacion: number | null;
       totalServiciosValorados: number;
       confirmedReports90Days: number;
+      revenue90Days: number;
+      disponible: boolean;
       score: number | null;
       position: number | null;
     }>
@@ -605,33 +607,59 @@ export class EmployeesService {
         fotoPerfilUrl: true,
         promedioCalificacion: true,
         totalServiciosValorados: true,
+        disponible: true,
       },
     });
     if (employees.length === 0) return [];
+    const ids = employees.map((employee) => employee.id);
 
-    const confirmedRows: Array<{ employee_id: string; confirmed: number }> =
+    const confirmedRows: Array<{ subject_id: string; confirmed: number }> =
       await this.dataSource.query(
-        `SELECT employee_id, COUNT(*)::int AS confirmed
-         FROM employee_reports
-         WHERE status = 'resuelto' AND created_at >= now() - interval '90 days'
-           AND employee_id = ANY($1::uuid[])
-         GROUP BY employee_id`,
-        [employees.map((employee) => employee.id)],
+        `SELECT subject_id, COUNT(*)::int AS confirmed
+         FROM conduct_reports
+         WHERE subject_type = 'employee' AND outcome = 'confirmado'
+           AND created_at >= now() - interval '90 days'
+           AND subject_id = ANY($1::uuid[])
+         GROUP BY subject_id`,
+        [ids],
       );
     const confirmedByEmployee = new Map(
-      confirmedRows.map((row) => [row.employee_id, row.confirmed]),
+      confirmedRows.map((row) => [row.subject_id, row.confirmed]),
     );
+
+    const revenueRows: Array<{ empleada_id: string; revenue: string }> =
+      await this.dataSource.query(
+        `SELECT empleada_id, COALESCE(SUM(total_final), 0) AS revenue
+         FROM servicios
+         WHERE estado = 'finalizado' AND hora_fin_servicio >= now() - interval '90 days'
+           AND empleada_id = ANY($1::uuid[])
+         GROUP BY empleada_id`,
+        [ids],
+      );
+    const revenueByEmployee = new Map(
+      revenueRows.map((row) => [row.empleada_id, Number(row.revenue)]),
+    );
+    const maxRevenue = Math.max(0, ...revenueByEmployee.values());
 
     const kpis = employees.map((employee) => {
       const confirmedReports90Days = confirmedByEmployee.get(employee.id) ?? 0;
+      const revenue90Days = revenueByEmployee.get(employee.id) ?? 0;
       const promedio = employee.promedioCalificacion;
-      const score =
-        promedio != null
-          ? Math.max(
-              0,
-              Math.round((promedio / 5) * 100 - confirmedReports90Days * 8),
-            )
-          : null;
+      // El score combina calificación y reportes (como antes) con dos factores nuevos,
+      // acotados a un bono pequeño para no desplazar el peso del desempeño con clientes:
+      // ingresos generados (relativo a la mejor de sus pares en 90 días) y disponibilidad actual.
+      let score: number | null = null;
+      if (promedio != null) {
+        const revenueBonus =
+          maxRevenue > 0 ? Math.round((revenue90Days / maxRevenue) * 10) : 0;
+        const availabilityBonus = employee.disponible ? 5 : 0;
+        score = Math.max(
+          0,
+          Math.round((promedio / 5) * 100 - confirmedReports90Days * 8) +
+            revenueBonus +
+            availabilityBonus,
+        );
+      }
       return {
         id: employee.id,
         nombreArtistico: employee.nombreArtistico,
@@ -639,6 +667,8 @@ export class EmployeesService {
         promedioCalificacion: promedio,
         totalServiciosValorados: employee.totalServiciosValorados,
         confirmedReports90Days,
+        revenue90Days,
+        disponible: employee.disponible,
         score,
         position: null as number | null,
       };

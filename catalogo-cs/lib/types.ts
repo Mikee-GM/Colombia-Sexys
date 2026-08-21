@@ -520,6 +520,8 @@ export type EmployeeKpi = {
   promedioCalificacion: number | null;
   totalServiciosValorados: number;
   confirmedReports90Days: number;
+  revenue90Days?: number;
+  disponible?: boolean;
   score: number | null;
   position: number | null;
 };
@@ -530,6 +532,8 @@ export type DriverKpi = {
   fotoPerfilUrl: null;
   ratingAverage: number | null;
   confirmedReports90Days: number;
+  revenue90Days?: number;
+  disponible?: boolean;
   score: number | null;
   position: number | null;
 };

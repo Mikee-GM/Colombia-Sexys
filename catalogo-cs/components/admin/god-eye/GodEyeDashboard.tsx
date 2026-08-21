@@ -732,7 +732,126 @@ export default function GodEyeDashboard({
             Por liquidar →
           </span>
         </Link>
+
+        <Link
+          href="/admin/liquidations"
+          className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner transition-all duration-200 hover:scale-[1.02] hover:border-emerald-500/60 hover:bg-[#111111] hover:shadow-lg hover:shadow-emerald-500/5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-zinc-400 group-hover:text-zinc-200">
+            <span className="text-sm font-bold uppercase tracking-wider">
+              Ingresos Hoy
+            </span>
+            <Banknote className="h-4 w-4 text-[#C5A55A]" />
+          </div>
+          <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-[#C5A55A]">
+            ${metrics.revenueToday.toLocaleString()}
+          </p>
+          <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
+            Servicios finalizados →
+          </span>
+        </Link>
+
+        <Link
+          href="/admin/reports"
+          className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner transition-all duration-200 hover:scale-[1.02] hover:border-red-500/60 hover:bg-[#111111] hover:shadow-lg hover:shadow-red-500/5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-zinc-400 group-hover:text-zinc-200">
+            <span className="text-sm font-bold uppercase tracking-wider">
+              Quejas Abiertas
+            </span>
+            <AlertTriangle
+              className={`h-4 w-4 ${metrics.pendingReports > 0 ? "text-red-500" : "text-zinc-500"}`}
+            />
+          </div>
+          <p className="mt-2 text-3xl font-extrabold text-red-400">
+            {metrics.pendingReports}
+          </p>
+          <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
+            Sin resolver →
+          </span>
+        </Link>
+
+        <Link
+          href="/admin/services"
+          className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner transition-all duration-200 hover:scale-[1.02] hover:border-[#C5A55A]/60 hover:bg-[#111111] hover:shadow-lg hover:shadow-amber-500/5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-zinc-400 group-hover:text-zinc-200">
+            <span className="text-sm font-bold uppercase tracking-wider">
+              Ofertas Grupales
+            </span>
+            <Radio className="h-4 w-4 text-purple-400" />
+          </div>
+          <p className="mt-2 text-3xl font-extrabold text-white">
+            {metrics.pendingOffers}
+          </p>
+          <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
+            En proceso →
+          </span>
+        </Link>
+
+        <div className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-sm font-bold uppercase tracking-wider">
+              Clientes
+            </span>
+            <Users className="h-4 w-4 text-zinc-400" />
+          </div>
+          <p className="mt-2 text-3xl font-extrabold text-white">
+            {metrics.clientsTotal}
+          </p>
+          <span className="text-xs text-zinc-400 font-medium">
+            Registrados en total
+          </span>
+        </div>
       </div>
+
+      {/* Quejas abiertas */}
+      {overview.pendingReports.length > 0 && (
+        <div className="rounded-3xl border border-zinc-800 bg-[#090909] p-5 sm:p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-base font-extrabold uppercase tracking-wider text-red-400">
+              <AlertTriangle className="h-4 w-4" />
+              Quejas abiertas
+            </h3>
+            <Link
+              href="/admin/reports"
+              className="text-xs font-semibold uppercase tracking-wider text-[#C5A55A] hover:text-white"
+            >
+              Ver todas →
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {overview.pendingReports.map((report) => (
+              <Link
+                key={report.id}
+                href="/admin/reports"
+                className="flex items-center justify-between gap-4 rounded-xl border border-zinc-900 bg-zinc-950/60 px-4 py-3 text-sm hover:border-red-500/40"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-zinc-200">
+                    <span className="font-semibold">
+                      {report.subjectName ?? "Sujeto desconocido"}
+                    </span>{" "}
+                    <span className="text-zinc-500">· {report.category}</span>
+                  </p>
+                  <p className="truncate text-xs text-zinc-500">{report.description}</p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                    report.priority === "urgente"
+                      ? "border-red-500/40 bg-red-500/10 text-red-400"
+                      : report.priority === "alta"
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                        : "border-zinc-700 bg-zinc-900 text-zinc-400"
+                  }`}
+                >
+                  {report.priority}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 🚀 BOTÓN REFRESH RÁPIDO */}
       <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3.5">
