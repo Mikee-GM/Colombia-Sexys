@@ -1469,9 +1469,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }
 
     const bossGroupId = boss?.grupoTelegramId;
-    if (!bossGroupId) {
+    const bossPrivateId = boss?.telegramChatId;
+    if (!bossGroupId && !bossPrivateId) {
       this.logger.warn(
-        `No boss group found for trio request (Main: ${mainEmployee.nombreArtistico}, Trio: ${trioEmployee.nombreArtistico})`,
+        `No boss group or chat found for trio request (Main: ${mainEmployee.nombreArtistico}, Trio: ${trioEmployee.nombreArtistico})`,
       );
       return;
     }
@@ -1489,7 +1490,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ? parseInt(ctx.session.bossThreadId, 10)
       : null;
 
-    if (!threadId) {
+    if (bossGroupId && !threadId) {
       try {
         const topic = await ctx.telegram.createForumTopic(
           bossGroupId,
@@ -1501,8 +1502,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           ctx.session.bossGroupId = bossGroupId;
         }
       } catch (topicErr) {
-        this.logger.error(
-          'Error creating forum topic for boss trio request:',
+        this.logger.warn(
+          'Could not create forum topic for boss trio request, sending directly to group:',
           topicErr,
         );
       }
@@ -1535,14 +1536,32 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ],
     ]);
 
-    try {
-      await ctx.telegram.sendMessage(bossGroupId, messageText, {
-        parse_mode: 'Markdown',
-        message_thread_id: threadId || undefined,
-        ...inlineKeyboard,
-      });
-    } catch (sendErr) {
-      this.logger.error('Error sending trio request to boss group:', sendErr);
+    let sent = false;
+    if (bossGroupId) {
+      try {
+        await ctx.telegram.sendMessage(bossGroupId, messageText, {
+          parse_mode: 'Markdown',
+          message_thread_id: threadId || undefined,
+          ...inlineKeyboard,
+        });
+        sent = true;
+      } catch (sendErr) {
+        this.logger.error('Error sending trio request to boss group:', sendErr);
+      }
+    }
+
+    if (!sent && bossPrivateId) {
+      try {
+        await ctx.telegram.sendMessage(bossPrivateId, messageText, {
+          parse_mode: 'Markdown',
+          ...inlineKeyboard,
+        });
+      } catch (privErr) {
+        this.logger.error(
+          'Error sending trio request to boss private chat:',
+          privErr,
+        );
+      }
     }
   }
 
@@ -3446,14 +3465,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       });
 
       let priceMsg = '';
-      const trioTag =
+      const horasTexto =
+        duracionPactadaHoras === 1 ? '1 hora' : `${duracionPactadaHoras} horas`;
+      const conQuien =
         isTrioConfirmed && ctx.session?.trioSelectedEmployeeName
-          ? ` (en trío con ${ctx.session.trioSelectedEmployeeName})`
-          : '';
+          ? ` con nosotras (en trío con ${ctx.session.trioSelectedEmployeeName})`
+          : ' conmigo';
       if (transportCharge > 0) {
-        priceMsg = `Por las ${duracionPactadaHoras} horas con nosotras${trioTag} serían *${formatoMoneda.format(totalBase)}*, más *${formatoMoneda.format(transportCharge)}* del transporte a tu ubicación.\n\nEn total serían *${formatoMoneda.format(total)}* amor.`;
+        priceMsg = `Por ${horasTexto}${conQuien} serían *${formatoMoneda.format(totalBase)}*, más *${formatoMoneda.format(transportCharge)}* del transporte a tu ubicación.\n\nEn total serían *${formatoMoneda.format(total)}* amor.`;
       } else {
-        priceMsg = `Por las ${duracionPactadaHoras} horas con nosotras${trioTag} serían *${formatoMoneda.format(totalBase)}* en total, sin costo extra de transporte mor.`;
+        priceMsg = `Por ${horasTexto}${conQuien} serían *${formatoMoneda.format(totalBase)}* en total, sin costo extra de transporte mor.`;
       }
 
       if (ctx.session.metodoPago) {
@@ -3565,61 +3586,112 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         const jefeUser = await this.usuariosRepository.findOne({
           where: { id: jefeId },
         });
-        if (jefeUser && jefeUser.grupoTelegramId) {
-          try {
-            const clientName =
-              client.nombreTelegram || ctx.from?.first_name || 'Cliente';
-            const topic = await ctx.telegram.createForumTopic(
-              jefeUser.grupoTelegramId,
-              `👤 Cliente: ${clientName}`,
-            );
-            // Acumulamos en memoria y guardamos en DB
-            nuevoServicioEnc.telegramThreadId =
-              topic.message_thread_id.toString();
-            await this.serviciosRepository.save(nuevoServicioEnc);
+        if (jefeUser) {
+          const clientName =
+            client.nombreTelegram || ctx.from?.first_name || 'Cliente';
+          const duracionTexto =
+            duracionPactadaHoras === 1
+              ? '1 hora'
+              : `${duracionPactadaHoras} horas`;
 
-            const detailsMsg =
-              `📋 *Información del Servicio (Cita Encadenada):*\n\n` +
-              `• *Cliente:* ${clientName} (ID: ${telegramId})\n` +
-              `• *Empleada:* ${empleada.nombreArtistico}\n` +
-              `• *Duración:* ${duracionPactadaHoras} horas\n` +
-              `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
-              `• *Tarifa:* $${empleada.precioBaseHora}/hr\n` +
-              (notasUbicacionSafe
-                ? `• *Ubicación/Notas:* ${notasUbicacionSafe}\n`
-                : '') +
-              `• *Estado:* Pendiente Encadenada`;
-            await ctx.telegram.sendMessage(
-              jefeUser.grupoTelegramId,
-              detailsMsg,
-              {
-                message_thread_id: topic.message_thread_id,
+          const detailsMsg =
+            `📋 *Información del Servicio (Cita Encadenada):*\n\n` +
+            `• *Cliente:* ${clientName} (ID: ${telegramId})\n` +
+            `• *Empleada:* ${empleada.nombreArtistico}\n` +
+            `• *Duración:* ${duracionTexto}\n` +
+            `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
+            `• *Tarifa:* $${empleada.precioBaseHora}/hr\n` +
+            (notasUbicacionSafe
+              ? `• *Ubicación/Notas:* ${notasUbicacionSafe}\n`
+              : '') +
+            `• *Estado:* Pendiente Encadenada`;
+
+          const inlineKeyboard = Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                '🟢 Aceptar',
+                `jefe_autorizar:${nuevoServicioEnc.id}:1`,
+              ),
+              Markup.button.callback(
+                '🔴 Rechazar',
+                `jefe_autorizar:${nuevoServicioEnc.id}:0`,
+              ),
+            ],
+          ]);
+
+          let sentEnc = false;
+          if (jefeUser.grupoTelegramId) {
+            try {
+              let threadId: number | undefined = undefined;
+              try {
+                const topic = await ctx.telegram.createForumTopic(
+                  jefeUser.grupoTelegramId,
+                  `👤 Cliente: ${clientName}`,
+                );
+                threadId = topic.message_thread_id;
+                nuevoServicioEnc.telegramThreadId = threadId.toString();
+                await this.serviciosRepository.save(nuevoServicioEnc);
+              } catch (topicErr) {
+                this.logger.warn(
+                  'Could not create forum topic for chained service, sending directly to group:',
+                  topicErr,
+                );
+              }
+
+              const sendOpts: any = {
                 parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([
-                  [
-                    Markup.button.callback(
-                      '🟢 Aceptar',
-                      `jefe_autorizar:${nuevoServicioEnc.id}:1`,
-                    ),
-                    Markup.button.callback(
-                      '🔴 Rechazar',
-                      `jefe_autorizar:${nuevoServicioEnc.id}:0`,
-                    ),
-                  ],
-                ]),
-              },
-            );
-            await ctx.telegram.sendLocation(
-              jefeUser.grupoTelegramId,
-              parseFloat(lat),
-              parseFloat(lng),
-              { message_thread_id: topic.message_thread_id },
-            );
-          } catch (err) {
-            this.logger.error(
-              'Error al crear forum topic para servicio encadenado:',
-              err,
-            );
+                ...inlineKeyboard,
+              };
+              if (threadId) {
+                sendOpts.message_thread_id = threadId;
+              }
+
+              await ctx.telegram.sendMessage(
+                jefeUser.grupoTelegramId,
+                detailsMsg,
+                sendOpts,
+              );
+
+              const locOpts: any = {};
+              if (threadId) {
+                locOpts.message_thread_id = threadId;
+              }
+              await ctx.telegram.sendLocation(
+                jefeUser.grupoTelegramId,
+                parseFloat(lat),
+                parseFloat(lng),
+                locOpts,
+              );
+              sentEnc = true;
+            } catch (err) {
+              this.logger.error(
+                'Error al enviar mensaje de cita encadenada al grupo del jefe:',
+                err,
+              );
+            }
+          }
+
+          if (!sentEnc && jefeUser.telegramChatId) {
+            try {
+              await ctx.telegram.sendMessage(
+                jefeUser.telegramChatId,
+                detailsMsg,
+                {
+                  parse_mode: 'Markdown',
+                  ...inlineKeyboard,
+                },
+              );
+              await ctx.telegram.sendLocation(
+                jefeUser.telegramChatId,
+                parseFloat(lat),
+                parseFloat(lng),
+              );
+            } catch (privErr) {
+              this.logger.error(
+                'Error al enviar cita encadenada al chat privado del jefe:',
+                privErr,
+              );
+            }
           }
         }
 
@@ -3723,95 +3795,153 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const jefeUser = await this.usuariosRepository.findOne({
         where: { id: jefeId },
       });
-      if (jefeUser && jefeUser.grupoTelegramId) {
-        try {
-          const clientName =
-            client.nombreTelegram || ctx.from?.first_name || 'Cliente';
-          const topic = await ctx.telegram.createForumTopic(
-            jefeUser.grupoTelegramId,
-            `👤 Cliente: ${clientName}`,
-          );
-          // Acumulamos en memoria y guardamos en DB
-          nuevoServicio.telegramThreadId = topic.message_thread_id.toString();
-          await this.serviciosRepository.save(nuevoServicio);
-          await this.attachAndReplayDraftConversation(
-            ctx,
-            nuevoServicio,
-            jefeUser.grupoTelegramId,
-            topic.message_thread_id,
-          );
+      if (jefeUser) {
+        const clientName =
+          client.nombreTelegram || ctx.from?.first_name || 'Cliente';
+        const fechaProgFormatted = nuevoServicio.fechaProgramada
+          ? new Date(nuevoServicio.fechaProgramada).toLocaleString('es-MX', {
+              timeZone: 'America/Mexico_City',
+            })
+          : null;
 
-          const fechaProgFormatted = nuevoServicio.fechaProgramada
-            ? new Date(nuevoServicio.fechaProgramada).toLocaleString('es-MX', {
-                timeZone: 'America/Mexico_City',
-              })
-            : null;
+        const duracionTexto =
+          duracionPactadaHoras === 1
+            ? '1 hora'
+            : `${duracionPactadaHoras} horas`;
 
-          const detailsMsg =
-            (isProgramado
-              ? `📅 *SOLICITUD DE CITA PROGRAMADA*\n\n`
-              : `📋 *Información del Servicio:*\n\n`) +
-            `• *Cliente:* ${clientName} (ID: ${telegramId})\n` +
-            `• *Empleada:* ${empleada.nombreArtistico}\n` +
-            (isProgramado && fechaProgFormatted
-              ? `• *Fecha/Hora de Cita:* ${fechaProgFormatted}\n`
-              : '') +
-            `• *Duración:* ${duracionPactadaHoras} horas\n` +
-            `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
-            `• *Tarifa:* $${ratePerHour}/hr${isTrioConfirmed && ctx.session?.trioSelectedEmployeeName ? ` (Trío con ${ctx.session.trioSelectedEmployeeName})` : ''}\n` +
-            (notasUbicacionSafe
-              ? `• *Ubicación/Notas:* ${notasUbicacionSafe}\n`
-              : '') +
-            `• *Estado:* ${
-              nuevoServicio.servicioPrevioId
-                ? 'Pendiente para agendar'
-                : isProgramado
-                  ? 'Pendiente (Cita Programada)'
-                  : 'Pendiente'
-            }` +
-            (!isProgramado && nuevoServicio.horaInicioEstimada
-              ? `\n• *Llegada estimada:* ${nuevoServicio.horaInicioEstimada.toLocaleTimeString(
-                  'es-MX',
-                  {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    timeZone: 'America/Mexico_City',
-                  },
-                )}`
-              : '');
-          await ctx.telegram.sendMessage(jefeUser.grupoTelegramId, detailsMsg, {
-            message_thread_id: topic.message_thread_id,
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-              [
-                Markup.button.callback(
-                  '🟢 Aceptar',
-                  `jefe_autorizar:${nuevoServicio.id}:1`,
-                ),
-                Markup.button.callback(
-                  '🔴 Rechazar',
-                  `jefe_autorizar:${nuevoServicio.id}:0`,
-                ),
-              ],
-              [
-                Markup.button.callback(
-                  '✏️ Editar Servicio',
-                  `jefe_editar_srv:${nuevoServicio.id}`,
-                ),
-              ],
-            ]),
-          });
-          await ctx.telegram.sendLocation(
-            jefeUser.grupoTelegramId,
-            parseFloat(lat),
-            parseFloat(lng),
-            { message_thread_id: topic.message_thread_id },
-          );
-        } catch (err) {
-          this.logger.error(
-            'Error al crear forum topic para servicio normal:',
-            err,
-          );
+        const detailsMsg =
+          (isProgramado
+            ? `📅 *SOLICITUD DE CITA PROGRAMADA*\n\n`
+            : `📋 *Información del Servicio:*\n\n`) +
+          `• *Cliente:* ${clientName} (ID: ${telegramId})\n` +
+          `• *Empleada:* ${empleada.nombreArtistico}\n` +
+          (isProgramado && fechaProgFormatted
+            ? `• *Fecha/Hora de Cita:* ${fechaProgFormatted}\n`
+            : '') +
+          `• *Duración:* ${duracionTexto}\n` +
+          `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
+          `• *Tarifa:* $${ratePerHour}/hr${isTrioConfirmed && ctx.session?.trioSelectedEmployeeName ? ` (Trío con ${ctx.session.trioSelectedEmployeeName})` : ''}\n` +
+          (notasUbicacionSafe
+            ? `• *Ubicación/Notas:* ${notasUbicacionSafe}\n`
+            : '') +
+          `• *Estado:* ${
+            nuevoServicio.servicioPrevioId
+              ? 'Pendiente para agendar'
+              : isProgramado
+                ? 'Pendiente (Cita Programada)'
+                : 'Pendiente'
+          }` +
+          (!isProgramado && nuevoServicio.horaInicioEstimada
+            ? `\n• *Llegada estimada:* ${nuevoServicio.horaInicioEstimada.toLocaleTimeString(
+                'es-MX',
+                {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  timeZone: 'America/Mexico_City',
+                },
+              )}`
+            : '');
+
+        const inlineKeyboard = Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              '🟢 Aceptar',
+              `jefe_autorizar:${nuevoServicio.id}:1`,
+            ),
+            Markup.button.callback(
+              '🔴 Rechazar',
+              `jefe_autorizar:${nuevoServicio.id}:0`,
+            ),
+          ],
+          [
+            Markup.button.callback(
+              '✏️ Editar Servicio',
+              `jefe_editar_srv:${nuevoServicio.id}`,
+            ),
+          ],
+        ]);
+
+        let sentInGroup = false;
+
+        if (jefeUser.grupoTelegramId) {
+          try {
+            let threadId: number | undefined = undefined;
+            try {
+              const topic = await ctx.telegram.createForumTopic(
+                jefeUser.grupoTelegramId,
+                `👤 Cliente: ${clientName}`,
+              );
+              threadId = topic.message_thread_id;
+              nuevoServicio.telegramThreadId = threadId.toString();
+              await this.serviciosRepository.save(nuevoServicio);
+              await this.attachAndReplayDraftConversation(
+                ctx,
+                nuevoServicio,
+                jefeUser.grupoTelegramId,
+                threadId,
+              );
+            } catch (topicErr) {
+              this.logger.warn(
+                'Could not create forum topic in boss group, sending directly to group:',
+                topicErr,
+              );
+            }
+
+            const sendOpts: any = {
+              parse_mode: 'Markdown',
+              ...inlineKeyboard,
+            };
+            if (threadId) {
+              sendOpts.message_thread_id = threadId;
+            }
+
+            await ctx.telegram.sendMessage(
+              jefeUser.grupoTelegramId,
+              detailsMsg,
+              sendOpts,
+            );
+
+            const locOpts: any = {};
+            if (threadId) {
+              locOpts.message_thread_id = threadId;
+            }
+            await ctx.telegram.sendLocation(
+              jefeUser.grupoTelegramId,
+              parseFloat(lat),
+              parseFloat(lng),
+              locOpts,
+            );
+            sentInGroup = true;
+          } catch (err) {
+            this.logger.error(
+              'Error al enviar mensaje al grupo del jefe:',
+              err,
+            );
+          }
+        }
+
+        // Fallback al chat privado del jefe si no tiene grupo o falló el envío grupal
+        if (!sentInGroup && jefeUser.telegramChatId) {
+          try {
+            await ctx.telegram.sendMessage(
+              jefeUser.telegramChatId,
+              detailsMsg,
+              {
+                parse_mode: 'Markdown',
+                ...inlineKeyboard,
+              },
+            );
+            await ctx.telegram.sendLocation(
+              jefeUser.telegramChatId,
+              parseFloat(lat),
+              parseFloat(lng),
+            );
+          } catch (privErr) {
+            this.logger.error(
+              'Error al enviar mensaje al chat privado del jefe:',
+              privErr,
+            );
+          }
         }
       }
 
