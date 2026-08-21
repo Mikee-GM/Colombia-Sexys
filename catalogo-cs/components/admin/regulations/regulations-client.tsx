@@ -15,9 +15,10 @@ export default function RegulationsClient() {
   const [content, setContent] = useState("");
   const [passingScore, setPassingScore] = useState(80);
   const [questions, setQuestions] = useState<PublishRegulationData["questions"]>([
-    { text: "", options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }] }
+    { text: "", options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }], groupKey: "" }
   ]);
-  
+  const [requireRetake, setRequireRetake] = useState(true);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCurrent, setIsLoadingCurrent] = useState(false);
   const [currentRegulation, setCurrentRegulation] = useState<any>(null);
@@ -37,7 +38,13 @@ export default function RegulationsClient() {
   }, [targetRole]);
 
   const handleAddQuestion = () => {
-    setQuestions([...questions, { text: "", options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }] }]);
+    setQuestions([...questions, { text: "", options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }], groupKey: "" }]);
+  };
+
+  const handleGroupKeyChange = (qIndex: number, groupKey: string) => {
+    const newQs = [...questions];
+    newQs[qIndex].groupKey = groupKey;
+    setQuestions(newQs);
   };
 
   const handleRemoveQuestion = (qIndex: number) => {
@@ -87,10 +94,11 @@ export default function RegulationsClient() {
       if (currentRegulation.questions && currentRegulation.questions.length > 0) {
         setQuestions(currentRegulation.questions.map((q: any) => ({
           text: q.text,
-          options: q.options.map((o: any) => ({ text: o.text, isCorrect: o.isCorrect }))
+          options: q.options.map((o: any) => ({ text: o.text, isCorrect: o.isCorrect })),
+          groupKey: q.groupKey || "",
         })));
       } else {
-        setQuestions([{ text: "", options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }] }]);
+        setQuestions([{ text: "", options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }], groupKey: "" }]);
       }
       toast.success("Formulario precargado con el reglamento actual");
       
@@ -145,7 +153,8 @@ export default function RegulationsClient() {
       title,
       content,
       passingScore: Number(passingScore),
-      questions
+      questions,
+      requireRetake,
     };
 
     const res = await publishRegulationAction(payload);
@@ -157,7 +166,8 @@ export default function RegulationsClient() {
       setTitle("");
       setContent("");
       setPassingScore(80);
-      setQuestions([{ text: "", options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }] }]);
+      setQuestions([{ text: "", options: [{ text: "", isCorrect: true }, { text: "", isCorrect: false }], groupKey: "" }]);
+      setRequireRetake(true);
       // Recargar el actual
       getCurrentRegulationAction(targetRole).then(r => {
         if (r.success) setCurrentRegulation(r.data);
@@ -231,6 +241,21 @@ export default function RegulationsClient() {
               placeholder="Ej. Reglamento Básico de Higiene y Puntualidad"
             />
 
+            {currentRegulation && (
+              <label className="flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={requireRetake}
+                  onChange={(e) => setRequireRetake(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-brand-gold bg-zinc-950 border-zinc-700 focus:ring-brand-gold cursor-pointer"
+                />
+                <span className="text-sm text-zinc-300">
+                  <span className="font-semibold text-white">Requerir que todo el personal vuelva a presentar el examen.</span>{" "}
+                  Si desmarcas esto, quienes ya habían aprobado la versión anterior conservan su aprobación y no reciben el cuestionario de nuevo — solo lo reciben quienes no habían aprobado o son nuevos.
+                </span>
+              </label>
+            )}
+
             <TextareaField
               label="Contenido del Reglamento"
               value={content}
@@ -272,6 +297,18 @@ export default function RegulationsClient() {
                       >
                         <Trash2 className="w-5 h-5" />
                       </button>
+                    </div>
+
+                    <div className="max-w-xs">
+                      <InputField
+                        label="Grupo alternativo (opcional)"
+                        value={q.groupKey || ""}
+                        onChange={(e) => handleGroupKeyChange(qIndex, e.target.value)}
+                        placeholder="Ej. puntualidad"
+                      />
+                      <p className="text-[11px] text-zinc-500 mt-1">
+                        Dos preguntas con el mismo grupo son variantes del mismo tema: el sistema muestra una al azar en cada intento, así quien reprueba no ve siempre el mismo cuestionario.
+                      </p>
                     </div>
 
                     <div className="pl-4 border-l-2 border-zinc-800 space-y-3">

@@ -36,6 +36,14 @@ export class RegulationQuestion {
   @Column('smallint', { name: 'display_order' })
   order: number;
 
+  /** Preguntas con el mismo groupKey son variantes alternativas de la misma "casilla" del cuestionario: comparten `order` y el sistema elige una al azar (estable por intento) en cada intento. */
+  @Column('character varying', {
+    name: 'group_key',
+    length: 60,
+    nullable: true,
+  })
+  groupKey: string | null;
+
   @ManyToOne(() => EmployeeRegulation, (regulation) => regulation.questions, {
     onDelete: 'CASCADE',
   })

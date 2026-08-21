@@ -5,6 +5,7 @@ import {
   IsBoolean,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Max,
   MaxLength,
@@ -38,6 +39,17 @@ export class RegulationQuestionDto {
   @ValidateNested({ each: true })
   @Type(() => RegulationOptionDto)
   readonly options: RegulationOptionDto[];
+
+  @ApiProperty({
+    description:
+      'Etiqueta opcional para marcar preguntas como variantes alternativas del mismo tema. Dos preguntas con el mismo groupKey ocupan la misma casilla del cuestionario; el sistema elige una al azar por intento, para no repetir siempre lo mismo si el trabajador reprueba.',
+    example: 'puntualidad',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  readonly groupKey?: string;
 }
 
 export class PublishRegulationDto {
@@ -73,4 +85,14 @@ export class PublishRegulationDto {
   @ValidateNested({ each: true })
   @Type(() => RegulationQuestionDto)
   readonly questions: RegulationQuestionDto[];
+
+  @ApiProperty({
+    description:
+      'Si es false, el personal que ya había aprobado la versión anterior conserva su aprobación y no se le reenvía el cuestionario; solo lo reciben quienes no habían aprobado o son nuevos. Por defecto true (comportamiento actual: se reenvía a todo el personal).',
+    default: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  readonly requireRetake?: boolean;
 }

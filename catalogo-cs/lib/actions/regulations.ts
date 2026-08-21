@@ -11,6 +11,7 @@ export interface RegulationOption {
 export interface RegulationQuestion {
   text: string;
   options: RegulationOption[];
+  groupKey?: string;
 }
 
 export interface PublishRegulationData {
@@ -19,6 +20,7 @@ export interface PublishRegulationData {
   passingScore: number;
   targetRole: "empleada" | "chofer" | "jefe";
   questions: RegulationQuestion[];
+  requireRetake?: boolean;
 }
 
 export async function publishRegulationAction(data: PublishRegulationData) {

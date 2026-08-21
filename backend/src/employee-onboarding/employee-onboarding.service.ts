@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { PublishRegulationDto } from './dto/publish-regulation.dto';
@@ -135,14 +135,31 @@ export class EmployeeOnboardingService {
       }
       regulation = await manager.save(EmployeeRegulation, regulation);
 
-      for (const [questionIndex, questionDto] of dto.questions.entries()) {
+      // Preguntas con el mismo groupKey comparten "casilla" (order): son variantes
+      // alternativas del mismo tema. Sin groupKey, cada pregunta ocupa su propia casilla.
+      let nextSlot = 1;
+      const slotByGroupKey = new Map<string, number>();
+      for (const questionDto of dto.questions) {
+        const groupKey = questionDto.groupKey?.trim() || null;
+        let slot: number;
+        if (groupKey) {
+          slot = slotByGroupKey.get(groupKey) ?? nextSlot;
+          if (!slotByGroupKey.has(groupKey)) {
+            slotByGroupKey.set(groupKey, slot);
+            nextSlot += 1;
+          }
+        } else {
+          slot = nextSlot;
+          nextSlot += 1;
+        }
         const question = await manager.save(
           RegulationQuestion,
           manager.create(RegulationQuestion, {
             regulationId: regulation.id,
             publicationKey,
             text: questionDto.text,
-            order: questionIndex + 1,
+            order: slot,
+            groupKey,
           }),
         );
         await manager.save(
@@ -158,23 +175,6 @@ export class EmployeeOnboardingService {
         );
       }
 
-      const previousAssignments = await manager.find(EmployeeOnboarding, {
-        where: { active: true },
-      });
-      const previousByUser = new Map(
-        previousAssignments.map((assignment) => [
-          assignment.userId,
-          assignment,
-        ]),
-      );
-      if (previousAssignments.length > 0) {
-        await manager.update(
-          EmployeeOnboarding,
-          { active: true },
-          { active: false },
-        );
-      }
-
       const staff = await manager.find(Usuarios, {
         where: { rol: targetRole },
       });
@@ -187,27 +187,65 @@ export class EmployeeOnboardingService {
       const employeeByUser = new Map(
         employeeProfiles.map((employee) => [employee.usuarioId, employee]),
       );
-      if (staff.length > 0) {
-        await manager.save(
-          EmployeeOnboarding,
-          staff.map((user) => {
-            const previous = previousByUser.get(user.id);
-            const employee = employeeByUser.get(user.id);
-            return manager.create(EmployeeOnboarding, {
-              userId: user.id,
-              employeeId: employee?.id ?? null,
-              publicationKey,
-              assignedAt: publishedAt,
-              status: 'pending',
-              active: true,
-              isRenewal: Boolean(previous),
-              attemptCount: 0,
-              bestScore: 0,
-              trustScore: 1,
-              welcomeSentAt: previous?.welcomeSentAt ? publishedAt : null,
-            });
+
+      const previousAssignments =
+        staff.length > 0
+          ? await manager.find(EmployeeOnboarding, {
+              where: { active: true, userId: In(staff.map((u) => u.id)) },
+            })
+          : [];
+      const previousByUser = new Map(
+        previousAssignments.map((assignment) => [
+          assignment.userId,
+          assignment,
+        ]),
+      );
+
+      const requireRetake = dto.requireRetake ?? true;
+      const toDeactivateIds: string[] = [];
+      const toCarryForward: EmployeeOnboarding[] = [];
+      const toCreate: EmployeeOnboarding[] = [];
+
+      for (const user of staff) {
+        const previous = previousByUser.get(user.id);
+        const employee = employeeByUser.get(user.id);
+        if (!requireRetake && previous?.status === 'completed') {
+          // Ya había aprobado la versión anterior y el cambio no amerita repetir:
+          // solo movemos su publicationKey al reglamento vigente, sin reiniciar progreso.
+          previous.publicationKey = publicationKey;
+          toCarryForward.push(previous);
+          continue;
+        }
+        if (previous) toDeactivateIds.push(previous.id);
+        toCreate.push(
+          manager.create(EmployeeOnboarding, {
+            userId: user.id,
+            employeeId: employee?.id ?? null,
+            publicationKey,
+            assignedAt: publishedAt,
+            status: 'pending',
+            active: true,
+            isRenewal: Boolean(previous),
+            attemptCount: 0,
+            bestScore: 0,
+            trustScore: 1,
+            welcomeSentAt: previous?.welcomeSentAt ? publishedAt : null,
           }),
         );
+      }
+
+      if (toDeactivateIds.length > 0) {
+        await manager.update(
+          EmployeeOnboarding,
+          { id: In(toDeactivateIds) },
+          { active: false },
+        );
+      }
+      if (toCarryForward.length > 0) {
+        await manager.save(EmployeeOnboarding, toCarryForward);
+      }
+      if (toCreate.length > 0) {
+        await manager.save(EmployeeOnboarding, toCreate);
       }
     });
 
@@ -311,9 +349,15 @@ export class EmployeeOnboardingService {
       });
       if (existing) return existing;
 
-      const totalQuestions = await manager.count(RegulationQuestion, {
-        where: { publicationKey: onboarding.publicationKey },
-      });
+      const slotCountRow = await manager
+        .getRepository(RegulationQuestion)
+        .createQueryBuilder('q')
+        .select('COUNT(DISTINCT q.order)', 'count')
+        .where('q.publicationKey = :publicationKey', {
+          publicationKey: onboarding.publicationKey,
+        })
+        .getRawOne<{ count: string }>();
+      const totalQuestions = Number(slotCountRow?.count ?? 0);
       if (totalQuestions === 0) {
         throw new ConflictException('El reglamento no tiene preguntas');
       }
@@ -355,10 +399,11 @@ export class EmployeeOnboardingService {
       if (!attempt)
         throw new ConflictException('No hay un cuestionario en progreso');
 
-      const questions = await manager.find(RegulationQuestion, {
-        where: { publicationKey: onboarding.publicationKey },
-        order: { order: 'ASC' },
-      });
+      const questions = await this.resolveEffectiveQuestions(
+        onboarding.publicationKey,
+        attempt.id,
+        manager,
+      );
       const answers = await manager.find(QuestionnaireAnswer, {
         where: { attemptId: attempt.id },
       });
@@ -467,15 +512,64 @@ export class EmployeeOnboardingService {
     if (!attempt) throw new NotFoundException('Intento no encontrado');
     const answers = await this.answerRepository.find({ where: { attemptId } });
     const answeredIds = new Set(answers.map((answer) => answer.questionId));
-    const questions = await this.questionRepository.find({
-      where: { publicationKey: attempt.onboarding.publicationKey },
-      relations: { options: true },
-      order: { order: 'ASC', options: { order: 'ASC' } },
-    });
+    const questions = await this.resolveEffectiveQuestions(
+      attempt.onboarding.publicationKey,
+      attemptId,
+    );
     const question = questions.find((item) => !answeredIds.has(item.id));
     if (!question)
       throw new ConflictException('No quedan preguntas por responder');
-    return question;
+    const withOptions = await this.questionRepository.findOne({
+      where: { id: question.id },
+      relations: { options: true },
+      order: { options: { order: 'ASC' } },
+    });
+    return withOptions ?? question;
+  }
+
+  /**
+   * Resuelve la lista efectiva de preguntas de un intento: una por cada "casilla"
+   * (order). Si una casilla tiene varias variantes (mismo groupKey), elige una de forma
+   * determinística según el id del intento — estable dentro del mismo intento, pero
+   * distinta entre intentos, para que reprobar no siempre muestre el mismo cuestionario.
+   */
+  private async resolveEffectiveQuestions(
+    publicationKey: string,
+    attemptId: string,
+    manager?: EntityManager,
+  ): Promise<RegulationQuestion[]> {
+    const repo = manager
+      ? manager.getRepository(RegulationQuestion)
+      : this.questionRepository;
+    const all = await repo.find({
+      where: { publicationKey },
+      order: { order: 'ASC' },
+    });
+    const bySlot = new Map<number, RegulationQuestion[]>();
+    for (const question of all) {
+      const list = bySlot.get(question.order) ?? [];
+      list.push(question);
+      bySlot.set(question.order, list);
+    }
+    const resolved: RegulationQuestion[] = [];
+    for (const [slot, variants] of [...bySlot.entries()].sort(
+      (a, b) => a[0] - b[0],
+    )) {
+      resolved.push(
+        variants.length === 1
+          ? variants[0]
+          : this.pickBySeed(variants, `${attemptId}:${slot}`),
+      );
+    }
+    return resolved;
+  }
+
+  private pickBySeed<T>(items: T[], seed: string): T {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) {
+      hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+    }
+    return items[hash % items.length];
   }
 
   async findPendingDeliveries(limit = 50) {
