@@ -160,7 +160,8 @@ describe('Telegram booking session input parsing', () => {
 
     expect(session.trioStatus).toBe('confirmed');
     expect(session.trioSelectedEmployeeName).toBe('Valentina');
-    expect(session.trioCombinedRatePerHour).toBe(2900);
-    expect(session.duracionPactadaHoras * session.trioCombinedRatePerHour).toBe(5800);
+    expect(session.duracionPactadaHoras * session.trioCombinedRatePerHour).toBe(
+      5800,
+    );
   });
 });

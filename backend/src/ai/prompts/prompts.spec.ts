@@ -1,8 +1,4 @@
-import {
-  getHireSystemPrompt,
-  getGeneralChatSystemPrompt,
-  EmpleadaPromptParams,
-} from './prompts';
+import { getHireSystemPrompt, EmpleadaPromptParams } from './prompts';
 
 describe('AI Prompts Generation (prompts.ts)', () => {
   const baseParams: EmpleadaPromptParams = {
@@ -35,7 +31,9 @@ describe('AI Prompts Generation (prompts.ts)', () => {
     const prompt = getHireSystemPrompt(baseParams);
 
     expect(prompt).toContain('COSTO DE TRANSPORTE REGISTRADO EN EL SISTEMA:');
-    expect(prompt).toContain('En ubicaciones predeterminadas (moteles del sistema): $0 (Completamente GRATIS');
+    expect(prompt).toContain(
+      'En ubicaciones predeterminadas (moteles del sistema): $0 (Completamente GRATIS',
+    );
     expect(prompt).toContain('$120');
     expect(prompt).toContain('INFORMACIÓN DE TRANSPORTE Y TRASLADOS:');
   });
@@ -43,7 +41,9 @@ describe('AI Prompts Generation (prompts.ts)', () => {
   it('incluye la regla estricta contra pactar ubicaciones en texto libre o lenguaje natural', () => {
     const prompt = getHireSystemPrompt(baseParams);
 
-    expect(prompt).toContain('PROHIBIDO PACTAR O CONFIRMAR UBICACIONES POR TEXTO O LENGUAJE NATURAL');
+    expect(prompt).toContain(
+      'PROHIBIDO PACTAR O CONFIRMAR UBICACIONES POR TEXTO O LENGUAJE NATURAL',
+    );
     expect(prompt).toContain('UBICACIÓN EN PIN');
     expect(prompt).toContain('no conoces ese lugar');
   });
@@ -54,20 +54,26 @@ describe('AI Prompts Generation (prompts.ts)', () => {
     expect(prompt).toContain('SOBRE SERVICIOS EXTRAS, BESOS Y LAMIDAS');
     expect(prompt).toContain('HIGIENE PERSONAL INDISPENSABLE');
     expect(prompt).toContain('EXCELENTE HIGIENE');
-    expect(prompt).toContain('NUNCA garantices besos ni lamidas por chat por adelantado');
+    expect(prompt).toContain(
+      'NUNCA garantices besos ni lamidas por chat por adelantado',
+    );
   });
 
   it('incluye la aclaración del servicio extra "Atención a parejas"', () => {
     const prompt = getHireSystemPrompt(baseParams);
 
     expect(prompt).toContain('ATENCIÓN A PAREJAS');
-    expect(prompt).toContain('pareja (ya sean novios, amantes, esposos o cualquier tipo de relación de pareja)');
+    expect(prompt).toContain(
+      'pareja (ya sean novios, amantes, esposos o cualquier tipo de relación de pareja)',
+    );
   });
 
   it('contiene la directiva de continuidad de conversación sin cortes por longitud', () => {
     const prompt = getHireSystemPrompt(baseParams);
 
-    expect(prompt).toContain('CONTINUIDAD DE LA CONVERSACIÓN: NUNCA dejes de responder ni cortes la conversación');
+    expect(prompt).toContain(
+      'CONTINUIDAD DE LA CONVERSACIÓN: NUNCA dejes de responder ni cortes la conversación',
+    );
   });
 
   it('lista las modelos disponibles para trío y formatea la marca [TRIO_REQUEST]', () => {
@@ -76,7 +82,9 @@ describe('AI Prompts Generation (prompts.ts)', () => {
     expect(prompt).toContain('MODELOS DISPONIBLES PARA TRÍO:');
     expect(prompt).toContain('Valentina (ID: val-123)');
     expect(prompt).toContain('Tarifa combinada en trío: $2900/hr');
-    expect(prompt).toContain('[TRIO_REQUEST: {"modeloId": "ID_DE_LA_MODELO", "modeloNombre": "NOMBRE_DE_LA_MODELO"}]');
+    expect(prompt).toContain(
+      '[TRIO_REQUEST: {"modeloId": "ID_DE_LA_MODELO", "modeloNombre": "NOMBRE_DE_LA_MODELO"}]',
+    );
   });
 
   it('incluye encabezado especial cuando el trío ya ha sido confirmado', () => {
@@ -91,7 +99,9 @@ describe('AI Prompts Generation (prompts.ts)', () => {
 
     const prompt = getHireSystemPrompt(confirmedParams);
 
-    expect(prompt).toContain('¡ATENCIÓN! ESTE SERVICIO ES EN TRÍO CONFIRMADO CON VALENTINA.');
+    expect(prompt).toContain(
+      '¡ATENCIÓN! ESTE SERVICIO ES EN TRÍO CONFIRMADO CON VALENTINA.',
+    );
     expect(prompt).toContain('TARIFA COMBINADA PARA AMBAS: $2900/hr.');
   });
 });

@@ -1599,7 +1599,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             `Confirmado por administración.`,
           { parse_mode: 'Markdown' },
         );
-      } catch {}
+      } catch (editErr) {
+        this.logger.debug(
+          'Error al editar mensaje de confirmación de trío:',
+          editErr,
+        );
+      }
 
       const trioUserChatId = trioEmployee.usuario?.telegramChatId;
       if (trioUserChatId && trioUserChatId !== '111111111') {
@@ -1660,7 +1665,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             `Se informó al cliente que no se pudo concretar el trío y se continuará con servicio individual.`,
           { parse_mode: 'Markdown' },
         );
-      } catch {}
+      } catch (editErr) {
+        this.logger.debug(
+          'Error al editar mensaje de rechazo de trío:',
+          editErr,
+        );
+      }
 
       const clientMsg = `Ay papi, me acaban de avisar que por el momento no se va a poder armar el trío, pero tú y yo la vamos a pasar riquísimo a solas 😘 Dime, ¿cuántas horas quieres y cómo prefieres pagar?`;
       await ctx.telegram.sendMessage(clientTelegramId, clientMsg, {
@@ -1706,8 +1716,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ),
       ).filter((id) => id !== modelId);
 
-      const otherAvailable =
-        await this.getAvailableTrioEmployees(allLinkedIds);
+      const otherAvailable = await this.getAvailableTrioEmployees(allLinkedIds);
       const otherNames = otherAvailable.map((m) => m.nombre).join(', ');
 
       try {
@@ -1716,7 +1725,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             `Se notificó al cliente para que elija otra de las modelos disponibles (${otherNames || 'ninguna adicional'}) o continúe individual.`,
           { parse_mode: 'Markdown' },
         );
-      } catch {}
+      } catch (editErr) {
+        this.logger.debug(
+          'Error al editar mensaje de cambio de modelo:',
+          editErr,
+        );
+      }
 
       const otherMsg = otherNames
         ? `Ay mor, me dicen que *${trioEmployee.nombreArtistico}* no está disponible ahorita, pero puedo invitar a ${otherNames}. ¿Te gustaría con alguna de ellas o prefieres que seamos solo tú y yo solitos?`
@@ -3676,8 +3690,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         isTrioConfirmed && ctx.session?.trioSelectedEmployeeName
           ? `[Servicio en Trío con ${ctx.session.trioSelectedEmployeeName}] `
           : '';
-      const combinedNotes =
-        `${trioNote}${notasUbicacion || ''}`.trim() || null;
+      const combinedNotes = `${trioNote}${notasUbicacion || ''}`.trim() || null;
 
       const nuevoServicio = await this.servicesService.reserveNext({
         clienteId: client.id,
