@@ -261,7 +261,7 @@ function ServiceList({ services, allServices, active, disabled, onDecide, onRequ
 }
 
 function EditPendingServiceDialog({ service, onClose, onSaved }: { service: Service; onClose: () => void; onSaved: (service: Service) => void }) {
-  const [duracion, setDuracion] = useState(Number(service.duracionPactadaHoras) || 1);
+  const [duracion, setDuracion] = useState<number | string>(Number(service.duracionPactadaHoras) || 1);
   const [metodoPago, setMetodoPago] = useState(service.metodoPago);
   const [notas, setNotas] = useState(service.notas || "");
   const [saving, setSaving] = useState(false);
@@ -270,8 +270,9 @@ function EditPendingServiceDialog({ service, onClose, onSaved }: { service: Serv
     e.preventDefault();
     setSaving(true);
     try {
+      const duracionNum = Math.max(1, Math.min(24, parseInt(String(duracion), 10) || 1));
       const res = await updatePendingServiceAction(service.id, {
-        duracionPactadaHoras: duracion,
+        duracionPactadaHoras: duracionNum,
         metodoPago: metodoPago as any,
         notas: notas.trim() || undefined,
       });
@@ -296,7 +297,20 @@ function EditPendingServiceDialog({ service, onClose, onSaved }: { service: Serv
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">Duración (Horas)</label>
-            <input type="number" min={1} max={24} value={duracion} onChange={(e) => setDuracion(parseInt(e.target.value, 10) || 1)} className="w-full bg-black border border-zinc-800 px-4 py-2.5 rounded-xl text-white outline-none focus:border-[#C5A55A]" />
+            <input
+              type="number"
+              min={1}
+              max={24}
+              value={duracion}
+              onChange={(e) => setDuracion(e.target.value)}
+              onBlur={() => {
+                const val = parseInt(String(duracion), 10);
+                if (isNaN(val) || val < 1) setDuracion(1);
+                else if (val > 24) setDuracion(24);
+                else setDuracion(val);
+              }}
+              className="w-full bg-black border border-zinc-800 px-4 py-2.5 rounded-xl text-white outline-none focus:border-[#C5A55A]"
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">Método de Pago</label>

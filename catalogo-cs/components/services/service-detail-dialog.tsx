@@ -58,7 +58,7 @@ export default function ServiceDetailDialog({
   const [pendingAction, setPendingAction] = useState(false);
 
   // Edit form state
-  const [duracion, setDuracion] = useState(1);
+  const [duracion, setDuracion] = useState<number | string>(1);
   const [metodoPago, setMetodoPago] = useState<"efectivo" | "tarjeta" | "transferencia" | "mixto">("efectivo");
   const [notas, setNotas] = useState("");
   const [notasJefe, setNotasJefe] = useState("");
@@ -119,9 +119,10 @@ export default function ServiceDetailDialog({
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPendingAction(true);
+    const duracionNum = Math.max(1, Math.min(24, parseInt(String(duracion), 10) || 1));
     try {
       const res = await updateServiceAction(service.id, {
-        duracionPactadaHoras: duracion,
+        duracionPactadaHoras: duracionNum,
         metodoPago,
         notas: notas.trim() || undefined,
         notasJefe: notasJefe.trim() || undefined,
@@ -375,7 +376,13 @@ export default function ServiceDetailDialog({
                         min={1}
                         max={24}
                         value={duracion}
-                        onChange={(e) => setDuracion(parseInt(e.target.value, 10) || 1)}
+                        onChange={(e) => setDuracion(e.target.value)}
+                        onBlur={() => {
+                          const val = parseInt(String(duracion), 10);
+                          if (isNaN(val) || val < 1) setDuracion(1);
+                          else if (val > 24) setDuracion(24);
+                          else setDuracion(val);
+                        }}
                         className="w-full bg-black border border-zinc-800 px-4 py-2.5 rounded-xl text-white outline-none focus:border-[#C5A55A]"
                       />
                     </div>

@@ -48,6 +48,7 @@ import {
   XCircle,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -618,21 +619,29 @@ export default function GodEyeDashboard({
 
       {/* 🟢 BARRA SUPERIOR: KPIs EN TIEMPO REAL */}
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-6">
-        <div className="rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner">
-          <div className="flex items-center justify-between text-zinc-400">
+        <Link
+          href="/admin/services"
+          className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner transition-all duration-200 hover:scale-[1.02] hover:border-[#C5A55A]/60 hover:bg-[#111111] hover:shadow-lg hover:shadow-amber-500/5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-zinc-400 group-hover:text-zinc-200">
             <span className="text-sm font-bold uppercase tracking-wider">
               Servicios Activos
             </span>
             <Radio className="h-4 w-4 animate-pulse text-emerald-400" />
           </div>
-          <p className="mt-2 text-3xl font-extrabold text-white">
+          <p className="mt-2 text-3xl font-extrabold text-white group-hover:text-[#C5A55A] transition-colors">
             {metrics.activeServices}
           </p>
-          <span className="text-xs text-zinc-400 font-medium">En curso & pendientes</span>
-        </div>
+          <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
+            En curso & pendientes →
+          </span>
+        </Link>
 
-        <div className="rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner">
-          <div className="flex items-center justify-between text-zinc-400">
+        <Link
+          href="/admin/modelos"
+          className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner transition-all duration-200 hover:scale-[1.02] hover:border-[#C5A55A]/60 hover:bg-[#111111] hover:shadow-lg hover:shadow-amber-500/5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-zinc-400 group-hover:text-zinc-200">
             <span className="text-sm font-bold uppercase tracking-wider">
               Empleadas
             </span>
@@ -642,11 +651,16 @@ export default function GodEyeDashboard({
             <span className="text-emerald-400">{metrics.employeesAvailable}</span>
             <span className="text-zinc-500 font-bold"> / {metrics.employeesTotal}</span>
           </p>
-          <span className="text-xs text-zinc-400 font-medium">Disponibles ahora</span>
-        </div>
+          <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
+            Disponibles ahora →
+          </span>
+        </Link>
 
-        <div className="rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner">
-          <div className="flex items-center justify-between text-zinc-400">
+        <Link
+          href="/admin/choferes"
+          className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner transition-all duration-200 hover:scale-[1.02] hover:border-[#C5A55A]/60 hover:bg-[#111111] hover:shadow-lg hover:shadow-amber-500/5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-zinc-400 group-hover:text-zinc-200">
             <span className="text-sm font-bold uppercase tracking-wider">
               Choferes
             </span>
@@ -656,24 +670,34 @@ export default function GodEyeDashboard({
             <span className="text-blue-400">{metrics.driversActive}</span>
             <span className="text-zinc-500 font-bold"> / {metrics.driversTotal}</span>
           </p>
-          <span className="text-xs text-zinc-400 font-medium">En turno operativo</span>
-        </div>
+          <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
+            En turno operativo →
+          </span>
+        </Link>
 
-        <div className="rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner">
-          <div className="flex items-center justify-between text-zinc-400">
+        <Link
+          href="/admin/evidence"
+          className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner transition-all duration-200 hover:scale-[1.02] hover:border-[#C5A55A]/60 hover:bg-[#111111] hover:shadow-lg hover:shadow-amber-500/5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-zinc-400 group-hover:text-zinc-200">
             <span className="text-sm font-bold uppercase tracking-wider">
               Comprobantes
             </span>
             <CreditCard className="h-4 w-4 text-amber-400" />
           </div>
-          <p className="mt-2 text-3xl font-extrabold text-white">
+          <p className="mt-2 text-3xl font-extrabold text-white group-hover:text-amber-400 transition-colors">
             {metrics.pendingReceipts}
           </p>
-          <span className="text-xs text-zinc-400 font-medium">Pendientes de validar</span>
-        </div>
+          <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
+            Pendientes de validar →
+          </span>
+        </Link>
 
-        <div className="rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner">
-          <div className="flex items-center justify-between text-zinc-400">
+        <Link
+          href="/admin/reports"
+          className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner transition-all duration-200 hover:scale-[1.02] hover:border-red-500/60 hover:bg-[#111111] hover:shadow-lg hover:shadow-red-500/5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-zinc-400 group-hover:text-zinc-200">
             <span className="text-sm font-bold uppercase tracking-wider">
               Quejas 24h
             </span>
@@ -688,11 +712,16 @@ export default function GodEyeDashboard({
           <p className="mt-2 text-3xl font-extrabold text-red-400">
             {metrics.recentNegativeRatings}
           </p>
-          <span className="text-xs text-zinc-400 font-medium">⭐ 1-2 estrellas</span>
-        </div>
+          <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
+            ⭐ 1-2 estrellas →
+          </span>
+        </Link>
 
-        <div className="rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner">
-          <div className="flex items-center justify-between text-zinc-400">
+        <Link
+          href="/admin/liquidations"
+          className="group block rounded-2xl border border-zinc-800 bg-[#090909] p-4 shadow-inner transition-all duration-200 hover:scale-[1.02] hover:border-emerald-500/60 hover:bg-[#111111] hover:shadow-lg hover:shadow-emerald-500/5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-zinc-400 group-hover:text-zinc-200">
             <span className="text-sm font-bold uppercase tracking-wider">
               Efectivo Calle
             </span>
@@ -701,8 +730,10 @@ export default function GodEyeDashboard({
           <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-emerald-400">
             ${metrics.cashInStreet.toLocaleString()}
           </p>
-          <span className="text-xs text-zinc-400 font-medium">Por liquidar</span>
-        </div>
+          <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
+            Por liquidar →
+          </span>
+        </Link>
       </div>
 
       {/* 🚀 BOTÓN REFRESH RÁPIDO */}

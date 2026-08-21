@@ -585,7 +585,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       `SELECT id, direction, stars, comment, created_at AS "createdAt"
        FROM interaction_ratings
        WHERE ${column} = $1
-         AND direction LIKE $2
+         AND direction::text LIKE $2
          AND stars <= 3
          AND appeal_status = 'none'
        ORDER BY created_at DESC
@@ -870,7 +870,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
               COUNT(*)::int AS count
        FROM interaction_ratings
        WHERE ${column} = $1
-         AND direction LIKE $2
+         AND direction::text LIKE $2
          AND appeal_status NOT IN ('pending', 'overturned')
        GROUP BY direction ORDER BY direction`,
       [subjectId, `%_to_${subjectType}`],
