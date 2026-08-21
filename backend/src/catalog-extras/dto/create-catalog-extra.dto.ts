@@ -7,6 +7,7 @@ import {
   Min,
   IsArray,
   IsOptional,
+  MaxLength,
 } from 'class-validator';
 
 export class CreateCatalogExtraDto {
@@ -40,4 +41,14 @@ export class CreateCatalogExtraDto {
   @IsString({ each: true })
   @IsOptional()
   readonly modelosVinculadasIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Speech personalizado que se enviará al cliente cuando pregunte por este extra',
+    example: 'Amor, con tu pareja los consiento a los dos...',
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(2000)
+  readonly speechPersonalizado?: string;
 }

@@ -49,6 +49,19 @@ export class CreateExtraDto {
   })
   @IsOptional()
   readonly modelosVinculadasIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Speech personalizado que la modelo enviará al cliente cuando pregunte por este extra (usado por "Atención a parejas")',
+    example: 'Amor, con tu pareja los consiento a los dos...',
+    maxLength: 2000,
+  })
+  @IsString({ message: 'El speech personalizado debe ser texto' })
+  @MaxLength(2000, {
+    message: 'El speech personalizado no puede superar los 2000 caracteres',
+  })
+  @IsOptional()
+  readonly speechPersonalizado?: string;
 }
 
 export class CreateEmployeeDto {

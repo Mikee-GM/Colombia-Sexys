@@ -63,6 +63,14 @@ export class ExtrasCatalogo {
   })
   modelosVinculadasIds?: string[] | null;
 
+  @Column('text', { name: 'speech_personalizado', nullable: true })
+  @ApiPropertyOptional({
+    description:
+      'Texto exacto que la modelo debe enviar al cliente cuando pregunte por este extra (ej. Atención a parejas)',
+    example: 'Amor, con tu pareja los consiento a los dos...',
+  })
+  speechPersonalizado?: string | null;
+
   @Column('timestamp with time zone', {
     name: 'created_at',
     default: () => 'now()',

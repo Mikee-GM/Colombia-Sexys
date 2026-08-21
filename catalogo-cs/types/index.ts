@@ -4,6 +4,11 @@ export interface ServiceExtra {
   precio: number;
   activo?: boolean;
   modelosVinculadasIds?: string[];
+  /**
+   * Texto exacto que la modelo enviara al cliente cuando pregunte por este
+   * extra. Se usa principalmente en "Atencion a parejas".
+   */
+  speechPersonalizado?: string;
 }
 
 export interface Modelo {

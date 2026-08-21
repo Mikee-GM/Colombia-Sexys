@@ -19,6 +19,8 @@ export class CatalogExtrasService {
       empleadaId: createCatalogExtraDto.empleadaId,
       nombre: createCatalogExtraDto.nombre,
       precio: createCatalogExtraDto.precio,
+      modelosVinculadasIds: createCatalogExtraDto.modelosVinculadasIds ?? [],
+      speechPersonalizado: createCatalogExtraDto.speechPersonalizado ?? null,
       activo: true,
     });
     return this.extrasCatalogoRepository.save(extra);
@@ -57,6 +59,13 @@ export class CatalogExtrasService {
     }
     if (updateCatalogExtraDto.precio !== undefined) {
       extra.precio = updateCatalogExtraDto.precio;
+    }
+    if (updateCatalogExtraDto.modelosVinculadasIds !== undefined) {
+      extra.modelosVinculadasIds = updateCatalogExtraDto.modelosVinculadasIds;
+    }
+    if (updateCatalogExtraDto.speechPersonalizado !== undefined) {
+      extra.speechPersonalizado =
+        updateCatalogExtraDto.speechPersonalizado || null;
     }
     return this.extrasCatalogoRepository.save(extra);
   }

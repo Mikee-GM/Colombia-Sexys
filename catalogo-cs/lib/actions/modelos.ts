@@ -47,6 +47,7 @@ function mapToModelo(emp: any): Modelo {
             nombre: ext.nombre,
             precio: ext.precio ? parseFloat(ext.precio) : 0,
             modelosVinculadasIds: Array.isArray(ext.modelosVinculadasIds) ? ext.modelosVinculadasIds : [],
+            speechPersonalizado: ext.speechPersonalizado || "",
           }))
       : [],
   };
@@ -126,6 +127,7 @@ export async function createModeloAction(
       nombre: ext.nombre,
       precio: ext.precio,
       modelosVinculadasIds: ext.modelosVinculadasIds || [],
+      speechPersonalizado: (ext.speechPersonalizado || "").trim() || undefined,
     })),
   };
 
@@ -162,6 +164,7 @@ export async function updateModeloAction(
       nombre: ext.nombre,
       precio: ext.precio,
       modelosVinculadasIds: ext.modelosVinculadasIds || [],
+      speechPersonalizado: (ext.speechPersonalizado || "").trim() || undefined,
     })),
   };
 

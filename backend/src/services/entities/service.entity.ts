@@ -370,6 +370,28 @@ export class Servicios {
   tipoAgenda: 'inmediato' | 'programado';
 
   @Column('boolean', {
+    name: 'duracion_indefinida',
+    default: false,
+  })
+  @ApiProperty({
+    description:
+      'El cliente contrató una duración abierta: las horas se cuentan al finalizar el servicio y se redondean hacia arriba a partir de los 15 minutos',
+    default: false,
+  })
+  duracionIndefinida: boolean;
+
+  @Column('boolean', {
+    name: 'cobro_final_pendiente',
+    default: false,
+  })
+  @ApiProperty({
+    description:
+      'Servicio indefinido pagado por transferencia cuyo comprobante se solicita al finalizar',
+    default: false,
+  })
+  cobroFinalPendiente: boolean;
+
+  @Column('boolean', {
     name: 'notificacion_previa_enviada',
     default: false,
   })

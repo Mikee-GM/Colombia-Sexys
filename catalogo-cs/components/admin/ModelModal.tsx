@@ -337,6 +337,14 @@ export default function ModelModal({
     });
   };
 
+  const updateExtraSpeech = (index: number, speech: string) => {
+    setForm((prev) => {
+      const newExtras = [...(prev.extras || [])];
+      newExtras[index] = { ...newExtras[index], speechPersonalizado: speech };
+      return { ...prev, extras: newExtras };
+    });
+  };
+
   const toggleVinculadaModelo = (extraIndex: number, targetModeloId: string) => {
     setForm((prev) => {
       const newExtras = [...(prev.extras || [])];
@@ -830,6 +838,7 @@ export default function ModelModal({
                     </div>
                     {form.extras.map((extra, idx) => {
                       const isTrio = /tr[ií]o/i.test(extra.nombre);
+                      const isParejas = /pareja/i.test(extra.nombre);
                       const currentVinculadas = extra.modelosVinculadasIds || [];
                       const availableOtherModelos = modelos.filter(
                         (m) => m._id !== modelo?._id
@@ -846,6 +855,11 @@ export default function ModelModal({
                               {isTrio && (
                                 <span className="ml-2 text-[10px] bg-[#C5A55A]/20 border border-[#C5A55A]/40 text-[#E8D5A3] px-1.5 py-0.5 rounded font-mono">
                                   Trío (Vinculación disponible)
+                                </span>
+                              )}
+                              {isParejas && (
+                                <span className="ml-2 text-[10px] bg-[#C5A55A]/20 border border-[#C5A55A]/40 text-[#E8D5A3] px-1.5 py-0.5 rounded font-mono">
+                                  Speech personalizado disponible
                                 </span>
                               )}
                             </div>
@@ -900,6 +914,32 @@ export default function ModelModal({
                                   })}
                                 </div>
                               )}
+                            </div>
+                          )}
+
+                          {/* Speech personalizado: pensado para "Atencion a parejas" */}
+                          {isParejas && (
+                            <div className="pt-2 border-t border-zinc-900 space-y-1.5">
+                              <span className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                                Speech personalizado para el cliente
+                              </span>
+                              <p className="text-[11px] text-zinc-600 font-light leading-relaxed">
+                                Si escribes un texto aqui, sera el mensaje exacto
+                                que reciba el cliente cuando pregunte por este
+                                servicio. Dejalo vacio para usar la explicacion
+                                estandar.
+                              </p>
+                              <textarea
+                                value={extra.speechPersonalizado || ""}
+                                onChange={(e) => updateExtraSpeech(idx, e.target.value)}
+                                maxLength={2000}
+                                rows={4}
+                                placeholder="Ej. Mi amor, con tu pareja los atiendo a los dos y los consiento..."
+                                className="w-full bg-zinc-900 border border-zinc-700 px-2 py-1.5 text-white rounded text-xs focus:border-[#C5A55A] outline-none resize-y font-light"
+                              />
+                              <div className="text-right text-[10px] text-zinc-600 font-mono">
+                                {(extra.speechPersonalizado || "").length}/2000
+                              </div>
                             </div>
                           )}
                         </div>

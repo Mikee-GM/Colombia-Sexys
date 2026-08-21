@@ -140,6 +140,7 @@ export class EmployeesService {
             nombre: ext.nombre,
             precio: Number(ext.precio),
             modelosVinculadasIds: ext.modelosVinculadasIds || [],
+            speechPersonalizado: ext.speechPersonalizado || null,
             activo: true,
           });
           const extraGuardado = await manager.save(ExtrasCatalogo, nuevoExtra);
@@ -567,6 +568,7 @@ export class EmployeesService {
             await manager.update(ExtrasCatalogo, matched.id, {
               precio: Number(ext.precio),
               modelosVinculadasIds: ext.modelosVinculadasIds || [],
+              speechPersonalizado: ext.speechPersonalizado || null,
               activo: true,
             });
           } else {
@@ -575,6 +577,7 @@ export class EmployeesService {
               nombre: ext.nombre,
               precio: Number(ext.precio),
               modelosVinculadasIds: ext.modelosVinculadasIds || [],
+              speechPersonalizado: ext.speechPersonalizado || null,
               activo: true,
             });
             await manager.save(ExtrasCatalogo, nuevoExtra);
