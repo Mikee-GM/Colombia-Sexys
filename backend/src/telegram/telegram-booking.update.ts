@@ -112,6 +112,10 @@ interface SessionData {
   iaActiva?: boolean;
   bossThreadId?: string;
   bossGroupId?: string;
+  trioSelectedEmployeeId?: string;
+  trioSelectedEmployeeName?: string;
+  trioStatus?: 'pending_boss' | 'confirmed' | 'rejected';
+  trioCombinedRatePerHour?: number;
 }
 
 interface BotContext extends Context {
@@ -366,14 +370,13 @@ export function detectGroupServiceIntent(
     .toLowerCase();
   if (
     /\bservicio\s+grupal\b/.test(normalized) ||
-    /\btrios?\b/.test(normalized) ||
-    /\b(grupo\s+de\s+(chicas|empleadas)|varias\s+(chicas|empleadas|modelos)|mas\s+de\s+una\s+(chica|empleada|modelo)|(dos|tres|cuatro)\s+(chicas|empleadas|modelos))\b/.test(
+    /\b(grupo\s+de\s+(chicas|empleadas|modelos)|mas\s+de\s+dos\s+(chicas|empleadas|modelos)|(tres|cuatro)\s+(chicas|empleadas|modelos))\b/.test(
       normalized,
     )
   )
     return 'grupal';
   if (
-    /\b(acompanada|con\s+una\s+amiga|trae\s+una\s+amiga|alguien\s+mas)\b/.test(
+    /\b(mas\s+de\s+dos\s+chicas|varias\s+chicas\s+a\s+la\s+vez)\b/.test(
       normalized,
     )
   )
@@ -1047,13 +1050,17 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       await this.recordDraftConversation(ctx, 'sistema', waitingMessage);
     }
 
-    const [empleadaExtras, presetLocations, busySchedules] = await Promise.all([
-      this.extrasCatalogoRepository.find({
-        where: { empleadaId: empleada.id, activo: true },
-      }),
-      this.transportOperations.activeLocations(),
-      this.getEmployeeBusySchedules(empleada.id),
-    ]);
+    const [empleadaExtras, presetLocations, busySchedules, transportConfig] =
+      await Promise.all([
+        this.extrasCatalogoRepository.find({
+          where: { empleadaId: empleada.id, activo: true },
+        }),
+        this.transportOperations.activeLocations(),
+        this.getEmployeeBusySchedules(empleada.id),
+        this.transportOperations
+          .getConfiguration()
+          .catch(() => ({ externalLocationFee: 0 })),
+      ]);
 
     const allLinkedIds = Array.from(
       new Set(
@@ -1066,12 +1073,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       allLinkedIds.length > 0
         ? await this.empleadasRepository.find({
             where: { id: In(allLinkedIds) },
-            select: { id: true, nombreArtistico: true },
+            select: { id: true, nombreArtistico: true, precioBaseHora: true },
           })
         : [];
     const linkedNameMap = new Map(
       linkedEmployees.map((m) => [m.id, m.nombreArtistico]),
     );
+
+    const availableTrioModels =
+      await this.getAvailableTrioEmployees(allLinkedIds);
 
     const extrasData = empleadaExtras.map((e) => {
       const linkedIds = Array.isArray(e.modelosVinculadasIds)
@@ -1104,6 +1114,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       precioBaseHora: empleada.precioBaseHora,
       descripcion: empleada.descripcion,
       extras: extrasData,
+      modelosDisponiblesTrio: availableTrioModels,
+      costoTransporteExterno: Number(
+        (transportConfig as any)?.externalLocationFee ?? 0,
+      ),
       ubicacionesPreestablecidas: ubicacionesData,
       fechaHoraActual: new Date().toLocaleString('es-MX', {
         timeZone: 'America/Mexico_City',
@@ -1382,6 +1396,359 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ...Markup.removeKeyboard(),
       ...Markup.inlineKeyboard(rows),
     });
+  }
+
+  private async getAvailableTrioEmployees(
+    linkedIds: string[],
+  ): Promise<{ id: string; nombre: string; precioBaseHora: number }[]> {
+    if (!linkedIds || linkedIds.length === 0) return [];
+    const employees = await this.empleadasRepository.find({
+      where: { id: In(linkedIds), catalogoActivo: true, disponible: true },
+      select: { id: true, nombreArtistico: true, precioBaseHora: true },
+    });
+    if (!employees || employees.length === 0) return [];
+
+    const available: {
+      id: string;
+      nombre: string;
+      precioBaseHora: number;
+    }[] = [];
+    for (const emp of employees) {
+      const activeService = await this.serviciosRepository.findOne({
+        where: {
+          empleadaId: emp.id,
+          estado: In(['pendiente', 'en_curso']),
+        },
+      });
+      if (activeService) continue;
+
+      const busy = await this.getEmployeeBusySchedules(emp.id);
+      const now = Date.now();
+      const hasConflict = busy.some((b) => {
+        const start = new Date(b.inicio).getTime();
+        const end = new Date(b.fin).getTime();
+        return (
+          (now >= start && now <= end) ||
+          (start > now && start - now < 2 * 3600 * 1000)
+        );
+      });
+      if (hasConflict) continue;
+
+      available.push({
+        id: emp.id,
+        nombre: emp.nombreArtistico,
+        precioBaseHora: Number(emp.precioBaseHora),
+      });
+    }
+    return available;
+  }
+
+  private async notifyBossAboutTrioRequest(
+    ctx: BotContext,
+    mainEmployee: Empleadas,
+    trioEmployee: Empleadas,
+  ): Promise<void> {
+    const telegramId = ctx.from?.id?.toString();
+    if (!telegramId) return;
+
+    let boss = mainEmployee.jefe;
+    if (!boss && mainEmployee.jefeId) {
+      boss = await this.usuariosRepository.findOne({
+        where: { id: mainEmployee.jefeId, activo: true },
+      });
+    }
+    if (!boss) {
+      boss = await this.usuariosRepository.findOne({
+        where: { rol: 'jefe', disponible: true, activo: true },
+      });
+    }
+    if (!boss) {
+      boss = await this.usuariosRepository.findOne({
+        where: { rol: 'admin', activo: true },
+      });
+    }
+
+    const bossGroupId = boss?.grupoTelegramId;
+    if (!bossGroupId) {
+      this.logger.warn(
+        `No boss group found for trio request (Main: ${mainEmployee.nombreArtistico}, Trio: ${trioEmployee.nombreArtistico})`,
+      );
+      return;
+    }
+
+    const client = await this.clientesRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+    const clientName =
+      client?.nombreTelegram || ctx.from?.first_name || 'Cliente';
+    const combinedRate =
+      Number(mainEmployee.precioBaseHora) + Number(trioEmployee.precioBaseHora);
+    const sessionKey = `${telegramId}:${ctx.chat?.id || telegramId}`;
+
+    let threadId = ctx.session?.bossThreadId
+      ? parseInt(ctx.session.bossThreadId, 10)
+      : null;
+
+    if (!threadId) {
+      try {
+        const topic = await ctx.telegram.createForumTopic(
+          bossGroupId,
+          `👤 Cliente: ${clientName}`,
+        );
+        threadId = topic.message_thread_id;
+        if (ctx.session) {
+          ctx.session.bossThreadId = threadId.toString();
+          ctx.session.bossGroupId = bossGroupId;
+        }
+      } catch (topicErr) {
+        this.logger.error(
+          'Error creating forum topic for boss trio request:',
+          topicErr,
+        );
+      }
+    }
+
+    const messageText =
+      `👥 *SOLICITUD DE SERVICIO EN TRÍO*\n\n` +
+      `👤 *Cliente:* ${clientName} (ID: ${telegramId})\n` +
+      `👠 *Modelo Principal:* ${mainEmployee.nombreArtistico} ($${mainEmployee.precioBaseHora}/hr)\n` +
+      `🔥 *Modelo Solicitada para Trío:* ${trioEmployee.nombreArtistico} ($${trioEmployee.precioBaseHora}/hr)\n` +
+      `💰 *Tarifa Combinada:* $${combinedRate}/hr\n\n` +
+      `¿Deseas autorizar la participación de *${trioEmployee.nombreArtistico}* en este servicio?`;
+
+    const inlineKeyboard = Markup.inlineKeyboard([
+      [
+        Markup.button.callback(
+          '✅ Confirmar Trío',
+          `trio_boss:confirm:${sessionKey}:${trioEmployee.id}`,
+        ),
+        Markup.button.callback(
+          '❌ Rechazar Trío',
+          `trio_boss:reject:${sessionKey}:${trioEmployee.id}`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          '🔄 Cambiar de Modelo',
+          `trio_boss:change:${sessionKey}:${trioEmployee.id}`,
+        ),
+      ],
+    ]);
+
+    try {
+      await ctx.telegram.sendMessage(bossGroupId, messageText, {
+        parse_mode: 'Markdown',
+        message_thread_id: threadId || undefined,
+        ...inlineKeyboard,
+      });
+    } catch (sendErr) {
+      this.logger.error('Error sending trio request to boss group:', sendErr);
+    }
+  }
+
+  @Action(/^trio_boss:(confirm|reject|change):([^:]+):(.+)$/)
+  async onBossTrioAction(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery();
+    const match = (ctx as any).match;
+    const action = match[1] as 'confirm' | 'reject' | 'change';
+    const sessionKey = match[2];
+    const modelId = match[3];
+
+    const sessionEntity = await this.telegramSessionRepository.findOne({
+      where: { key: sessionKey },
+    });
+    if (!sessionEntity || !sessionEntity.data) {
+      await ctx.reply('No se encontró la sesión activa del cliente.');
+      return;
+    }
+    const sessionData = sessionEntity.data;
+    const clientTelegramId = sessionKey.split(':')[0];
+
+    const [mainEmployee, trioEmployee] = await Promise.all([
+      this.empleadasRepository.findOne({
+        where: { id: sessionData.empleadaId },
+        relations: { usuario: true },
+      }),
+      this.empleadasRepository.findOne({
+        where: { id: modelId },
+        relations: { usuario: true },
+      }),
+    ]);
+
+    if (!mainEmployee || !trioEmployee) {
+      await ctx.reply('No se encontraron las empleadas vinculadas al trío.');
+      return;
+    }
+
+    const combinedRate =
+      Number(mainEmployee.precioBaseHora) + Number(trioEmployee.precioBaseHora);
+
+    if (action === 'confirm') {
+      sessionData.trioStatus = 'confirmed';
+      sessionData.trioSelectedEmployeeId = trioEmployee.id;
+      sessionData.trioSelectedEmployeeName = trioEmployee.nombreArtistico;
+      sessionData.trioCombinedRatePerHour = combinedRate;
+      await this.telegramSessionRepository.save(sessionEntity);
+
+      try {
+        await ctx.editMessageText(
+          `✅ *Trío Confirmado*\n\n` +
+            `👤 *Cliente:* ${clientTelegramId}\n` +
+            `👠 *Modelos:* ${mainEmployee.nombreArtistico} & ${trioEmployee.nombreArtistico}\n` +
+            `💰 *Tarifa Combinada:* $${combinedRate}/hr\n` +
+            `Confirmado por administración.`,
+          { parse_mode: 'Markdown' },
+        );
+      } catch {}
+
+      const trioUserChatId = trioEmployee.usuario?.telegramChatId;
+      if (trioUserChatId && trioUserChatId !== '111111111') {
+        try {
+          await ctx.telegram.sendMessage(
+            trioUserChatId,
+            `🔔 *Aviso de Servicio en Trío*\n\n` +
+              `Hola *${trioEmployee.nombreArtistico}*, fuiste confirmada para un servicio en *Trío* junto con *${mainEmployee.nombreArtistico}*.\n` +
+              `Tarifa combinada acordada: $${combinedRate}/hr.\n` +
+              `Mantente atenta a los detalles finales del servicio cuando se concrete la ubicación y hora. 🔥`,
+            { parse_mode: 'Markdown' },
+          );
+        } catch (sendErr) {
+          this.logger.warn(
+            `No se pudo notificar a modelo de trío ${trioEmployee.nombreArtistico}:`,
+            sendErr,
+          );
+        }
+      }
+
+      const clientMsg = `¡Listo mi amor! Ya hablé con *${trioEmployee.nombreArtistico}* y me confirmó que nos acompaña 🔥 La tarifa por nosotras dos es de $${combinedRate}/hr. Ahora sí mi amor, dime: ¿cuántas horitas nos vas a contratar y cómo prefieres pagar?`;
+      await ctx.telegram.sendMessage(clientTelegramId, clientMsg, {
+        parse_mode: 'Markdown',
+      });
+
+      if (!sessionData.chatHistory) sessionData.chatHistory = [];
+      sessionData.chatHistory.push({
+        role: 'model',
+        parts: [{ text: clientMsg }],
+      });
+      await this.telegramSessionRepository.save(sessionEntity);
+
+      const client = await this.clientesRepository.findOne({
+        where: { telegramChatId: clientTelegramId },
+      });
+      if (client) {
+        await this.conversationsRepository.save(
+          this.conversationsRepository.create({
+            clienteId: client.id,
+            servicioId: null,
+            bookingSessionId: sessionData.bookingSessionId || null,
+            emisor: 'ia',
+            mensaje: clientMsg,
+            iaActiva: true,
+          }),
+        );
+      }
+    } else if (action === 'reject') {
+      sessionData.trioStatus = 'rejected';
+      sessionData.trioSelectedEmployeeId = undefined;
+      sessionData.trioSelectedEmployeeName = undefined;
+      sessionData.trioCombinedRatePerHour = undefined;
+      await this.telegramSessionRepository.save(sessionEntity);
+
+      try {
+        await ctx.editMessageText(
+          `❌ *Trío Rechazado*\n\n` +
+            `Se informó al cliente que no se pudo concretar el trío y se continuará con servicio individual.`,
+          { parse_mode: 'Markdown' },
+        );
+      } catch {}
+
+      const clientMsg = `Ay papi, me acaban de avisar que por el momento no se va a poder armar el trío, pero tú y yo la vamos a pasar riquísimo a solas 😘 Dime, ¿cuántas horas quieres y cómo prefieres pagar?`;
+      await ctx.telegram.sendMessage(clientTelegramId, clientMsg, {
+        parse_mode: 'Markdown',
+      });
+
+      if (!sessionData.chatHistory) sessionData.chatHistory = [];
+      sessionData.chatHistory.push({
+        role: 'model',
+        parts: [{ text: clientMsg }],
+      });
+      await this.telegramSessionRepository.save(sessionEntity);
+
+      const client = await this.clientesRepository.findOne({
+        where: { telegramChatId: clientTelegramId },
+      });
+      if (client) {
+        await this.conversationsRepository.save(
+          this.conversationsRepository.create({
+            clienteId: client.id,
+            servicioId: null,
+            bookingSessionId: sessionData.bookingSessionId || null,
+            emisor: 'ia',
+            mensaje: clientMsg,
+            iaActiva: true,
+          }),
+        );
+      }
+    } else if (action === 'change') {
+      sessionData.trioStatus = undefined;
+      sessionData.trioSelectedEmployeeId = undefined;
+      sessionData.trioSelectedEmployeeName = undefined;
+      sessionData.trioCombinedRatePerHour = undefined;
+
+      const extras = await this.extrasCatalogoRepository.find({
+        where: { empleadaId: mainEmployee.id, activo: true },
+      });
+      const allLinkedIds = Array.from(
+        new Set(
+          extras.flatMap((e) =>
+            Array.isArray(e.modelosVinculadasIds) ? e.modelosVinculadasIds : [],
+          ),
+        ),
+      ).filter((id) => id !== modelId);
+
+      const otherAvailable =
+        await this.getAvailableTrioEmployees(allLinkedIds);
+      const otherNames = otherAvailable.map((m) => m.nombre).join(', ');
+
+      try {
+        await ctx.editMessageText(
+          `🔄 *Cambio de Modelo Solicitado*\n\n` +
+            `Se notificó al cliente para que elija otra de las modelos disponibles (${otherNames || 'ninguna adicional'}) o continúe individual.`,
+          { parse_mode: 'Markdown' },
+        );
+      } catch {}
+
+      const otherMsg = otherNames
+        ? `Ay mor, me dicen que *${trioEmployee.nombreArtistico}* no está disponible ahorita, pero puedo invitar a ${otherNames}. ¿Te gustaría con alguna de ellas o prefieres que seamos solo tú y yo solitos?`
+        : `Ay mor, me dicen que *${trioEmployee.nombreArtistico}* no está disponible en este momento y no tengo más amigas libres por ahora. ¿Nos vemos tú y yo solitos?`;
+
+      await ctx.telegram.sendMessage(clientTelegramId, otherMsg, {
+        parse_mode: 'Markdown',
+      });
+
+      if (!sessionData.chatHistory) sessionData.chatHistory = [];
+      sessionData.chatHistory.push({
+        role: 'model',
+        parts: [{ text: otherMsg }],
+      });
+      await this.telegramSessionRepository.save(sessionEntity);
+
+      const client = await this.clientesRepository.findOne({
+        where: { telegramChatId: clientTelegramId },
+      });
+      if (client) {
+        await this.conversationsRepository.save(
+          this.conversationsRepository.create({
+            clienteId: client.id,
+            servicioId: null,
+            bookingSessionId: sessionData.bookingSessionId || null,
+            emisor: 'ia',
+            mensaje: otherMsg,
+            iaActiva: true,
+          }),
+        );
+      }
+    }
   }
 
   @Action(/^agregar_extra_list:(.+)$/)
@@ -3051,7 +3418,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         return;
       }
 
-      const totalBase = duracionPactadaHoras * Number(empleada.precioBaseHora);
+      const isTrioConfirmed = ctx.session?.trioStatus === 'confirmed';
+      const ratePerHour =
+        ctx.session?.trioCombinedRatePerHour ?? Number(empleada.precioBaseHora);
+      const totalBase = duracionPactadaHoras * ratePerHour;
       const transportCharge = Number(ctx.session?.customerTransportCharge ?? 0);
       const total = totalBase + transportCharge;
 
@@ -3062,10 +3432,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       });
 
       let priceMsg = '';
+      const trioTag =
+        isTrioConfirmed && ctx.session?.trioSelectedEmployeeName
+          ? ` (en trío con ${ctx.session.trioSelectedEmployeeName})`
+          : '';
       if (transportCharge > 0) {
-        priceMsg = `Por las ${duracionPactadaHoras} horas conmigo serían *${formatoMoneda.format(totalBase)}*, más *${formatoMoneda.format(transportCharge)}* del transporte a tu ubicación.\n\nEn total serían *${formatoMoneda.format(total)}* amor.`;
+        priceMsg = `Por las ${duracionPactadaHoras} horas con nosotras${trioTag} serían *${formatoMoneda.format(totalBase)}*, más *${formatoMoneda.format(transportCharge)}* del transporte a tu ubicación.\n\nEn total serían *${formatoMoneda.format(total)}* amor.`;
       } else {
-        priceMsg = `Por las ${duracionPactadaHoras} horas conmigo serían *${formatoMoneda.format(totalBase)}* en total, sin costo extra de transporte mor.`;
+        priceMsg = `Por las ${duracionPactadaHoras} horas con nosotras${trioTag} serían *${formatoMoneda.format(totalBase)}* en total, sin costo extra de transporte mor.`;
       }
 
       if (ctx.session.metodoPago) {
@@ -3295,6 +3669,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ? new Date(ctx.session.fechaProgramada)
         : undefined;
 
+      const isTrioConfirmed = ctx.session?.trioStatus === 'confirmed';
+      const ratePerHour =
+        ctx.session?.trioCombinedRatePerHour ?? Number(empleada.precioBaseHora);
+      const trioNote =
+        isTrioConfirmed && ctx.session?.trioSelectedEmployeeName
+          ? `[Servicio en Trío con ${ctx.session.trioSelectedEmployeeName}] `
+          : '';
+      const combinedNotes =
+        `${trioNote}${notasUbicacion || ''}`.trim() || null;
+
       const nuevoServicio = await this.servicesService.reserveNext({
         clienteId: client.id,
         empleadaId: empleada.id,
@@ -3303,9 +3687,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         metodoPago: metodoPago,
         ubicacionClienteLat: parseFloat(lat),
         ubicacionClienteLng: parseFloat(lng),
-        precioBaseHoraPactado: empleada.precioBaseHora,
+        precioBaseHoraPactado: ratePerHour,
         estado: 'pendiente',
-        notas: notasUbicacion,
+        notas: combinedNotes,
         clienteTelegramId: telegramId,
         iaActiva: false,
         presetLocationId: ctx.session?.presetLocationId ?? null,
@@ -3361,7 +3745,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               : '') +
             `• *Duración:* ${duracionPactadaHoras} horas\n` +
             `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
-            `• *Tarifa:* $${empleada.precioBaseHora}/hr\n` +
+            `• *Tarifa:* $${ratePerHour}/hr${isTrioConfirmed && ctx.session?.trioSelectedEmployeeName ? ` (Trío con ${ctx.session.trioSelectedEmployeeName})` : ''}\n` +
             (notasUbicacionSafe
               ? `• *Ubicación/Notas:* ${notasUbicacionSafe}\n`
               : '') +
@@ -3445,7 +3829,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         style: 'currency',
         currency: 'MXN',
       });
-      const totalBase = duracionPactadaHoras * Number(empleada.precioBaseHora);
+      const totalBase = duracionPactadaHoras * ratePerHour;
       const transportCharge = Number(
         nuevoServicio.customerTransportCharge ?? 0,
       );
@@ -4298,6 +4682,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       if (!userMessage.trim()) return;
 
       // Debounce / Buffer de mensajes seguidos del cliente para evitar que la IA responda por partes
+      const DEBOUNCE_WAIT_MS = 20000;
       const existingBuffer = this.clientMessageBuffers.get(telegramId);
       if (existingBuffer) {
         clearTimeout(existingBuffer.timer);
@@ -4305,12 +4690,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         existingBuffer.ctx = ctx;
         existingBuffer.timer = setTimeout(() => {
           this.flushClientMessageBuffer(telegramId, empleada);
-        }, 4000);
+        }, DEBOUNCE_WAIT_MS);
         return;
       } else {
         const timer = setTimeout(() => {
           this.flushClientMessageBuffer(telegramId, empleada);
-        }, 4000);
+        }, DEBOUNCE_WAIT_MS);
         this.clientMessageBuffers.set(telegramId, {
           messages: [userMessage],
           timer,
@@ -4927,13 +5312,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const history = session.chatHistory || [];
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      const [empleadaExtras, presetLocations, busySchedules] =
+      const [empleadaExtras, presetLocations, busySchedules, transportConfig] =
         await Promise.all([
           this.extrasCatalogoRepository.find({
             where: { empleadaId: empleada.id, activo: true },
           }),
           this.transportOperations.activeLocations(),
           this.getEmployeeBusySchedules(empleada.id),
+          this.transportOperations
+            .getConfiguration()
+            .catch(() => ({ externalLocationFee: 0 })),
         ]);
 
       const allLinkedIds = Array.from(
@@ -4947,12 +5335,41 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         allLinkedIds.length > 0
           ? await this.empleadasRepository.find({
               where: { id: In(allLinkedIds) },
-              select: { id: true, nombreArtistico: true },
+              select: { id: true, nombreArtistico: true, precioBaseHora: true },
             })
           : [];
       const linkedNameMap = new Map(
         linkedEmployees.map((m) => [m.id, m.nombreArtistico]),
       );
+
+      const availableTrioModels =
+        await this.getAvailableTrioEmployees(allLinkedIds);
+
+      let trioConfirmado: {
+        id: string;
+        nombre: string;
+        precioCombinadoHora: number;
+      } | null = null;
+      if (
+        session.trioStatus === 'confirmed' &&
+        session.trioSelectedEmployeeId
+      ) {
+        const trioEmp =
+          linkedEmployees.find(
+            (m) => m.id === session.trioSelectedEmployeeId,
+          ) ||
+          (await this.empleadasRepository.findOne({
+            where: { id: session.trioSelectedEmployeeId },
+          }));
+        if (trioEmp) {
+          trioConfirmado = {
+            id: trioEmp.id,
+            nombre: trioEmp.nombreArtistico,
+            precioCombinadoHora:
+              Number(empleada.precioBaseHora) + Number(trioEmp.precioBaseHora),
+          };
+        }
+      }
 
       const extrasData = empleadaExtras.map((e) => {
         const linkedIds = Array.isArray(e.modelosVinculadasIds)
@@ -4982,10 +5399,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
       const generalPrompt = getGeneralChatSystemPrompt({
         nombreArtistico: empleada.nombreArtistico,
-        precioBaseHora: empleada.precioBaseHora,
+        precioBaseHora:
+          session.trioCombinedRatePerHour ?? empleada.precioBaseHora,
         descripcion: empleada.descripcion,
         extras: extrasData,
+        modelosDisponiblesTrio: availableTrioModels,
+        trioConfirmado,
         ubicacionesPreestablecidas: ubicacionesData,
+        costoTransporteExterno: Number(
+          (transportConfig as any)?.externalLocationFee ?? 0,
+        ),
         duracionPactada: session.duracionPactadaHoras,
         metodoPago: session.metodoPago,
         fechaHoraActual: new Date().toLocaleString('es-MX', {
@@ -5023,12 +5446,60 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           return;
         }
 
-        // Check if response contains [SEND_EXCLUSIVE_PHOTO]
+        // Check if response contains [SEND_EXCLUSIVE_PHOTO] or [TRIO_REQUEST]
         const hasPhotoIntent = responseText.includes('[SEND_EXCLUSIVE_PHOTO]');
+        const trioMatch = responseText.match(/\[TRIO_REQUEST:\s*(\{.*?\})\]/);
         const cleanText = responseText
           .replace(/\[SEND_EXCLUSIVE_PHOTO\]/g, '')
+          .replace(/\[TRIO_REQUEST:\s*\{.*?\}\]/g, '')
           .replace(/\[DATA:\s*\{.*?\}\]/g, '')
           .trim();
+
+        if (trioMatch) {
+          try {
+            const trioData = JSON.parse(trioMatch[1]);
+            const requestedId = trioData.modeloId;
+            const requestedName = trioData.modeloNombre;
+
+            let matchedTrioEmp: Empleadas | null | undefined =
+              linkedEmployees.find(
+                (m) =>
+                  (requestedId && m.id === requestedId) ||
+                  (requestedName &&
+                    m.nombreArtistico.toLowerCase().trim() ===
+                      requestedName.toLowerCase().trim()),
+              );
+
+            if (!matchedTrioEmp && (requestedId || requestedName)) {
+              matchedTrioEmp = await this.empleadasRepository.findOne({
+                where: requestedId
+                  ? { id: requestedId, catalogoActivo: true }
+                  : { nombreArtistico: requestedName, catalogoActivo: true },
+              });
+            }
+
+            if (matchedTrioEmp) {
+              session.trioSelectedEmployeeId = matchedTrioEmp.id;
+              session.trioSelectedEmployeeName = matchedTrioEmp.nombreArtistico;
+              session.trioStatus = 'pending_boss';
+
+              history.push({ role: 'model', parts: [{ text: cleanText }] });
+              session.chatHistory = history;
+
+              await this.sendDelayedReply(ctx, cleanText);
+              await this.recordDraftConversation(ctx, 'ia', cleanText);
+
+              await this.notifyBossAboutTrioRequest(
+                ctx,
+                empleada,
+                matchedTrioEmp,
+              );
+              return;
+            }
+          } catch (trioErr) {
+            this.logger.error('Error parsing TRIO_REQUEST data:', trioErr);
+          }
+        }
 
         if (hasPhotoIntent) {
           try {

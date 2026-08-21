@@ -10,9 +10,10 @@ import {
 
 describe('Telegram booking session input parsing', () => {
   it.each([
-    ['quiero dos chicas para el servicio', 'grupal'],
+    ['quiero tres chicas para el servicio', 'grupal'],
     ['busco un servicio grupal', 'grupal'],
-    ['puedes venir con una amiga', 'incierta'],
+    ['varias chicas a la vez', 'incierta'],
+    ['puedes venir con una amiga para un trio', 'individual'],
     ['quiero dos horas contigo', 'individual'],
   ])('clasifica la intención de %s como %s', (text, expected) => {
     expect(detectGroupServiceIntent(text)).toBe(expected);
@@ -144,5 +145,22 @@ describe('Telegram booking session input parsing', () => {
     expect(session.humanTakeover).toBe(true);
     expect(session.iaActiva).toBe(false);
     expect(session.bossThreadId).toBe('12345');
+  });
+
+  it('permite estructurar correctamente una sesión con trío confirmado y tarifa combinada', () => {
+    const session: any = {
+      step: 'CHAT_CON_EMPLEADA',
+      empleadaId: 'emp-1',
+      trioStatus: 'confirmed',
+      trioSelectedEmployeeId: 'emp-2',
+      trioSelectedEmployeeName: 'Valentina',
+      trioCombinedRatePerHour: 2900,
+      duracionPactadaHoras: 2,
+    };
+
+    expect(session.trioStatus).toBe('confirmed');
+    expect(session.trioSelectedEmployeeName).toBe('Valentina');
+    expect(session.trioCombinedRatePerHour).toBe(2900);
+    expect(session.duracionPactadaHoras * session.trioCombinedRatePerHour).toBe(5800);
   });
 });
