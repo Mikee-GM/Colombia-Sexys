@@ -1019,17 +1019,35 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     direction: RatingDirection,
   ) {
     if (direction !== 'client_to_employee') return;
+    const [metric] = await this.dataSource.query(
+      `SELECT ROUND(AVG(stars)::numeric, 2) AS average, COUNT(*)::int AS count
+       FROM interaction_ratings
+       WHERE employee_id = $1 AND direction = 'client_to_employee'
+         AND appeal_status NOT IN ('pending', 'overturned')`,
+      [employeeId],
+    );
     await this.dataSource.query(
-      `UPDATE empleadas e
-       SET promedio_calificacion = metric.average,
-           total_servicios_valorados = metric.count
-       FROM (
-         SELECT ROUND(AVG(stars)::numeric, 2) AS average, COUNT(*)::int AS count
-         FROM interaction_ratings
-         WHERE employee_id = $1 AND direction = 'client_to_employee'
-           AND appeal_status NOT IN ('pending', 'overturned')
-       ) metric
-       WHERE e.id = $1`,
+      `UPDATE empleadas
+       SET promedio_calificacion = $2, total_servicios_valorados = $3
+       WHERE id = $1`,
+      [employeeId, metric.average, metric.count],
+    );
+    // Se conserva un registro histórico de cada recálculo del promedio, para poder
+    // reconstruir cómo cambió la calificación pública de una empleada con el tiempo.
+    await this.dataSource.query(
+      `INSERT INTO employee_rating_snapshots (employee_id, average, rating_count)
+       VALUES ($1, $2, $3)`,
+      [employeeId, metric.average, metric.count],
+    );
+  }
+
+  async listRatingHistory(employeeId: string) {
+    return this.dataSource.query(
+      `SELECT id, average, rating_count AS "ratingCount", created_at AS "createdAt"
+       FROM employee_rating_snapshots
+       WHERE employee_id = $1
+       ORDER BY created_at DESC
+       LIMIT 100`,
       [employeeId],
     );
   }

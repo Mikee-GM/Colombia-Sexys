@@ -270,12 +270,14 @@ export class DriversService {
       fotoPerfilUrl: null;
       ratingAverage: number | null;
       confirmedReports90Days: number;
+      revenue90Days: number;
+      disponible: boolean;
       score: number | null;
       position: number | null;
     }>
   > {
     const drivers = await this.choferesRepository.find({
-      select: { id: true, nombre: true },
+      select: { id: true, nombre: true, disponible: true },
     });
     if (drivers.length === 0) return [];
     const driverIds = drivers.map((d) => d.id);
@@ -306,24 +308,47 @@ export class DriversService {
       reportRows.map((row) => [row.subject_id, Number(row.confirmed)]),
     );
 
+    const revenueRows: Array<{ chofer_id: string; revenue: string }> =
+      await this.dataSource.query(
+        `SELECT chofer_id, COALESCE(SUM(driver_payout), 0) AS revenue
+         FROM viajes
+         WHERE estado = 'finalizado' AND proveedor_transporte = 'interno'
+           AND hora_fin_viaje >= now() - interval '90 days'
+           AND chofer_id = ANY($1::uuid[])
+         GROUP BY chofer_id`,
+        [driverIds],
+      );
+    const revenueByDriver = new Map(
+      revenueRows.map((row) => [row.chofer_id, Number(row.revenue)]),
+    );
+    const maxRevenue = Math.max(0, ...revenueByDriver.values());
+
     const kpis = drivers.map((driver) => {
       const ratingAverage = ratingByDriver.get(driver.id) ?? null;
       const confirmedReports90Days = reportsByDriver.get(driver.id) ?? 0;
-      const score =
-        ratingAverage != null
-          ? Math.max(
-              0,
-              Math.round(
-                (ratingAverage / 5) * 100 - confirmedReports90Days * 8,
-              ),
-            )
-          : null;
+      const revenue90Days = revenueByDriver.get(driver.id) ?? 0;
+      // Mismo criterio que en employees.service.ts: bono acotado por ingresos relativos
+      // a la mejor de sus pares en 90 días, más un bono fijo si está disponible ahora.
+      let score: number | null = null;
+      if (ratingAverage != null) {
+        const revenueBonus =
+          maxRevenue > 0 ? Math.round((revenue90Days / maxRevenue) * 10) : 0;
+        const availabilityBonus = driver.disponible ? 5 : 0;
+        score = Math.max(
+          0,
+          Math.round((ratingAverage / 5) * 100 - confirmedReports90Days * 8) +
+            revenueBonus +
+            availabilityBonus,
+        );
+      }
       return {
         id: driver.id,
         nombre: driver.nombre,
         fotoPerfilUrl: null,
         ratingAverage,
         confirmedReports90Days,
+        revenue90Days,
+        disponible: driver.disponible,
         score,
         position: null as number | null,
       };

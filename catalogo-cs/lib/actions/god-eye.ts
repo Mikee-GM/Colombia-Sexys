@@ -16,7 +16,20 @@ export type GodEyeOverview = {
     cashInStreet: number;
     activeSanctions: number;
     pendingAppeals: number;
+    pendingReports: number;
+    clientsTotal: number;
+    pendingOffers: number;
+    revenueToday: number;
   };
+  pendingReports: Array<{
+    id: string;
+    category: string;
+    priority: "normal" | "alta" | "urgente";
+    description: string;
+    createdAt: string;
+    subjectType: "client" | "employee" | "driver";
+    subjectName: string | null;
+  }>;
   activeServices: Array<{
     id: string;
     serviceType: "individual" | "grupal";

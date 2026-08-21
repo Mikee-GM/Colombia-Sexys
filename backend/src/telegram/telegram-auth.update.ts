@@ -399,6 +399,93 @@ export class TelegramAuthUpdate {
     }
   }
 
+  @Command('historial')
+  async onHistorialCommand(@Ctx() ctx: Context) {
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
+
+    const identity = await this.resolveAppealIdentity(telegramId);
+    if (!identity) {
+      await ctx.reply(
+        'No encontramos tu perfil. Si eres empleada o chofer, vincula tu cuenta con /vincular.',
+      );
+      return;
+    }
+
+    if (identity.type === 'employee') {
+      const services = await this.serviciosRepository.find({
+        where: { empleadaId: identity.id, estado: 'finalizado' },
+        relations: { cliente: true },
+        order: { horaFinServicio: 'DESC' },
+        take: 5,
+      });
+      if (services.length === 0) {
+        await ctx.reply(
+          'Todavía no tienes servicios finalizados en tu historial.',
+        );
+        return;
+      }
+      const lines = services.map(
+        (service) =>
+          `${this.formatTime(service.horaFinServicio)} · ${service.cliente?.nombreTelegram || 'Cliente'} · $${Number(service.totalFinal).toLocaleString()}`,
+      );
+      await ctx.reply(
+        `📋 *Tus últimos ${services.length} servicios*\n\n${lines.join('\n')}`,
+        { parse_mode: 'Markdown' },
+      );
+      return;
+    }
+
+    if (identity.type === 'driver') {
+      const trips = await this.viajesRepository.find({
+        where: { choferId: identity.id, estado: 'finalizado' },
+        order: { horaFinViaje: 'DESC' },
+        take: 5,
+      });
+      if (trips.length === 0) {
+        await ctx.reply(
+          'Todavía no tienes viajes finalizados en tu historial.',
+        );
+        return;
+      }
+      const lines = trips.map(
+        (trip) =>
+          `${this.formatTime(trip.horaFinViaje)} · ${trip.tipo === 'ida' ? 'Ida' : 'Regreso'} · $${Number(trip.driverPayout || 0).toLocaleString()}`,
+      );
+      await ctx.reply(
+        `📋 *Tus últimos ${trips.length} viajes*\n\n${lines.join('\n')}`,
+        { parse_mode: 'Markdown' },
+      );
+      return;
+    }
+
+    const services = await this.serviciosRepository.find({
+      where: { clienteId: identity.id },
+      relations: { empleada: true },
+      order: { createdAt: 'DESC' },
+      take: 5,
+    });
+    if (services.length === 0) {
+      await ctx.reply('Todavía no tienes servicios en tu historial.');
+      return;
+    }
+    const statusLabels: Record<string, string> = {
+      finalizado: 'Finalizado',
+      cancelado: 'Cancelado',
+      en_curso: 'En curso',
+      agendado: 'Agendado',
+      pendiente: 'Pendiente',
+    };
+    const lines = services.map(
+      (service) =>
+        `${this.formatTime(service.createdAt)} · ${service.empleada?.nombreArtistico || 'Empleada'} · ${statusLabels[service.estado] || service.estado}`,
+    );
+    await ctx.reply(
+      `📋 *Tus últimos ${services.length} servicios*\n\n${lines.join('\n')}`,
+      { parse_mode: 'Markdown' },
+    );
+  }
+
   @Help()
   async onHelp(@Ctx() ctx: Context) {
     await ctx.reply(
@@ -408,6 +495,7 @@ export class TelegramAuthUpdate {
         '/desvincular - Desvincular tu cuenta de empleado o chofer\n' +
         '/vincular_grupo - Vincular el grupo de Telegram actual a tu cuenta (Jefes y Admins)\n' +
         '/apelar - Apelar una calificación que recibiste\n' +
+        '/historial - Ver tus últimas actividades (servicios, viajes)\n' +
         '/help - Ver los comandos de ayuda',
     );
   }

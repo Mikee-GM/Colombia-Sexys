@@ -80,6 +80,12 @@ export class DisciplineController {
     return this.discipline.listEmployeeRatingComments(employeeId);
   }
 
+  @Get('ratings/employee/:employeeId/history')
+  @Roles('admin')
+  listRatingHistory(@Param('employeeId', ParseUUIDPipe) employeeId: string) {
+    return this.discipline.listRatingHistory(employeeId);
+  }
+
   @Get('sanctions')
   @Roles('admin', 'jefe')
   sanctions(

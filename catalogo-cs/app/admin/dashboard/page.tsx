@@ -21,8 +21,13 @@ export default async function DashboardPage() {
         cashInStreet: 0,
         activeSanctions: 0,
         pendingAppeals: 0,
+        pendingReports: 0,
+        clientsTotal: 0,
+        pendingOffers: 0,
+        revenueToday: 0,
       },
       activeServices: [],
+      pendingReports: [],
     })),
     getGodEyeActorsAction().catch(() => ({
       employees: [],

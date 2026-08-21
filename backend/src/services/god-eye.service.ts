@@ -15,6 +15,10 @@ export class GodEyeService {
       cashInStreetRow,
       activeSanctionsRow,
       pendingAppealsRow,
+      pendingReportsRow,
+      clientsTotalRow,
+      pendingOffersRow,
+      revenueTodayRow,
     ] = await Promise.all([
       this.dataSource.query(`
         SELECT COUNT(*)::int AS count
@@ -60,7 +64,47 @@ export class GodEyeService {
         FROM interaction_ratings
         WHERE appeal_status = 'pending'
       `),
+      this.dataSource.query(`
+        SELECT COUNT(*)::int AS count
+        FROM conduct_reports
+        WHERE status IN ('nuevo', 'en_revision')
+      `),
+      this.dataSource.query(`
+        SELECT COUNT(*)::int AS count
+        FROM clientes
+      `),
+      this.dataSource.query(`
+        SELECT COUNT(*)::int AS count
+        FROM group_service_requests
+        WHERE status IN ('esperando_jefe', 'seleccionando', 'reservada', 'esperando_pago')
+      `),
+      this.dataSource.query(`
+        SELECT COALESCE(SUM(total_final), 0)::numeric AS total
+        FROM servicios
+        WHERE estado = 'finalizado' AND hora_fin_servicio >= date_trunc('day', now())
+      `),
     ]);
+
+    const pendingReportsList = await this.dataSource.query(`
+      SELECT
+        r.id,
+        r.category,
+        r.priority,
+        r.description,
+        r.created_at AS "createdAt",
+        r.subject_type AS "subjectType",
+        CASE
+          WHEN r.subject_type = 'employee' THEN e.nombre_artistico
+          WHEN r.subject_type = 'driver' THEN c.nombre
+          ELSE NULL
+        END AS "subjectName"
+      FROM conduct_reports r
+      LEFT JOIN empleadas e ON r.subject_type = 'employee' AND e.id = r.subject_id
+      LEFT JOIN choferes c ON r.subject_type = 'driver' AND c.id = r.subject_id
+      WHERE r.status IN ('nuevo', 'en_revision')
+      ORDER BY r.created_at DESC
+      LIMIT 5
+    `);
 
     const activeServicesList = await this.dataSource.query(`
       SELECT
@@ -131,8 +175,13 @@ export class GodEyeService {
         cashInStreet: Number(cashInStreetRow[0]?.total_cash || 0),
         activeSanctions: activeSanctionsRow[0]?.count || 0,
         pendingAppeals: pendingAppealsRow[0]?.count || 0,
+        pendingReports: pendingReportsRow[0]?.count || 0,
+        clientsTotal: clientsTotalRow[0]?.count || 0,
+        pendingOffers: pendingOffersRow[0]?.count || 0,
+        revenueToday: Number(revenueTodayRow[0]?.total || 0),
       },
       activeServices: activeServicesList,
+      pendingReports: pendingReportsList,
     };
   }
 
