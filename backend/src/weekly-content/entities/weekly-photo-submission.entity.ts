@@ -3,7 +3,10 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { Empleadas } from '../../employees/entities/employee.entity';
 
 export type SubmissionStatus =
-  'pendiente' | 'aprobada_publica' | 'aprobada_privada' | 'rechazada';
+  | 'pendiente'
+  | 'aprobada_publica'
+  | 'aprobada_privada'
+  | 'rechazada';
 
 @Index('idx_weekly_photo_submissions_empleada', ['empleadaId'], {})
 @Index('idx_weekly_photo_submissions_estado', ['estado'], {})

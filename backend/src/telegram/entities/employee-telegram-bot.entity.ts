@@ -12,7 +12,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Empleadas } from '../../employees/entities/employee.entity';
 
 export type EmployeeBotStatus =
-  'pendiente' | 'activo' | 'error' | 'deshabilitado';
+  | 'pendiente'
+  | 'activo'
+  | 'error'
+  | 'deshabilitado';
 
 /**
  * Credenciales del bot de Telegram dedicado a una empleada.

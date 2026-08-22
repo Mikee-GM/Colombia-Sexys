@@ -12,7 +12,9 @@ import { Empleadas } from '../../employees/entities/employee.entity';
 import { CandidateScreeningAnswer } from './candidate-screening-answer.entity';
 
 export type CandidateScreeningStatus =
-  'pendiente' | 'en_progreso' | 'completado';
+  | 'pendiente'
+  | 'en_progreso'
+  | 'completado';
 
 @Index('candidate_screenings_pkey', ['id'], { unique: true })
 @Index('candidate_screenings_token_key', ['token'], { unique: true })

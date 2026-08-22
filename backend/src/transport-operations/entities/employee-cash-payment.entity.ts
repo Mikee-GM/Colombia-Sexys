@@ -15,7 +15,8 @@ export class EmployeeCashPayment {
   @Column('varchar', { length: 240, nullable: true }) note: string | null;
   @Column('uuid', { name: 'registered_by_user_id' }) registeredByUserId: string;
   @Column('varchar', { length: 20, default: 'physical' }) origin:
-    'physical' | 'weekly_offset';
+    | 'physical'
+    | 'weekly_offset';
   @Column('timestamptz', { name: 'created_at', default: () => 'now()' })
   createdAt: Date;
 }

@@ -1632,7 +1632,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     const match = (ctx as any).match;
     const metodo = match[1] as
-      'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
+      | 'efectivo'
+      | 'tarjeta'
+      | 'transferencia'
+      | 'mixto';
 
     session.metodoPago = metodo;
 
@@ -2710,7 +2713,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ctx.session.uberTripId
     ) {
       const photos = (ctx.message as any)?.photo as
-        Array<{ file_id: string }> | undefined;
+        | Array<{ file_id: string }>
+        | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!fileId) {
         await ctx.reply(
@@ -2758,7 +2762,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       Number(groupRequest.service.pendingBalance) > 0.009
     ) {
       const photos = (ctx.message as any)?.photo as
-        Array<{ file_id: string }> | undefined;
+        | Array<{ file_id: string }>
+        | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!fileId) return;
       const pending = Number(groupRequest.service.pendingBalance);
@@ -2914,7 +2919,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       if (!client || !empleada) return;
 
       const photos = (ctx.message as any)?.photo as
-        Array<{ file_id: string }> | undefined;
+        | Array<{ file_id: string }>
+        | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!fileId) {
         await ctx.reply(
@@ -3072,7 +3078,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     // recibido".
     if (ctx.session?.empleadaId && ctx.chat?.type === 'private') {
       const photos = (ctx.message as any)?.photo as
-        Array<{ file_id: string }> | undefined;
+        | Array<{ file_id: string }>
+        | undefined;
       const fileId = photos?.[photos.length - 1]?.file_id;
       if (!fileId) return;
 
@@ -3115,7 +3122,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     servicio: Servicios,
   ): Promise<void> {
     const photos = (ctx.message as any)?.photo as
-      Array<{ file_id: string }> | undefined;
+      | Array<{ file_id: string }>
+      | undefined;
     const fileId = photos?.[photos.length - 1]?.file_id;
     if (!fileId) {
       await ctx.reply(
