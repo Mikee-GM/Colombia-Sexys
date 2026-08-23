@@ -33,6 +33,7 @@ import { CandidateScreeningModule } from './candidate-screening/candidate-screen
 import { ChallengesModule } from './challenges/challenges.module';
 import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
 import { ClientAlertsModule } from './client-alerts/client-alerts.module';
+import { ServiceExtensionsModule } from './service-extensions/service-extensions.module';
 
 @Module({
   imports: [
@@ -154,6 +155,7 @@ import { ClientAlertsModule } from './client-alerts/client-alerts.module';
     ChallengesModule,
     DriverShiftsModule,
     ClientAlertsModule,
+    ServiceExtensionsModule,
   ],
   controllers: [AppController],
   providers: [
