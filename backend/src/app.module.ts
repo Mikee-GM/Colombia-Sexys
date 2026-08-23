@@ -32,6 +32,7 @@ import { WeeklyContentModule } from './weekly-content/weekly-content.module';
 import { CandidateScreeningModule } from './candidate-screening/candidate-screening.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
+import { ClientAlertsModule } from './client-alerts/client-alerts.module';
 
 @Module({
   imports: [
@@ -152,6 +153,7 @@ import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
     CandidateScreeningModule,
     ChallengesModule,
     DriverShiftsModule,
+    ClientAlertsModule,
   ],
   controllers: [AppController],
   providers: [
