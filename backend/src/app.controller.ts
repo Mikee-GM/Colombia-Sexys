@@ -1,4 +1,10 @@
-import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  ServiceUnavailableException,
+  VERSION_NEUTRAL,
+  Version,
+} from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DataSource } from 'typeorm';
 import { AppService } from './app.service';
@@ -21,12 +27,14 @@ export class AppController {
   }
 
   @Get('health/live')
+  @Version(VERSION_NEUTRAL)
   @ApiOperation({ summary: 'Comprobar que el proceso de la API responde' })
   healthLive() {
     return { status: 'ok' as const };
   }
 
   @Get('health/ready')
+  @Version(VERSION_NEUTRAL)
   @ApiOperation({ summary: 'Comprobar que la API y PostgreSQL estan listos' })
   async healthReady() {
     try {

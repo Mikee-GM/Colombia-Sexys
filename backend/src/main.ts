@@ -54,6 +54,11 @@ async function bootstrap() {
   // Quedan fuera del prefijo las rutas que consume infraestructura ajena y que
   // no deben versionarse: las sondas de Docker y el webhook que Telegram tiene
   // registrado en sus servidores.
+  //
+  // Ojo: `exclude` solo quita el prefijo `/api`, no la version. Estas rutas
+  // ademas llevan `@Version(VERSION_NEUTRAL)` en su handler; sin eso quedarian
+  // publicadas en `/v1/health/ready` y el healthcheck del contenedor recibiria
+  // un 404.
   app.setGlobalPrefix('api', {
     exclude: [
       { path: 'health/live', method: RequestMethod.GET },

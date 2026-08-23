@@ -13,6 +13,8 @@ import {
   UsePipes,
   ValidationPipe,
   ForbiddenException,
+  VERSION_NEUTRAL,
+  Version,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -65,6 +67,7 @@ export class TelegramBotsController {
    * Telegram y nosotros.
    */
   @Post('webhook/:recordId')
+  @Version(VERSION_NEUTRAL)
   @HttpCode(200)
   async webhook(
     @Param('recordId', new ParseUUIDPipe()) recordId: string,
