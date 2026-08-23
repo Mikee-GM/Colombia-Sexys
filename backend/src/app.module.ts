@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import * as Joi from 'joi';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
 import { TelegramModule } from './telegram/telegram.module';
 import { UsersModule } from './users/users.module';
 import { AiModule } from './ai/ai.module';
@@ -161,8 +162,10 @@ import { ServiceExtensionsModule } from './service-extensions/service-extensions
   providers: [
     AppService,
     // Sin este guard global el ThrottlerModule no aplica a nada: quedaba
-    // configurado pero inerte, y el login admitia intentos ilimitados.
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // configurado pero inerte, y el login admitia intentos ilimitados. Se usa
+    // la variante que se salta los contextos no-HTTP para no romper los
+    // handlers de Telegram, que pasan por este mismo pipeline.
+    { provide: APP_GUARD, useClass: HttpThrottlerGuard },
   ],
 })
 export class AppModule {}

@@ -14,6 +14,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost) {
+    // Los filtros globales tambien envuelven los handlers de Telegram, y ahi no
+    // hay respuesta HTTP que escribir: `switchToHttp()` devuelve el contexto de
+    // Telegraf y `response.status(...)` revienta, sustituyendo el error real por
+    // un `response.status is not a function` que no dice nada. Se deja subir la
+    // excepcion para que la recoja el `bot.catch()` correspondiente.
+    if (host.getType() !== 'http') {
+      throw exception;
+    }
+
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
