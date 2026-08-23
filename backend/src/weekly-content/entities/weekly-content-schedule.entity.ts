@@ -3,10 +3,7 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { Empleadas } from '../../employees/entities/employee.entity';
 
 export type WeeklyScheduleStatus =
-  | 'solicitado'
-  | 'recordatorio_enviado'
-  | 'entregado'
-  | 'falta_aplicada';
+  'solicitado' | 'recordatorio_enviado' | 'entregado' | 'falta_aplicada';
 
 @Index(
   'weekly_content_schedules_empleada_semana_key',

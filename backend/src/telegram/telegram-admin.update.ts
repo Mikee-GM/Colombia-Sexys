@@ -855,10 +855,7 @@ export class TelegramAdminUpdate {
     const match = (ctx as any).match;
     const serviceId = match[1];
     const newPay = match[2] as
-      | 'efectivo'
-      | 'tarjeta'
-      | 'transferencia'
-      | 'mixto';
+      'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
 
     const servicio = await this.serviciosRepository.findOne({
       where: { id: serviceId },

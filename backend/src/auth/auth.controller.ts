@@ -67,8 +67,7 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const refreshToken = request.signedCookies?.[REFRESH_COOKIE] as
-      | string
-      | undefined;
+      string | undefined;
     if (!refreshToken) {
       throw new UnauthorizedException('No existe una sesión renovable');
     }
