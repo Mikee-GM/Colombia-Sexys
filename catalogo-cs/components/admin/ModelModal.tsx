@@ -40,6 +40,38 @@ interface ModelModalProps {
   apartments: { id: string; name: string }[];
 }
 
+/**
+ * Espejo de `detectKissingPolicy` del backend (src/ai/prompts/prompts.ts), que
+ * es la fuente de verdad. Aqui solo sirve para enseñarle al admin que responde
+ * hoy la opcion "Automatico": sin esa pista, el modo automatico es una caja
+ * negra y nadie se entera de que una edicion de la biografia le cambio la
+ * respuesta a la modelo.
+ */
+function previewKissingPolicy(descripcion: string): "no_besa" | "besos_bien_dados" | "besos" | "sin_dato" {
+  const normalized = descripcion
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+  if (/\b(no\s+(da|doy|hace|hago)\s+besos|sin\s+besos|no\s+beso\b|nada\s+de\s+besos|no\s+besa\b)/.test(normalized)) {
+    return "no_besa";
+  }
+  if (/\b(besos\s+bien\s+dados|besa\s+bien|besos\s+ricos|besos\s+de\s+lengua|besos\s+franceses|besos\s+apasionados|muy\s+besucona|besucona)\b/.test(normalized)) {
+    return "besos_bien_dados";
+  }
+  if (/\bbes(o|os|a|ar|ito|itos)\b/.test(normalized)) {
+    return "besos";
+  }
+  return "sin_dato";
+}
+
+const KISSING_PREVIEW: Record<ReturnType<typeof previewKissingPolicy>, string> = {
+  no_besa: "que no da besos en la boca",
+  besos_bien_dados: "que si da besos y los da muy bien",
+  besos: "que si da besos",
+  sin_dato: "que eso se ve en persona (la descripcion no lo dice)",
+};
+
 const PREDEFINED_EXTRAS = [
   { nombre: "Oral natural", precio: 500 },
   { nombre: "Oral natural terminado en cara", precio: 1000 },
@@ -116,6 +148,7 @@ export default function ModelModal({
           nombreArtistico: modelo.nombreArtistico || "",
           descripcion: modelo.descripcion,
           estiloHabla: modelo.estiloHabla || "",
+          politicaBesos: modelo.politicaBesos ?? null,
           fotoPrincipal: modelo.fotoPrincipal,
           fotos: [...modelo.fotos],
           linkX: modelo.linkX,
@@ -134,6 +167,7 @@ export default function ModelModal({
           nombreArtistico: "",
           descripcion: "",
           estiloHabla: "",
+          politicaBesos: null,
           fotoPrincipal: "",
           fotos: [],
           linkX: "",
@@ -1238,6 +1272,38 @@ export default function ModelModal({
                     que no todas las modelos suenen igual en el chat.
                   </p>
                 </div>
+              </div>
+
+              {/* Va pegado a la descripción porque es de donde se deducía antes:
+                  dejarlo en automático significa seguir leyendo ese texto, y
+                  entonces reescribir la biografía puede cambiar en silencio lo
+                  que la modelo le responde al cliente sobre los besos. */}
+              <div>
+                <SelectField
+                  label="Política de Besos"
+                  value={form.politicaBesos ?? ""}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      politicaBesos: (e.target.value || null) as ModeloPayload["politicaBesos"],
+                    })
+                  }
+                  options={[
+                    { value: "", label: "Automático (se deduce de la descripción)" },
+                    { value: "besos", label: "Sí da besos" },
+                    { value: "besos_bien_dados", label: "Sí, y los da muy bien" },
+                    { value: "no_besa", label: "No da besos en la boca" },
+                  ]}
+                />
+                <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
+                  Define qué contesta la modelo cuando el cliente pregunta por besos. En
+                  automático se deduce de la descripción, así que editar la biografía puede
+                  cambiar la respuesta sin avisar. Elegir una opción fija la respuesta.
+                  {form.politicaBesos == null && form.descripcion?.trim()
+                    ? " Con la descripción actual respondería: " +
+                      KISSING_PREVIEW[previewKissingPolicy(form.descripcion)] + "."
+                    : ""}
+                </p>
               </div>
             </div>
           </div>

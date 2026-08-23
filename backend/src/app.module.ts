@@ -87,6 +87,11 @@ import { ServiceExtensionsModule } from './service-extensions/service-extensions
         R2_BUCKET_NAME: Joi.string().required(),
         R2_PUBLIC_URL: Joi.string().uri().required(),
         GROQ_API_KEY: Joi.string().allow('').optional(),
+        // Modelos y temperatura configurables: cuando el proveedor retira una
+        // version del modelo hay que poder cambiarla sin tocar el codigo.
+        AI_CHAT_MODEL: Joi.string().allow('').optional(),
+        AI_VISION_MODEL: Joi.string().allow('').optional(),
+        AI_CHAT_TEMPERATURE: Joi.number().min(0).max(2).allow('').optional(),
         XAI_API_KEY: Joi.string().allow('').optional(),
         BANK_ACCOUNT_DETAILS: Joi.string().allow('').optional(),
         MAX_DAILY_AI_CALLS: Joi.number().default(15),

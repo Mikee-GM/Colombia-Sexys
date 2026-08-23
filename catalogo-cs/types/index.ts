@@ -11,6 +11,13 @@ export interface ServiceExtra {
   speechPersonalizado?: string;
 }
 
+/**
+ * Politica de besos declarada en la ficha. `null` significa "sin declarar": el
+ * bot vuelve entonces a deducirla del texto de la descripcion, que es como
+ * funcionaba antes de que existiera este campo.
+ */
+export type PoliticaBesos = "no_besa" | "besos" | "besos_bien_dados";
+
 export interface Modelo {
   _id: string;
   nombre: string; // Mapea a nombreArtistico por compatibilidad con vistas publicas
@@ -19,6 +26,7 @@ export interface Modelo {
   descripcion: string;
   /** Sello propio de habla, se inyecta en el prompt de la IA. */
   estiloHabla?: string;
+  politicaBesos?: PoliticaBesos | null;
   fotoPrincipal: string;
   fotos: string[];
   fotosExclusivas?: string[];
@@ -52,6 +60,7 @@ export interface ModeloPayload {
   descripcion: string;
   /** Sello propio de habla, se inyecta en el prompt de la IA. */
   estiloHabla?: string;
+  politicaBesos?: PoliticaBesos | null;
   fotoPrincipal: string;
   fotos: string[];
   linkX: string;

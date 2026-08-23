@@ -119,6 +119,22 @@ export class Empleadas {
   })
   estiloHabla: string | null;
 
+   * Politica de besos declarada. Cuando esta vacia se deduce de la descripcion,
+   * que es la forma en la que venia funcionando: se dejo opcional para no
+   * cambiar el comportamiento de las fichas ya cargadas.
+   */
+  @Column('character varying', {
+    name: 'politica_besos',
+    length: 20,
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description:
+      'Politica de besos declarada explicitamente para lo que la IA le dice al cliente',
+    enum: ['no_besa', 'besos', 'besos_bien_dados'],
+  })
+  politicaBesos: 'no_besa' | 'besos' | 'besos_bien_dados' | null;
+
   @Column('character varying', { name: 'link_x', nullable: true, length: 255 })
   linkX: string | null;
 

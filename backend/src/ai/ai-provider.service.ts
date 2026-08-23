@@ -1,11 +1,50 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+/** Modelos por defecto si el entorno no dice otra cosa. */
+const DEFAULT_CHAT_MODEL = 'grok-4.20-0309-non-reasoning';
+const DEFAULT_VISION_MODEL = 'grok-4.20-0309-non-reasoning';
+
+/**
+ * Temperatura del chat con el cliente. Baja a proposito: el prompt de la modelo
+ * son casi todo reglas duras (que no prometa besos, que no de horas de llegada,
+ * que no confirme el servicio) y con temperaturas altas se las salta mucho mas.
+ */
+const DEFAULT_CHAT_TEMPERATURE = 0.45;
+
 @Injectable()
 export class AiProviderService {
   private readonly logger = new Logger(AiProviderService.name);
 
   constructor(private readonly configService: ConfigService) {}
+
+  /**
+   * El modelo se lee del entorno para poder cambiarlo o volver al anterior sin
+   * desplegar: cuando el proveedor retira una version, el bot se queda mudo.
+   */
+  private get chatModel(): string {
+    return (
+      this.configService.get<string>('AI_CHAT_MODEL') || DEFAULT_CHAT_MODEL
+    );
+  }
+
+  private get visionModel(): string {
+    return (
+      this.configService.get<string>('AI_VISION_MODEL') || DEFAULT_VISION_MODEL
+    );
+  }
+
+  private get chatTemperature(): number {
+    const raw = this.configService.get<string | number>('AI_CHAT_TEMPERATURE');
+    // Ojo con la cadena vacia: `Number('')` es 0, asi que dejar la variable
+    // declarada y sin valor en el .env pondria la temperatura a cero —el modelo
+    // contestando siempre lo mismo— en vez de usar el valor por defecto.
+    if (raw === undefined || raw === null || String(raw).trim() === '') {
+      return DEFAULT_CHAT_TEMPERATURE;
+    }
+    const configured = Number(raw);
+    return Number.isFinite(configured) ? configured : DEFAULT_CHAT_TEMPERATURE;
+  }
 
   private getApiKey(): string | undefined {
     return (
@@ -39,10 +78,10 @@ export class AiProviderService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'grok-4.20-0309-non-reasoning',
+          model: this.chatModel,
           messages,
           max_tokens: 450,
-          temperature: 0.7,
+          temperature: this.chatTemperature,
         }),
         signal: controller.signal,
       });
@@ -130,7 +169,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'grok-4.20-0309-non-reasoning',
+          model: this.visionModel,
           messages,
           response_format: { type: 'json_object' },
           temperature: 0.1,

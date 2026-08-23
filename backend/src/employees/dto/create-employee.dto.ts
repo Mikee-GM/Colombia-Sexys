@@ -160,6 +160,17 @@ export class CreateEmployeeDto {
   @IsOptional()
   readonly estiloHabla?: string;
 
+  @ApiPropertyOptional({
+      'Politica de besos declarada. Si se deja vacia, se deduce del texto de la descripcion.',
+    enum: ['no_besa', 'besos', 'besos_bien_dados'],
+    example: 'besos_bien_dados',
+  })
+  @IsEnum(['no_besa', 'besos', 'besos_bien_dados'], {
+    message: 'La política de besos debe ser no_besa, besos o besos_bien_dados',
+  })
+  @IsOptional()
+  readonly politicaBesos?: 'no_besa' | 'besos' | 'besos_bien_dados' | null;
+
   @ApiProperty({ description: 'Precio base por hora pactado', example: 1200 })
   @IsNumber(
     {},
