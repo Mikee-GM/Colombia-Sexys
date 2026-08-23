@@ -16,6 +16,7 @@ export function mapToModelo(emp: any): Modelo {
     nombreReal: emp.nombreReal || "",
     nombreArtistico: emp.nombreArtistico || "",
     descripcion: emp.descripcion || "",
+    estiloHabla: emp.estiloHabla || "",
     fotoPrincipal: emp.fotoPerfilUrl || "",
     fotos: emp.empleadaFotos ? emp.empleadaFotos.map((f: any) => f.url) : [],
     fotosExclusivas: emp.fotosExclusivas

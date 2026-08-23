@@ -17,6 +17,8 @@ export interface Modelo {
   nombreReal: string;
   nombreArtistico: string;
   descripcion: string;
+  /** Sello propio de habla, se inyecta en el prompt de la IA. */
+  estiloHabla?: string;
   fotoPrincipal: string;
   fotos: string[];
   fotosExclusivas?: string[];
@@ -48,6 +50,8 @@ export interface ModeloPayload {
   nombreReal: string;
   nombreArtistico: string;
   descripcion: string;
+  /** Sello propio de habla, se inyecta en el prompt de la IA. */
+  estiloHabla?: string;
   fotoPrincipal: string;
   fotos: string[];
   linkX: string;

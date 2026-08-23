@@ -108,6 +108,17 @@ export class Empleadas {
   @ApiPropertyOptional({ description: 'Descripcion', example: 'Ejemplo' })
   descripcion: string | null;
 
+  /**
+   * Sello propio de habla de la modelo, en texto libre. Se inyecta en el prompt
+   * para que no todas suenen igual.
+   */
+  @Column('text', { name: 'estilo_habla', nullable: true })
+  @ApiPropertyOptional({
+    description: 'Estilo de habla propio',
+    example: 'Habla muy costeña, alarga las vocales y dice "ajá" a cada rato.',
+  })
+  estiloHabla: string | null;
+
   @Column('character varying', { name: 'link_x', nullable: true, length: 255 })
   linkX: string | null;
 

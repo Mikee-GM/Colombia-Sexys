@@ -7,8 +7,8 @@ import {
   BeforeApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Update, Ctx, Action, On, Hears } from 'nestjs-telegraf';
-import { Context, Markup } from 'telegraf';
+import { Update, Ctx, Action, On, Hears, InjectBot } from 'nestjs-telegraf';
+import { Context, Markup, Telegraf } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -57,6 +57,7 @@ interface SessionData {
     | 'AWAITING_LOCATION'
     | 'AWAITING_PAYMENT_METHOD'
     | 'AWAITING_MIXED_TRANSFER_AMOUNT'
+    | 'AWAITING_PRESENCE_CONFIRMATION'
     | 'AWAITING_PAYMENT_RECEIPT'
     | 'AWAITING_FINAL_PAYMENT_RECEIPT'
     | 'AWAITING_RATING_COMMENT'
@@ -106,6 +107,12 @@ interface SessionData {
   esperandoEmpleadaId?: string;
   /** true en cuanto el cliente envía una foto de comprobante de transferencia. */
   comprobanteEnviado?: boolean;
+  /**
+   * El cliente confirmó que ya está instalado en el lugar del servicio. Se pide
+   * antes de cobrar para no mandar a la modelo a un sitio donde el cliente
+   * todavía no llegó.
+   */
+  presenciaConfirmada?: boolean;
   /** Id de la validación del comprobante ya recibido. */
   comprobanteValidationId?: string;
   /** Servicio pendiente de cobro final (duración indefinida por transferencia). */
@@ -532,6 +539,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
   private readonly locationCleanupInterval: NodeJS.Timeout;
 
   constructor(
+    // Bot central. Las alertas a jefes y grupos tienen que salir por aquí:
+    // el bot dedicado de una modelo no es miembro del grupo del jefe, así que
+    // `ctx.telegram` fallaría en silencio cuando el chat viene de su bot.
+    @InjectBot() private readonly bot: Telegraf<Context>,
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
     @InjectRepository(Clientes)
@@ -1167,6 +1178,35 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     );
   }
 
+  /**
+   * Respuesta de entrada del bot central para un cliente que escribe sin haber
+   * pasado por el catálogo. Antes estos mensajes se ignoraban por completo y el
+   * cliente se perdía; ahora se le saluda y se le muestra con quién puede hablar.
+   */
+  private async replyWithAvailableEmployees(ctx: BotContext): Promise<void> {
+    const available = await this.getAvailableEmployees();
+    if (!available.length) {
+      await ctx.reply(
+        'Hola, gracias por escribirnos. En este momento no hay chicas disponibles, pero si nos cuentas para cuándo la quieres te avisamos apenas se desocupe alguna.',
+      );
+      return;
+    }
+
+    await ctx.reply(
+      'Hola, bienvenido. Estas son las chicas disponibles ahora mismo. Toca a la que te guste para hablar directamente con ella.',
+      Markup.inlineKeyboard(
+        available
+          .slice(0, 8)
+          .map((employee) => [
+            Markup.button.callback(
+              `${employee.nombreArtistico} — $${employee.precioBaseHora}/hr`,
+              `contratar_empleada:${employee.id}`,
+            ),
+          ]),
+      ),
+    );
+  }
+
   /** Foto principal utilizable para mostrar a una empleada en el chat. */
   private getEmployeePhotoUrl(employee: Empleadas): string | undefined {
     if (employee.fotoPerfilUrl) return employee.fotoPerfilUrl;
@@ -1519,6 +1559,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       nombreArtistico: empleada.nombreArtistico,
       precioBaseHora: empleada.precioBaseHora,
       descripcion: empleada.descripcion,
+      estiloHabla: empleada.estiloHabla,
       extras: extrasData,
       modelosDisponiblesTrio: availableTrioModels,
       otrasModelosDisponibles: otherAvailable.map((employee) => ({
@@ -1627,6 +1668,29 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     );
   }
 
+  /**
+   * El cliente confirma que ya está en el lugar. Se marca la sesión y se
+   * reanuda el flujo de pago exactamente donde se había pausado, reutilizando
+   * el método de pago que ya había elegido.
+   */
+  @Action('presencia_confirmada')
+  async onPresenceConfirmed(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery();
+    const session = ctx.session;
+    if (!session || session.step !== 'AWAITING_PRESENCE_CONFIRMATION') {
+      await ctx.reply('No hay ningún proceso de contratación activo.');
+      return;
+    }
+    session.presenciaConfirmada = true;
+    session.step = 'AWAITING_PAYMENT_METHOD';
+    try {
+      await ctx.editMessageReplyMarkup(undefined);
+    } catch {
+      // El mensaje puede haber sido editado o eliminado; el flujo continua.
+    }
+    await this.proceedWithPayment(ctx);
+  }
+
   @Action(/^pago_(efectivo|tarjeta|transferencia|mixto)$/)
   async onSelectPayment(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery();
@@ -1692,6 +1756,57 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
+    // Antes de cobrar hay que saber que el cliente ya está instalado: cobrar y
+    // despachar a la modelo a un lugar donde él todavía no llegó era una de las
+    // fuentes de fricción reportadas.
+    if (!session.presenciaConfirmada) {
+      session.step = 'AWAITING_PRESENCE_CONFIRMATION';
+      await ctx.reply(
+        'Antes de continuar con el pago, necesito confirmar que ya estás instalado en el lugar.\n\nComparte tu *ubicación en tiempo real* (toca el clip, luego Ubicación, y elige "Compartir ubicación en tiempo real") o confirma con el botón.',
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                'Ya estoy instalado',
+                'presencia_confirmada',
+              ),
+            ],
+          ]),
+        },
+      );
+      return;
+    }
+
+    await this.proceedWithPayment(ctx);
+  }
+
+  /**
+   * Tramo final del cobro, una vez confirmado que el cliente ya está en el
+   * lugar. Vive aparte porque se entra por dos caminos: eligiendo el método de
+   * pago cuando la presencia ya estaba confirmada, o al confirmarla después.
+   */
+  private async proceedWithPayment(ctx: BotContext): Promise<void> {
+    const session = ctx.session;
+    if (!session) return;
+
+    const {
+      locationLat,
+      locationLng,
+      locationNotas,
+      empleadaId,
+      duracionPactadaHoras,
+      metodoPago,
+    } = session;
+
+    if (!locationLat || !locationLng || !empleadaId || !metodoPago) {
+      await ctx.reply('Datos incompletos. Por favor inicia nuevamente.');
+      ctx.session = {};
+      return;
+    }
+
+    const metodo = metodoPago as
+      'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
     const bankDetails = await this.servicesService.bankTransferDetails();
 
     if (metodo === 'transferencia') {
@@ -4158,6 +4273,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const bookingAlive = Boolean(ctx.session?.empleadaId);
     const acceptsLocation =
       step === 'AWAITING_LOCATION' ||
+      step === 'AWAITING_PRESENCE_CONFIRMATION' ||
       (bookingAlive &&
         (step === 'CHAT_CON_EMPLEADA' ||
           step === 'AWAITING_DURATION' ||
@@ -4166,6 +4282,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       await ctx.reply(
         'Por favor, inicia la contratación de una empleada desde el catálogo primero.',
       );
+      return;
+    }
+
+    // Mandar la ubicación estando en el paso de confirmación de presencia vale
+    // como confirmación: es justo lo que se le pidió.
+    if (step === 'AWAITING_PRESENCE_CONFIRMATION' && ctx.session) {
+      ctx.session.presenciaConfirmada = true;
+      ctx.session.step = 'AWAITING_PAYMENT_METHOD';
+      await ctx.reply('Confirmado, gracias. Seguimos con el pago.');
+      await this.proceedWithPayment(ctx);
       return;
     }
     await this.recordDraftConversation(
@@ -5662,6 +5788,20 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }
     }
 
+    // Bot central: un cliente que escribe directo, sin /start ni venir del
+    // catálogo, tampoco puede quedarse en visto. Como aquí no hay una modelo
+    // implícita, se le da la bienvenida y se le muestra quién está disponible
+    // para que elija, en vez de ignorarlo.
+    if (!ctx.session && !dedicatedEmployeeId && dedicatedSenderId) {
+      const staff = await this.usuariosRepository.findOneBy({
+        telegramChatId: dedicatedSenderId,
+      });
+      if (!staff) {
+        await this.replyWithAvailableEmployees(ctx);
+        return;
+      }
+    }
+
     const session = ctx.session;
     if (!session) return;
     const step = session.step;
@@ -5790,6 +5930,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const sentimentPrompt = getSentimentPrompt(comments);
 
       let analysisResult = { sentimiento: 'neutral', enojo: false, score: 2 };
+      // Una queja grave no se cierra con un "gracias por tu opinión": el
+      // cliente tiene que ver que alguien se va a hacer cargo.
+      let quejaGrave = false;
       try {
         const responseText = await this.getGroqResponse(sentimentPrompt, []);
         const jsonMatch = responseText.match(/\{[\s\S]*?\}/);
@@ -5819,6 +5962,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             return;
           }
           const rating = ctx.session?.pendingRating ?? analysisResult.score;
+          quejaGrave = rating <= 2 || analysisResult.enojo;
           await this.disciplineService.createClientRating(client.id, {
             direction: 'client_to_employee',
             interactionId: servicio.id,
@@ -5832,8 +5976,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
           await this.serviciosRepository.save(servicio);
 
-          // Si se detecta enojo o frustración grave, alertar al Jefe/Admin de inmediato
-          if (analysisResult.enojo) {
+          // Se alerta al jefe ante cualquier queja grave, no solo cuando la IA
+          // detecta enojo: una calificación de 1 o 2 estrellas ya lo es, y al
+          // cliente se le está prometiendo que alguien lo va a contactar.
+          if (quejaGrave) {
             const jefeGrupoId =
               servicio.jefe?.grupoTelegramId ||
               servicio.empleada?.jefe?.grupoTelegramId;
@@ -5848,12 +5994,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               `• *Empleada:* ${servicio.empleada?.nombreArtistico || 'N/A'}\n` +
               `• *Calificación:* ${servicio.calificacion} ⭐\n` +
               `• *Comentario:* "${comments}"\n\n` +
-              `• *Análisis de IA:* Sentimiento: *${analysisResult.sentimiento.toUpperCase()}* (Enojo Detectado)\n\n` +
-              `Por favor, contacta al cliente de inmediato para resolver la situación.`;
+              `• *Análisis de IA:* Sentimiento: *${analysisResult.sentimiento.toUpperCase()}*${analysisResult.enojo ? ' (Enojo Detectado)' : ''}\n\n` +
+              `Al cliente ya se le prometió que un supervisor lo contactaría por este chat con una solución concreta. Por favor, contáctalo de inmediato.`;
 
             if (jefeGrupoId) {
               try {
-                await ctx.telegram.sendMessage(jefeGrupoId, alertMsg, {
+                await this.bot.telegram.sendMessage(jefeGrupoId, alertMsg, {
                   parse_mode: 'Markdown',
                 });
               } catch (e) {
@@ -5861,7 +6007,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               }
             } else if (jefeChatId) {
               try {
-                await ctx.telegram.sendMessage(jefeChatId, alertMsg, {
+                await this.bot.telegram.sendMessage(jefeChatId, alertMsg, {
                   parse_mode: 'Markdown',
                 });
               } catch (e) {
@@ -5875,7 +6021,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ctx.session = {};
 
       await ctx.reply(
-        `Muchas gracias por tus comentarios. Valoramos mucho tu opinión para seguir mejorando.`,
+        quejaGrave
+          ? `Lamento muchísimo que la experiencia no haya sido la que mereces, y te agradezco que te hayas tomado el tiempo de contarnos exactamente qué pasó.\n\nEsto no queda así: ya escalé tu caso a un supervisor, que va a revisarlo personalmente y se va a comunicar contigo por este mismo chat para darte una solución concreta (una compensación en tu próximo servicio o lo que corresponda según lo ocurrido).`
+          : `Muchas gracias por tus comentarios. Valoramos mucho tu opinión para seguir mejorando.`,
         servicioId
           ? Markup.inlineKeyboard([
               [
@@ -6485,6 +6633,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         precioBaseHora:
           session.trioCombinedRatePerHour ?? empleada.precioBaseHora,
         descripcion: empleada.descripcion,
+        estiloHabla: empleada.estiloHabla,
         extras: extrasData,
         modelosDisponiblesTrio: availableTrioModels,
         otrasModelosDisponibles,
