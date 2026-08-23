@@ -119,6 +119,7 @@ export class Empleadas {
   })
   estiloHabla: string | null;
 
+  /**
    * Politica de besos declarada. Cuando esta vacia se deduce de la descripcion,
    * que es la forma en la que venia funcionando: se dejo opcional para no
    * cambiar el comportamiento de las fichas ya cargadas.

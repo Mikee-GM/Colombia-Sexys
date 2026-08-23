@@ -161,6 +161,7 @@ export class CreateEmployeeDto {
   readonly estiloHabla?: string;
 
   @ApiPropertyOptional({
+    description:
       'Politica de besos declarada. Si se deja vacia, se deduce del texto de la descripcion.',
     enum: ['no_besa', 'besos', 'besos_bien_dados'],
     example: 'besos_bien_dados',
