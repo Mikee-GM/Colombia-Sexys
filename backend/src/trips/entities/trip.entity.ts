@@ -48,6 +48,23 @@ export class Viajes {
   })
   choferId: string | null;
 
+  /**
+   * Cuando vence la oferta enviada al chofer. Se persiste para que el barrido
+   * de mantenimiento pueda expirarla aunque el proceso que la creo se haya
+   * reiniciado; el setTimeout en memoria solo es la via rapida.
+   */
+  @Column('timestamp with time zone', {
+    name: 'oferta_expira_en',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Vencimiento de la oferta enviada al chofer',
+    type: String,
+    format: 'date-time',
+    example: '2026-07-09T12:00:00.000Z',
+  })
+  ofertaExpiraEn: Date | null;
+
   @Column('enum', { name: 'tipo', enum: ['ida', 'regreso'] })
   @ApiProperty({
     description: 'Tipo',

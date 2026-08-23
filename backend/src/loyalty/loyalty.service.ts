@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   OnModuleInit,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -19,6 +20,8 @@ import { LoyaltyTransaction } from './entities/loyalty-transaction.entity';
 
 @Injectable()
 export class LoyaltyService implements OnModuleInit {
+  private readonly logger = new Logger(LoyaltyService.name);
+
   constructor(
     @InjectRepository(LoyaltyTier)
     private readonly tiersRepository: Repository<LoyaltyTier>,
@@ -78,7 +81,7 @@ export class LoyaltyService implements OnModuleInit {
         await this.tiersRepository.save(defaultTiers);
       }
     } catch (error) {
-      console.error('Error seeding default loyalty tiers:', error);
+      this.logger.error('Error seeding default loyalty tiers:', error);
     }
   }
 

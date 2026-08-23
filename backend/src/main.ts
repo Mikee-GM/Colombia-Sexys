@@ -1,5 +1,11 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { NestFactory, Reflector } from '@nestjs/core';
+import {
+  ClassSerializerInterceptor,
+  INestApplication,
+  RequestMethod,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -34,9 +40,43 @@ async function bootstrap() {
     }),
   );
 
+  // Segunda capa sobre `select: false`: respeta los @Exclude() de las entidades
+  // para que un campo sensible no salga aunque alguien lo cargue a proposito.
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+
   // Global Exception Filter
   app.useGlobalFilters(new HttpExceptionFilter());
 
+  // Prefijo y version en la URL: toda la API cuelga de `/api/v1`. Sin esto un
+  // cambio incompatible obligaba a migrar a todos los clientes a la vez; ahora
+  // un controlador puede publicar `@Version('2')` y convivir con el anterior.
+  //
+  // Quedan fuera del prefijo las rutas que consume infraestructura ajena y que
+  // no deben versionarse: las sondas de Docker y el webhook que Telegram tiene
+  // registrado en sus servidores.
+  app.setGlobalPrefix('api', {
+    exclude: [
+      { path: 'health/live', method: RequestMethod.GET },
+      { path: 'health/ready', method: RequestMethod.GET },
+      { path: 'telegram/webhook/:recordId', method: RequestMethod.POST },
+    ],
+  });
+  app.enableVersioning({
+    type: VersioningType.URI,
+    defaultVersion: '1',
+  });
+
+  // Swagger solo fuera de produccion: el documento es un mapa completo de la
+  // superficie de ataque (cada ruta, cada DTO, cada campo de cada entidad) y no
+  // aporta nada al cliente final.
+  if (process.env.NODE_ENV !== 'production') {
+    setupSwagger(app);
+  }
+
+  await app.listen(process.env.PORT ?? 4000);
+}
+
+function setupSwagger(app: INestApplication) {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Backend Citas API')
     .setDescription('Documentacion de endpoints, DTOs y entidades de la API.')
@@ -53,7 +93,8 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api', app, document, {
+  // No puede seguir en `/api`: ese espacio es ahora la propia API.
+  SwaggerModule.setup('docs', app, document, {
     jsonDocumentUrl: 'docs-json',
     swaggerOptions: {
       persistAuthorization: true,
@@ -61,7 +102,6 @@ async function bootstrap() {
       operationsSorter: 'alpha',
     },
   });
-
-  await app.listen(process.env.PORT ?? 4000);
 }
+
 void bootstrap();

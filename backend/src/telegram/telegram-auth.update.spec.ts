@@ -20,12 +20,12 @@ describe('TelegramAuthUpdate deep links', () => {
       startHireSession: jest.fn().mockResolvedValue(undefined),
     };
     const update = new TelegramAuthUpdate(
+      {} as any, // linkAttempts
       usuariosRepository as any,
       clientesRepository as any,
       {} as any, // empleadasRepository
       {} as any, // serviciosRepository
       {} as any, // viajesRepository
-      {} as any, // jwtService
       {} as any, // authService
       {} as any, // telegramService
       bookingUpdate as any, // telegramBookingUpdate

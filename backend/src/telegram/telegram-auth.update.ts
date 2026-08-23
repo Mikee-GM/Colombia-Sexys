@@ -13,7 +13,6 @@ import {
 import { Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, MoreThan } from 'typeorm';
-import { JwtService } from '@nestjs/jwt';
 import { AuthService } from '../auth/auth.service';
 import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from '../clients/entities/client.entity';
@@ -30,12 +29,15 @@ import { WeeklyContentService } from '../weekly-content/weekly-content.service';
 import { CandidateScreeningService } from '../candidate-screening/candidate-screening.service';
 import { DisciplineService } from '../discipline/discipline.service';
 import { DedicatedBotContext } from './telegram-bot-registry.service';
+import { hashLinkCode } from './telegram-link-code';
+import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
 
 @Update()
 export class TelegramAuthUpdate {
   private readonly logger = new Logger(TelegramAuthUpdate.name);
 
   constructor(
+    private readonly linkAttempts: TelegramLinkAttemptsService,
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
     @InjectRepository(Clientes)
@@ -46,7 +48,6 @@ export class TelegramAuthUpdate {
     private readonly serviciosRepository: Repository<Servicios>,
     @InjectRepository(Viajes)
     private readonly viajesRepository: Repository<Viajes>,
-    private readonly jwtService: JwtService,
     private readonly authService: AuthService,
     @Inject(forwardRef(() => TelegramService))
     private readonly telegramService: TelegramService,
@@ -529,18 +530,34 @@ export class TelegramAuthUpdate {
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
 
-    // Find the user with the active, non-expired OTP code
+    // Seis digitos y diez minutos de validez son adivinables a fuerza bruta si
+    // se puede probar sin limite. El ThrottlerGuard del backend no llega aqui:
+    // es un guard HTTP y los updates de Telegram no pasan por el.
+    const blockedMinutes =
+      await this.linkAttempts.blockedMinutesLeft(telegramId);
+    if (blockedMinutes !== null) {
+      await ctx.reply(
+        `Demasiados intentos fallidos. Vuelve a intentarlo en ${blockedMinutes} minuto(s), ` +
+          'o pide un código nuevo en el panel.',
+      );
+      return;
+    }
+
+    // Se busca por la huella: en la base nunca hubo un codigo en claro.
     const user = await this.usuariosRepository.findOne({
       where: {
-        telegramVerificationCode: code,
+        telegramVerificationCode: hashLinkCode(code),
         telegramVerificationExpiresAt: MoreThan(new Date()),
       },
     });
 
     if (!user) {
+      const blocked = await this.linkAttempts.registerFailure(telegramId);
       await ctx.reply(
-        'El código de vinculación no es válido o ha expirado. ' +
-          'Por favor solicita un nuevo código en el panel.',
+        blocked
+          ? 'El código no es válido. Has agotado los intentos: espera 15 minutos antes de volver a probar.'
+          : 'El código de vinculación no es válido o ha expirado. ' +
+              'Por favor solicita un nuevo código en el panel.',
       );
       return;
     }
@@ -563,6 +580,7 @@ export class TelegramAuthUpdate {
     user.telegramVerificationCode = null;
     user.telegramVerificationExpiresAt = null;
     await this.usuariosRepository.save(user);
+    await this.linkAttempts.clear(telegramId);
 
     await ctx.reply(
       `🎉 ¡Vinculación exitosa!\n` +
@@ -918,13 +936,12 @@ export class TelegramAuthUpdate {
       return;
     }
 
-    const payload = { sub: user.id, email: user.email, rol: user.rol };
-    const token = this.jwtService.sign(payload);
+    const token = await this.authService.createPanelAccessToken(user);
 
     await ctx.reply(
       `🔑 *Token de Acceso Jefes:*\n\n` +
         `\`${token}\`\n\n` +
-        `Usa este token para autenticar tu panel externo conectándote al flujo de Server-Sent Events (SSE).`,
+        `Válido 15 minutos. Úsalo para autenticar tu panel externo en el flujo de Server-Sent Events (SSE).`,
       { parse_mode: 'Markdown' },
     );
   }

@@ -26,6 +26,44 @@ export type ChallengeStanding = {
   position: number;
 };
 
+/**
+ * De donde sale el KPI de cada tipo de participante.
+ *
+ * Eran cinco ternarios sobre el mismo discriminante justo antes de la consulta:
+ * el lector tenia que reconstruir mentalmente las dos variantes. Como
+ * `Record<ChallengeParticipantType, ...>`, cada variante se lee de un vistazo y
+ * anadir un tipo de participante nuevo no compila hasta describirlo entero.
+ *
+ * Los valores son identificadores fijos escritos aqui, nunca entrada del
+ * usuario: por eso pueden interpolarse en el SQL.
+ */
+const KPI_SOURCE: Record<
+  ChallengeParticipantType,
+  {
+    nameCol: string;
+    table: string;
+    ratingIdCol: string;
+    ratingDirection: string;
+    appealFilter: string;
+  }
+> = {
+  employee: {
+    nameCol: 'nombre_artistico',
+    table: 'empleadas',
+    ratingIdCol: 'employee_id',
+    ratingDirection: 'client_to_employee',
+    // A la empleada no se le cuentan las calificaciones en disputa.
+    appealFilter: "AND appeal_status NOT IN ('pending','overturned')",
+  },
+  driver: {
+    nameCol: 'nombre',
+    table: 'choferes',
+    ratingIdCol: 'driver_id',
+    ratingDirection: 'employee_to_driver',
+    appealFilter: '',
+  },
+};
+
 @Injectable()
 export class ChallengesService {
   constructor(
@@ -220,19 +258,8 @@ export class ChallengesService {
     windowEnd: Date,
   ): Promise<Map<string, { name: string; value: number }>> {
     if (metric === 'kpi_score') {
-      const nameCol =
-        participantType === 'employee' ? 'nombre_artistico' : 'nombre';
-      const table = participantType === 'employee' ? 'empleadas' : 'choferes';
-      const ratingIdCol =
-        participantType === 'employee' ? 'employee_id' : 'driver_id';
-      const ratingDirection =
-        participantType === 'employee'
-          ? 'client_to_employee'
-          : 'employee_to_driver';
-      const appealFilter =
-        participantType === 'employee'
-          ? "AND appeal_status NOT IN ('pending','overturned')"
-          : '';
+      const { nameCol, table, ratingIdCol, ratingDirection, appealFilter } =
+        KPI_SOURCE[participantType];
       const rows: Array<{
         id: string;
         name: string;

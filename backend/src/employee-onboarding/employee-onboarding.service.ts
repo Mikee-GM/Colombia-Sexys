@@ -16,6 +16,7 @@ import { QuestionnaireAnswer } from './entities/questionnaire-answer.entity';
 import { QuestionnaireAttempt } from './entities/questionnaire-attempt.entity';
 import { RegulationOption } from './entities/regulation-option.entity';
 import { RegulationQuestion } from './entities/regulation-question.entity';
+import { describeError } from '../common/errors/error-message';
 
 export interface QuestionnaireProgress {
   completed: boolean;
@@ -624,7 +625,7 @@ export class EmployeeOnboardingService {
   }
 
   async markDeliveryError(id: string, error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = describeError(error);
     await this.onboardingRepository.update(id, {
       lastDeliveryError: message.slice(0, 4000),
     });
@@ -756,9 +757,9 @@ export class EmployeeOnboardingService {
       }
       return {
         user: this.sanitizeUser(user),
-        employee: user.empleadas?.[0]
-          ? this.sanitizeEmployee(user.empleadas[0])
-          : null,
+        // `empleadas` es una relacion OneToOne, no una lista: el indexado `[0]`
+        // anterior daba siempre undefined y este campo nunca se rellenaba.
+        employee: user.empleadas ? this.sanitizeEmployee(user.empleadas) : null,
         attempts: [],
       };
     }

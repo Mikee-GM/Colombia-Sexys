@@ -16,6 +16,7 @@ import { Usuarios } from './entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import {
   ApiActionDocs,
   ApiControllerDocs,
@@ -36,10 +37,12 @@ export class UsersController {
     tag: 'users',
     entity: Usuarios,
     createDto: CreateUserDto,
-    protected: false,
+    protected: true,
   })
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'jefe')
+  create(@Body() createUserDto: CreateUserDto, @GetUser() actor: Usuarios) {
+    return this.usersService.create(createUserDto, actor);
   }
 
   @Get()

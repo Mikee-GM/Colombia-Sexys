@@ -1,15 +1,43 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
-  GetObjectCommand,
 } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
+import { describeError } from '../common/errors/error-message';
 
 const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Lo unico que el servicio necesita del fichero que entrega Multer. Se declara
+ * aqui para no depender de @types/multer, que el proyecto no instala.
+ */
+export type UploadedFilePayload = {
+  buffer: Buffer;
+  originalname?: string;
+  mimetype?: string;
+  size?: number;
+};
+
+/** Tope de las subidas del panel. Se aplica tambien en el FileInterceptor. */
+export const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Unicos hosts desde los que se descarga evidencia. `uploadEvidenceFromUrl`
+ * hace una peticion saliente desde el backend, asi que sin lista blanca seria
+ * un SSRF hacia la red interna o al endpoint de metadatos del proveedor.
+ */
+const EVIDENCE_SOURCE_HOSTS = new Set(['api.telegram.org']);
+
+/** Timeout de la descarga de evidencia, para no colgar el handler. */
+const EVIDENCE_FETCH_TIMEOUT_MS = 15_000;
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/jpg': 'jpg',
@@ -47,9 +75,9 @@ function sniffImageContentType(buffer: Buffer): string | null {
 
 @Injectable()
 export class UploadService {
+  private readonly logger = new Logger(UploadService.name);
   private s3Client: S3Client;
   private bucketName: string;
-  private privateBucketName: string;
   private publicUrl: string;
 
   constructor(private configService: ConfigService) {
@@ -64,81 +92,58 @@ export class UploadService {
       },
     });
     this.bucketName = this.configService.getOrThrow<string>('R2_BUCKET_NAME');
-    this.privateBucketName = this.configService.get<string>(
-      'R2_PRIVATE_BUCKET_NAME',
-      this.bucketName,
-    );
     this.publicUrl = this.configService.getOrThrow<string>('R2_PUBLIC_URL');
   }
 
-  async uploadFile(file: any): Promise<{ url: string }> {
-    try {
-      const timestamp = Date.now();
-      const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-      const key = `modelos/${timestamp}-${sanitizedName}`;
+  /**
+   * El bucket es publico, asi que el `Content-Type` no puede venir del cliente:
+   * subir un HTML declarado como `text/html` daria XSS almacenado bajo el
+   * dominio de confianza. Se deduce del contenido real del fichero y se rechaza
+   * lo que no sea una imagen conocida.
+   */
+  async uploadFile(file: UploadedFilePayload): Promise<{ url: string }> {
+    const contentType = this.assertImage(file);
+    const extension = IMAGE_EXTENSIONS[contentType];
+    const key = `modelos/${Date.now()}-${randomUUID()}.${extension}`;
 
+    try {
       await this.s3Client.send(
         new PutObjectCommand({
           Bucket: this.bucketName,
           Key: key,
           Body: file.buffer,
-          ContentType: file.mimetype,
+          ContentType: contentType,
         }),
       );
 
       return { url: `${this.publicUrl}/${key}` };
     } catch (error) {
-      console.error('Error uploading file to R2:', error);
+      this.logger.error(`Error subiendo archivo a R2: ${describeError(error)}`);
       throw new InternalServerErrorException('Error al subir el archivo a R2');
     }
   }
 
-  async uploadPrivateFile(
-    file: any,
-    folder = 'comprobantes',
-  ): Promise<{ key: string; bucket: string }> {
-    try {
-      const timestamp = Date.now();
-      const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-      const key = `${folder}/${timestamp}-${sanitizedName}`;
-
-      await this.s3Client.send(
-        new PutObjectCommand({
-          Bucket: this.privateBucketName,
-          Key: key,
-          Body: file.buffer,
-          ContentType: file.mimetype,
-        }),
-      );
-
-      return { key, bucket: this.privateBucketName };
-    } catch (error) {
-      console.error('Error uploading private file to R2:', error);
-      throw new InternalServerErrorException(
-        'Error al subir el archivo privado a R2',
+  /**
+   * Valida tamaño y formato real. Se mira el contenido con `sniffImageContentType`
+   * y solo se acepta el mimetype declarado si coincide con lo que dicen los
+   * bytes; asi un `.png` renombrado o un HTML disfrazado se rechazan igual.
+   */
+  private assertImage(file: UploadedFilePayload): string {
+    if (!file.buffer?.length) {
+      throw new BadRequestException('El archivo recibido está vacío');
+    }
+    if (file.buffer.length > UPLOAD_MAX_BYTES) {
+      throw new BadRequestException(
+        `El archivo supera el límite de ${Math.floor(UPLOAD_MAX_BYTES / (1024 * 1024))} MB`,
       );
     }
-  }
-
-  async getPresignedUrl(
-    key: string,
-    expiresInSeconds = 3600,
-  ): Promise<{ url: string }> {
-    try {
-      const command = new GetObjectCommand({
-        Bucket: this.privateBucketName,
-        Key: key,
-      });
-      const url = await getSignedUrl(this.s3Client as any, command as any, {
-        expiresIn: expiresInSeconds,
-      });
-      return { url };
-    } catch (error) {
-      console.error('Error generating presigned URL for R2:', error);
-      throw new InternalServerErrorException(
-        'Error al generar URL temporal para el archivo privado',
+    const sniffed = sniffImageContentType(file.buffer);
+    if (!sniffed) {
+      throw new BadRequestException(
+        'Solo se aceptan imágenes JPEG, PNG o WEBP',
       );
     }
+    return sniffed;
   }
 
   async uploadEvidence(input: {
@@ -148,7 +153,7 @@ export class UploadService {
     scopeId?: string;
   }): Promise<{ url: string; key: string }> {
     if (!input.buffer.length || input.buffer.length > EVIDENCE_MAX_BYTES) {
-      throw new InternalServerErrorException(
+      throw new BadRequestException(
         'La evidencia recibida está vacía o supera el límite permitido',
       );
     }
@@ -163,7 +168,7 @@ export class UploadService {
       }
     }
     if (!extension) {
-      throw new InternalServerErrorException(
+      throw new BadRequestException(
         'La evidencia recibida no tiene un formato de imagen compatible',
       );
     }
@@ -181,7 +186,9 @@ export class UploadService {
       );
       return { key, url: `${this.publicUrl}/${key}` };
     } catch (error) {
-      console.error('Error uploading evidence to R2:', error);
+      this.logger.error(
+        `Error subiendo evidencia a R2: ${describeError(error)}`,
+      );
       throw new InternalServerErrorException(
         'No fue posible almacenar la evidencia en la nube',
       );
@@ -193,20 +200,40 @@ export class UploadService {
     folder: 'uber' | 'transferencias';
     scopeId?: string;
   }): Promise<{ url: string; key: string }> {
+    this.assertAllowedSource(input.sourceUrl);
+
     let response: Response;
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      EVIDENCE_FETCH_TIMEOUT_MS,
+    );
     try {
-      response = await fetch(input.sourceUrl);
+      response = await fetch(input.sourceUrl, { signal: controller.signal });
     } catch (error) {
-      console.error('Error downloading evidence:', error);
+      this.logger.error(`Error descargando evidencia: ${describeError(error)}`);
       throw new InternalServerErrorException(
         'No fue posible descargar la evidencia recibida',
       );
+    } finally {
+      clearTimeout(timeout);
     }
     if (!response.ok) {
       throw new InternalServerErrorException(
         'No fue posible descargar la evidencia recibida',
       );
     }
+
+    // El Content-Length puede mentir o faltar, asi que el tope real lo impone
+    // uploadEvidence sobre el buffer ya materializado; esto solo corta pronto
+    // lo que ya se anuncia como demasiado grande.
+    const declaredLength = Number(response.headers.get('content-length') ?? 0);
+    if (declaredLength > EVIDENCE_MAX_BYTES) {
+      throw new BadRequestException(
+        'La evidencia recibida supera el límite permitido',
+      );
+    }
+
     const buffer = Buffer.from(await response.arrayBuffer());
     return this.uploadEvidence({
       buffer,
@@ -214,6 +241,30 @@ export class UploadService {
       folder: input.folder,
       scopeId: input.scopeId,
     });
+  }
+
+  /**
+   * Solo se descarga de los hosts de la lista blanca y siempre por https. Sin
+   * esto, cualquier ruta que llegue a alimentar `sourceUrl` convierte al
+   * backend en un proxy hacia su propia red interna.
+   */
+  private assertAllowedSource(sourceUrl: string): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(sourceUrl);
+    } catch {
+      throw new BadRequestException('El origen de la evidencia no es válido');
+    }
+    if (parsed.protocol !== 'https:') {
+      throw new BadRequestException(
+        'El origen de la evidencia debe usar https',
+      );
+    }
+    if (!EVIDENCE_SOURCE_HOSTS.has(parsed.hostname)) {
+      throw new BadRequestException(
+        'El origen de la evidencia no está autorizado',
+      );
+    }
   }
 
   async deleteFile(url: string): Promise<{ success: boolean }> {
@@ -232,27 +283,11 @@ export class UploadService {
 
       return { success: true };
     } catch (error) {
-      console.error('Error deleting file from R2:', error);
+      this.logger.error(
+        `Error eliminando archivo de R2: ${describeError(error)}`,
+      );
       throw new InternalServerErrorException(
         'Error al eliminar el archivo de R2',
-      );
-    }
-  }
-
-  async deletePrivateFile(key: string): Promise<{ success: boolean }> {
-    try {
-      await this.s3Client.send(
-        new DeleteObjectCommand({
-          Bucket: this.privateBucketName,
-          Key: key,
-        }),
-      );
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error deleting private file from R2:', error);
-      throw new InternalServerErrorException(
-        'Error al eliminar el archivo privado de R2',
       );
     }
   }

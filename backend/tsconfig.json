@@ -15,10 +15,12 @@
     "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
-    "strictNullChecks": true,
+    "strict": true,
     "forceConsistentCasingInFileNames": true,
-    "noImplicitAny": false,
-    "strictBindCallApply": false,
-    "noFallthroughCasesInSwitch": false
+    "noFallthroughCasesInSwitch": true,
+    // Las columnas de TypeORM se asignan por reflexion, no en el constructor:
+    // con esta regla activa las entidades pedirian `!` en cada campo sin
+    // aportar seguridad real. Es la unica pieza de `strict` que queda fuera.
+    "strictPropertyInitialization": false
   }
 }

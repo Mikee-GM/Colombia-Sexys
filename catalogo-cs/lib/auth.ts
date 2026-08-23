@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
 import type { AuthUser } from "@/lib/types";
 import { ACCESS_COOKIE, CSRF_COOKIE } from "@/lib/auth-constants";
+import { BACKEND_API_PREFIX } from "@/lib/api-constants";
 
 function getBackendUrl() {
   return (
@@ -10,7 +11,7 @@ function getBackendUrl() {
     process.env.API_URL ??
     process.env.NEXT_PUBLIC_API_URL ??
     "http://127.0.0.1:4000"
-  ).replace(/\/$/, "");
+  ).replace(/\/$/, "") + BACKEND_API_PREFIX;
 }
 
 export async function getBackendCookieHeader(): Promise<string> {

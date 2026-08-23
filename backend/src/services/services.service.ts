@@ -36,6 +36,18 @@ import { SaveBankAccountDto } from './dto/bank-account.dto';
 import { UploadService } from '../upload/upload.service';
 import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
+import { describeError } from '../common/errors/error-message';
+
+/**
+ * Tope por defecto del listado de servicios. Generoso para que los paneles
+ * existentes sigan funcionando sin cambios, pero acotado: sin limite, la
+ * consulta crecia sin freno con el historico.
+ */
+/** Cuanto vive una oferta de viaje enviada a un chofer. */
+const DISPATCH_OFFER_TTL_MS = 120_000;
+
+const SERVICES_DEFAULT_PAGE_SIZE = 200;
+const SERVICES_MAX_PAGE_SIZE = 500;
 
 export type EvidenceItem = {
   id: string;
@@ -60,9 +72,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
   clearDispatchTimeout(viajeId: string) {
     const existing = this.dispatchTimeouts.get(viajeId);
-    console.log(
-      `[clearDispatchTimeout] Viaje: ${viajeId}, Existe timeout: ${!!existing}`,
-    );
     if (existing) {
       clearTimeout(existing);
       this.dispatchTimeouts.delete(viajeId);
@@ -167,104 +176,150 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         createData.clienteId,
       );
     }
-    return this.serviciosRepository.manager.transaction(async (manager) => {
-      await manager
-        .getRepository(Empleadas)
-        .createQueryBuilder('employee')
-        .setLock('pessimistic_write')
-        .where('employee.id = :id', { id: createData.empleadaId })
-        .getOneOrFail();
+    // Se rellena dentro de la transaccion y se usa despues: avisar al jefe no
+    // puede ocurrir con la fila de la empleada bloqueada.
+    let competing: Array<{ id: string }> = [];
 
-      if (
-        createData.tipoAgenda === 'programado' ||
-        createData.fechaProgramada
-      ) {
-        const scheduledDate = new Date(createData.fechaProgramada!);
-        const durationHours = Number(createData.duracionPactadaHoras) || 1;
-        const scheduledEnd = new Date(
-          scheduledDate.getTime() + (durationHours * 60 + 45) * 60_000,
-        );
-        const scheduledStartWithBuffer = new Date(
-          scheduledDate.getTime() - 45 * 60_000,
-        );
+    const reserved = await this.serviciosRepository.manager.transaction(
+      async (manager) => {
+        await manager
+          .getRepository(Empleadas)
+          .createQueryBuilder('employee')
+          .setLock('pessimistic_write')
+          .where('employee.id = :id', { id: createData.empleadaId })
+          .getOneOrFail();
 
-        const existingServices = await manager.find(Servicios, {
-          where: {
-            empleadaId: createData.empleadaId,
-            estado: In(['pendiente', 'agendado', 'en_curso']),
-          },
-        });
-
-        for (const existing of existingServices) {
-          const start =
-            existing.fechaProgramada ||
-            existing.horaInicioEstimada ||
-            existing.horaInicioServicio ||
-            existing.createdAt;
-          if (!start) continue;
-          const startDate = new Date(start);
-          const end = new Date(
-            startDate.getTime() +
-              (Number(existing.duracionPactadaHoras) * 60 + 45) * 60_000,
+        if (
+          createData.tipoAgenda === 'programado' ||
+          createData.fechaProgramada
+        ) {
+          const scheduledDate = new Date(createData.fechaProgramada!);
+          const durationHours = Number(createData.duracionPactadaHoras) || 1;
+          const scheduledEnd = new Date(
+            scheduledDate.getTime() + (durationHours * 60 + 45) * 60_000,
           );
-          const startWithBuffer = new Date(startDate.getTime() - 45 * 60_000);
+          const scheduledStartWithBuffer = new Date(
+            scheduledDate.getTime() - 45 * 60_000,
+          );
 
-          if (
-            scheduledDate.getTime() < end.getTime() &&
-            scheduledEnd.getTime() > startWithBuffer.getTime()
-          ) {
-            throw new ConflictException(
-              'La empleada ya tiene un compromiso agendado en ese horario',
+          const existingServices = await manager.find(Servicios, {
+            where: {
+              empleadaId: createData.empleadaId,
+              estado: In(['pendiente', 'agendado', 'en_curso']),
+            },
+          });
+
+          for (const existing of existingServices) {
+            const start =
+              existing.fechaProgramada ||
+              existing.horaInicioEstimada ||
+              existing.horaInicioServicio ||
+              existing.createdAt;
+            if (!start) continue;
+            const startDate = new Date(start);
+            const end = new Date(
+              startDate.getTime() +
+                (Number(existing.duracionPactadaHoras) * 60 + 45) * 60_000,
             );
+            const startWithBuffer = new Date(startDate.getTime() - 45 * 60_000);
+
+            if (
+              scheduledDate.getTime() < end.getTime() &&
+              scheduledEnd.getTime() > startWithBuffer.getTime()
+            ) {
+              throw new ConflictException(
+                'La empleada ya tiene un compromiso agendado en ese horario',
+              );
+            }
           }
+
+          const draft = manager.create(Servicios, {
+            ...createData,
+            tipoAgenda: 'programado',
+            fechaProgramada: scheduledDate,
+            horaInicioEstimada: scheduledDate,
+          });
+          return manager.save(Servicios, draft);
         }
 
+        const active = await manager.findOne(Servicios, {
+          where: { empleadaId: createData.empleadaId, estado: 'en_curso' },
+          order: { createdAt: 'DESC' },
+        });
+        if (!active) {
+          // Dos clientes pueden pedir a la vez a la misma empleada libre y los
+          // dos servicios se crean: es el jefe quien decide cual acepta. Lo que
+          // no puede pasar es que se entere por casualidad, asi que se cuentan
+          // aqui, dentro del bloqueo, y se avisa al salir.
+          competing = await manager.find(Servicios, {
+            where: {
+              empleadaId: createData.empleadaId,
+              estado: 'pendiente',
+            },
+            select: { id: true },
+          });
+          return manager.save(Servicios, manager.create(Servicios, createData));
+        }
+        const existing = await manager.findOne(Servicios, {
+          where: [
+            {
+              empleadaId: createData.empleadaId,
+              servicioPrevioId: active.id,
+              estado: 'pendiente',
+            },
+            {
+              empleadaId: createData.empleadaId,
+              servicioPrevioId: active.id,
+              estado: 'agendado',
+            },
+          ],
+        });
+        if (existing) {
+          throw new ConflictException(
+            'La empleada ya tiene reservado su siguiente servicio',
+          );
+        }
+        const availableAt = this.estimatedEnd(active) ?? new Date();
         const draft = manager.create(Servicios, {
           ...createData,
-          tipoAgenda: 'programado',
-          fechaProgramada: scheduledDate,
-          horaInicioEstimada: scheduledDate,
+          servicioPrevioId: active.id,
+          horaDisponibilidadEstimada: availableAt,
         });
-        return manager.save(Servicios, draft);
-      }
-
-      const active = await manager.findOne(Servicios, {
-        where: { empleadaId: createData.empleadaId, estado: 'en_curso' },
-        order: { createdAt: 'DESC' },
-      });
-      if (!active) {
-        return manager.save(Servicios, manager.create(Servicios, createData));
-      }
-      const existing = await manager.findOne(Servicios, {
-        where: [
-          {
-            empleadaId: createData.empleadaId,
-            servicioPrevioId: active.id,
-            estado: 'pendiente',
-          },
-          {
-            empleadaId: createData.empleadaId,
-            servicioPrevioId: active.id,
-            estado: 'agendado',
-          },
-        ],
-      });
-      if (existing) {
-        throw new ConflictException(
-          'La empleada ya tiene reservado su siguiente servicio',
+        draft.horaInicioEstimada = new Date(
+          availableAt.getTime() + this.travelMinutes(active, draft) * 60_000,
         );
-      }
-      const availableAt = this.estimatedEnd(active) ?? new Date();
-      const draft = manager.create(Servicios, {
-        ...createData,
-        servicioPrevioId: active.id,
-        horaDisponibilidadEstimada: availableAt,
+        return manager.save(Servicios, draft);
+      },
+    );
+
+    if (competing.length > 0) {
+      this.warnAboutCompetingRequests(reserved, competing.length + 1);
+    }
+    return reserved;
+  }
+
+  /**
+   * Avisa al jefe de que varios clientes estan esperando a la misma empleada.
+   *
+   * No bloquea ninguna de las solicitudes —se decidio que sea el jefe quien
+   * elija— pero sin este aviso las dos aparecen como peticiones normales y
+   * nada indica que compiten por la misma persona.
+   */
+  private warnAboutCompetingRequests(servicio: Servicios, total: number): void {
+    try {
+      this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+        type: 'service_requests_competing',
+        data: {
+          empleadaId: servicio.empleadaId,
+          servicioId: servicio.id,
+          pendientes: total,
+        },
       });
-      draft.horaInicioEstimada = new Date(
-        availableAt.getTime() + this.travelMinutes(active, draft) * 60_000,
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo avisar de solicitudes en competencia para la empleada ${servicio.empleadaId}: ${describeError(error)}`,
       );
-      return manager.save(Servicios, draft);
-    });
+    }
   }
 
   private getServiceTopic(servicio: Servicios) {
@@ -285,7 +340,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         telegramThreadId: null,
       });
     } catch (error) {
-      console.error(
+      this.logger.error(
         `[ServicesService] No se pudo eliminar el tema ${topic.threadId} del servicio ${servicio.id}:`,
         error,
       );
@@ -323,7 +378,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           }
         }
       } catch (err) {
-        console.error('Error auto-assigning jefeId for employee:', err);
+        this.logger.error('Error auto-assigning jefeId for employee:', err);
       }
     }
 
@@ -342,14 +397,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         });
       }
     } catch (sseErr) {
-      console.error('Error emitting SSE event for new service:', sseErr);
+      this.logger.error('Error emitting SSE event for new service:', sseErr);
     }
 
     // Send Telegram notification to Jefes & Admins
     try {
       await this.telegramService.notifyJefesNewService(servicioGuardado.id);
     } catch (telegramErr) {
-      console.error(
+      this.logger.error(
         'Error notifying jefes via Telegram for new service:',
         telegramErr,
       );
@@ -383,7 +438,25 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async findAll(actor?: Usuarios): Promise<Servicios[]> {
+  /**
+   * Listado acotado y con las colecciones cargadas en consultas aparte.
+   *
+   * Antes traia la tabla entera con seis niveles de relaciones resueltos por
+   * LEFT JOIN: el numero de filas intermedias era el producto de las
+   * colecciones y la hidratacion se hacia en memoria del proceso. Con
+   * `relationLoadStrategy: 'query'` cada coleccion se pide por separado, que es
+   * mas barato y da exactamente el mismo resultado.
+   */
+  async findAll(
+    actor?: Usuarios,
+    options: { limit?: number; offset?: number } = {},
+  ): Promise<Servicios[]> {
+    const take = Math.min(
+      SERVICES_MAX_PAGE_SIZE,
+      Math.max(1, Math.trunc(options.limit ?? SERVICES_DEFAULT_PAGE_SIZE)),
+    );
+    const skip = Math.max(0, Math.trunc(options.offset ?? 0));
+
     return await this.serviciosRepository.find({
       where:
         actor?.rol === 'jefe'
@@ -393,6 +466,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               { empleada: { jefeSecundarioId: actor.id } },
             ]
           : undefined,
+      relationLoadStrategy: 'query',
       relations: {
         cliente: true,
         empleada: true,
@@ -402,6 +476,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         receiptValidations: true,
       },
       order: { createdAt: 'DESC' },
+      take,
+      skip,
     });
   }
 
@@ -953,9 +1029,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           await this.serviciosRepository.save(servicio);
         }
       } catch (telegramErr) {
-        console.error(
+        this.logger.error(
           `Error al enviar notificación de Telegram a la empleada (chatId: ${empUser.telegramChatId}):`,
-          telegramErr.message || telegramErr,
+          describeError(telegramErr),
         );
       }
     }
@@ -973,9 +1049,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           clientMessage,
         );
       } catch (telegramErr) {
-        console.error(
+        this.logger.error(
           `Error al enviar notificación de aceptación al cliente (chatId: ${servicio.cliente.telegramChatId}):`,
-          telegramErr.message || telegramErr,
+          describeError(telegramErr),
         );
       }
     }
@@ -988,7 +1064,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       try {
         await this.dispatchViaje(viajeGuardado.id);
       } catch (dispatchErr) {
-        console.error(
+        this.logger.error(
           'Error al iniciar despacho de choferes por proximidad:',
           dispatchErr,
         );
@@ -1173,7 +1249,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           parseInt(servicio.telegramThreadId, 10),
         );
       } catch (err) {
-        console.error('Error deleting forum topic on reject:', err);
+        this.logger.error('Error deleting forum topic on reject:', err);
       }
     }
 
@@ -1190,7 +1266,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           clientMessage,
         );
       } catch (err) {
-        console.error('Error notifying client of rejected service:', err);
+        this.logger.error('Error notifying client of rejected service:', err);
       }
     }
 
@@ -1390,13 +1466,27 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     // Check every 60 seconds
     this.maintenanceInterval = setInterval(() => {
-      this.checkActiveServicesForExtension().catch((err) =>
-        console.error('Error checking active services for extension:', err),
+      this.checkActiveServicesForExtension().catch((err: unknown) =>
+        this.logger.error(
+          `Error revisando servicios activos para prorroga: ${describeError(
+            err,
+          )}`,
+        ),
       );
-      this.processReturnTransportReminders().catch((err) =>
-        console.error('Error checking return transport reminders:', err),
+      this.processReturnTransportReminders().catch((err: unknown) =>
+        this.logger.error(
+          `Error revisando recordatorios de transporte de regreso: ${describeError(
+            err,
+          )}`,
+        ),
+      );
+      this.sweepExpiredDispatchOffers().catch((err: unknown) =>
+        this.logger.error(
+          `Error barriendo ofertas de viaje vencidas: ${describeError(err)}`,
+        ),
       );
     }, 60000);
+    this.maintenanceInterval.unref?.();
   }
 
   onModuleDestroy() {
@@ -1476,7 +1566,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             );
           }
         } catch (err) {
-          console.error(
+          this.logger.error(
             `Error sending extension prompt to employee (chatId: ${service.empleada.usuario.telegramChatId}):`,
             err,
           );
@@ -1501,7 +1591,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (!viaje) {
-      console.error(`[dispatchViaje] Viaje ${viajeId} no encontrado.`);
+      this.logger.error(`[dispatchViaje] Viaje ${viajeId} no encontrado.`);
       return;
     }
 
@@ -1520,7 +1610,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       const employeeLng =
         passenger?.ubicacionLng ?? viaje.servicio?.empleada?.ubicacionLng;
       if (employeeLat == null || employeeLng == null) {
-        console.error(
+        this.logger.error(
           `[dispatchViaje] Ubicación de empleada faltante para viaje ${viajeId}.`,
         );
         return;
@@ -1532,7 +1622,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         !viaje.servicio?.ubicacionClienteLat ||
         !viaje.servicio?.ubicacionClienteLng
       ) {
-        console.error(
+        this.logger.error(
           `[dispatchViaje] Ubicación de cliente faltante para viaje de regreso ${viajeId}.`,
         );
         return;
@@ -1642,7 +1732,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       .getRawAndEntities();
 
     if (result.entities.length === 0) {
-      console.log(
+      this.logger.log(
         `[dispatchViaje] No hay choferes disponibles para el viaje ${viajeId}.`,
       );
       await this.notifyNoDriversAvailable(viaje);
@@ -1724,7 +1814,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         viaje.telegramChoferMsgOfertaId = sentMsg.message_id.toString();
         await this.viajesRepository.save(viaje);
       } catch (err) {
-        console.error(
+        this.logger.error(
           `[dispatchViaje] Error enviando mensaje a Telegram de chofer ${nearestDriver.id}:`,
           err,
         );
@@ -1733,7 +1823,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Configurar Timeout de 2 minutos (120000 ms) para expirar la oferta si no responde
+    // El vencimiento se guarda en base de datos ademas de programarse en
+    // memoria: el setTimeout es la via rapida, pero si el proceso se reinicia
+    // antes de dispararlo, `sweepExpiredDispatchOffers` recoge la oferta.
+    await this.viajesRepository.update(viajeId, {
+      ofertaExpiraEn: new Date(Date.now() + DISPATCH_OFFER_TTL_MS),
+    });
+
     const timeout = setTimeout(() => {
       void (async () => {
         try {
@@ -1745,21 +1841,23 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             checkViaje.estado === 'notificado' &&
             checkViaje.choferId === nearestDriver.id
           ) {
-            console.log(
+            this.logger.log(
               `[dispatchViaje] Oferta expirada por timeout para viaje ${viajeId}, chofer ${nearestDriver.id}`,
             );
             await this.expirarOfertaYContinuar(viajeId, nearestDriver.id);
           }
         } catch (timeoutErr) {
-          console.error(
+          this.logger.error(
             `[dispatchViaje] Error en timeout de viaje ${viajeId}:`,
             timeoutErr,
           );
         }
       })();
-    }, 120000);
+    }, DISPATCH_OFFER_TTL_MS);
     this.dispatchTimeouts.set(viajeId, timeout);
-    console.log(`[dispatchViaje] Timeout establecido para viaje ${viajeId}`);
+    this.logger.log(
+      `[dispatchViaje] Timeout establecido para viaje ${viajeId}`,
+    );
   }
 
   private async notifyNoDriversAvailable(viaje: Viajes): Promise<void> {
@@ -1792,7 +1890,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         },
       )
       .catch((error) =>
-        console.error(
+        this.logger.error(
           `[dispatchViaje] No se pudo notificar al jefe del viaje ${viaje.id}:`,
           error,
         ),
@@ -1821,15 +1919,48 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             `⏰ *Oferta expirada.*\nNo respondiste a tiempo y el viaje ha sido ofrecido al siguiente chofer disponible.`,
           );
         } catch (editErr) {
-          console.error(`Error al editar mensaje de oferta expirada:`, editErr);
+          this.logger.error(
+            `Error al editar mensaje de oferta expirada:`,
+            editErr,
+          );
         }
       }
 
       viaje.choferId = null;
       viaje.telegramChoferMsgOfertaId = null;
+      viaje.ofertaExpiraEn = null;
       await this.viajesRepository.save(viaje);
 
       await this.dispatchViaje(viajeId);
+    }
+  }
+
+  /**
+   * Recoge las ofertas cuyo temporizador en memoria se perdio (despliegue,
+   * reinicio, o el proceso que la creo no es el que sigue vivo). Sin esto el
+   * viaje se quedaba en 'notificado' indefinidamente y nadie lo reasignaba.
+   */
+  private async sweepExpiredDispatchOffers(): Promise<void> {
+    const expired = await this.viajesRepository.find({
+      where: {
+        estado: 'notificado',
+        ofertaExpiraEn: LessThanOrEqual(new Date()),
+      },
+      select: { id: true, choferId: true },
+      take: 50,
+    });
+
+    for (const viaje of expired) {
+      if (!viaje.choferId) continue;
+      try {
+        await this.expirarOfertaYContinuar(viaje.id, viaje.choferId);
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo expirar la oferta del viaje ${viaje.id}: ${describeError(
+            error,
+          )}`,
+        );
+      }
     }
   }
 
@@ -1852,7 +1983,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             `❌ *Has rechazado esta oferta de viaje.*`,
           );
         } catch (editErr) {
-          console.error(
+          this.logger.error(
             `Error al editar mensaje de oferta rechazada:`,
             editErr,
           );
@@ -1861,6 +1992,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
       viaje.choferId = null;
       viaje.telegramChoferMsgOfertaId = null;
+      viaje.ofertaExpiraEn = null;
       await this.viajesRepository.save(viaje);
 
       await this.dispatchViaje(viajeId);
@@ -1872,7 +2004,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const timeout = setTimeout(() => {
       void this.handleWaitTimeoutExpired(servicioId).catch((err) => {
-        console.error(
+        this.logger.error(
           `Error handling wait timeout for service ${servicioId}:`,
           err,
         );
@@ -1915,7 +2047,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    console.log(
+    this.logger.log(
       `[handleWaitTimeoutExpired] Expiró tiempo de espera para servicio ${servicioId}. Prórrogas usadas: ${servicio.prorrogasUsadas}`,
     );
 
@@ -1959,7 +2091,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               { parse_mode: 'Markdown' },
             );
           } catch (err) {
-            console.error('Error al notificar al chofer de cancelación:', err);
+            this.logger.error(
+              'Error al notificar al chofer de cancelación:',
+              err,
+            );
           }
         }
       }
@@ -1982,7 +2117,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             { message_thread_id: threadId, parse_mode: 'Markdown' },
           );
         } catch (err) {
-          console.error('Error al notificar a empleada de cancelación:', err);
+          this.logger.error(
+            'Error al notificar a empleada de cancelación:',
+            err,
+          );
         }
       }
     }
@@ -2063,7 +2201,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           );
         }
       } catch (err) {
-        console.error('Error al notificar al cliente de cancelación:', err);
+        this.logger.error('Error al notificar al cliente de cancelación:', err);
       }
     }
   }
@@ -2088,7 +2226,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     await this.liquidationSync
       .syncOfficeRecord(servicio.id)
       .catch((error) =>
-        console.error(
+        this.logger.error(
           `[requestReturnTransport] El aviso se envió, pero no se pudo sincronizar la liquidación del servicio ${servicio.id}:`,
           error,
         ),
@@ -2182,7 +2320,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     for (const servicio of pending) {
       const count = servicio.recordatoriosRegreso + 1;
       await this.sendReturnTransportPrompt(servicio, true).catch((error) =>
-        console.error('Error sending return reminder:', error),
+        this.logger.error('Error sending return reminder:', error),
       );
       await this.serviciosRepository.update(servicio.id, {
         recordatoriosRegreso: count,
@@ -2277,7 +2415,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     await this.liquidationSync
       .syncOfficeRecord(result.servicio.id)
       .catch((error) =>
-        console.error(
+        this.logger.error(
           `[chooseReturnTransport] El viaje ${result.trip.id} se creó, pero no se pudo sincronizar la liquidación:`,
           error,
         ),
@@ -2285,7 +2423,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     if (provider === 'interno') {
       await this.dispatchViaje(result.trip.id).catch((error) =>
-        console.error(
+        this.logger.error(
           `[chooseReturnTransport] El viaje ${result.trip.id} se creó, pero el despacho inicial falló:`,
           error,
         ),
@@ -2302,7 +2440,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             '🚗 Tu viaje de regreso con chofer ya fue solicitado. Te avisaremos cuando un chofer lo acepte.',
           )
           .catch((error) =>
-            console.error(
+            this.logger.error(
               `[chooseReturnTransport] No se pudo avisar a la empleada del viaje ${result.trip.id}:`,
               error,
             ),
@@ -2344,7 +2482,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           },
         )
         .catch((error) =>
-          console.error(
+          this.logger.error(
             `[chooseReturnTransport] No se pudo avisar a la empleada del Uber ${result.trip.id}:`,
             error,
           ),
@@ -2655,7 +2793,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         });
         setTimeout(() => {
           this.deleteServiceTopic(trip.servicio).catch((error) =>
-            console.error(
+            this.logger.error(
               `[ServicesService] No se pudo cerrar el tema del servicio ${trip.servicioId}:`,
               error,
             ),
@@ -2994,7 +3132,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             message_thread_id: topic.threadId,
           });
         } catch (error) {
-          console.error(
+          this.logger.error(
             `[ServicesService] No se pudo notificar el estado del viaje en el tema ${topic.threadId}:`,
             error,
           );

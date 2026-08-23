@@ -6,12 +6,17 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import {
+  ADVISORY_LOCKS,
+  withAdvisoryLock,
+} from '../common/scheduling/advisory-lock';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Markup } from 'telegraf';
 import { Servicios } from './entities/service.entity';
 import { AiMessageService } from '../ai/ai-message.service';
 import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
+import { describeError } from '../common/errors/error-message';
 
 @Injectable()
 export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
@@ -27,6 +32,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly aiMessageService: AiMessageService,
     private readonly botRegistry: TelegramBotRegistryService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /** La empleada y su cliente hablan por el bot dedicado de ella, si lo tiene. */
@@ -58,16 +64,22 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
+  /**
+   * El guard `running` evita solapes dentro del proceso; el advisory lock evita
+   * que dos replicas manden el mismo recordatorio al mismo cliente.
+   */
   private async runCycle() {
     if (this.running) return;
     this.running = true;
     try {
-      await this.checkUpcomingScheduledServices();
+      await withAdvisoryLock(
+        this.dataSource,
+        ADVISORY_LOCKS.serviceSchedule,
+        () => this.checkUpcomingScheduledServices(),
+      );
     } catch (error) {
       this.logger.warn(
-        `Error en el ciclo de citas programadas: ${
-          error instanceof Error ? error.message : error
-        }`,
+        `Error en el ciclo de citas programadas: ${describeError(error)}`,
       );
     } finally {
       this.running = false;

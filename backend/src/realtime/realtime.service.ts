@@ -1,15 +1,87 @@
-import { Injectable, MessageEvent } from '@nestjs/common';
+import { Injectable, MessageEvent, OnModuleInit } from '@nestjs/common';
 import { merge, Observable, Subject, timer } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { RealtimeBus, RealtimeMessage } from './realtime.bus';
+
+/**
+ * Un canal SSE vivo mas su contador de suscriptores. El contador es lo que
+ * permite liberar el Subject cuando se va el ultimo cliente: sin el, cada
+ * usuario distinto que se conectaba desde el arranque dejaba un Subject
+ * residente para siempre y la memoria del proceso solo crecia.
+ */
+type Channel = {
+  subject: Subject<any>;
+  subscribers: number;
+};
+
+type ChannelRegistry = Map<string, Channel>;
 
 @Injectable()
-export class RealtimeEventsService {
+export class RealtimeEventsService implements OnModuleInit {
   private static readonly HEARTBEAT_INTERVAL_MS = 15_000;
+
+  /** Canal comun de jefes/admin: siempre existe, no se libera. */
   private readonly jefesSubject = new Subject<any>();
-  private readonly bossSubjects = new Map<string, Subject<any>>();
-  private readonly employeeSubjects = new Map<string, Subject<any>>();
-  private readonly driverSubjects = new Map<string, Subject<any>>();
-  private readonly clientSubjects = new Map<string, Subject<any>>();
+
+  private readonly bossSubjects: ChannelRegistry = new Map();
+  private readonly employeeSubjects: ChannelRegistry = new Map();
+  private readonly driverSubjects: ChannelRegistry = new Map();
+  private readonly clientSubjects: ChannelRegistry = new Map();
+
+  constructor(private readonly bus: RealtimeBus) {}
+
+  onModuleInit(): void {
+    // Lo que publica otra replica se entrega aqui igual que si se hubiera
+    // originado en esta.
+    this.bus.onRemoteMessage((message) => this.deliverLocally(message));
+  }
+
+  /**
+   * Reparte un evento a los canales de este proceso.
+   *
+   * Es el unico sitio que escribe en los Subjects, venga el evento de esta
+   * replica o de otra, para que las dos rutas se comporten igual.
+   */
+  private deliverLocally(message: RealtimeMessage): void {
+    const { target, key, event } = message;
+    switch (target) {
+      case 'jefes':
+        this.jefesSubject.next(event);
+        for (const channel of this.bossSubjects.values())
+          channel.subject.next(event);
+        return;
+      case 'boss':
+        if (key) {
+          this.emitTo(this.bossSubjects, key, event);
+        } else {
+          for (const channel of this.bossSubjects.values())
+            channel.subject.next(event);
+        }
+        this.jefesSubject.next(event);
+        return;
+      case 'employee':
+        if (key) this.emitTo(this.employeeSubjects, key, event);
+        return;
+      case 'driver':
+        if (key) this.emitTo(this.driverSubjects, key, event);
+        return;
+      case 'client':
+        if (key) this.emitTo(this.clientSubjects, key, event);
+        return;
+    }
+  }
+
+  /**
+   * Entrega en local y publica para las demas replicas.
+   *
+   * El orden importa: primero lo local, que es inmediato y no depende de la
+   * base, y despues la publicacion, que puede fallar sin arrastrar a la
+   * entrega que ya ocurrio.
+   */
+  private dispatch(message: RealtimeMessage): void {
+    this.deliverLocally(message);
+    void this.bus.publish(message);
+  }
 
   getJefesStream(): Observable<MessageEvent> {
     return this.withHeartbeat(
@@ -18,51 +90,56 @@ export class RealtimeEventsService {
   }
 
   getBossStream(bossId: string): Observable<MessageEvent> {
-    if (!this.bossSubjects.has(bossId)) {
-      this.bossSubjects.set(bossId, new Subject<any>());
-    }
-    return this.withHeartbeat(
-      this.bossSubjects
-        .get(bossId)!
-        .asObservable()
-        .pipe(map((data) => ({ data }))),
-    );
+    return this.streamFor(this.bossSubjects, bossId);
   }
 
   getEmployeeStream(empleadaId: string): Observable<MessageEvent> {
-    if (!this.employeeSubjects.has(empleadaId)) {
-      this.employeeSubjects.set(empleadaId, new Subject<any>());
-    }
-    return this.withHeartbeat(
-      this.employeeSubjects
-        .get(empleadaId)!
-        .asObservable()
-        .pipe(map((data) => ({ data }))),
-    );
+    return this.streamFor(this.employeeSubjects, empleadaId);
   }
 
   getDriverStream(choferId: string): Observable<MessageEvent> {
-    if (!this.driverSubjects.has(choferId)) {
-      this.driverSubjects.set(choferId, new Subject<any>());
-    }
-    return this.withHeartbeat(
-      this.driverSubjects
-        .get(choferId)!
-        .asObservable()
-        .pipe(map((data) => ({ data }))),
-    );
+    return this.streamFor(this.driverSubjects, choferId);
   }
 
   getClientStream(clienteId: string): Observable<MessageEvent> {
-    if (!this.clientSubjects.has(clienteId)) {
-      this.clientSubjects.set(clienteId, new Subject<any>());
-    }
-    return this.withHeartbeat(
-      this.clientSubjects
-        .get(clienteId)!
-        .asObservable()
-        .pipe(map((data) => ({ data }))),
-    );
+    return this.streamFor(this.clientSubjects, clienteId);
+  }
+
+  /**
+   * Crea el canal en la primera suscripcion y lo borra del registro cuando se
+   * desconecta el ultimo suscriptor.
+   */
+  private streamFor(
+    registry: ChannelRegistry,
+    key: string,
+  ): Observable<MessageEvent> {
+    return new Observable<MessageEvent>((subscriber) => {
+      let channel = registry.get(key);
+      if (!channel) {
+        channel = { subject: new Subject<any>(), subscribers: 0 };
+        registry.set(key, channel);
+      }
+      channel.subscribers += 1;
+
+      const inner = this.withHeartbeat(
+        channel.subject.asObservable().pipe(map((data) => ({ data }))),
+      ).subscribe(subscriber);
+
+      return () => {
+        inner.unsubscribe();
+        const current = registry.get(key);
+        if (!current) return;
+        current.subscribers -= 1;
+        if (current.subscribers <= 0) {
+          current.subject.complete();
+          registry.delete(key);
+        }
+      };
+    });
+  }
+
+  private emitTo(registry: ChannelRegistry, key: string, event: any) {
+    registry.get(key)?.subject.next(event);
   }
 
   private withHeartbeat(
@@ -80,21 +157,11 @@ export class RealtimeEventsService {
   }
 
   emitToJefes(event: any) {
-    this.jefesSubject.next(event);
-    for (const subject of this.bossSubjects.values()) {
-      subject.next(event);
-    }
+    this.dispatch({ target: 'jefes', key: null, event });
   }
 
   emitToBoss(bossId: string | null | undefined, event: any) {
-    if (bossId) {
-      this.bossSubjects.get(bossId)?.next(event);
-    } else {
-      for (const subject of this.bossSubjects.values()) {
-        subject.next(event);
-      }
-    }
-    this.jefesSubject.next(event);
+    this.dispatch({ target: 'boss', key: bossId ?? null, event });
   }
 
   emitToBosses(bossIds: (string | null | undefined)[], event: any) {
@@ -106,26 +173,19 @@ export class RealtimeEventsService {
       return;
     }
     for (const id of uniqueIds) {
-      this.bossSubjects.get(id)?.next(event);
+      this.dispatch({ target: 'boss', key: id, event });
     }
-    this.jefesSubject.next(event);
   }
 
   emitToEmployee(empleadaId: string, event: any) {
-    const subject = this.employeeSubjects.get(empleadaId);
-    if (subject) {
-      subject.next(event);
-    }
+    this.dispatch({ target: 'employee', key: empleadaId, event });
   }
 
   emitToDriver(choferId: string, event: any) {
-    const subject = this.driverSubjects.get(choferId);
-    if (subject) {
-      subject.next(event);
-    }
+    this.dispatch({ target: 'driver', key: choferId, event });
   }
 
   emitToClient(clienteId: string, event: any) {
-    this.clientSubjects.get(clienteId)?.next(event);
+    this.dispatch({ target: 'client', key: clienteId, event });
   }
 }

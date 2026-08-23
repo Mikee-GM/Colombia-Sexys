@@ -1,3 +1,4 @@
+import { fromCents, toCents } from '../common/money';
 import { LiquidationRecord } from './entities/liquidation-record.entity';
 
 export interface CutResult {
@@ -27,8 +28,12 @@ export interface CutResult {
   companyTransportExpenses: number;
 }
 
-const money = (value: number) =>
-  Math.round((value + Number.EPSILON) * 100) / 100;
+/*
+ * Todos los acumuladores de `calculateCut` trabajan en centavos enteros. Antes
+ * eran flotantes que solo se redondeaban al devolver el resultado, asi que el
+ * error de cada suma se arrastraba a lo largo de todos los registros de la
+ * semana. `toCents` entra, `fromCents` sale, y entre medias solo hay enteros.
+ */
 
 export function calculateCut(records: LiquidationRecord[]): CutResult {
   let salesTotal = 0;
@@ -51,65 +56,68 @@ export function calculateCut(records: LiquidationRecord[]): CutResult {
 
   for (const record of records) {
     if (record.isFine) {
-      finesTotal += Number(record.fineAmount) || 0;
+      finesTotal += toCents(record.fineAmount);
       continue;
     }
 
-    let transport = Number(record.companyTransportExpense) || 0;
+    let transport = toCents(record.companyTransportExpense);
     const place = record.place?.trim().toLowerCase();
     const isNearby = ['montecarlo', 'magestic', 'majestic'].includes(
       place ?? '',
     );
     if (!record.cancelled && isNearby) {
-      const calculatedTransport =
-        (record.hasOutboundDriver ? 60 : 0) + (record.hasReturnDriver ? 60 : 0);
+      const calculatedTransport = toCents(
+        (record.hasOutboundDriver ? 60 : 0) + (record.hasReturnDriver ? 60 : 0),
+      );
       if (calculatedTransport > 0) {
         nearbyTripsCount += 1;
         nearbyTripsCost += calculatedTransport;
         if (transport === 0) transport = calculatedTransport;
       }
     }
-    transportTotal += transport + (Number(record.transportExcess) || 0);
-    customerTransportCharges += Number(record.customerTransportCharge) || 0;
-    employeeUberReimbursements += Number(record.employeeUberReimbursement) || 0;
-    employeeCashDue += Number(record.employeeCashDue) || 0;
+    transportTotal += transport + toCents(record.transportExcess);
+    customerTransportCharges += toCents(record.customerTransportCharge);
+    employeeUberReimbursements += toCents(record.employeeUberReimbursement);
+    employeeCashDue += toCents(record.employeeCashDue);
 
     if (record.cancelled) continue;
 
-    const serviceTotal = Number(record.serviceTotal) || 0;
+    const serviceTotal = toCents(record.serviceTotal);
     const cards = (record.cardAmounts ?? []).reduce(
-      (sum, amount) => sum + (Number(amount) || 0),
+      (sum, amount) => sum + toCents(amount),
       0,
     );
-    const promotion = record.promotion ? 300 : 0;
+    const promotion = record.promotion ? toCents(300) : 0;
 
     salesTotal += serviceTotal + promotion;
     cardTotal += cards;
     promotionTotal += promotion;
-    membershipTotal += Number(record.membershipAmount) || 0;
+    membershipTotal += toCents(record.membershipAmount);
 
-    const extra =
-      Number(record.electronicExtraAmount ?? record.extraAmount) || 0;
+    const extra = toCents(record.electronicExtraAmount ?? record.extraAmount);
     rawExtrasTotal += extra;
-    calculatedExtras += extra >= 1000 ? extra * 0.85 : extra;
+    // El umbral son 1000 unidades, que en centavos son 100_000.
+    calculatedExtras += extra >= 100_000 ? Math.round(extra * 0.85) : extra;
 
     if (record.paymentMethod === 'efectivo') cashTotal += serviceTotal;
     if (record.paymentMethod === 'transferencia') transferTotal += serviceTotal;
     if (record.paymentMethod === 'mixto') {
-      cashTotal += Number(record.cashAmount) || 0;
+      cashTotal += toCents(record.cashAmount);
     }
 
-    companyCommission +=
-      (serviceTotal + promotion) *
-      ((Number(record.companyPercentage) || 40) / 100);
-    employeeShareTotal +=
-      serviceTotal * (1 - (Number(record.companyPercentage) || 40) / 100);
+    const companyPercentage = Number(record.companyPercentage) || 40;
+    companyCommission += Math.round(
+      (serviceTotal + promotion) * (companyPercentage / 100),
+    );
+    employeeShareTotal += Math.round(
+      serviceTotal * (1 - companyPercentage / 100),
+    );
   }
 
-  const result = money(
+  const resultCents =
     -(employeeShareTotal + calculatedExtras + employeeUberReimbursements) +
-      finesTotal,
-  );
+    finesTotal;
+  const result = fromCents(resultCents);
 
   const companyTransportExpenses = Math.max(
     0,
@@ -121,21 +129,21 @@ export function calculateCut(records: LiquidationRecord[]): CutResult {
   const netCompanyShare = companyCommission + netTransportBalance;
 
   return {
-    salesTotal: money(salesTotal),
-    finesTotal: money(finesTotal),
-    cashTotal: money(cashTotal),
-    companyCommission: money(companyCommission),
-    transportTotal: money(transportTotal),
-    cardTotal: money(cardTotal),
-    calculatedExtras: money(calculatedExtras),
-    membershipTotal: money(membershipTotal),
-    promotionTotal: money(promotionTotal),
+    salesTotal: fromCents(salesTotal),
+    finesTotal: fromCents(finesTotal),
+    cashTotal: fromCents(cashTotal),
+    companyCommission: fromCents(companyCommission),
+    transportTotal: fromCents(transportTotal),
+    cardTotal: fromCents(cardTotal),
+    calculatedExtras: fromCents(calculatedExtras),
+    membershipTotal: fromCents(membershipTotal),
+    promotionTotal: fromCents(promotionTotal),
     nearbyTripsCount,
-    nearbyTripsCost: money(nearbyTripsCost),
-    customerTransportCharges: money(customerTransportCharges),
-    employeeUberReimbursements: money(employeeUberReimbursements),
-    employeeCashDue: money(employeeCashDue),
-    employeeGrossPay: money(Math.max(0, -result)),
+    nearbyTripsCost: fromCents(nearbyTripsCost),
+    customerTransportCharges: fromCents(customerTransportCharges),
+    employeeUberReimbursements: fromCents(employeeUberReimbursements),
+    employeeCashDue: fromCents(employeeCashDue),
+    employeeGrossPay: fromCents(Math.max(0, -resultCents)),
     result,
     direction:
       result > 0
@@ -144,12 +152,12 @@ export function calculateCut(records: LiquidationRecord[]): CutResult {
           ? 'company_owes_employee'
           : 'settled',
     count: records.length,
-    totalCollected: money(totalCollected),
-    rawExtrasTotal: money(rawExtrasTotal),
-    netCompanyShare: money(netCompanyShare),
-    netTransportBalance: money(netTransportBalance),
-    transferTotal: money(transferTotal),
-    companyTransportExpenses: money(companyTransportExpenses),
+    totalCollected: fromCents(totalCollected),
+    rawExtrasTotal: fromCents(rawExtrasTotal),
+    netCompanyShare: fromCents(netCompanyShare),
+    netTransportBalance: fromCents(netTransportBalance),
+    transferTotal: fromCents(transferTotal),
+    companyTransportExpenses: fromCents(companyTransportExpenses),
   };
 }
 

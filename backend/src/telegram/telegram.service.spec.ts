@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Servicios } from '../services/entities/service.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { TelegramService } from './telegram.service';
+import { TelegramBotRegistryService } from './telegram-bot-registry.service';
 
 describe('TelegramService', () => {
   let service: TelegramService;
@@ -28,6 +29,13 @@ describe('TelegramService', () => {
         {
           provide: JwtService,
           useValue: { sign: jest.fn() },
+        },
+        {
+          provide: TelegramBotRegistryService,
+          useValue: {
+            botForEmployeeOrCentral: jest.fn(),
+            centralBot: jest.fn(),
+          },
         },
       ],
     }).compile();

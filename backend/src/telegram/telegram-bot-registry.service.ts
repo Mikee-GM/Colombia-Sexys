@@ -13,6 +13,8 @@ import { Telegraf, Context } from 'telegraf';
 import { Update } from 'telegraf/typings/core/types/typegram';
 import { EmployeeTelegramBot } from './entities/employee-telegram-bot.entity';
 import { TelegramCryptoService } from './telegram-crypto.service';
+import { describeError } from '../common/errors/error-message';
+import { installSendThrottle } from './telegram-send-throttle';
 
 /**
  * Contexto extendido con la identidad del bot dedicado por el que entró el
@@ -57,7 +59,39 @@ export class TelegramBotRegistryService
     return this.webhookBaseUrl.length > 0;
   }
 
+  /**
+   * Impide arrancar en la combinación que rompe el bot sin dar la cara.
+   *
+   * Con long polling, dos procesos pidiendo `getUpdates` sobre el mismo token
+   * no se reparten el trabajo: Telegram responde 409 y uno de los dos deja de
+   * recibir mensajes. No es una degradación, es un bot que se calla, y desde
+   * fuera parece que los clientes han dejado de escribir.
+   *
+   * Los ciclos periódicos ya toleran varias réplicas gracias a los advisory
+   * locks, así que el día que se escale, esto es lo que queda por resolver: hay
+   * que pasar a webhook antes. Falla al arrancar en vez de dejarlo pasar.
+   */
+  private assertPollingIsSafe(): void {
+    const instances = Number(
+      this.configService.get<string | number>('APP_INSTANCE_COUNT', 1),
+    );
+    if (instances <= 1 || this.usesWebhooks) return;
+
+    throw new Error(
+      `APP_INSTANCE_COUNT=${instances} con long polling: Telegram solo admite un proceso ` +
+        'haciendo getUpdates por token, así que las demás réplicas dejarían de recibir ' +
+        'mensajes. Define TELEGRAM_WEBHOOK_BASE_URL (y habilita el bloque de webhook en ' +
+        'nginx) o vuelve a una sola instancia.',
+    );
+  }
+
   async onModuleInit(): Promise<void> {
+    this.assertPollingIsSafe();
+
+    // El bot central manda tanto como los dedicados: avisos a jefes, ofertas a
+    // choferes y los barridos periodicos salen todos por aqui.
+    installSendThrottle(this.centralBot, 'central');
+
     let records: EmployeeTelegramBot[];
     try {
       records = await this.botsRepository.find({
@@ -111,6 +145,7 @@ export class TelegramBotRegistryService
     token: string,
   ): Telegraf<Context> {
     const bot = new Telegraf<Context>(token);
+    installSendThrottle(bot, `empleada:${record.employeeId}`);
 
     bot.use((ctx: DedicatedBotContext, next) => {
       ctx.dedicatedBotEmployeeId = record.employeeId;
@@ -179,7 +214,7 @@ export class TelegramBotRegistryService
         `Bot @${me.username ?? me.id} activo para la empleada ${record.employeeId}.`,
       );
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = describeError(error);
       await this.botsRepository.update(record.id, {
         status: 'error',
         lastError: message.slice(0, 500),

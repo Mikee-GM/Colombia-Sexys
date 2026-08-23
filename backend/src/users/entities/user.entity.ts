@@ -1,4 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  ApiHideProperty,
+  ApiProperty,
+  ApiPropertyOptional,
+} from '@nestjs/swagger';
+import { Exclude } from 'class-transformer';
 import { Column, Entity, Index, OneToMany, OneToOne } from 'typeorm';
 import { AlertasClientes } from '../../client-alerts/entities/client-alert.entity';
 import { Choferes } from '../../drivers/entities/driver.entity';
@@ -27,8 +32,15 @@ export class Usuarios {
   @ApiProperty({ description: 'Email', example: 'usuario@example.com' })
   email: string;
 
-  @Column('text', { name: 'password_hash' })
-  @ApiProperty({ description: 'Password Hash', example: 'Ejemplo' })
+  /**
+   * `select: false` para que ninguna consulta lo traiga por accidente: las
+   * entidades se serializan tal cual en varias respuestas y basta una relacion
+   * anidada (`empleada.usuario`) para filtrar el hash. Se lee explicitamente
+   * con `addSelect` solo en AuthService.login.
+   */
+  @Column('text', { name: 'password_hash', select: false })
+  @Exclude()
+  @ApiHideProperty()
   passwordHash: string;
 
   @Column('enum', {

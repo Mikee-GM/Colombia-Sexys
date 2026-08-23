@@ -1,91 +1,130 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
+/** Respuesta cacheada del resumen del panel. */
+type OverviewPayload = {
+  metrics: Record<string, number>;
+  activeServices: unknown[];
+  pendingReports: unknown[];
+};
+
+/** Fila que devuelve la consulta unica de metricas del panel. */
+type OverviewMetricsRow = {
+  active_services: number;
+  employees_total: number;
+  employees_available: number;
+  employees_busy: number;
+  drivers_total: number;
+  drivers_active: number;
+  pending_receipts: number;
+  recent_negative_ratings: number;
+  cash_in_street: string | number;
+  active_sanctions: number;
+  pending_appeals: number;
+  pending_reports: number;
+  clients_total: number;
+  pending_offers: number;
+  revenue_today: string | number;
+};
+
 @Injectable()
 export class GodEyeService {
+  /** Ventana de cache del resumen. El panel se auto-refresca cada pocos segundos. */
+  private static readonly OVERVIEW_CACHE_MS = 15_000;
+
+  private overviewCache: {
+    value: OverviewPayload;
+    expiresAt: number;
+  } | null = null;
+
   constructor(private readonly dataSource: DataSource) {}
 
-  async getOverview() {
-    const [
-      activeServicesRow,
-      employeesRow,
-      driversRow,
-      pendingReceiptsRow,
-      recentNegativeRatingsRow,
-      cashInStreetRow,
-      activeSanctionsRow,
-      pendingAppealsRow,
-      pendingReportsRow,
-      clientsTotalRow,
-      pendingOffersRow,
-      revenueTodayRow,
-    ] = await Promise.all([
-      this.dataSource.query(`
-        SELECT COUNT(*)::int AS count
-        FROM servicios
-        WHERE estado IN ('pendiente', 'en_curso')
-      `),
-      this.dataSource.query(`
-        SELECT
-          COUNT(*)::int AS total,
-          COUNT(*) FILTER (WHERE disponible = true)::int AS disponibles,
-          COUNT(*) FILTER (WHERE disponible = false)::int AS ocupadas
-        FROM empleadas
-      `),
-      this.dataSource.query(`
-        SELECT
-          COUNT(*)::int AS total,
-          COUNT(*) FILTER (WHERE disponible = true)::int AS activos
-        FROM choferes
-      `),
-      this.dataSource.query(`
-        SELECT COUNT(*)::int AS count
-        FROM payment_receipt_validations
-        WHERE estado IN ('PENDIENTE', 'REVISION_MANUAL', 'pending')
-      `),
-      this.dataSource.query(`
-        SELECT COUNT(*)::int AS count
-        FROM interaction_ratings
-        WHERE stars <= 2
-          AND created_at >= NOW() - INTERVAL '24 hours'
-      `),
-      this.dataSource.query(`
-        SELECT COALESCE(SUM(amount - paid_amount), 0)::numeric AS total_cash
-        FROM employee_cash_obligations
-        WHERE status = 'pending'
-      `),
-      this.dataSource.query(`
-        SELECT COUNT(*)::int AS count
-        FROM disciplinary_sanctions
-        WHERE status = 'active'
-      `),
-      this.dataSource.query(`
-        SELECT COUNT(*)::int AS count
-        FROM interaction_ratings
-        WHERE appeal_status = 'pending'
-      `),
-      this.dataSource.query(`
-        SELECT COUNT(*)::int AS count
-        FROM conduct_reports
-        WHERE status IN ('nuevo', 'en_revision')
-      `),
-      this.dataSource.query(`
-        SELECT COUNT(*)::int AS count
-        FROM clientes
-      `),
-      this.dataSource.query(`
-        SELECT COUNT(*)::int AS count
-        FROM group_service_requests
-        WHERE status IN ('esperando_jefe', 'seleccionando', 'reservada', 'esperando_pago')
-      `),
-      this.dataSource.query(`
-        SELECT COALESCE(SUM(total_final), 0)::numeric AS total
-        FROM servicios
-        WHERE estado = 'finalizado' AND hora_fin_servicio >= date_trunc('day', now())
-      `),
-    ]);
+  /**
+   * Las quince metricas del panel salen de una sola consulta con subconsultas
+   * escalares, en vez de doce viajes independientes a Postgres. Sumando las dos
+   * listas, cada carga pasa de catorce consultas a tres. El pool tiene veinte
+   * conexiones: con la version anterior, tres administradores refrescando a la
+   * vez lo saturaban.
+   *
+   * Ademas el resultado se cachea unos segundos, porque el panel se refresca
+   * solo y los contadores no necesitan precision al instante.
+   */
+  async getOverview(): Promise<OverviewPayload> {
+    const cached = this.overviewCache;
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
 
-    const pendingReportsList = await this.dataSource.query(`
+    const [metricsRow, pendingReportsList, activeServicesList] =
+      await Promise.all([
+        this.queryOverviewMetrics(),
+        this.queryPendingReports(),
+        this.queryActiveServices(),
+      ]);
+
+    const value: OverviewPayload = {
+      metrics: {
+        activeServices: metricsRow.active_services ?? 0,
+        employeesTotal: metricsRow.employees_total ?? 0,
+        employeesAvailable: metricsRow.employees_available ?? 0,
+        employeesBusy: metricsRow.employees_busy ?? 0,
+        driversTotal: metricsRow.drivers_total ?? 0,
+        driversActive: metricsRow.drivers_active ?? 0,
+        pendingReceipts: metricsRow.pending_receipts ?? 0,
+        recentNegativeRatings: metricsRow.recent_negative_ratings ?? 0,
+        cashInStreet: Number(metricsRow.cash_in_street ?? 0),
+        activeSanctions: metricsRow.active_sanctions ?? 0,
+        pendingAppeals: metricsRow.pending_appeals ?? 0,
+        pendingReports: metricsRow.pending_reports ?? 0,
+        clientsTotal: metricsRow.clients_total ?? 0,
+        pendingOffers: metricsRow.pending_offers ?? 0,
+        revenueToday: Number(metricsRow.revenue_today ?? 0),
+      },
+      activeServices: activeServicesList,
+      pendingReports: pendingReportsList,
+    };
+
+    this.overviewCache = {
+      value,
+      expiresAt: Date.now() + GodEyeService.OVERVIEW_CACHE_MS,
+    };
+    return value;
+  }
+
+  /** Los quince contadores del panel en una sola pasada. */
+  private async queryOverviewMetrics(): Promise<OverviewMetricsRow> {
+    const [row]: OverviewMetricsRow[] = await this.dataSource.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM servicios
+          WHERE estado IN ('pendiente', 'en_curso')) AS active_services,
+        (SELECT COUNT(*)::int FROM empleadas) AS employees_total,
+        (SELECT COUNT(*)::int FROM empleadas WHERE disponible = true) AS employees_available,
+        (SELECT COUNT(*)::int FROM empleadas WHERE disponible = false) AS employees_busy,
+        (SELECT COUNT(*)::int FROM choferes) AS drivers_total,
+        (SELECT COUNT(*)::int FROM choferes WHERE disponible = true) AS drivers_active,
+        (SELECT COUNT(*)::int FROM payment_receipt_validations
+          WHERE estado IN ('PENDIENTE', 'REVISION_MANUAL', 'pending')) AS pending_receipts,
+        (SELECT COUNT(*)::int FROM interaction_ratings
+          WHERE stars <= 2 AND created_at >= NOW() - INTERVAL '24 hours') AS recent_negative_ratings,
+        (SELECT COALESCE(SUM(amount - paid_amount), 0)::numeric FROM employee_cash_obligations
+          WHERE status = 'pending') AS cash_in_street,
+        (SELECT COUNT(*)::int FROM disciplinary_sanctions
+          WHERE status = 'active') AS active_sanctions,
+        (SELECT COUNT(*)::int FROM interaction_ratings
+          WHERE appeal_status = 'pending') AS pending_appeals,
+        (SELECT COUNT(*)::int FROM conduct_reports
+          WHERE status IN ('nuevo', 'en_revision')) AS pending_reports,
+        (SELECT COUNT(*)::int FROM clientes) AS clients_total,
+        (SELECT COUNT(*)::int FROM group_service_requests
+          WHERE status IN ('esperando_jefe', 'seleccionando', 'reservada', 'esperando_pago')) AS pending_offers,
+        (SELECT COALESCE(SUM(total_final), 0)::numeric FROM servicios
+          WHERE estado = 'finalizado' AND hora_fin_servicio >= date_trunc('day', now())) AS revenue_today
+    `);
+    return row ?? ({} as OverviewMetricsRow);
+  }
+
+  private queryPendingReports() {
+    return this.dataSource.query(`
       SELECT
         r.id,
         r.category,
@@ -105,8 +144,11 @@ export class GodEyeService {
       ORDER BY r.created_at DESC
       LIMIT 5
     `);
+  }
 
-    const activeServicesList = await this.dataSource.query(`
+  private queryActiveServices() {
+    return this.dataSource.query(`
+
       SELECT
         s.id,
         s.service_type AS "serviceType",
@@ -161,28 +203,6 @@ export class GodEyeService {
       ORDER BY s.created_at DESC
       LIMIT 25
     `);
-
-    return {
-      metrics: {
-        activeServices: activeServicesRow[0]?.count || 0,
-        employeesTotal: employeesRow[0]?.total || 0,
-        employeesAvailable: employeesRow[0]?.disponibles || 0,
-        employeesBusy: employeesRow[0]?.ocupadas || 0,
-        driversTotal: driversRow[0]?.total || 0,
-        driversActive: driversRow[0]?.activos || 0,
-        pendingReceipts: pendingReceiptsRow[0]?.count || 0,
-        recentNegativeRatings: recentNegativeRatingsRow[0]?.count || 0,
-        cashInStreet: Number(cashInStreetRow[0]?.total_cash || 0),
-        activeSanctions: activeSanctionsRow[0]?.count || 0,
-        pendingAppeals: pendingAppealsRow[0]?.count || 0,
-        pendingReports: pendingReportsRow[0]?.count || 0,
-        clientsTotal: clientsTotalRow[0]?.count || 0,
-        pendingOffers: pendingOffersRow[0]?.count || 0,
-        revenueToday: Number(revenueTodayRow[0]?.total || 0),
-      },
-      activeServices: activeServicesList,
-      pendingReports: pendingReportsList,
-    };
   }
 
   async getActorDossier(type: 'employee' | 'driver' | 'boss', id: string) {

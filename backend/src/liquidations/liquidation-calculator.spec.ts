@@ -35,6 +35,30 @@ describe('liquidation calculator', () => {
     expect(result.cashTotal).toBe(2500);
   });
 
+  it('no acumula error de flotante al sumar muchos importes con decimales', () => {
+    // 0.1 + 0.2 !== 0.3 en flotante binario. Con 300 registros de 0.10 el
+    // acumulador anterior se desviaba del total exacto; en centavos no.
+    const records = Array.from({ length: 300 }, () =>
+      record({ serviceTotal: 0.1, companyPercentage: 0 }),
+    );
+
+    const result = calculateCut(records);
+
+    expect(result.salesTotal).toBe(30);
+    expect(result.cashTotal).toBe(30);
+  });
+
+  it('redondea la comision al centavo en vez de arrastrar decimales', () => {
+    const result = calculateCut([
+      record({ serviceTotal: 33.33, companyPercentage: 33 }),
+    ]);
+
+    // 33.33 * 0.33 = 10.9989 -> 11.00
+    expect(result.companyCommission).toBe(11);
+    // La parte de la empleada es el resto: 33.33 * 0.67 = 22.3311 -> 22.33
+    expect(result.result).toBe(-22.33);
+  });
+
   it('identifica tarjeta que la empresa debe pagar a la empleada', () => {
     const result = calculateCut([
       record({ paymentMethod: 'tarjeta', cardAmounts: [2500] }),

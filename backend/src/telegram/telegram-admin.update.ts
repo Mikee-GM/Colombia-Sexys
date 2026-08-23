@@ -1,4 +1,4 @@
-import { Inject, forwardRef } from '@nestjs/common';
+import { Inject, forwardRef, Logger } from '@nestjs/common';
 import { Update, Ctx, Action, Hears } from 'nestjs-telegraf';
 import { Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -6,13 +6,15 @@ import { Repository } from 'typeorm';
 import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { ServicesService } from '../services/services.service';
+import type { TelegramSessionData } from './telegram-booking.update';
+
+/** El jefe tambien tiene sesion de Telegram; aqui solo interesa una clave. */
+type BossContext = Context & { session?: TelegramSessionData };
 
 @Update()
 export class TelegramAdminUpdate {
-  private readonly pendingBossNotes = new Map<
-    string,
-    { serviceId: string; notes: string; sameLocation: boolean }
-  >();
+  private readonly logger = new Logger(TelegramAdminUpdate.name);
+
   constructor(
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
@@ -21,6 +23,39 @@ export class TelegramAdminUpdate {
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
   ) {}
+
+  /**
+   * Notas del jefe a medio escribir, guardadas en su sesion de Telegram.
+   *
+   * Antes eran un Map en la memoria del proceso: con dos replicas, empezar la
+   * nota en una y terminarla en otra perdia el flujo sin decir nada, y nada
+   * purgaba las entradas abandonadas. La sesion ya persiste en la base y ya
+   * caduca sola.
+   */
+  private pendingNotes(
+    ctx: Context,
+  ): Record<
+    string,
+    { notes: string; sameLocation: boolean; startedAt: number }
+  > {
+    const session = (ctx as BossContext).session;
+    if (!session) return {};
+    session.pendingBossNotes ??= {};
+    return session.pendingBossNotes;
+  }
+
+  /** Una nota sin terminar deja de valer pasado este tiempo. */
+  private static readonly NOTES_TTL_MS = 30 * 60 * 1000;
+
+  private readNote(ctx: Context, serviceId: string) {
+    const pending = this.pendingNotes(ctx)[serviceId];
+    if (!pending) return undefined;
+    if (Date.now() - pending.startedAt > TelegramAdminUpdate.NOTES_TTL_MS) {
+      delete this.pendingNotes(ctx)[serviceId];
+      return undefined;
+    }
+    return pending;
+  }
 
   @Action(/^jefe_autorizar:(.+):([01])$/)
   async onJefeAutorizar(@Ctx() ctx: Context) {
@@ -140,14 +175,14 @@ export class TelegramAdminUpdate {
           id: service.servicioPrevioId,
         })
       : null;
-    this.pendingBossNotes.set(`${actor.id}:${serviceId}`, {
-      serviceId,
+    this.pendingNotes(ctx)[serviceId] = {
       notes: '',
       sameLocation: Boolean(
         previous?.presetLocationId &&
         previous.presetLocationId === service?.presetLocationId,
       ),
-    });
+      startedAt: Date.now(),
+    };
     await ctx.reply(
       `Escribe las notas internas con el formato:\n/nota ${serviceId} detalle para la empleada`,
     );
@@ -160,13 +195,10 @@ export class TelegramAdminUpdate {
     const match = (ctx as any).match;
     const serviceId = match[1];
     const notes = match[2].trim();
-    const key = `${actor.id}:${serviceId}`;
-    if (!this.pendingBossNotes.has(key)) return;
-    this.pendingBossNotes.set(key, {
-      ...this.pendingBossNotes.get(key)!,
-      notes,
-    });
-    const pending = this.pendingBossNotes.get(key)!;
+    const existing = this.readNote(ctx, serviceId);
+    if (!existing) return;
+    const pending = { ...existing, notes };
+    this.pendingNotes(ctx)[serviceId] = pending;
     await ctx.reply('Elige el transporte para aceptar el servicio:', {
       ...Markup.inlineKeyboard([
         [
@@ -197,8 +229,8 @@ export class TelegramAdminUpdate {
     const actor = await this.getActor(ctx);
     if (!actor) return;
     const match = (ctx as any).match;
-    const key = `${actor.id}:${match[1]}`;
-    const pending = this.pendingBossNotes.get(key);
+    const serviceId = match[1] as string;
+    const pending = this.readNote(ctx, serviceId);
     if (!pending?.notes) {
       await ctx.answerCbQuery('Las notas expiraron.', { show_alert: true });
       return;
@@ -206,12 +238,12 @@ export class TelegramAdminUpdate {
     const transportType = match[2] === 'same' ? 'chofer' : match[2];
     try {
       const res = await this.servicesService.aceptar(
-        pending.serviceId,
+        serviceId,
         actor.id,
         transportType,
         pending.notes,
       );
-      this.pendingBossNotes.delete(key);
+      delete this.pendingNotes(ctx)[serviceId];
       await ctx.answerCbQuery('Servicio aceptado con notas.');
 
       const inlineButtons: any[] = [];
@@ -622,7 +654,7 @@ export class TelegramAdminUpdate {
 
       await ctx.editMessageText(originalText + resolutionMsg, options);
     } catch (err: any) {
-      console.error('Error al autorizar servicio desde Telegram:', err);
+      this.logger.error('Error al autorizar servicio desde Telegram:', err);
       await ctx.answerCbQuery(
         err.message || 'Error al procesar la solicitud.',
         { show_alert: true },
@@ -686,7 +718,7 @@ export class TelegramAdminUpdate {
           : {}),
       });
     } catch (err: any) {
-      console.error('Error al despachar cita programada:', err);
+      this.logger.error('Error al despachar cita programada:', err);
       await ctx.answerCbQuery(err.message || 'Error al iniciar el traslado.', {
         show_alert: true,
       });

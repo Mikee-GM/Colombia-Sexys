@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import * as Joi from 'joi';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -12,12 +13,8 @@ import { DriversModule } from './drivers/drivers.module';
 import { ClientsModule } from './clients/clients.module';
 import { EmployeesModule } from './employees/employees.module';
 import { ServicesModule } from './services/services.module';
-import { ServiceExtensionsModule } from './service-extensions/service-extensions.module';
 import { CatalogExtrasModule } from './catalog-extras/catalog-extras.module';
-import { ServiceExtrasModule } from './service-extras/service-extras.module';
 import { ExtensionsModule } from './extensions/extensions.module';
-import { TripsModule } from './trips/trips.module';
-import { ClientAlertsModule } from './client-alerts/client-alerts.module';
 import { TelegramConversationsModule } from './telegram-conversations/telegram-conversations.module';
 import { EmployeePhotosModule } from './employee-photos/employee-photos.module';
 import { AuthModule } from './auth/auth.module';
@@ -74,6 +71,11 @@ import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
           .allow('')
           .optional(),
         TELEGRAM_WEBHOOK_BASE_URL: Joi.string().uri().allow('').optional(),
+        // Cuantas instancias del backend se arrancan. Solo se usa para impedir
+        // una combinacion que rompe el bot en silencio: con long polling, dos
+        // procesos pidiendo getUpdates sobre el mismo token hacen que Telegram
+        // devuelva 409 y uno de los dos deje de recibir mensajes.
+        APP_INSTANCE_COUNT: Joi.number().integer().min(1).default(1),
         DEFAULT_ADMIN_EMAIL: Joi.string().email().required(),
         DEFAULT_ADMIN_PASSWORD: Joi.string().min(12).required(),
         R2_ENDPOINT: Joi.string().uri().required(),
@@ -108,11 +110,10 @@ import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
         username: configService.get<string>('DATABASE_USER'),
         password: configService.get<string>('DATABASE_PASSWORD'),
         database: configService.get<string>('DATABASE_NAME'),
+        // Con autoLoadEntities basta: cada modulo registra las suyas con
+        // forFeature. El glob explicito ademas incluia `*.entity.ts`, que en
+        // desarrollo con ts-node podia registrar la misma entidad dos veces.
         autoLoadEntities: true,
-        entities: [
-          __dirname + '/**/*.entity.js',
-          __dirname + '/**/*.entity.ts',
-        ],
         synchronize: false, // Regla Heavy DB: no sincronización automática en producción/desarrollo estructurado, usar migraciones.
         migrationsRun: false,
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
@@ -125,6 +126,7 @@ import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
     }),
     ThrottlerModule.forRoot([
       {
+        name: 'default',
         ttl: 60000,
         limit: 100,
       },
@@ -135,12 +137,8 @@ import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
     ClientsModule,
     EmployeesModule,
     ServicesModule,
-    ServiceExtensionsModule,
     CatalogExtrasModule,
-    ServiceExtrasModule,
     ExtensionsModule,
-    TripsModule,
-    ClientAlertsModule,
     TelegramConversationsModule,
     EmployeePhotosModule,
     ApartmentsModule,
@@ -156,6 +154,11 @@ import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
     DriverShiftsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Sin este guard global el ThrottlerModule no aplica a nada: quedaba
+    // configurado pero inerte, y el login admitia intentos ilimitados.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

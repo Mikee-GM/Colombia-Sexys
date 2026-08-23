@@ -53,9 +53,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       } else {
         message = 'Error de base de datos interno.';
       }
-    } else if (exception instanceof Error) {
-      message = exception.message;
     }
+    // Cualquier otra cosa se queda como 500 con un texto fijo: el mensaje de un
+    // Error interno puede llevar rutas de fichero, hosts o credenciales, y no
+    // tiene por que llegar al cliente. El detalle completo va al log de abajo.
 
     // Log the error internally with appropriate severity levels
     const logMessage = `${request.method} ${request.url} - Status: ${status} - Error: ${

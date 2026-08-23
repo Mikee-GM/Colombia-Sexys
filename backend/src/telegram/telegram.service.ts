@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -10,6 +10,8 @@ import { TelegramBotRegistryService } from './telegram-bot-registry.service';
 
 @Injectable()
 export class TelegramService {
+  private readonly logger = new Logger(TelegramService.name);
+
   constructor(
     @InjectBot() private readonly bot: Telegraf<Context>,
     @InjectRepository(Usuarios)
@@ -21,13 +23,13 @@ export class TelegramService {
   ) {
     if (this.bot && typeof this.bot.catch === 'function') {
       this.bot.catch((err: any, ctx: Context) => {
-        console.error('Global Telegram Bot Error:', err);
+        this.logger.error('Global Telegram Bot Error:', err);
         ctx
           .reply(
             'Ocurrió un error inesperado al procesar tu solicitud. Por favor, intenta de nuevo.',
           )
           .catch((e: any) =>
-            console.error('Failed to send error notification:', e),
+            this.logger.error('Failed to send error notification:', e),
           );
       });
     }

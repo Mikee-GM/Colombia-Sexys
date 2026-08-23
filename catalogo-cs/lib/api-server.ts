@@ -5,6 +5,7 @@ import {
 } from "@/lib/auth";
 import { ACCESS_COOKIE } from "@/lib/auth-constants";
 import { redirect } from "next/navigation";
+import { BACKEND_API_PREFIX } from "@/lib/api-constants";
 
 export function getApiBaseUrl() {
   return (
@@ -12,7 +13,7 @@ export function getApiBaseUrl() {
     process.env.API_URL ??
     process.env.NEXT_PUBLIC_API_URL ??
     "http://127.0.0.1:4000"
-  ).replace(/\/$/, "");
+  ).replace(/\/$/, "") + BACKEND_API_PREFIX;
 }
 
 type ApiFetchOptions = RequestInit & {

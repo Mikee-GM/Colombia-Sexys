@@ -45,9 +45,13 @@ export class AuthService {
       throw new UnauthorizedException('Debe ingresar email y contraseña');
     }
 
-    const user = await this.usuariosRepository.findOne({
-      where: { email },
-    });
+    // `passwordHash` es `select: false` en la entidad, asi que hay que pedirlo
+    // explicitamente: este es el unico sitio del backend que lo necesita.
+    const user = await this.usuariosRepository
+      .createQueryBuilder('usuario')
+      .addSelect('usuario.passwordHash')
+      .where('usuario.email = :email', { email })
+      .getOne();
 
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
@@ -62,9 +66,9 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    // Update last login timestamp
-    user.lastLoginAt = new Date();
-    await this.usuariosRepository.save(user);
+    // Update puntual en vez de save(): guardar la entidad entera reescribiria
+    // el hash que acabamos de cargar y bloquearia la fila sin necesidad.
+    await this.usuariosRepository.update(user.id, { lastLoginAt: new Date() });
 
     return this.createTokenPair(user, deviceId);
   }
@@ -227,6 +231,20 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }
+  }
+
+  /**
+   * Access token respaldado por una sesion real, para los paneles externos que
+   * se autentican con un token pegado a mano (comando /panel del bot). Antes se
+   * firmaba un JWT suelto: no aparecia en `auth_sessions`, asi que no habia
+   * forma de revocarlo y desde que JwtStrategy exige `sid` tampoco valdria.
+   */
+  async createPanelAccessToken(
+    user: Usuarios,
+    deviceId = 'telegram-panel',
+  ): Promise<string> {
+    const { accessToken } = await this.createTokenPair(user, deviceId);
+    return accessToken;
   }
 
   async generatePortalToken(user: Usuarios): Promise<string> {

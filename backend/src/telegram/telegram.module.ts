@@ -2,7 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
-import { session } from 'telegraf';
+import { Context, session } from 'telegraf';
 import { Repository } from 'typeorm';
 import { TelegramService } from './telegram.service';
 import { TelegramCryptoService } from './telegram-crypto.service';
@@ -37,11 +37,16 @@ import { EmployeeOnboardingModule } from '../employee-onboarding/employee-onboar
 import { TelegramOnboardingService } from './telegram-onboarding.service';
 import { TelegramOnboardingUpdate } from './telegram-onboarding.update';
 import { TelegramOnboardingScheduler } from './telegram-onboarding.scheduler';
+import { TelegramSessionMaintenance } from './telegram-session.maintenance';
 import { DisciplineModule } from '../discipline/discipline.module';
 import { GroupServicesModule } from '../group-services/group-services.module';
 import { UploadModule } from '../upload/upload.module';
 import { WeeklyContentModule } from '../weekly-content/weekly-content.module';
 import { CandidateScreeningModule } from '../candidate-screening/candidate-screening.module';
+import { TelegramSessionStore } from './telegram-session.store';
+import { serializeBySessionKey } from './telegram-session.lock';
+import { TelegramLinkAttempt } from './entities/telegram-link-attempt.entity';
+import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
 
 @Module({
   imports: [
@@ -58,6 +63,7 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
       AuthorizedBankAccounts,
       PaymentReceiptValidations,
       EmployeeTelegramBot,
+      TelegramLinkAttempt,
     ]),
     AuthModule,
     LoyaltyModule,
@@ -84,6 +90,23 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
             'TELEGRAM_BOT_TOKEN is not defined in environment variables',
           );
         }
+        // Cada bot dedicado necesita su propio hilo de conversación: sin este
+        // prefijo, hablar con dos modelas distintas compartiría la misma
+        // sesión. El bot central conserva el formato original de la clave para
+        // no tumbar las conversaciones ya abiertas.
+        //
+        // La misma función la usan el cerrojo y la sesión: si divergieran, el
+        // cerrojo estaría protegiendo una clave distinta de la que se escribe.
+        const getSessionKey = (ctx: Context): string | undefined => {
+          if (!ctx.from || !ctx.chat) return undefined;
+          const base = `${ctx.from.id}:${ctx.chat.id}`;
+          const employeeId = (ctx as { dedicatedBotEmployeeId?: string })
+            .dedicatedBotEmployeeId;
+          return employeeId ? `${employeeId}:${base}` : base;
+        };
+
+        const store = new TelegramSessionStore(sessionRepository);
+
         return {
           token,
           launchOptions:
@@ -93,33 +116,13 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
               ? false
               : undefined,
           middlewares: [
-            session({
-              // Cada bot dedicado necesita su propio hilo de conversación: sin
-              // este prefijo, hablar con dos modelas distintas compartiría la
-              // misma sesión. El bot central conserva el formato original de la
-              // clave para no tumbar las conversaciones ya abiertas.
-              getSessionKey: (ctx) => {
-                if (!ctx.from || !ctx.chat) return undefined;
-                const base = `${ctx.from.id}:${ctx.chat.id}`;
-                const employeeId = (ctx as { dedicatedBotEmployeeId?: string })
-                  .dedicatedBotEmployeeId;
-                return employeeId ? `${employeeId}:${base}` : base;
-              },
-              store: {
-                get: async (key) => {
-                  const sess = await sessionRepository.findOne({
-                    where: { key },
-                  });
-                  return sess ? sess.data : undefined;
-                },
-                set: async (key, data) => {
-                  await sessionRepository.save({ key, data });
-                },
-                delete: async (key) => {
-                  await sessionRepository.delete(key);
-                },
-              },
-            }),
+            // Va antes de `session()` a propósito: el cerrojo tiene que
+            // envolver también la lectura y la escritura de la sesión, no solo
+            // el manejador. Dos updates del mismo cliente se procesan en fila.
+            serializeBySessionKey(
+              getSessionKey as (ctx: unknown) => string | undefined,
+            ),
+            session({ getSessionKey, store }),
           ],
         };
       },
@@ -130,6 +133,7 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
   providers: [
     TelegramService,
     TelegramCryptoService,
+    TelegramLinkAttemptsService,
     TelegramBotRegistryService,
     TelegramAuthUpdate,
     TelegramBookingUpdate,
@@ -139,6 +143,7 @@ import { CandidateScreeningModule } from '../candidate-screening/candidate-scree
     TelegramOnboardingService,
     TelegramOnboardingUpdate,
     TelegramOnboardingScheduler,
+    TelegramSessionMaintenance,
   ],
   exports: [
     TelegramService,

@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Usuarios } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { generateLinkCode, hashLinkCode } from '../telegram/telegram-link-code';
 
 @Injectable()
 export class UsersService {
@@ -21,10 +26,13 @@ export class UsersService {
       throw new NotFoundException(`Usuario con ID ${userId} no encontrado`);
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const code = generateLinkCode();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos de validez
 
-    user.telegramVerificationCode = code;
+    // En la base solo queda la huella. El codigo en claro se devuelve una vez,
+    // para que el panel se lo enseñe a quien lo pidio, y no se guarda en ningun
+    // sitio del que se pueda recuperar despues.
+    user.telegramVerificationCode = hashLinkCode(code);
     user.telegramVerificationExpiresAt = expiresAt;
     await this.usuariosRepository.save(user);
 
@@ -51,21 +59,46 @@ export class UsersService {
     return { unlinked: true };
   }
 
-  async create(createUserDto: CreateUserDto) {
+  /**
+   * Solo un admin puede crear otro admin. Sin esta comprobacion cualquier jefe
+   * podria escalar privilegios creandose una cuenta con rol 'admin'.
+   */
+  async create(createUserDto: CreateUserDto, actor?: Usuarios) {
+    if (createUserDto.rol === 'admin' && actor?.rol !== 'admin') {
+      throw new ForbiddenException(
+        'Solo un administrador puede crear cuentas con rol admin',
+      );
+    }
+
+    const { password, ...rest } = createUserDto;
     const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(createUserDto.password, salt);
+    const passwordHash = await bcrypt.hash(password, salt);
     const user = this.usuariosRepository.create({
-      ...createUserDto,
+      ...rest,
       passwordHash,
     });
-    return this.usuariosRepository.save(user);
+    const saved = await this.usuariosRepository.save(user);
+    return this.stripSecrets(saved);
   }
 
-  findAll(rol?: Usuarios['rol']) {
-    if (rol) {
-      return this.usuariosRepository.find({ where: { rol } });
-    }
-    return this.usuariosRepository.find();
+  /**
+   * El hash nunca sale del backend. La columna ya es `select: false`, pero en
+   * la ruta de creacion la entidad viene de memoria, no de la base, asi que hay
+   * que quitarlo a mano.
+   */
+  private stripSecrets(user: Usuarios): Omit<Usuarios, 'passwordHash'> {
+    const { passwordHash: _omitted, ...safe } = user;
+    return safe as Omit<Usuarios, 'passwordHash'>;
+  }
+
+  /** Acotado: la tabla de usuarios no tiene por que caber entera en memoria. */
+  findAll(rol?: Usuarios['rol'], limit = 200, offset = 0) {
+    return this.usuariosRepository.find({
+      where: rol ? { rol } : undefined,
+      order: { createdAt: 'DESC' },
+      take: Math.min(500, Math.max(1, Math.trunc(limit))),
+      skip: Math.max(0, Math.trunc(offset)),
+    });
   }
 
   findOne(id: string) {

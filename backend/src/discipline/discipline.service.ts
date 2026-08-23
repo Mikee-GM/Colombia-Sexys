@@ -27,6 +27,20 @@ import {
 
 type PersonType = 'client' | 'employee' | 'driver' | 'boss';
 type ReportPersonType = 'client' | 'employee' | 'driver';
+
+/**
+ * Columna de `interaction_ratings` que identifica a cada tipo de persona.
+ *
+ * El mapeo estaba escrito como un ternario repetido en cada consulta cruda, asi
+ * que anadir un tipo obligaba a recordar todos los sitios. Al declararlo como
+ * `Record<ReportPersonType, ...>` es el compilador quien exige la entrada nueva.
+ * `boss` queda fuera a proposito: no se le califica.
+ */
+const RATING_SUBJECT_COLUMN: Record<ReportPersonType, string> = {
+  client: 'client_id',
+  employee: 'employee_id',
+  driver: 'driver_id',
+};
 type Actor = { id: string; rol: 'jefe' | 'empleada' | 'chofer' | 'admin' };
 type ResolvedInteraction = {
   serviceId: string | null;
@@ -575,12 +589,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
 
   async listOwnAppealableRatings(subjectType: PersonType, subjectId: string) {
     if (subjectType === 'boss') return [];
-    const column =
-      subjectType === 'client'
-        ? 'client_id'
-        : subjectType === 'employee'
-          ? 'employee_id'
-          : 'driver_id';
+    const column = RATING_SUBJECT_COLUMN[subjectType];
     return this.dataSource.query(
       `SELECT id, direction, stars, comment, created_at AS "createdAt"
        FROM interaction_ratings
@@ -858,12 +867,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
 
   private async ratingSummary(subjectType: PersonType, subjectId: string) {
     if (subjectType === 'boss') return [];
-    const column =
-      subjectType === 'client'
-        ? 'client_id'
-        : subjectType === 'employee'
-          ? 'employee_id'
-          : 'driver_id';
+    const column = RATING_SUBJECT_COLUMN[subjectType];
     return this.dataSource.query(
       `SELECT direction,
               ROUND(AVG(stars)::numeric, 2)::float AS average,
@@ -883,12 +887,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     direction: RatingDirection,
   ) {
     if (subjectType === 'boss') return;
-    const column =
-      subjectType === 'client'
-        ? 'client_id'
-        : subjectType === 'employee'
-          ? 'employee_id'
-          : 'driver_id';
+    const column = RATING_SUBJECT_COLUMN[subjectType];
     const [metric] = await this.dataSource.query(
       `SELECT AVG(stars)::float AS average, COUNT(*)::int AS count
        FROM interaction_ratings

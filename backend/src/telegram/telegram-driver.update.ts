@@ -25,7 +25,17 @@ import {
 import { DisciplineService } from '../discipline/discipline.service';
 import { SettlementsService } from '../transport-operations/settlements.service';
 import { AuthService } from '../auth/auth.service';
+import { describeError } from '../common/errors/error-message';
 
+/**
+ * Datos de identidad del chofer, cacheados diez minutos para no consultar la
+ * base en cada pulsacion de boton.
+ *
+ * Deliberadamente no incluye `disponible` ni ningun otro estado operativo: eso
+ * cambia constantemente y tiene que leerse siempre de la base. Si algun dia se
+ * añade aqui un campo mutable, hara falta invalidacion entre replicas, que hoy
+ * no existe.
+ */
 interface DriverCacheEntry {
   userId: string;
   id: string;
@@ -308,6 +318,9 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
         .set({
           estado: 'aceptado',
           horaAceptacion: new Date(),
+          // La oferta deja de estar viva: sin limpiarlo, el barrido de ofertas
+          // vencidas la tomaria como pendiente.
+          ofertaExpiraEn: null,
         })
         .where('id = :viajeId AND chofer_id = :choferId AND estado = :estado', {
           viajeId,
@@ -324,8 +337,9 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     });
 
     if (result) {
-      // Invalidad caché ya que chofer.disponible cambió a false
-      this.driverIdentityCache.delete(clickerTelegramId);
+      // La caché guarda solo la identidad del chofer (id, nombre, teléfono,
+      // vehículo), no su disponibilidad: `disponible` se lee siempre de la base
+      // en el momento. No hay nada que invalidar aquí.
 
       // Cancelar el timeout de despacho del viaje
       this.servicesService.clearDispatchTimeout(viajeId);
@@ -347,7 +361,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           { parse_mode: 'Markdown' },
         );
       } catch (err) {
-        console.error('Error al actualizar mensaje de grupo:', err);
+        this.logger.error('Error al actualizar mensaje de grupo:', err);
       }
 
       const trip = await this.dataSource.getRepository(Viajes).findOne({
@@ -444,7 +458,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
                   trip.telegramEmpleadaMsgChoferCaminoId,
               });
             } catch (sendErr) {
-              console.error('Error al notificar a la empleada:', sendErr);
+              this.logger.error('Error al notificar a la empleada:', sendErr);
             }
           }
         })();
@@ -494,7 +508,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
                 },
               );
             } catch (sendErr) {
-              console.error(
+              this.logger.error(
                 'Error al enviar mensaje privado al chofer:',
                 sendErr,
               );
@@ -731,9 +745,9 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
               trip.telegramEmpleadaMsgChoferLlegadoId,
           });
         } catch (telegramErr) {
-          console.error(
+          this.logger.error(
             `Error al notificar a la empleada sobre la llegada (chatId: ${empUserArrived.telegramChatId}):`,
-            telegramErr.message || telegramErr,
+            describeError(telegramErr),
           );
         }
       }
@@ -779,7 +793,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
         ...Markup.inlineKeyboard(inlineButtons),
       });
     } catch (err) {
-      console.error('Error actualizando mensaje de chofer_llegado:', err);
+      this.logger.error('Error actualizando mensaje de chofer_llegado:', err);
     }
   }
 
@@ -999,7 +1013,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
             parseInt(msgCaminoId, 10),
           );
         } catch (err) {
-          console.error(
+          this.logger.error(
             'Error al borrar mensaje "chofer va en camino" de la empleada:',
             err,
           );
@@ -1013,7 +1027,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
             parseInt(msgLlegadoId, 10),
           );
         } catch (err) {
-          console.error(
+          this.logger.error(
             'Error al borrar mensaje "chofer ha llegado" de la empleada:',
             err,
           );
@@ -1061,7 +1075,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
         ...Markup.inlineKeyboard(inlineButtons),
       });
     } catch (err) {
-      console.error('Error actualizando mensaje de recogida:', err);
+      this.logger.error('Error actualizando mensaje de recogida:', err);
     }
 
     // Notificar al cliente que la empleada va en camino
@@ -1080,9 +1094,9 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           clientMessage,
         );
       } catch (telegramErr) {
-        console.error(
+        this.logger.error(
           `Error al notificar al cliente sobre viaje en camino (chatId: ${trip.servicio.cliente.telegramChatId}):`,
-          telegramErr.message || telegramErr,
+          describeError(telegramErr),
         );
       }
     }
@@ -1336,7 +1350,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
                 .getRepository(Servicios)
                 .update(trip.servicio.id, { telegramThreadId: null });
             })().catch((err) => {
-              console.error(
+              this.logger.error(
                 'Error al notificar o eliminar el tema al finalizar el viaje de regreso:',
                 err,
               );
@@ -1391,8 +1405,8 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
       });
     }
 
-    // Invalidad caché del chofer ya que chofer.disponible cambió a true
-    this.driverIdentityCache.delete(telegramId);
+    // Igual que al aceptar: la caché no guarda `disponible`, así que cambiar la
+    // disponibilidad no la deja obsoleta.
 
     await ctx.answerCbQuery('🏁 Viaje finalizado con éxito.');
 
@@ -1422,7 +1436,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
         ]),
       });
     } catch (err) {
-      console.error('Error actualizando mensaje de finalización:', err);
+      this.logger.error('Error actualizando mensaje de finalización:', err);
     }
     const employeeChatId = trip.servicio.empleada?.usuario?.telegramChatId;
     if (employeeChatId) {
@@ -1455,9 +1469,9 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           clientMessage,
         );
       } catch (telegramErr) {
-        console.error(
+        this.logger.error(
           `Error al notificar al cliente sobre llegada (chatId: ${trip.servicio.cliente.telegramChatId}):`,
-          telegramErr.message || telegramErr,
+          describeError(telegramErr),
         );
       }
     }
@@ -1870,7 +1884,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           : {}),
       });
     } catch (err) {
-      console.error(
+      this.logger.error(
         `Error al notificar al jefe en Telegram sobre actualización de chofer (targetChatId: ${targetChatId}):`,
         err,
       );

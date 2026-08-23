@@ -10,6 +10,8 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -37,6 +39,9 @@ import { Usuarios } from '../users/entities/user.entity';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Limite estricto: el global de 100/min no sirve de nada contra fuerza bruta
+  // de credenciales.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   @ApiLoginDocs(LoginDto)
   @HttpCode(HttpStatus.OK)
@@ -54,6 +59,7 @@ export class AuthController {
     return { user: result.user };
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(
@@ -68,7 +74,12 @@ export class AuthController {
     }
     const csrfCookie = request.cookies?.[CSRF_COOKIE] as string | undefined;
     const csrfHeader = request.headers['x-csrf-token'];
-    if (!csrfCookie || csrfHeader !== csrfCookie) {
+    if (
+      typeof csrfCookie !== 'string' ||
+      typeof csrfHeader !== 'string' ||
+      csrfCookie.length !== csrfHeader.length ||
+      !timingSafeEqual(Buffer.from(csrfCookie), Buffer.from(csrfHeader))
+    ) {
       throw new UnauthorizedException('Token CSRF inválido');
     }
 

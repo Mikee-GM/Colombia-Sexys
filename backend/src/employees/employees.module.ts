@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
@@ -23,7 +23,7 @@ import { AuthModule } from '../auth/auth.module';
     ]),
     UploadModule,
     WeeklyContentModule,
-    forwardRef(() => AuthModule),
+    AuthModule,
   ],
   controllers: [EmployeesController, EmployeePortalController],
   providers: [EmployeesService],

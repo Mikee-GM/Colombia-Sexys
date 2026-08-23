@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { ACCESS_COOKIE } from "@/lib/auth-constants";
+import { BACKEND_API_VERSION } from "@/lib/api-constants";
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -14,7 +15,9 @@ export async function middleware(request: NextRequest) {
     !pathname.startsWith("/api/realtime")
   ) {
     const backendUrl = process.env.BACKEND_API_URL || "http://localhost:4000";
-    const apiPath = pathname.replace(/^\/api/, "");
+    // El backend publica toda su superficie bajo `/api/v1`. Aqui se traduce
+    // `/api/algo` del navegador a `/api/v1/algo` del backend.
+    const apiPath = pathname.replace(/^\/api/, `/api/${BACKEND_API_VERSION}`);
     const targetUrl = new URL(`${apiPath}${search}`, backendUrl);
     return NextResponse.rewrite(targetUrl);
   }

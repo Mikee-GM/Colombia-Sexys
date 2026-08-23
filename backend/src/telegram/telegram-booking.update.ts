@@ -131,7 +131,20 @@ interface SessionData {
   trioSelectedEmployeeName?: string;
   trioStatus?: 'pending_boss' | 'confirmed' | 'rejected';
   trioCombinedRatePerHour?: number;
+  /**
+   * Notas que el jefe esta redactando para un servicio, por id de servicio.
+   *
+   * Vivian en un Map dentro del proceso, asi que el flujo se perdia sin ningun
+   * mensaje si el jefe empezaba la nota en una replica y la terminaba en otra,
+   * y el Map crecia sin que nada lo purgara. En la sesion caducan con ella.
+   */
+  pendingBossNotes?: Record<
+    string,
+    { notes: string; sameLocation: boolean; startedAt: number }
+  >;
 }
+
+export type { SessionData as TelegramSessionData };
 
 interface BotContext extends Context {
   session?: SessionData;
@@ -3064,7 +3077,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           ctx.session.comprobanteEnviado = false;
           ctx.session.comprobanteValidationId = undefined;
         }
-        console.error('Error procesando comprobante:', err);
+        this.logger.error('Error procesando comprobante:', err);
         await ctx.reply(
           'Ocurrió un error verificando el comprobante. Intentaremos revisarlo manualmente.',
         );
@@ -3379,7 +3392,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           });
         }
       } catch (err) {
-        console.error(
+        this.logger.error(
           'Error al actualizar disponibilidad de la empleada:',
           err,
         );
@@ -3423,7 +3436,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     try {
       await ctx.editMessageText(resumenEmpText, { parse_mode: 'Markdown' });
     } catch (err) {
-      console.error('Error al editar mensaje de cierre de actividad:', err);
+      this.logger.error('Error al editar mensaje de cierre de actividad:', err);
     }
     await ctx.reply(
       'Califica tu interacción con el cliente.',
@@ -3452,7 +3465,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             parseInt(servicio.telegramClienteMensajeId, 10),
           );
         } catch (err) {
-          console.error('Error al eliminar mensaje del cliente:', err);
+          this.logger.error('Error al eliminar mensaje del cliente:', err);
         }
       }
     }
@@ -3471,7 +3484,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       try {
         await this.servicesService.requestReturnTransport(servicio.id);
       } catch (err) {
-        console.error('Error al solicitar transporte de regreso:', err);
+        this.logger.error('Error al solicitar transporte de regreso:', err);
       }
     }
   }
@@ -4561,7 +4574,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         try {
           await this.telegramService.notifyJefesNewService(nuevoServicioEnc.id);
         } catch (err) {
-          console.error('Error notificando jefe sobre cita encadenada:', err);
+          this.logger.error(
+            'Error notificando jefe sobre cita encadenada:',
+            err,
+          );
         }
 
         return;
@@ -4795,7 +4811,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             serviceWithRelations.id,
           );
         } catch (err) {
-          console.error(
+          this.logger.error(
             'Error al enviar notificaciones de Telegram para el nuevo servicio:',
             err,
           );
@@ -5028,7 +5044,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         { parse_mode: 'Markdown' },
       );
     } catch (err) {
-      console.error('Error al editar mensaje de extensión:', err);
+      this.logger.error('Error al editar mensaje de extensión:', err);
     }
   }
 
@@ -5041,7 +5057,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         { parse_mode: 'Markdown' },
       );
     } catch (err) {
-      console.error('Error al editar mensaje de no extensión:', err);
+      this.logger.error('Error al editar mensaje de no extensión:', err);
     }
   }
 
@@ -5702,20 +5718,26 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
       // Debounce / Buffer de mensajes seguidos del cliente para evitar que la IA responda por partes
       const DEBOUNCE_WAIT_MS = 20000;
-      const existingBuffer = this.clientMessageBuffers.get(telegramId);
+      // La clave lleva la empleada ademas del cliente, igual que hace
+      // `getSessionKey` en telegram.module.ts. Con solo el id de Telegram, un
+      // cliente que escribia a dos modelos dentro de la ventana de agrupacion
+      // metia el segundo mensaje en el buffer de la primera, y la respuesta
+      // salia generada con el contexto de la conversacion equivocada.
+      const bufferKey = this.messageBufferKey(telegramId, empleadaId);
+      const existingBuffer = this.clientMessageBuffers.get(bufferKey);
       if (existingBuffer) {
         clearTimeout(existingBuffer.timer);
         existingBuffer.messages.push(userMessage);
         existingBuffer.ctx = ctx;
         existingBuffer.timer = setTimeout(() => {
-          this.flushClientMessageBuffer(telegramId, empleada);
+          void this.flushClientMessageBuffer(bufferKey, empleada);
         }, DEBOUNCE_WAIT_MS);
         return;
       } else {
         const timer = setTimeout(() => {
-          this.flushClientMessageBuffer(telegramId, empleada);
+          void this.flushClientMessageBuffer(bufferKey, empleada);
         }, DEBOUNCE_WAIT_MS);
-        this.clientMessageBuffers.set(telegramId, {
+        this.clientMessageBuffers.set(bufferKey, {
           messages: [userMessage],
           timer,
           ctx,
@@ -5783,7 +5805,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           analysisResult = JSON.parse(jsonMatch[0]);
         }
       } catch (err) {
-        console.error('Error al analizar sentimiento con IA:', err);
+        this.logger.error('Error al analizar sentimiento con IA:', err);
       }
 
       const servicioId = ctx.session?.servicioIdCalificacion;
@@ -5843,7 +5865,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                   parse_mode: 'Markdown',
                 });
               } catch (e) {
-                console.error('Error al enviar alerta a grupo de Jefe:', e);
+                this.logger.error('Error al enviar alerta a grupo de Jefe:', e);
               }
             } else if (jefeChatId) {
               try {
@@ -5851,7 +5873,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                   parse_mode: 'Markdown',
                 });
               } catch (e) {
-                console.error('Error al enviar alerta privada a Jefe:', e);
+                this.logger.error('Error al enviar alerta privada a Jefe:', e);
               }
             }
           }
@@ -5980,7 +6002,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           { parse_mode: 'Markdown' },
         );
       } catch (err) {
-        console.error('Error al notificar al chofer sobre la prórroga:', err);
+        this.logger.error(
+          'Error al notificar al chofer sobre la prórroga:',
+          err,
+        );
       }
     }
 
@@ -6010,7 +6035,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ...Markup.inlineKeyboard(inlineButtons),
       });
     } catch (err) {
-      console.error('Error al editar mensaje de empleada tras prórroga:', err);
+      this.logger.error(
+        'Error al editar mensaje de empleada tras prórroga:',
+        err,
+      );
     }
   }
 
@@ -6259,15 +6287,22 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     await this.sendTranscript(ctx, groupId, transcript, threadId);
   }
 
+  /** Un cliente hablando con dos modelos tiene dos buffers, no uno. */
+  private messageBufferKey(telegramId: string, empleadaId: string): string {
+    return `${empleadaId}:${telegramId}`;
+  }
+
   private async flushClientMessageBuffer(
-    telegramId: string,
+    bufferKey: string,
     empleada: Empleadas,
   ): Promise<void> {
-    const buffer = this.clientMessageBuffers.get(telegramId);
+    const buffer = this.clientMessageBuffers.get(bufferKey);
     if (!buffer) return;
-    this.clientMessageBuffers.delete(telegramId);
+    this.clientMessageBuffers.delete(bufferKey);
 
     const ctx = buffer.ctx;
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
     const session = ctx.session;
     if (!session) return;
 

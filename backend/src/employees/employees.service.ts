@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In, Not } from 'typeorm';
@@ -25,6 +26,8 @@ import { EmployeeCashObligation } from '../transport-operations/entities/employe
 
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+
   constructor(
     @InjectRepository(Empleadas)
     private readonly empleadasRepository: Repository<Empleadas>,
@@ -165,6 +168,9 @@ export class EmployeesService {
 
   async findAll(): Promise<Empleadas[]> {
     const employees = await this.empleadasRepository.find({
+      // Consultas separadas por coleccion en vez de un LEFT JOIN unico: con seis
+      // relaciones el join producia el producto cartesiano de todas ellas.
+      relationLoadStrategy: 'query',
       relations: {
         usuario: true,
         empleadaFotos: true,
@@ -180,15 +186,21 @@ export class EmployeesService {
     return await this.attachWeeklyContentMetrics(withBots);
   }
 
+  /**
+   * Catalogo publico: lo sirve `GET /catalog/employees` sin autenticacion, asi
+   * que la respuesta no puede arrastrar entidades `Usuarios`. Solo se carga la
+   * relacion `usuario` para filtrar por `activo`, y se elimina del resultado
+   * antes de devolverlo; el frontend unicamente usa los ids escalares
+   * (`usuarioId`, `jefeId`, `jefeSecundarioId`), que sí son columnas propias.
+   */
   async findAllActive(): Promise<Empleadas[]> {
     const employees = await this.empleadasRepository.find({
       where: { catalogoActivo: true },
+      relationLoadStrategy: 'query',
       relations: {
         usuario: true,
         empleadaFotos: true,
         extrasCatalogos: true,
-        jefe: true,
-        jefeSecundario: true,
       },
     });
     const sanctionedRows: Array<{ subject_id: string }> =
@@ -209,11 +221,26 @@ export class EmployeesService {
       (employee) => !sanctioned.has(employee.id) && employee.usuario?.activo,
     );
     const ranked = await this.rankEmployeesByScore(publicEmployees);
-    return this.attachBotUsernames(
+    const enriched = await this.attachBotUsernames(
       await this.attachCatalogAvailability(
         await this.attachTrustScores(ranked),
       ),
     );
+    return enriched.map((employee) => this.stripUserRelations(employee));
+  }
+
+  /**
+   * Quita del objeto las relaciones que son `Usuarios`. Son datos internos
+   * (email, telefono, telegramChatId) que no deben salir por una ruta publica.
+   */
+  private stripUserRelations(employee: Empleadas): Empleadas {
+    const {
+      usuario: _usuario,
+      jefe: _jefe,
+      jefeSecundario: _jefeSecundario,
+      ...safe
+    } = employee;
+    return safe as Empleadas;
   }
 
   /**
@@ -508,7 +535,10 @@ export class EmployeesService {
         try {
           await this.uploadService.deleteFile(empleada.fotoPerfilUrl);
         } catch (err) {
-          console.error('Error al eliminar fotoPerfilUrl antigua de R2:', err);
+          this.logger.error(
+            'Error al eliminar fotoPerfilUrl antigua de R2:',
+            err,
+          );
         }
       }
     }
@@ -525,7 +555,10 @@ export class EmployeesService {
           try {
             await this.uploadService.deleteFile(url);
           } catch (err) {
-            console.error('Error al eliminar foto extra obsoleta de R2:', err);
+            this.logger.error(
+              'Error al eliminar foto extra obsoleta de R2:',
+              err,
+            );
           }
         }
       }
@@ -740,7 +773,10 @@ export class EmployeesService {
       try {
         await this.uploadService.deleteFile(empleada.fotoPerfilUrl);
       } catch (err) {
-        console.error('Error al eliminar fotoPerfilUrl de R2 en borrado:', err);
+        this.logger.error(
+          'Error al eliminar fotoPerfilUrl de R2 en borrado:',
+          err,
+        );
       }
     }
 
@@ -751,7 +787,7 @@ export class EmployeesService {
           try {
             await this.uploadService.deleteFile(foto.url);
           } catch (err) {
-            console.error(
+            this.logger.error(
               'Error al eliminar foto extra de R2 en borrado:',
               err,
             );

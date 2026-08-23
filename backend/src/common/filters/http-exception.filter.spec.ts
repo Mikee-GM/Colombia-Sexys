@@ -116,9 +116,25 @@ describe('HttpExceptionFilter', () => {
       expect.objectContaining({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         error: 'Internal Server Error',
-        message: 'Test server failure',
+        message: 'Internal server error',
       }),
     );
     expect(loggerErrorSpy).toHaveBeenCalled();
+  });
+
+  it('no filtra el mensaje interno de un Error al cliente', () => {
+    // Un Error interno puede llevar hosts, rutas o credenciales en el mensaje.
+    const error = new Error('connect ECONNREFUSED 10.0.0.5:5432');
+
+    filter.catch(error, mockArgumentsHost);
+
+    const payload = mockResponse.json.mock.calls[0][0] as { message: string };
+    expect(payload.message).toBe('Internal server error');
+    expect(JSON.stringify(payload)).not.toContain('10.0.0.5');
+    // El detalle completo si tiene que quedar en el log del servidor.
+    expect(loggerErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('10.0.0.5'),
+      expect.anything(),
+    );
   });
 });

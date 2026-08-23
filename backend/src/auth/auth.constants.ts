@@ -3,9 +3,19 @@ import type { CookieOptions } from 'express';
 export const ACCESS_COOKIE = 'access_token';
 export const REFRESH_COOKIE = 'refresh_token';
 export const CSRF_COOKIE = 'csrf_token';
-export const ACCESS_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60; // 1 año de sesión por defecto
+/**
+ * El access token es corto a proposito: no se puede revocar por si mismo, asi
+ * que su ventana de riesgo tiene que ser pequeña. La sesion larga la sostiene
+ * el refresh token, que si vive en base de datos y se puede invalidar.
+ */
+export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutos
 export const REFRESH_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60; // 1 año de sesión por defecto
-export const REFRESH_COOKIE_PATH = '/';
+
+/**
+ * La cookie de refresh solo se envia a la ruta que la consume. Mandarla en
+ * cada peticion la expone sin ninguna ventaja.
+ */
+export const REFRESH_COOKIE_PATH = '/auth/refresh';
 
 export function cookieOptions(
   maxAgeSeconds: number,

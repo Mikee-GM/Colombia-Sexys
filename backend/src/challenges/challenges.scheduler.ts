@@ -5,7 +5,13 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
+import {
+  ADVISORY_LOCKS,
+  withAdvisoryLock,
+} from '../common/scheduling/advisory-lock';
 import { ChallengesService } from './challenges.service';
+import { describeError } from '../common/errors/error-message';
 
 @Injectable()
 export class ChallengesScheduler implements OnModuleInit, OnModuleDestroy {
@@ -16,6 +22,7 @@ export class ChallengesScheduler implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly challenges: ChallengesService,
     private readonly configService: ConfigService,
+    private readonly dataSource: DataSource,
   ) {}
 
   onModuleInit() {
@@ -45,12 +52,18 @@ export class ChallengesScheduler implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
-      await this.challenges.activateDueChallenges();
-      await this.challenges.finishDueChallenges();
-    } catch (error) {
-      this.logger.warn(
-        `Error en el ciclo de retos: ${error instanceof Error ? error.message : error}`,
+      // Advisory lock: activar o cerrar un reto dos veces desde dos replicas
+      // duplicaria las notificaciones y los premios.
+      await withAdvisoryLock(
+        this.dataSource,
+        ADVISORY_LOCKS.challenges,
+        async () => {
+          await this.challenges.activateDueChallenges();
+          await this.challenges.finishDueChallenges();
+        },
       );
+    } catch (error) {
+      this.logger.warn(`Error en el ciclo de retos: ${describeError(error)}`);
     } finally {
       this.running = false;
     }

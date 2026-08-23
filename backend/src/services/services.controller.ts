@@ -96,8 +96,15 @@ export class ServicesController {
 
   @Get()
   @ApiFindAllDocs({ tag: 'services', entity: Servicios, protected: true })
-  findAll(@Req() req: any) {
-    return this.servicesService.findAll(req.user);
+  findAll(
+    @Req() req: any,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.servicesService.findAll(req.user, {
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
   }
 
   @Get('evidence')

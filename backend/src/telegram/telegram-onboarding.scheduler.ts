@@ -5,8 +5,14 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
+import {
+  ADVISORY_LOCKS,
+  withAdvisoryLock,
+} from '../common/scheduling/advisory-lock';
 import { EmployeeOnboardingService } from '../employee-onboarding/employee-onboarding.service';
 import { TelegramOnboardingService } from './telegram-onboarding.service';
+import { describeError } from '../common/errors/error-message';
 
 @Injectable()
 export class TelegramOnboardingScheduler
@@ -20,6 +26,7 @@ export class TelegramOnboardingScheduler
     private readonly configService: ConfigService,
     private readonly onboardingService: EmployeeOnboardingService,
     private readonly telegramOnboardingService: TelegramOnboardingService,
+    private readonly dataSource: DataSource,
   ) {}
 
   onModuleInit() {
@@ -52,41 +59,49 @@ export class TelegramOnboardingScheduler
     if (this.running) return;
     this.running = true;
     try {
-      const pending = await this.onboardingService.findPendingDeliveries();
-      for (const assignment of pending) {
-        try {
-          await this.telegramOnboardingService.deliverAssignment(assignment);
-        } catch (error) {
-          this.logger.warn(
-            `Falló el envío pendiente ${assignment.id}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      }
-
-      const reminderHours = this.configService.get<number>(
-        'ONBOARDING_REMINDER_HOURS',
-        3,
+      // Advisory lock: dos replicas barriendo a la vez enviarian el reglamento
+      // y el recordatorio dos veces a la misma empleada.
+      await withAdvisoryLock(
+        this.dataSource,
+        ADVISORY_LOCKS.onboardingReminders,
+        () => this.deliverPendingAndRemind(),
       );
-      const cutoff = new Date(Date.now() - reminderHours * 60 * 60 * 1000);
-      const dueReminders =
-        await this.onboardingService.findDueReminders(cutoff);
-      for (const assignment of dueReminders) {
-        if (!assignment.user?.telegramChatId) continue;
-        try {
-          await this.telegramOnboardingService.sendReminder(assignment);
-        } catch (error) {
-          this.logger.warn(
-            `Falló el recordatorio ${assignment.id}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      }
     } catch (error) {
-      this.logger.error(
-        'Falló la revisión de incorporaciones',
-        error instanceof Error ? error.stack : String(error),
+      this.logger.warn(
+        `Error en el ciclo de onboarding: ${describeError(error)}`,
       );
     } finally {
       this.running = false;
+    }
+  }
+
+  private async deliverPendingAndRemind(): Promise<void> {
+    const pending = await this.onboardingService.findPendingDeliveries();
+    for (const assignment of pending) {
+      try {
+        await this.telegramOnboardingService.deliverAssignment(assignment);
+      } catch (error) {
+        this.logger.warn(
+          `Falló el envío pendiente ${assignment.id}: ${describeError(error)}`,
+        );
+      }
+    }
+
+    const reminderHours = this.configService.get<number>(
+      'ONBOARDING_REMINDER_HOURS',
+      3,
+    );
+    const cutoff = new Date(Date.now() - reminderHours * 60 * 60 * 1000);
+    const dueReminders = await this.onboardingService.findDueReminders(cutoff);
+    for (const assignment of dueReminders) {
+      if (!assignment.user?.telegramChatId) continue;
+      try {
+        await this.telegramOnboardingService.sendReminder(assignment);
+      } catch (error) {
+        this.logger.warn(
+          `Falló el recordatorio ${assignment.id}: ${describeError(error)}`,
+        );
+      }
     }
   }
 }

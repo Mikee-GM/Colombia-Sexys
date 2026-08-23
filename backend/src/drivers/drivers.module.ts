@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DriversService } from './drivers.service';
 import { DriversController } from './drivers.controller';
@@ -9,10 +9,7 @@ import { Viajes } from '../trips/entities/trip.entity';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Choferes, Usuarios, Viajes]),
-    forwardRef(() => AuthModule),
-  ],
+  imports: [TypeOrmModule.forFeature([Choferes, Usuarios, Viajes]), AuthModule],
   controllers: [DriversController, DriverPortalController],
   providers: [DriversService],
   exports: [DriversService],

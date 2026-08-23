@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import {
+  ADVISORY_LOCKS,
+  withAdvisoryLock,
+} from '../common/scheduling/advisory-lock';
 import { WeeklyContentService } from './weekly-content.service';
 import { WeeklyContentSchedule } from './entities/weekly-content-schedule.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
@@ -29,6 +33,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly empleadasRepo: Repository<Empleadas>,
     @InjectRepository(ConductReport)
     private readonly conductReportRepo: Repository<ConductReport>,
+    private readonly dataSource: DataSource,
   ) {}
 
   onModuleInit() {
@@ -64,33 +69,43 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
-      const now = new Date();
-      const cdmxDate = new Date(
-        now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }),
+      // Advisory lock: sin el, dos replicas pedirian las fotos y aplicarian las
+      // faltas del mismo ciclo por duplicado.
+      await withAdvisoryLock(
+        this.dataSource,
+        ADVISORY_LOCKS.weeklyContent,
+        () => this.runWeeklyCycle(),
       );
-      const day = cdmxDate.getDay(); // 0 = dom, 5 = vie, 6 = sab
-      const hour = cdmxDate.getHours();
-
-      const currentFriday = this.weeklyContentService.getCurrentCycleFriday();
-
-      // 1. VIERNES (>= 10:00 AM): Crear ciclo y solicitar fotos a todas las empleadas activas
-      if (day === 5 && hour >= 10) {
-        await this.handleFridayRequests(currentFriday);
-      }
-
-      // 2. SÁBADO (>= 10:00 AM, 24h después): Enviar recordatorio a las que no han entregado
-      if ((day === 6 && hour >= 10) || day === 0) {
-        await this.handleSaturdayReminders(currentFriday);
-      }
-
-      // 3. DOMINGO (>= 10:00 AM, 48h después): Aplicar falta a las que no han entregado
-      if (day === 0 && hour >= 10) {
-        await this.handleSundaySanctions(currentFriday);
-      }
     } catch (error) {
       this.logger.error('Error en WeeklyContentScheduler:', error);
     } finally {
       this.running = false;
+    }
+  }
+
+  private async runWeeklyCycle(): Promise<void> {
+    const now = new Date();
+    const cdmxDate = new Date(
+      now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }),
+    );
+    const day = cdmxDate.getDay(); // 0 = dom, 5 = vie, 6 = sab
+    const hour = cdmxDate.getHours();
+
+    const currentFriday = this.weeklyContentService.getCurrentCycleFriday();
+
+    // 1. VIERNES (>= 10:00 AM): Crear ciclo y solicitar fotos a todas las empleadas activas
+    if (day === 5 && hour >= 10) {
+      await this.handleFridayRequests(currentFriday);
+    }
+
+    // 2. SÁBADO (>= 10:00 AM, 24h después): Enviar recordatorio a las que no han entregado
+    if ((day === 6 && hour >= 10) || day === 0) {
+      await this.handleSaturdayReminders(currentFriday);
+    }
+
+    // 3. DOMINGO (>= 10:00 AM, 48h después): Aplicar falta a las que no han entregado
+    if (day === 0 && hour >= 10) {
+      await this.handleSundaySanctions(currentFriday);
     }
   }
 

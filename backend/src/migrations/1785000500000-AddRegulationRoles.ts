@@ -1,9 +1,23 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddRegulationRoles1785000000000 implements MigrationInterface {
-  name = 'AddRegulationRoles1785000000000';
+export class AddRegulationRoles1785000500000 implements MigrationInterface {
+  name = 'AddRegulationRoles1785000500000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Esta migracion se renombro de 1785000000000 a 1785000500000 porque
+    // compartia timestamp con ScheduledServicesAndConversationHistory y el
+    // orden de ejecucion entre las dos quedaba a merced del orden de carga de
+    // ficheros. En una base que ya la ejecuto con el nombre anterior, TypeORM
+    // la vuelve a ver como pendiente, asi que sale sin hacer nada si el trabajo
+    // ya esta aplicado.
+    const [{ exists }]: Array<{ exists: boolean }> = await queryRunner.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM pg_type
+         WHERE typname = 'employee_regulations_target_role_enum'
+       ) AS exists`,
+    );
+    if (exists) return;
+
     await queryRunner.query(
       `CREATE TYPE public.employee_regulations_target_role_enum AS ENUM ('empleada', 'chofer', 'jefe')`,
     );
