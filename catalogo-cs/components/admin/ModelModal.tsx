@@ -115,6 +115,7 @@ export default function ModelModal({
           nombreReal: modelo.nombreReal || "",
           nombreArtistico: modelo.nombreArtistico || "",
           descripcion: modelo.descripcion,
+          estiloHabla: modelo.estiloHabla || "",
           fotoPrincipal: modelo.fotoPrincipal,
           fotos: [...modelo.fotos],
           linkX: modelo.linkX,
@@ -132,6 +133,7 @@ export default function ModelModal({
           nombreReal: "",
           nombreArtistico: "",
           descripcion: "",
+          estiloHabla: "",
           fotoPrincipal: "",
           fotos: [],
           linkX: "",
@@ -1221,6 +1223,21 @@ export default function ModelModal({
                   rows={4}
                   autoResize
                 />
+
+                <div className="mt-5">
+                  <TextareaField
+                    label="Estilo de Habla"
+                    value={form.estiloHabla || ""}
+                    onChange={(e) => setForm({ ...form, estiloHabla: e.target.value })}
+                    placeholder='Cómo habla ella en particular. Ej: "Muy costeña, alarga las vocales y dice ajá a cada rato" o "Seca y directa, poco cariñosa al escribir".'
+                    rows={3}
+                    autoResize
+                  />
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Opcional. Define el sello propio de su forma de escribir para
+                    que no todas las modelos suenen igual en el chat.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

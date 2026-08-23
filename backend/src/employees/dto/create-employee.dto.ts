@@ -151,6 +151,15 @@ export class CreateEmployeeDto {
   @IsOptional()
   readonly descripcion?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Sello propio de habla de la modelo; se inyecta en el prompt de la IA',
+    example: 'Habla muy costeña, alarga las vocales y dice "ajá" a cada rato.',
+  })
+  @IsString({ message: 'El estilo de habla debe ser una cadena de texto' })
+  @IsOptional()
+  readonly estiloHabla?: string;
+
   @ApiProperty({ description: 'Precio base por hora pactado', example: 1200 })
   @IsNumber(
     {},
