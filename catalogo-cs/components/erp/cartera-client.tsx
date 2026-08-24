@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, CreditCard, Landmark, Wallet } from "lucide-react";
 
 import {
@@ -41,7 +41,14 @@ function estadoDeuda(debt: DebtWithEmployee): Estado {
 
 type Filtro = "todas" | "mora" | "saldadas";
 
-export default function CarteraClient({ debts }: { debts: DebtWithEmployee[] }) {
+export default function CarteraClient({
+  debts,
+  children,
+}: {
+  debts: DebtWithEmployee[];
+  /** Panel de efectivo por entregar, renderizado en el servidor. */
+  children?: ReactNode;
+}) {
   const [filtro, setFiltro] = useState<Filtro>("todas");
   const [busqueda, setBusqueda] = useState("");
 
@@ -254,6 +261,8 @@ export default function CarteraClient({ debts }: { debts: DebtWithEmployee[] }) 
           ) : null}
         </ErpTable>
       </Panel>
+
+      {children}
     </div>
   );
 }

@@ -1,16 +1,46 @@
-import PageHeader from "@/components/ui/page-header";
+import Link from "next/link";
+
+import { ErpPageHeader } from "@/components/erp/primitives";
 import TransportConfigurationClient from "@/components/admin/transport-configuration-client";
 import { getTransportConfiguration } from "./actions";
-import { getCashObligations, getDriverSettlements } from "./actions";
-import OperationalSettlementsClient from "@/components/admin/operational-settlements-client";
 
+export const dynamic = "force-dynamic";
+
+/**
+ * Transporte queda solo con la configuracion de destinos y tarifas.
+ *
+ * El efectivo por entregar se movio a /admin/cartera y los cortes de choferes
+ * a /admin/driver-settlements: son dinero por cobrar y por pagar, no ajustes
+ * de transporte, y aqui aparecian mezclados en la misma pantalla.
+ */
 export default async function TransportPage() {
-  const today = new Date();
-  const day = today.getUTCDay() || 7;
-  const monday = new Date(today); monday.setUTCDate(today.getUTCDate() - day + 1);
-  const sunday = new Date(monday); sunday.setUTCDate(monday.getUTCDate() + 6);
-  const startDate = monday.toISOString().slice(0, 10);
-  const endDate = sunday.toISOString().slice(0, 10);
-  const [configuration, cash, trips] = await Promise.all([getTransportConfiguration(), getCashObligations(), getDriverSettlements(startDate, endDate)]);
-  return <><PageHeader title="Transporte" description="Configura destinos, tarifa externa y reglas operativas."/><TransportConfigurationClient initial={configuration}/><div className="my-10 border-t border-zinc-800"/><OperationalSettlementsClient cash={cash} trips={trips} startDate={startDate} endDate={endDate}/></>;
+  const configuration = await getTransportConfiguration();
+
+  return (
+    <div className="flex flex-col gap-6">
+      <ErpPageHeader
+        title="Transporte"
+        description="Destinos preestablecidos, tarifa externa y reglas operativas"
+        actions={
+          <>
+            <Link
+              href="/admin/driver-settlements"
+              className="rounded-xl border border-[#C5A55A]/30 bg-[#C5A55A]/[0.08] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.05em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A]/20"
+            >
+              Cortes de choferes
+            </Link>
+
+            <Link
+              href="/admin/cartera"
+              className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.05em] text-zinc-300 transition-colors hover:text-white"
+            >
+              Efectivo por entregar
+            </Link>
+          </>
+        }
+      />
+
+      <TransportConfigurationClient initial={configuration} />
+    </div>
+  );
 }

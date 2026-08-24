@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Eye, Plus, Search } from "lucide-react";
 import ServiceStatusBadge from "./service-status-badge";
 import ServiceDetailDialog from "./service-detail-dialog";
@@ -131,8 +132,15 @@ export default function ServicesTable({ initialServices = [] }: Props) {
                     onClick={() => setSelectedService(service)}
                     className="hover:bg-zinc-900/50 cursor-pointer transition-colors group"
                   >
+                    {/* El codigo abre la ficha completa; la fila sigue abriendo el dialogo. */}
                     <td className="p-4 text-xs font-mono font-bold text-[#C5A55A]">
-                      #{service.id.slice(-6).toUpperCase()}
+                      <Link
+                        href={`/admin/services/${service.id}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="border-b border-[#C5A55A]/35 transition-colors hover:border-[#C5A55A] hover:text-[#E8D5A3]"
+                      >
+                        #{service.id.slice(-6).toUpperCase()}
+                      </Link>
                     </td>
 
                     <td className="p-4">

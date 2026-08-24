@@ -1,16 +1,23 @@
-import PageHeader from "@/components/ui/page-header";
+import { notFound, redirect } from "next/navigation";
 
-type Props = {
+import { getCurrentUser } from "@/lib/auth";
+import { getServiceByIdAction } from "@/lib/data/services";
+import ServicioDetalle from "@/components/erp/servicio-detalle";
+
+export const dynamic = "force-dynamic";
+
+export default async function ServicioDetallePage({
+  params,
+}: {
   params: Promise<{ id: string }>;
-};
+}) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/admin");
 
-export default async function ServiceDetailPage({ params }: Props) {
   const { id } = await params;
+  const result = await getServiceByIdAction(id);
 
-  return (
-    <PageHeader
-      title={`Service ${id}`}
-      description="Service detail is pending backend service logic."
-    />
-  );
+  if (!result.success || !result.data) notFound();
+
+  return <ServicioDetalle service={result.data} />;
 }
