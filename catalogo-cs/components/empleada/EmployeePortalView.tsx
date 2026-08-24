@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import type { EmployeePortalData } from "@/lib/types";
+import { formatCurrency as formatCurrencyCOP } from "@/lib/calculations";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 interface EmployeePortalViewProps {
   initialData: EmployeePortalData;
@@ -27,19 +29,12 @@ export default function EmployeePortalView({ initialData }: EmployeePortalViewPr
     }
   }, []);
 
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat("es-MX", {
-      style: "currency",
-      currency: "MXN",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(val);
-  };
+  const formatCurrency = formatCurrencyCOP;
 
   const formatDate = (iso: string) => {
     try {
-      return new Intl.DateTimeFormat("es-MX", {
-        timeZone: "America/Mexico_City",
+      return new Intl.DateTimeFormat(APP_LOCALE, {
+        timeZone: APP_TIME_ZONE,
         day: "2-digit",
         month: "short",
         hour: "2-digit",

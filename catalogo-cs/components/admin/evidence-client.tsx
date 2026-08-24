@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { ExternalLink, FileCheck2, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { getEvidence, reviewGroupReceipt } from "@/lib/actions/evidence";
+import { formatCurrency } from "@/lib/calculations";
 import type { EvidenceItem, EvidencePage } from "@/lib/types";
 
 const inputClass =
@@ -129,7 +130,7 @@ function EvidenceCard({
       <div className="mt-4 space-y-1 text-xs text-zinc-500">
         <p>Servicio: {item.serviceId ? item.serviceId.slice(-6).toUpperCase() : "Sin servicio asociado"}</p>
         {item.clientName && <p>Cliente: {item.clientName}</p>}
-        {item.amount != null && <p>Monto: {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(item.amount)}</p>}
+        {item.amount != null && <p>Monto: {formatCurrency(item.amount)}</p>}
         {item.observations && <p className="line-clamp-2 text-zinc-400">{item.observations}</p>}
       </div>
       <div className="mt-5 flex flex-wrap gap-3">

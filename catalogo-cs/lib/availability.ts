@@ -1,3 +1,4 @@
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 export type AvailabilityStatus = "disponible" | "ocupada" | "inactiva";
 
 export function formatAvailabilityTime(value?: string | null): string | null {
@@ -5,7 +6,7 @@ export function formatAvailabilityTime(value?: string | null): string | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
 
-  const timeZone = "America/Mexico_City";
+  const timeZone = APP_TIME_ZONE;
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",
@@ -18,14 +19,14 @@ export function formatAvailabilityTime(value?: string | null): string | null {
     month: "2-digit",
     day: "2-digit",
   }).format(date);
-  const time = new Intl.DateTimeFormat("es-MX", {
+  const time = new Intl.DateTimeFormat(APP_LOCALE, {
     timeZone,
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
 
   if (targetDay === today) return time;
-  const day = new Intl.DateTimeFormat("es-MX", {
+  const day = new Intl.DateTimeFormat(APP_LOCALE, {
     timeZone,
     weekday: "short",
     day: "numeric",

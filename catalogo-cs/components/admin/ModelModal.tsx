@@ -804,7 +804,7 @@ export default function ModelModal({
                   ]}
                 />
                 <InputField
-                  label="Tarifa por Hora (MXN)"
+                  label="Tarifa por Hora (COP)"
                   type="number"
                   value={form.precioBaseHora}
                   onChange={(e) => setForm({ ...form, precioBaseHora: parseFloat(e.target.value) || 0 })}

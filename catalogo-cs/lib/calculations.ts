@@ -38,8 +38,23 @@ export function getWeekStringFromDate(date: Date) {
   return `${year}-W${weekNum}`;
 }
 
+/**
+ * Formato unico de moneda de la aplicacion: pesos colombianos.
+ *
+ * Es el unico formateador de dinero que deben usar las vistas. Varias
+ * pantallas definian su propio helper con Intl.NumberFormat en es-MX y moneda
+ * MXN, de modo que el panel y los portales mostraban pesos mexicanos en un
+ * negocio colombiano.
+ *
+ * Se fija a cero decimales porque el peso colombiano no se opera con centavos
+ * y las cifras redondas evitan que la misma suma se vea distinta segun la
+ * pantalla.
+ */
 export const formatCurrency = (value: number | string | null | undefined) =>
-  `$${(Number(value) || 0).toLocaleString("es-CO")}`;
+  `$${(Number(value) || 0).toLocaleString("es-CO", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
 
 export const formatDate = (dateString: string | Date) =>
   new Date(dateString).toLocaleDateString("es-CO", { dateStyle: "short" });

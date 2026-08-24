@@ -1250,7 +1250,7 @@ export default function GodEyeDashboard({
                           dossier.finances.totalOwed > 0 ? (
                             <span className="flex items-center gap-1.5 rounded-lg bg-red-950/80 border border-red-500/50 px-2.5 py-1 font-bold text-red-300">
                               <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
-                              Debe ${dossier.finances.totalOwed.toLocaleString()} MXN
+                              Debe ${dossier.finances.totalOwed.toLocaleString()} COP
                             </span>
                           ) : (
                             <span className="flex items-center gap-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-1 font-bold text-emerald-300">
@@ -1506,7 +1506,7 @@ export default function GodEyeDashboard({
                                         {s.duracionFinalHoras ? ` (real: ${s.duracionFinalHoras}h)` : ""}
                                       </p>
                                       <p className="text-base sm:text-lg font-extrabold text-[#C5A55A]">
-                                        ${s.totalFinal || 0} MXN
+                                        ${s.totalFinal || 0} COP
                                       </p>
                                       {s.extrasServicio && s.extrasServicio.length > 0 && (
                                         <p className="text-xs text-zinc-300">
@@ -1553,7 +1553,7 @@ export default function GodEyeDashboard({
                               Deuda Consolidada
                             </span>
                             <p className="mt-1 text-lg sm:text-xl font-extrabold text-red-300">
-                              ${dossier.finances?.totalOwed?.toLocaleString() || 0} MXN
+                              ${dossier.finances?.totalOwed?.toLocaleString() || 0} COP
                             </p>
                           </div>
                           <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3.5">
@@ -1561,7 +1561,7 @@ export default function GodEyeDashboard({
                               Efectivo en Calle
                             </span>
                             <p className="mt-1 text-lg sm:text-xl font-extrabold text-[#C5A55A]">
-                              ${dossier.finances?.totalCashDue?.toLocaleString() || 0} MXN
+                              ${dossier.finances?.totalCashDue?.toLocaleString() || 0} COP
                             </p>
                           </div>
                           <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3.5">
@@ -1569,7 +1569,7 @@ export default function GodEyeDashboard({
                               Deuda Liquidación
                             </span>
                             <p className="mt-1 text-lg sm:text-xl font-extrabold text-amber-400">
-                              ${dossier.finances?.totalDebt?.toLocaleString() || 0} MXN
+                              ${dossier.finances?.totalDebt?.toLocaleString() || 0} COP
                             </p>
                           </div>
                         </div>
@@ -1586,7 +1586,7 @@ export default function GodEyeDashboard({
                               </span>
                             </div>
                             <p className="mt-1.5 text-base font-extrabold text-white">
-                              Ganancia Neta: ${dossier.finances.recentSettlement.netAmount} MXN
+                              Ganancia Neta: ${dossier.finances.recentSettlement.netAmount} COP
                             </p>
                           </div>
                         )}
@@ -1605,7 +1605,7 @@ export default function GodEyeDashboard({
                                 >
                                   <div>
                                     <span className="font-bold text-zinc-200">
-                                      Pendiente: ${o.montoRestante} MXN
+                                      Pendiente: ${o.montoRestante} COP
                                     </span>
                                     <span className="text-xs text-zinc-400 ml-2">
                                       (Total: ${o.montoOriginal} · Abonado: ${o.montoPagado || 0})
@@ -1638,7 +1638,7 @@ export default function GodEyeDashboard({
                                 >
                                   <div>
                                     <span className="font-bold text-red-300">
-                                      ${d.amount} MXN
+                                      ${d.amount} COP
                                     </span>
                                     <span className="text-xs text-zinc-300 ml-2">
                                       {d.description}
@@ -2092,7 +2092,7 @@ export default function GodEyeDashboard({
                                       </span>
                                       {s.fineAmount && Number(s.fineAmount) > 0 && (
                                         <span className="rounded-md bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-bold text-red-300">
-                                          -${s.fineAmount} MXN
+                                          -${s.fineAmount} COP
                                         </span>
                                       )}
                                       <span
@@ -2219,7 +2219,7 @@ export default function GodEyeDashboard({
                                   </span>
                                   {s.fineAmount && Number(s.fineAmount) > 0 && (
                                     <span className="rounded-md bg-red-500/20 border border-red-500/40 px-2 py-0.5 text-xs font-bold text-red-300">
-                                      -${s.fineAmount} MXN
+                                      -${s.fineAmount} COP
                                     </span>
                                   )}
                                   <span
@@ -2745,7 +2745,7 @@ export default function GodEyeDashboard({
 
               {sanctionType === "fine" && (
                 <div>
-                  <label className="text-zinc-200 font-bold">Monto de la Multa ($ MXN)</label>
+                  <label className="text-zinc-200 font-bold">Monto de la Multa ($ COP)</label>
                   <input
                     type="number"
                     min="1"
@@ -2991,7 +2991,7 @@ export default function GodEyeDashboard({
                     Monto Descontado
                   </span>
                   <span className="text-xs sm:text-sm font-extrabold text-red-300">
-                    -${selectedSanctionDetail.fineAmount} MXN
+                    -${selectedSanctionDetail.fineAmount} COP
                   </span>
                 </div>
               ) : (

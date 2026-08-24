@@ -11,7 +11,7 @@ import {
   getEmployeeRankingPositions,
   getDriverRankingPositions,
 } from "@/app/admin/liquidations/actions";
-import { getStartAndEndOfWeek } from "@/lib/calculations";
+import { formatCurrency, getStartAndEndOfWeek } from "@/lib/calculations";
 import PageHeader from "@/components/ui/page-header";
 import CutComparison from "./cut-comparison";
 import DebtManager from "./debt-manager";
@@ -375,5 +375,5 @@ export default function LiquidationsClient({
 }
 
 function SettlementMetric({ label, value }: { label: string; value: number }) {
-  return <div className="rounded-2xl border border-zinc-800 bg-black/40 p-4"><p className="text-xs uppercase tracking-wider text-zinc-500">{label}</p><p className="mt-2 font-serif text-2xl text-zinc-100">{new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value)}</p></div>;
+  return <div className="rounded-2xl border border-zinc-800 bg-black/40 p-4"><p className="text-xs uppercase tracking-wider text-zinc-500">{label}</p><p className="mt-2 font-serif text-2xl text-zinc-100">{formatCurrency(value)}</p></div>;
 }

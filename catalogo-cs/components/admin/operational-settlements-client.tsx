@@ -4,7 +4,9 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { closeCashObligation, payDriverSettlement, registerCashPayment, type CashSummary, type DriverTripSettlement } from "@/app/admin/transport/actions";
 
-const money = (value: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
+import { formatCurrency } from "@/lib/calculations";
+
+const money = formatCurrency;
 
 export default function OperationalSettlementsClient({ cash, trips, startDate, endDate }: { cash: CashSummary; trips: DriverTripSettlement[]; startDate: string; endDate: string }) {
   const [pending, startTransition] = useTransition();

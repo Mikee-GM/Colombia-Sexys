@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { confirmDriverSettlement } from "@/app/admin/liquidations/actions";
+import { formatCurrency } from "@/lib/calculations";
 import type { DriverLiquidationReport } from "./types";
 
-const money = (value: number) =>
-  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
+const money = formatCurrency;
 
 const statusLabel: Record<DriverLiquidationReport["weeklySettlement"]["status"], string> = {
   preview: "Sin actividad registrada",

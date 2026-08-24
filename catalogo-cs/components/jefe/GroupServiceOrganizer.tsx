@@ -28,6 +28,7 @@ import {
   type GroupTransportUnitInput,
 } from "@/lib/actions/jefe-panel";
 import type { ConversationMessage, Employee, GroupServiceRequest, Trip } from "@/lib/types";
+import { formatCurrency } from "@/lib/calculations";
 
 const LocationMap = dynamic(
   () => import("@/components/admin/transport-location-map"),
@@ -862,11 +863,7 @@ function ActiveGroupEditor({
           }];
     },
   );
-  const money = (value: number) =>
-    new Intl.NumberFormat("es-MX", {
-      style: "currency",
-      currency: "MXN",
-    }).format(value);
+  const money = formatCurrency;
 
   return (
     <>
@@ -1308,7 +1305,7 @@ function ActiveGroupEditor({
                 </div>
               </div>
               <div>
-                <label className="text-zinc-300 font-bold">Cargo manual de transporte ($ MXN, si aplica)</label>
+                <label className="text-zinc-300 font-bold">Cargo manual de transporte ($ COP, si aplica)</label>
                 <input
                   type="number"
                   min="0"
