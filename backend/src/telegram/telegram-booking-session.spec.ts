@@ -1,5 +1,6 @@
 import {
   detectGroupServiceIntent,
+  detectOpenEndedDuration,
   extractHireDuration,
   extractHirePaymentMethod,
   isUberAdminInputSession,
@@ -48,6 +49,48 @@ describe('Telegram booking session input parsing', () => {
     expect(extractHireDuration('2.5 horas')).toBeUndefined();
     expect(extractHireDuration('25 horas')).toBeUndefined();
     expect(extractHirePaymentMethod('luego te digo')).toBeUndefined();
+  });
+
+  /**
+   * La unidad era opcional, asi que cualquier cifra entre 1 y 24 metida en una
+   * frase se tomaba como la duracion y cambiaba en silencio el total a cobrar.
+   */
+  it.each([
+    'estoy en la carrera 15',
+    'llego a las 10',
+    'somos 2 personas',
+    'vivo en el apartamento 12',
+  ])('no toma como duración el número suelto de %s', (text) => {
+    expect(extractHireDuration(text)).toBeUndefined();
+  });
+
+  it('sigue leyendo la duración cuando lleva unidad o es la respuesta entera', () => {
+    expect(extractHireDuration('llego a las 9, quiero 3 horas')).toBe(3);
+    expect(extractHireDuration('4')).toBe(4);
+    expect(extractHireDuration('2h')).toBe(2);
+  });
+
+  /**
+   * "Abierto" se evalua en cada mensaje: suelto, una pregunta por el motel
+   * borraba las horas ya pactadas y pasaba el servicio a indefinido.
+   */
+  it.each([
+    '¿el motel está abierto?',
+    '¿eres abierta de mente?',
+    'busco un lugar abierto las 24 horas',
+  ])('no toma como duración abierta el mensaje %s', (text) => {
+    expect(detectOpenEndedDuration(text)).toBe(false);
+  });
+
+  it.each([
+    'quiero el servicio abierto',
+    'que sea tiempo indefinido',
+    'lo quiero indefinido',
+    'sin límite de horas',
+    'hasta que amanezca',
+    'no se cuantas horas',
+  ])('reconoce la duración abierta en %s', (text) => {
+    expect(detectOpenEndedDuration(text)).toBe(true);
   });
 
   it.each(['AWAITING_UBER_FARE_ACTION', 'AWAITING_UBER_FARE'])(
