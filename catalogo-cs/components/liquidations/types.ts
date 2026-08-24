@@ -102,6 +102,23 @@ export interface LiquidationDebt {
   remainingAmount: number;
 }
 
+/** Una fila del corte semanal, tal como la devuelve GET /liquidations/weekly-summary. */
+export interface WeeklySettlementSummary {
+  employeeId: string;
+  employeeName: string;
+  servicesCount: number;
+  salesTotal: number;
+  companyCommission: number;
+  finesTotal: number;
+  grossEmployeePay: number;
+  cashOutstanding: number;
+  cashOffset: number;
+  netEmployeePay: number;
+  remainingCashDebt: number;
+  status: "preview" | "confirmed";
+  confirmedAt: string | null;
+}
+
 /** Deuda tal como la devuelve GET /liquidations/debts, con la empleada resuelta. */
 export interface DebtWithEmployee extends LiquidationDebt {
   employee: { id: string; name: string; realName: string } | null;

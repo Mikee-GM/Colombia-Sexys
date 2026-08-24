@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, IsNull, LessThanOrEqual, Repository } from 'typeorm';
+import { DataSource, In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import { Usuarios } from '../users/entities/user.entity';
 import { CreateLiquidationRecordDto } from './dto/create-liquidation-record.dto';
 import { CreateDebtDto, CreateDebtPaymentDto } from './dto/debt.dto';
@@ -157,6 +157,97 @@ export class LiquidationsService {
         confirmedAt: existing?.confirmedAt ?? null,
       },
     };
+  }
+
+  /**
+   * Corte semanal de todas las empleadas con actividad en el periodo.
+   *
+   * getReport resuelve una empleada por peticion, asi que la tabla del corte
+   * habria necesitado una llamada por empleada. Aqui se leen los registros del
+   * periodo una sola vez y se agrupan; el alcance por rol lo aplica getRecords.
+   */
+  async getWeeklySummary(query: LiquidationPeriodQueryDto, actor: Usuarios) {
+    this.validatePeriod(query);
+
+    const records = await this.getRecords(
+      { ...query, employeeId: undefined } as LiquidationPeriodQueryDto,
+      actor,
+    );
+    if (!records.length) return [];
+
+    const weekStart = query.startDate.toISOString().slice(0, 10);
+    const employeeIds = [...new Set(records.map((record) => record.employeeId))];
+
+    const [settlements, obligations] = await Promise.all([
+      this.weeklySettlements.find({
+        where: { employeeId: In(employeeIds), weekStart },
+      }),
+      this.cashObligations.find({
+        where: {
+          employeeId: In(employeeIds),
+          status: 'pending',
+          calculationStatus: 'ready',
+          serviceDate: LessThanOrEqual(query.endDate),
+        },
+      }),
+    ]);
+
+    const settlementByEmployee = new Map(
+      settlements.map((item) => [item.employeeId, item]),
+    );
+    const cashByEmployee = new Map<string, number>();
+    for (const item of obligations) {
+      const pending = Math.max(0, Number(item.amount) - Number(item.paidAmount));
+      cashByEmployee.set(
+        item.employeeId,
+        (cashByEmployee.get(item.employeeId) ?? 0) + pending,
+      );
+    }
+
+    const recordsByEmployee = new Map<string, typeof records>();
+    for (const record of records) {
+      const bucket = recordsByEmployee.get(record.employeeId) ?? [];
+      bucket.push(record);
+      recordsByEmployee.set(record.employeeId, bucket);
+    }
+
+    return [...recordsByEmployee.entries()]
+      .map(([employeeId, employeeRecords]) => {
+        const cut = calculateCut(employeeRecords);
+        const existing = settlementByEmployee.get(employeeId);
+        const cashOutstanding = cashByEmployee.get(employeeId) ?? 0;
+
+        const grossEmployeePay = existing
+          ? Number(existing.grossEmployeePay)
+          : cut.employeeGrossPay;
+        const cashOffset = existing
+          ? Number(existing.cashOffset)
+          : Math.min(grossEmployeePay, cashOutstanding);
+        const netEmployeePay = existing
+          ? Number(existing.netEmployeePay)
+          : grossEmployeePay - cashOffset;
+
+        const employee = employeeRecords[0]?.employee;
+
+        return {
+          employeeId,
+          employeeName: employee?.nombreArtistico ?? 'Empleada',
+          servicesCount: cut.count,
+          salesTotal: cut.salesTotal,
+          companyCommission: cut.companyCommission,
+          finesTotal: cut.finesTotal,
+          grossEmployeePay,
+          cashOutstanding,
+          cashOffset,
+          netEmployeePay,
+          remainingCashDebt: existing
+            ? Number(existing.remainingCashDebt)
+            : Math.max(0, cashOutstanding - cashOffset),
+          status: existing ? ('confirmed' as const) : ('preview' as const),
+          confirmedAt: existing?.confirmedAt ?? null,
+        };
+      })
+      .sort((a, b) => b.netEmployeePay - a.netEmployeePay);
   }
 
   async confirmWeeklySettlement(

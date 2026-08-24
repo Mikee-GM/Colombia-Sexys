@@ -13,6 +13,7 @@ import type {
   LiquidationRecord,
   LiquidationReport,
   LiquidationRecordInput,
+  WeeklySettlementSummary,
 } from "@/components/liquidations/types";
 import type { DriverKpi, EmployeeKpi } from "@/lib/types";
 
@@ -31,6 +32,13 @@ export async function getLiquidationsRecords(startDate: string, endDate: string)
 export async function getLiquidationEmployees(startDate: string, endDate: string) {
   return await apiFetch<LiquidationEmployee[]>(
     `/liquidations/employees?${periodParams(startDate, endDate)}`,
+  );
+}
+
+/** Corte semanal de todas las empleadas con actividad, en una sola peticion. */
+export async function getWeeklySummary(startDate: string, endDate: string) {
+  return await apiFetch<WeeklySettlementSummary[]>(
+    `/liquidations/weekly-summary?${periodParams(startDate, endDate)}`,
   );
 }
 

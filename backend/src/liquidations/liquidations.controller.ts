@@ -76,6 +76,16 @@ export class LiquidationsController {
     return this.service.getReport(query, actor);
   }
 
+  // Corte semanal de todas las empleadas, para la tabla del ERP.
+  @Get('weekly-summary')
+  @Roles('admin', 'jefe')
+  getWeeklySummary(
+    @Query() query: LiquidationPeriodQueryDto,
+    @GetUser() actor: Usuarios,
+  ) {
+    return this.service.getWeeklySummary(query, actor);
+  }
+
   @Post('weekly-settlements/confirm')
   @Roles('admin')
   confirmWeeklySettlement(
