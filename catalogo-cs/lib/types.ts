@@ -162,6 +162,8 @@ export type Service = {
   empleada?: Employee;
 };
 
+export type TripZone = "montecarlo" | "majestic" | "domicilio";
+
 export type Trip = {
   id: string;
   servicioId: string;
@@ -170,6 +172,7 @@ export type Trip = {
   tipo: "ida" | "regreso";
   estado: "notificado" | "aceptado" | "en_camino" | "llegado" | "en_curso" | "finalizado" | "rechazado" | "cancelado";
   proveedorTransporte: "interno" | "uber";
+  zona?: TripZone;
   tarifa: string | number;
   telegramUberFileId?: string | null;
   uberScreenshotUrl?: string | null;
@@ -178,6 +181,15 @@ export type Trip = {
   fareConfirmedAt?: string | null;
   fareConfirmationOverride?: boolean;
   driverSettlementId?: string | null;
+  /**
+   * Ciclo de la oferta al chofer. El backend ya los guarda en viajes y son lo
+   * que permite medir cuanto tarda en aceptarse un viaje y cuantas ofertas
+   * vencieron sin respuesta.
+   */
+  ofertaExpiraEn?: string | null;
+  horaNotificacion?: string;
+  horaAceptacion?: string | null;
+  horaFinViaje?: string | null;
   passengers?: TripPassenger[];
 };
 
