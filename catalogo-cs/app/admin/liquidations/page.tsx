@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
+
 import { getCurrentUser } from "@/lib/auth";
+import { optionalSource } from "@/lib/optional-source";
 import { ErpPageHeader } from "@/components/erp/primitives";
 import CorteSemanal from "@/components/erp/corte-semanal";
 import LiquidationsClient from "@/components/liquidations/liquidations-client";
@@ -9,10 +12,16 @@ export const dynamic = "force-dynamic";
 
 export default async function LiquidationsPage() {
   const user = await getCurrentUser();
+  if (!user) redirect("/admin");
+
   const { startDate, endDate } = getOperationalWeek();
 
   // El corte de toda la semana; debajo queda el desglose por persona.
-  const summary = await getWeeklySummary(startDate, endDate).catch(() => []);
+  const summary = await optionalSource(
+    getWeeklySummary(startDate, endDate),
+    [],
+    "el corte semanal",
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -28,7 +37,7 @@ export default async function LiquidationsPage() {
       />
 
       <div className="border-t border-zinc-800 pt-6">
-        <LiquidationsClient isAdmin={user?.rol === "admin"} />
+        <LiquidationsClient isAdmin={user.rol === "admin"} />
       </div>
     </div>
   );

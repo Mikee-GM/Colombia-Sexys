@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import PageHeader from "@/components/ui/page-header";
 import { getEmployee } from "@/lib/data/employees";
 import { getEmployeeRatingComments } from "@/lib/actions/discipline";
+import { optionalSource } from "@/lib/optional-source";
 import Image from "next/image";
 
 type Props = {
@@ -12,7 +13,11 @@ export default async function EmployeeDetailPage({ params }: Props) {
   const { id } = await params;
   const employee = await getEmployee(id);
   const photos = employee.empleadaFotos?.sort((a, b) => a.orden - b.orden) ?? [];
-  const ratingComments = await getEmployeeRatingComments(id).catch(() => []);
+  const ratingComments = await optionalSource(
+    getEmployeeRatingComments(id),
+    [],
+    "la ficha de la empleada",
+  );
   const negativeComments = ratingComments.filter((rating) => rating.stars <= 3);
 
   return (

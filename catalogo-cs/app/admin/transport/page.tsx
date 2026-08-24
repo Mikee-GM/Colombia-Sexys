@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { getCurrentUser, isRedirectError } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/auth";
+import { optionalSource } from "@/lib/optional-source";
 import { getServices } from "@/lib/data/services";
 import { getDrivers } from "@/lib/data/drivers";
 import { Panel } from "@/components/erp/primitives";
@@ -19,25 +20,14 @@ export const dynamic = "force-dynamic";
  * transporte, y aqui aparecian mezclados en la misma pantalla.
  */
 
-/** Degrada una fuente sin tragarse las redirecciones de sesion de apiFetch. */
-async function opcional<T>(promise: Promise<T>, fallback: T): Promise<T> {
-  try {
-    return await promise;
-  } catch (error) {
-    if (isRedirectError(error)) throw error;
-    console.error("Fuente no disponible en transporte:", error);
-    return fallback;
-  }
-}
-
 export default async function TransportPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin");
 
   const [services, drivers, configuration] = await Promise.all([
-    opcional(getServices(), []),
-    opcional(getDrivers(), []),
-    opcional(getTransportConfiguration(), null),
+    optionalSource(getServices(), [], "transporte"),
+    optionalSource(getDrivers(), [], "transporte"),
+    optionalSource(getTransportConfiguration(), null, "transporte"),
   ]);
 
   return (

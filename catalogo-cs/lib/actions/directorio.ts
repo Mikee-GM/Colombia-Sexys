@@ -1,7 +1,7 @@
 "use server";
 
 import { apiFetch } from "@/lib/api-server";
-import { isRedirectError } from "@/lib/auth";
+import { optionalSource } from "@/lib/optional-source";
 import type {
   ApiUser,
   Client,
@@ -26,21 +26,11 @@ export async function getDirectorio(): Promise<Directorio> {
   };
 
   /* Cada lista se degrada por separado: sin choferes, el resto sigue con nombre. */
-  const seguro = async <T>(promise: Promise<T>, fallback: T): Promise<T> => {
-    try {
-      return await promise;
-    } catch (error) {
-      if (isRedirectError(error)) throw error;
-      console.error("Fuente no disponible en el directorio:", error);
-      return fallback;
-    }
-  };
-
   const [employees, drivers, users, clients] = await Promise.all([
-    seguro(apiFetch<Employee[]>("/employees"), []),
-    seguro(apiFetch<Driver[]>("/drivers"), []),
-    seguro(apiFetch<ApiUser[]>("/users"), []),
-    seguro(apiFetch<Client[]>("/clients"), []),
+    optionalSource(apiFetch<Employee[]>("/employees"), [], "el directorio"),
+    optionalSource(apiFetch<Driver[]>("/drivers"), [], "el directorio"),
+    optionalSource(apiFetch<ApiUser[]>("/users"), [], "el directorio"),
+    optionalSource(apiFetch<Client[]>("/clients"), [], "el directorio"),
   ]);
 
   for (const employee of employees ?? []) {
