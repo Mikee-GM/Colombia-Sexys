@@ -762,3 +762,15 @@ export type CreateManualServiceInput = {
   clienteTelegramId?: string;
 };
 
+
+/**
+ * Nombres de las personas del sistema, indexados por tipo e id.
+ *
+ * Los reportes de conducta y las sanciones guardan a quien senalan como un par
+ * de tipo e id, sin nombre, asi que el panel disciplinario necesita esta
+ * traduccion para no mostrar UUIDs.
+ */
+export type Directorio = Record<
+  "client" | "employee" | "driver" | "boss",
+  Record<string, string>
+>;
