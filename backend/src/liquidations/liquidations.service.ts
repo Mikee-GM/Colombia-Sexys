@@ -176,7 +176,9 @@ export class LiquidationsService {
     if (!records.length) return [];
 
     const weekStart = query.startDate.toISOString().slice(0, 10);
-    const employeeIds = [...new Set(records.map((record) => record.employeeId))];
+    const employeeIds = [
+      ...new Set(records.map((record) => record.employeeId)),
+    ];
 
     const [settlements, obligations] = await Promise.all([
       this.weeklySettlements.find({
@@ -197,7 +199,10 @@ export class LiquidationsService {
     );
     const cashByEmployee = new Map<string, number>();
     for (const item of obligations) {
-      const pending = Math.max(0, Number(item.amount) - Number(item.paidAmount));
+      const pending = Math.max(
+        0,
+        Number(item.amount) - Number(item.paidAmount),
+      );
       cashByEmployee.set(
         item.employeeId,
         (cashByEmployee.get(item.employeeId) ?? 0) + pending,
