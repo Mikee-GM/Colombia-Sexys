@@ -9,7 +9,7 @@ import {
   deleteChoferAction,
   updateChoferAction,
 } from "@/lib/actions/choferes";
-import { generateTelegramOtpAction } from "@/lib/actions/jefes";
+import TelegramOtpButton from "@/components/erp/telegram-otp-button";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import InputField from "../ui/InputField";
 import SearchBar from "../ui/SearchBar";
@@ -72,7 +72,6 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
   const [saving, setSaving] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState<Chofer | null>(null);
-  const [otpCodes, setOtpCodes] = useState<Record<string, string>>({});
   const [selectedEvaluationUser, setSelectedEvaluationUser] = useState<{ id: string; name: string } | null>(null);
 
   const handleSaveChofer = async (e: React.FormEvent) => {
@@ -159,21 +158,6 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
       setChoferes((prev) => prev.filter((c) => c.id !== chofer.id));
     } catch (err: any) {
       toast.error(err.message || "Error al eliminar el chofer");
-    }
-  };
-
-  const handleGenerateOtp = async (usuarioId: string) => {
-    try {
-      const res = await generateTelegramOtpAction(usuarioId);
-      if (!res.success) {
-        throw new Error(res.error || "No se pudo generar el OTP");
-      }
-      if (res.code) {
-        setOtpCodes((prev) => ({ ...prev, [usuarioId]: res.code || "" }));
-        toast.success("OTP generado correctamente.");
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Error al generar OTP");
     }
   };
 
@@ -336,12 +320,12 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 gap-6 border-b border-zinc-800 pb-5">
         <div>
-          <h2 className="font-heading text-3xl font-semibold text-white tracking-wide">
+          <h2 className="font-heading text-3xl font-semibold text-[#E8D5A3] leading-[1.15]">
             Choferes
           </h2>
-          <p className="text-sm text-[#C5A55A]/80 font-light mt-1">
+          <p className="text-[13px] text-zinc-500 mt-1.5">
             Gestiona las cuentas de los choferes y su vinculacion con Telegram
           </p>
         </div>
@@ -419,33 +403,7 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
                     <ReliabilityRating score={chofer.trustScore} compact />
                   </td>
                   <td className="px-6 py-4 text-sm font-medium">
-                    {otpCodes[chofer.usuarioId] ? (
-                      <div className="flex items-center gap-2">
-                        <span className="bg-[#C5A55A]/10 text-[#C5A55A] border border-[#C5A55A]/30 px-3 py-1.5 rounded-lg text-sm font-mono font-bold">
-                          {otpCodes[chofer.usuarioId]}
-                        </span>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(`/vincular ${otpCodes[chofer.usuarioId]}`);
-                            toast.success("Copiado al portapapeles");
-                          }}
-                          title="Copiar comando de vinculacion"
-                          className="text-[#C5A55A] hover:text-[#E8D5A3] transition-colors p-1"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleGenerateOtp(chofer.usuarioId)}
-                        className="text-xs font-bold tracking-wider text-[#C5A55A] hover:text-[#E8D5A3] transition-colors uppercase"
-                      >
-                        Generar OTP
-                      </button>
-                    )}
+                    <TelegramOtpButton usuarioId={chofer.usuarioId} />
                   </td>
                   <td className="px-6 py-4 text-right space-x-4">
                     <button

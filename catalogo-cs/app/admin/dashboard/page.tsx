@@ -1,4 +1,5 @@
-import PageHeader from "@/components/ui/page-header";
+import { ErpPageHeader } from "@/components/erp/primitives";
+import CentroDeMando from "@/components/erp/centro-de-mando";
 import GodEyeDashboard from "@/components/admin/god-eye/GodEyeDashboard";
 import {
   getGodEyeOverviewAction,
@@ -38,17 +39,20 @@ export default async function DashboardPage() {
   ]);
 
   return (
-    <>
-      <PageHeader
-        title="Dashboard"
-        description=""
+    <div className="flex flex-col gap-6">
+      <ErpPageHeader
+        title="Centro de Mando"
+        description="Estado de la operacion, alertas y accesos a cada modulo"
       />
+
+      {/* Resumen del ERP; debajo queda el tablero detallado que ya existia. */}
+      <CentroDeMando overview={overview} />
 
       <GodEyeDashboard
         initialOverview={overview}
         initialActors={actors}
         initialAppeals={appeals}
       />
-    </>
+    </div>
   );
 }

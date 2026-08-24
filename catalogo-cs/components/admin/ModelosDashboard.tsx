@@ -10,7 +10,7 @@ import {
   createModeloAction as createModelo,
   updateModeloAction as updateModelo,
 } from "@/lib/actions/modelos";
-import { generateTelegramOtpAction } from "@/lib/actions/jefes";
+import TelegramOtpButton from "@/components/erp/telegram-otp-button";
 import type { Modelo, ModeloPayload } from "@/types";
 import ModelModal from "./ModelModal";
 import ConfirmDialog from "../ui/ConfirmDialog";
@@ -37,23 +37,7 @@ export default function ModelosDashboard({
   const [editingModelo, setEditingModelo] = useState<Modelo | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Modelo | null>(null);
-  const [otpCodes, setOtpCodes] = useState<Record<string, string>>({});
   const [selectedEvaluationUser, setSelectedEvaluationUser] = useState<{ id: string; name: string } | null>(null);
-
-  const handleGenerateOtp = async (usuarioId: string) => {
-    try {
-      const res = await generateTelegramOtpAction(usuarioId);
-      if (!res.success) {
-        throw new Error(res.error || "No se pudo generar el OTP");
-      }
-      if (res.code) {
-        setOtpCodes((prev) => ({ ...prev, [usuarioId]: res.code || "" }));
-        toast.success("OTP generado correctamente.");
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Error al generar OTP");
-    }
-  };
 
   const fetchData = async () => {
     try {
@@ -190,42 +174,7 @@ export default function ModelosDashboard({
         />
         {modelo.usuarioId && (
           <div className="mb-3">
-            {otpCodes[modelo.usuarioId!] ? (
-              <div className="flex items-center gap-2">
-                <div className="inline-block bg-[#C5A55A]/10 text-[#C5A55A] border border-[#C5A55A]/30 px-3 py-1.5 rounded-lg text-sm font-mono font-bold">
-                  OTP: {otpCodes[modelo.usuarioId!]}
-                </div>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      `/vincular ${otpCodes[modelo.usuarioId!]}`,
-                    );
-                    toast.success("Copiado al portapapeles");
-                  }}
-                  title="Copiar comando de vinculacion"
-                  className="text-[#C5A55A] hover:text-[#E8D5A3] transition-colors p-1"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => handleGenerateOtp(modelo.usuarioId!)}
-                className="text-xs font-bold tracking-wider text-[#C5A55A] hover:text-[#E8D5A3] transition-colors uppercase"
-              >
-                Generar OTP
-              </button>
-            )}
+            <TelegramOtpButton usuarioId={modelo.usuarioId} />
           </div>
         )}
         <div className="mt-auto flex gap-3 pt-3.5 border-t border-zinc-800/60">
@@ -294,12 +243,12 @@ export default function ModelosDashboard({
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 gap-6 border-b border-zinc-800 pb-5">
         <div>
-          <h2 className="font-heading text-3xl font-semibold text-white tracking-wide">
-            Directorio
+          <h2 className="font-heading text-3xl font-semibold text-[#E8D5A3] leading-[1.15]">
+            Modelos
           </h2>
-          <p className="text-sm text-[#C5A55A]/80 font-light mt-1">
+          <p className="text-[13px] text-zinc-500 mt-1.5">
             Gestiona los perfiles y fotos de las modelos
           </p>
         </div>
