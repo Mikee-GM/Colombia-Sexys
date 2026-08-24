@@ -11,6 +11,7 @@ import { UpdateDriverDto } from './dto/update-driver.dto';
 import { Choferes } from './entities/driver.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { Viajes } from '../trips/entities/trip.entity';
+import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 
 export interface DriverPortalTripItem {
   id: string;
@@ -477,12 +478,12 @@ export class DriversService {
     );
     const now = new Date();
     const isSameDay = (d1: Date, d2: Date) =>
-      d1.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) ===
-      d2.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
+      d1.toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE }) ===
+      d2.toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE });
     const isSameMonth = (d1: Date, d2: Date) => {
       const fmt = (d: Date) =>
-        new Intl.DateTimeFormat('es-MX', {
-          timeZone: 'America/Mexico_City',
+        new Intl.DateTimeFormat(APP_LOCALE, {
+          timeZone: APP_TIME_ZONE,
           year: 'numeric',
           month: 'numeric',
         }).format(d);

@@ -1,3 +1,4 @@
+import { APP_LOCALE, APP_TIME_ZONE } from '../common/locale';
 import {
   Injectable,
   NotFoundException,
@@ -909,19 +910,19 @@ export class EmployeesService {
 
     const isSameDay = (d1: Date, d2: Date) => {
       return (
-        d1.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' }) ===
-        d2.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' })
+        d1.toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE }) ===
+        d2.toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE })
       );
     };
 
     const isSameMonth = (d1: Date, d2: Date) => {
-      const f1 = new Intl.DateTimeFormat('es-MX', {
-        timeZone: 'America/Mexico_City',
+      const f1 = new Intl.DateTimeFormat(APP_LOCALE, {
+        timeZone: APP_TIME_ZONE,
         year: 'numeric',
         month: 'numeric',
       }).format(d1);
-      const f2 = new Intl.DateTimeFormat('es-MX', {
-        timeZone: 'America/Mexico_City',
+      const f2 = new Intl.DateTimeFormat(APP_LOCALE, {
+        timeZone: APP_TIME_ZONE,
         year: 'numeric',
         month: 'numeric',
       }).format(d2);

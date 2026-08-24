@@ -17,6 +17,7 @@ import { Servicios } from './entities/service.entity';
 import { AiMessageService } from '../ai/ai-message.service';
 import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 import { describeError } from '../common/errors/error-message';
+import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 
 @Injectable()
 export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
@@ -112,11 +113,11 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
         await this.serviciosRepository.save(service);
 
         const horaStr = new Date(service.fechaProgramada).toLocaleTimeString(
-          'es-MX',
+          APP_LOCALE,
           {
             hour: '2-digit',
             minute: '2-digit',
-            timeZone: 'America/Mexico_City',
+            timeZone: APP_TIME_ZONE,
           },
         );
 

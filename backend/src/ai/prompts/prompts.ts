@@ -1,3 +1,4 @@
+import { APP_LOCALE, APP_TIME_ZONE } from '../../common/locale';
 export interface EmpleadaPromptParams {
   nombreArtistico: string;
   precioBaseHora: number | string;
@@ -315,7 +316,7 @@ ${
 }
 
 FECHA Y HORA ACTUAL DE REFERENCIA:
-${params.fechaHoraActual || new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}
+${params.fechaHoraActual || new Date().toLocaleString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}
 
 TUS HORARIOS OCUPADOS O CITAS PREVIAS (PRÓXIMOS 7 DÍAS):
 ${busyScheduleList}
