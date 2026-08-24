@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -178,12 +179,18 @@ export default function ModelosDashboard({
           </div>
         )}
         <div className="mt-auto flex gap-3 pt-3.5 border-t border-zinc-800/60">
+          <Link
+            href={`/admin/modelos/${modelo._id}`}
+            className="text-xs font-bold tracking-wider text-[#E8D5A3] uppercase hover:text-white transition-colors"
+          >
+            Expediente
+          </Link>
           <button
             onClick={() => {
               setEditingModelo(modelo);
               setShowModal(true);
             }}
-            className="text-xs font-bold tracking-wider text-[#E8D5A3] uppercase hover:text-white transition-colors"
+            className="text-xs font-bold tracking-wider text-[#C5A55A] uppercase hover:text-white transition-colors"
           >
             Editar
           </button>
