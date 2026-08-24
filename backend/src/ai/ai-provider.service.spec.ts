@@ -35,7 +35,7 @@ describe('AiProviderService — configuración por entorno', () => {
   });
 
   it('permite cambiar de modelo sin desplegar', () => {
-    expect(modelOf(build({}))).toBe('grok-4.20-0309-non-reasoning');
+    expect(modelOf(build({}))).toBe('grok-4.3-latest');
     expect(modelOf(build({ AI_CHAT_MODEL: 'grok-9' }))).toBe('grok-9');
   });
 });
