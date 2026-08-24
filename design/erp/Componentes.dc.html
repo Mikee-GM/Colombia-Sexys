@@ -1,0 +1,291 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body {
+      margin: 0;
+      background-color: #000000;
+      color: #ffffff;
+      font-family: Montserrat, system-ui, -apple-system, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+    * { box-sizing: border-box; }
+    .shell { display: flex; min-height: 100vh; }
+
+    /* ---- sidebar (w-64, bg-[#050505], border-zinc-800/80) ---- */
+    .sb { width: 256px; flex-shrink: 0; background-color: #050505; border-right: 1px solid rgba(39,39,42,0.8); display: flex; flex-direction: column; }
+    .sb-head { padding: 24px; border-bottom: 1px solid rgba(39,39,42,0.8); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .sb-logo { width: 48px; height: 48px; border-radius: 12px; border: 1px solid rgba(197,165,90,0.3); display: flex; align-items: center; justify-content: center; }
+    .sb-brand { margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.25em; color: #C5A55A; text-transform: uppercase; }
+    .sb-nav { flex: 1 1 auto; padding: 24px 12px; display: flex; flex-direction: column; gap: 24px; }
+    .sb-group { display: flex; flex-direction: column; gap: 4px; }
+    .sb-group-title { padding: 0 12px 2px; font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #71717a; }
+    .sb-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; color: #a1a1aa; }
+    .sb-item.is-active { color: #000000; background-color: #C5A55A; box-shadow: 0 4px 6px -1px rgba(197,165,90,0.2); }
+    .sb-foot { padding: 16px; border-top: 1px solid rgba(39,39,42,0.8); background-color: rgba(9,9,11,0.4); display: flex; flex-direction: column; gap: 8px; }
+    .sb-profile { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 12px; background-color: rgba(24,24,27,0.6); border: 1px solid rgba(39,39,42,0.8); }
+    .sb-profile-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .sb-avatar { width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; background-color: rgba(197,165,90,0.2); display: flex; align-items: center; justify-content: center; }
+    .sb-profile-text { min-width: 0; }
+    .sb-profile-name { margin: 0; font-size: 12px; font-weight: 700; color: #ffffff; }
+    .sb-profile-mail { margin: 2px 0 0; font-size: 10px; color: #71717a; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+    .sb-logout { display: flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 12px; background-color: rgba(24,24,27,0.8); border: 1px solid #27272a; font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #a1a1aa; }
+
+    /* ---- main ---- */
+    .main { flex: 1 1 auto; min-width: 0; background-color: #000000; padding: 32px; display: flex; flex-direction: column; gap: 24px; }
+    .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 1px solid #27272a; padding-bottom: 20px; }
+    .page-title { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 30px; font-weight: 600; line-height: 1.15; color: #E8D5A3; }
+    .page-sub { margin: 6px 0 0; font-size: 13px; color: #71717a; }
+    .head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+    /* ---- controls ---- */
+    .seg { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 12px; border: 1px solid #27272a; background-color: #09090b; }
+    .seg-item { padding: 7px 14px; border-radius: 9px; font-size: 12px; font-weight: 600; color: #a1a1aa; }
+    .seg-item.is-on { background-color: #C5A55A; color: #000000; }
+    .btn { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 12px; border: 1px solid rgba(197,165,90,0.3); background-color: rgba(197,165,90,0.08); font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #C5A55A; }
+    .btn-solid { border-color: #C5A55A; background-color: #C5A55A; color: #000000; }
+    .btn-ghost { border-color: #27272a; background-color: #09090b; color: #d4d4d8; }
+    .field { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; border: 1px solid #27272a; background-color: #000000; font-size: 13px; color: #71717a; }
+
+    /* ---- panels ---- */
+    .panel { border-radius: 16px; border: 1px solid #27272a; background-color: rgba(0,0,0,0.4); display: flex; flex-direction: column; overflow: hidden; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid #27272a; }
+    .panel-title { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 16px; font-weight: 600; letter-spacing: 0.04em; color: #e4e4e7; }
+    .panel-sub { margin: 4px 0 0; font-size: 11px; color: #71717a; }
+    .panel-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* ---- kpi ---- */
+    .kpis { display: grid; gap: 16px; }
+    .kpi { border-radius: 16px; border: 1px solid #27272a; background-color: rgba(0,0,0,0.4); padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+    .kpi-label { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #71717a; }
+    .kpi-value { font-family: Cinzel, Georgia, serif; font-size: 26px; font-weight: 600; line-height: 1.1; color: #ffffff; font-variant-numeric: tabular-nums; }
+    .kpi-foot { font-size: 11px; color: #71717a; }
+    .up { color: #4ade80; font-weight: 600; }
+    .down { color: #f87171; font-weight: 600; }
+
+    /* ---- table ---- */
+    .tbl { width: 100%; border-collapse: collapse; }
+    .tbl th { text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #71717a; border-bottom: 1px solid #27272a; white-space: nowrap; }
+    .tbl td { padding: 13px 16px; font-size: 13px; color: #d4d4d8; border-bottom: 1px solid rgba(39,39,42,0.55); vertical-align: middle; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .strong { color: #ffffff; font-weight: 600; }
+    .muted { color: #71717a; font-size: 11px; }
+    .tfoot td { background-color: rgba(24,24,27,0.5); font-weight: 700; color: #ffffff; border-top: 1px solid #27272a; }
+
+    /* ---- badges ---- */
+    .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; white-space: nowrap; }
+    .b-gold { border: 1px solid rgba(197,165,90,0.3); background-color: rgba(197,165,90,0.1); color: #C5A55A; }
+    .b-green { border: 1px solid rgba(74,222,128,0.25); background-color: rgba(74,222,128,0.08); color: #4ade80; }
+    .b-red { border: 1px solid rgba(248,113,113,0.25); background-color: rgba(248,113,113,0.08); color: #f87171; }
+    .b-amber { border: 1px solid rgba(251,191,36,0.25); background-color: rgba(251,191,36,0.08); color: #fbbf24; }
+    .b-blue { border: 1px solid rgba(96,165,250,0.25); background-color: rgba(96,165,250,0.08); color: #60a5fa; }
+    .b-zinc { border: 1px solid #27272a; background-color: rgba(24,24,27,0.6); color: #a1a1aa; }
+    .dot { width: 6px; height: 6px; border-radius: 999px; background-color: currentColor; }
+
+    /* ---- misc ---- */
+    .row { display: flex; align-items: center; gap: 10px; }
+    .col { display: flex; flex-direction: column; gap: 4px; }
+    .grid { display: grid; gap: 16px; }
+    .avatar { width: 34px; height: 34px; border-radius: 10px; background-color: rgba(197,165,90,0.12); border: 1px solid rgba(197,165,90,0.25); display: flex; align-items: center; justify-content: center; font-family: Cinzel, Georgia, serif; font-size: 13px; font-weight: 600; color: #C5A55A; flex-shrink: 0; }
+    .bar-track { height: 6px; border-radius: 999px; background-color: #18181b; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #8B7635, #C5A55A); }
+    .divider { height: 1px; background-color: #27272a; }
+    .list { display: flex; flex-direction: column; }
+    .list-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 20px; border-bottom: 1px solid rgba(39,39,42,0.55); }
+    .list-item:last-child { border-bottom: none; }
+    .kv { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid rgba(39,39,42,0.5); }
+    .kv:last-child { border-bottom: none; }
+    .kv-k { font-size: 12px; color: #71717a; }
+    .kv-v { font-size: 13px; color: #e4e4e7; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .note { font-size: 11px; color: #71717a; line-height: 1.5; }
+    .sect-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #8B7635; }
+
+    /* ---- campos navegables: abren la ficha detallada del registro ---- */
+    .link { color: #ffffff; font-weight: 600; border-bottom: 1px solid rgba(197,165,90,0.35); }
+    .link:hover { color: #E8D5A3; border-bottom-color: #C5A55A; }
+
+    /* ---- tarjeta de modelo (misma anatomía que ModelosDashboard) ---- */
+    .card { background-color: rgba(24,24,27,0.3); border: 1px solid #27272a; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+    .card-photo { aspect-ratio: 3 / 4; position: relative; background: linear-gradient(160deg, #101013, #050505); border-bottom: 1px solid #27272a; display: flex; align-items: center; justify-content: center; }
+    .card-photo-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2em; color: #52525b; }
+    .card-tl { position: absolute; top: 8px; left: 8px; }
+    .card-tr { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .card-body { padding: 20px; flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; }
+    .card-name { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 20px; font-weight: 700; color: #ffffff; }
+    .card-foot { margin-top: auto; display: flex; gap: 12px; padding-top: 14px; border-top: 1px solid rgba(39,39,42,0.6); }
+    .card-action { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #E8D5A3; }
+    .card-action.is-muted { color: #a1a1aa; }
+    .price-chip { display: inline-block; background-color: rgba(197,165,90,0.1); color: #C5A55A; border: 1px solid rgba(197,165,90,0.3); padding: 6px 12px; border-radius: 8px; font-size: 14px; font-family: ui-monospace, Menlo, monospace; font-weight: 700; }
+
+    /* ---- OTP de Telegram (mismo bloque del panel actual) ---- */
+    .otp-row { display: flex; align-items: center; gap: 8px; }
+    .otp-code { background-color: rgba(197,165,90,0.1); color: #C5A55A; border: 1px solid rgba(197,165,90,0.3); padding: 6px 12px; border-radius: 8px; font-size: 14px; font-family: ui-monospace, Menlo, monospace; font-weight: 700; letter-spacing: 0.08em; }
+    .otp-generate { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #C5A55A; }
+
+    /* ---- revisión de fotos ---- */
+    .shot { border-radius: 12px; border: 1px solid #27272a; background: linear-gradient(160deg, #101013, #050505); aspect-ratio: 3 / 4; display: flex; align-items: center; justify-content: center; position: relative; }
+    .shot-actions { display: flex; gap: 6px; }
+    .shot-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 6px; border-radius: 9px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  </style>
+</helmet>
+<div style="background-color:#000000; padding:40px; display:flex; flex-direction:column; gap:32px; min-height:100vh">
+  <div>
+    <h1 class="page-title" style="font-size:32px">Sistema del ERP</h1>
+    <p class="page-sub">Tokens y componentes heredados del panel administrativo de Colombia Sexys</p>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2 class="panel-title">Color</h2><p class="panel-sub">Definidos en app/globals.css</p></div></div>
+    <div class="panel-body">
+      <span class="sect-label">Marca</span>
+      <div style="display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:16px">
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:{{accent}}; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Dorado principal</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">{{accent}}</span><span class="muted">--color-gold</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#E8D5A3; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Dorado luminoso</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#E8D5A3</span><span class="muted">--color-gold-luminous</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#D4AF37; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Dorado claro</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#D4AF37</span><span class="muted">--color-gold-light</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#8B7635; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Dorado oscuro</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#8B7635</span><span class="muted">--color-gold-dark</span></div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <span class="sect-label">Superficies</span>
+      <div style="display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:16px">
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#000000; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Fondo</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#000000</span><span class="muted">body</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#050505; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Barra lateral</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#050505</span><span class="muted">aside</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#18181b; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Zinc 900</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#18181b</span><span class="muted">controles</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#27272a; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Zinc 800</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#27272a</span><span class="muted">bordes</span></div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <span class="sect-label">Estado</span>
+      <div style="display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:16px">
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#4ade80; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Positivo</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#4ade80</span><span class="muted">green-400</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#fbbf24; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Atención</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#fbbf24</span><span class="muted">amber-400</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#f87171; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Crítico</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#f87171</span><span class="muted">red-400</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div style="height:64px; border-radius:12px; background-color:#60a5fa; border:1px solid rgba(255,255,255,0.06)"></div>
+          <div class="col"><span class="strong" style="font-size:12px">Informativo</span><span class="muted" style="font-family:ui-monospace, Menlo, monospace">#60a5fa</span><span class="muted">blue-400</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2 class="panel-title">Tipografía</h2><p class="panel-sub">Cinzel para títulos y cifras · Montserrat para texto y controles</p></div></div>
+    <div class="panel-body">
+      <div style="display:flex; flex-direction:column; gap:18px">
+        <div class="col"><span class="muted">Cinzel 600 · 30 px · título de página</span><span style="font-family:Cinzel, Georgia, serif; font-size:30px; font-weight:600; color:#E8D5A3">Centro de Mando</span></div>
+        <div class="col"><span class="muted">Cinzel 600 · 26 px · cifra de indicador</span><span style="font-family:Cinzel, Georgia, serif; font-size:26px; font-weight:600">$ 39.950.000</span></div>
+        <div class="col"><span class="muted">Cinzel 600 · 16 px · título de panel</span><span style="font-family:Cinzel, Georgia, serif; font-size:16px; font-weight:600; letter-spacing:0.04em; color:#e4e4e7">Corte semanal por empleada</span></div>
+        <div class="col"><span class="muted">Montserrat 400 · 13 px · celda de tabla</span><span style="font-size:13px; color:#d4d4d8">Liquidación confirmada por Mauricio García</span></div>
+        <div class="col"><span class="muted">Montserrat 600 · 11 px · etiqueta en versales</span><span style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; color:#71717a">Ingreso bruto · semana</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="grid" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr)">
+    <section class="panel">
+      <div class="panel-head"><div><h2 class="panel-title">Controles</h2><p class="panel-sub">Bordes dorados sobre negro, radio de 12 px</p></div></div>
+      <div class="panel-body">
+        <div style="display:flex; flex-wrap:wrap; gap:12px">
+          <div class="btn btn-solid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span>Acción principal</span></div>
+          <div class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Acción secundaria</span></div>
+          <div class="btn btn-ghost"><span>Acción neutra</span></div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:12px">
+          <div class="seg"><span class="seg-item">Hoy</span><span class="seg-item is-on">Semana</span><span class="seg-item">Mes</span></div>
+          <div class="field" style="width:260px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><span>Buscar empleada</span></div>
+        </div>
+        <div class="divider"></div>
+        <span class="sect-label">Estados</span>
+        <div style="display:flex; flex-wrap:wrap; gap:8px">
+          <span class="badge b-green">Confirmada</span><span class="badge b-green"><span class="dot"></span>En curso</span><span class="badge b-amber">Por confirmar</span>
+          <span class="badge b-red">En mora</span><span class="badge b-blue">Finalizado</span><span class="badge b-red">Cancelado</span>
+          <span class="badge b-gold">Override</span><span class="badge b-zinc">Inactivo</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><div><h2 class="panel-title">Bloques de datos</h2><p class="panel-sub">Indicador, fila de persona y barra de avance</p></div></div>
+      <div class="panel-body">
+        <div style="display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:16px">
+      <div class="kpi">
+        <div class="kpi-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10M9 21V10M15 21V10M19 21V10M2 10l10-6 10 6"/></svg><span>Neto a pagar</span></div>
+        <div class="kpi-value">$ 18.300.000</div>
+        <div class="kpi-foot">Transferencias del lunes</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Deuda remanente</span></div>
+        <div class="kpi-value">$ 3.480.000</div>
+        <div class="kpi-foot"><span class="down">5 empleadas</span></div>
+      </div>
+        </div>
+        <div class="divider"></div>
+        <div class="row" style="justify-content:space-between"><div class="row"><div class="avatar">VL</div><div class="col"><span class="link">Valentina Ríos</span><span class="muted">@valentina · empleada</span></div></div><span class="badge b-green"><span class="dot"></span>Disponible</span></div>
+        <div class="col" style="gap:8px"><div class="row" style="justify-content:space-between"><span class="kv-k">Cobertura de turnos</span><span class="kv-v">92 %</span></div><div class="bar-track"><div class="bar-fill" style="width:92%"></div></div></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head"><div><h2 class="panel-title">Tabla</h2><p class="panel-sub">Encabezado en versales, filas con divisores de 1 px</p></div></div>
+        <table class="tbl">
+          <thead><tr><th>Empleada</th><th style="text-align:right">Servicios</th><th style="text-align:right">Bruto</th><th style="text-align:right">Neto</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td><div class="row"><div class="avatar">VL</div><div class="col"><span class="link">Valentina Ríos</span><span class="muted">@valentina</span></div></div></td><td class="num">14</td><td class="num">$ 4.620.000</td><td class="num"><span class="strong">$ 2.770.000</span></td><td><span class="badge b-green">Confirmada</span></td></tr>
+            <tr><td><div class="row"><div class="avatar">MR</div><div class="col"><span class="link">Mariana Peña</span><span class="muted">@mariana</span></div></div></td><td class="num">11</td><td class="num">$ 3.410.000</td><td class="num"><span class="strong">$ 2.430.000</span></td><td><span class="badge b-amber">Por confirmar</span></td></tr>
+            <tr><td><div class="row"><div class="avatar">LZ</div><div class="col"><span class="link">Luciana Zapata</span><span class="muted">@luciana</span></div></div></td><td class="num">8</td><td class="num">$ 2.540.000</td><td class="num"><span class="strong">$ 0</span></td><td><span class="badge b-red">En mora</span></td></tr>
+          </tbody>
+        </table>
+  </section>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#C5A55A","options":["#C5A55A","#D4AF37","#E8D5A3","#8B7635"],"section":"Marca"}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#C5A55A' };
+  }
+}
+</script>
+</body>
+</html>

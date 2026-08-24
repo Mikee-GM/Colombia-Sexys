@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/api-server";
 import type {
   CreateDebtInput,
   CreatePaymentInput,
+  DebtWithEmployee,
   DriverLiquidationDriver,
   DriverLiquidationReport,
   LiquidationDebt,
@@ -81,6 +82,11 @@ export async function getDebts(employeeId: string) {
   return await apiFetch<LiquidationDebt[]>(
     `/liquidations/employees/${employeeId}/debts`,
   );
+}
+
+/** Cartera completa para /admin/cartera, en una sola peticion. */
+export async function getAllDebts() {
+  return await apiFetch<DebtWithEmployee[]>("/liquidations/debts");
 }
 
 export async function createDebt(employeeId: string, data: CreateDebtInput) {

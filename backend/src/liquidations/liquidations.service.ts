@@ -292,6 +292,41 @@ export class LiquidationsService {
     return debts.map((debt) => this.serializeDebt(debt));
   }
 
+  /**
+   * Cartera completa, para la vista de deudas del ERP.
+   *
+   * Sin esto la pantalla tendria que pedir las deudas empleada por empleada.
+   * El alcance sigue la misma regla que assertEmployeeAccess: el admin ve toda
+   * la cartera y el jefe solo la de las empleadas que tiene asignadas.
+   */
+  async listAllDebts(actor: Usuarios) {
+    const debts = await this.debts.find({
+      where: { deletedAt: IsNull() },
+      relations: { payments: true, employee: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    const visible = debts.filter(
+      (debt) =>
+        actor.rol === 'admin' ||
+        (actor.rol === 'jefe' &&
+          [debt.employee?.jefeId, debt.employee?.jefeSecundarioId].includes(
+            actor.id,
+          )),
+    );
+
+    return visible.map((debt) => ({
+      ...this.serializeDebt(debt),
+      employee: debt.employee
+        ? {
+            id: debt.employee.id,
+            name: debt.employee.nombreArtistico,
+            realName: debt.employee.nombreReal,
+          }
+        : null,
+    }));
+  }
+
   async createDebt(employeeId: string, dto: CreateDebtDto, actor: Usuarios) {
     await this.assertEmployeeAccess(employeeId, actor);
     const debt = await this.debts.save(

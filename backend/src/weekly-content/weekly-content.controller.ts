@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { WeeklyContentService } from './weekly-content.service';
+import type { SubmissionStatus } from './entities/weekly-photo-submission.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -43,6 +44,19 @@ export class WeeklyContentController {
       pendingCounts,
       weeklyStatuses,
     };
+  }
+
+  // Cola de revision global: sin esto la pantalla pediria una peticion por modelo.
+  @Get('submissions')
+  @Roles('admin', 'jefe')
+  async listSubmissions(
+    @Query('estado') estado?: SubmissionStatus,
+    @Query('limit') limit?: string,
+  ) {
+    return this.weeklyContentService.listSubmissions(
+      estado,
+      limit ? Number(limit) : undefined,
+    );
   }
 
   @Get('employee/:empleadaId')

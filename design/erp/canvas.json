@@ -1,0 +1,208 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Centro de mando"
+    },
+    {
+      "id": "page-2",
+      "name": "Finanzas"
+    },
+    {
+      "id": "page-3",
+      "name": "Operación"
+    },
+    {
+      "id": "page-4",
+      "name": "Personal"
+    },
+    {
+      "id": "page-5",
+      "name": "Sistema"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1140,
+      "page": "page-1"
+    },
+    {
+      "file": "Liquidaciones.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1140,
+      "page": "page-2"
+    },
+    {
+      "file": "LiquidacionDetalle.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 1320,
+      "page": "page-2"
+    },
+    {
+      "file": "Cartera.dc.html",
+      "x": 0,
+      "y": 1860,
+      "w": 1440,
+      "h": 1140,
+      "page": "page-2"
+    },
+    {
+      "file": "CortesChoferes.dc.html",
+      "x": 1560,
+      "y": 1860,
+      "w": 1440,
+      "h": 1140,
+      "page": "page-2"
+    },
+    {
+      "file": "Operacion.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1140,
+      "page": "page-3"
+    },
+    {
+      "file": "ServicioDetalle.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 1320,
+      "page": "page-3"
+    },
+    {
+      "file": "Transporte.dc.html",
+      "x": 0,
+      "y": 1860,
+      "w": 1440,
+      "h": 1180,
+      "page": "page-3"
+    },
+    {
+      "file": "Turnos.dc.html",
+      "x": 1560,
+      "y": 1860,
+      "w": 1440,
+      "h": 1140,
+      "page": "page-3"
+    },
+    {
+      "file": "Modelos.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1620,
+      "page": "page-4"
+    },
+    {
+      "file": "FichaEmpleada.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 1560,
+      "page": "page-4"
+    },
+    {
+      "file": "Choferes.dc.html",
+      "x": 0,
+      "y": 1860,
+      "w": 1440,
+      "h": 1140,
+      "page": "page-4"
+    },
+    {
+      "file": "Jefes.dc.html",
+      "x": 1560,
+      "y": 1860,
+      "w": 1440,
+      "h": 1360,
+      "page": "page-4"
+    },
+    {
+      "file": "FotosAprobacion.dc.html",
+      "x": 0,
+      "y": 3720,
+      "w": 1440,
+      "h": 1360,
+      "page": "page-4"
+    },
+    {
+      "file": "Disciplina.dc.html",
+      "x": 1560,
+      "y": 3720,
+      "w": 1440,
+      "h": 1260,
+      "page": "page-4"
+    },
+    {
+      "file": "Onboarding.dc.html",
+      "x": 0,
+      "y": 5580,
+      "w": 1440,
+      "h": 1180,
+      "page": "page-4"
+    },
+    {
+      "file": "Componentes.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 1560,
+      "page": "page-5"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "nota-mando",
+      "x": 0,
+      "y": -150,
+      "w": 620,
+      "page": "page-1",
+      "text": "Centro de Mando: una sola pantalla que responde \"cómo va la semana\" con las cifras que el sistema ya calcula.\nLas demás páginas del lienzo abren cada dominio: Finanzas, Operación, Personal y el sistema visual."
+    },
+    {
+      "id": "nota-finanzas",
+      "x": 0,
+      "y": -150,
+      "w": 640,
+      "page": "page-2",
+      "text": "Finanzas parte de liquidaciones_registro: cada servicio deja un registro con reparto, efectivo, transporte y multas.\nEl corte semanal agrega por empleada; la cartera sigue el efectivo que no volvió; los cortes de choferes cierran el transporte."
+    },
+    {
+      "id": "nota-operacion",
+      "x": 0,
+      "y": -150,
+      "w": 640,
+      "page": "page-3",
+      "text": "Operación es la torre de control: servicios en vivo, la cola de transporte que hoy se resuelve por Telegram, y la malla de turnos.\nEl detalle de servicio reúne cobro, transporte, evidencias y calificaciones en una sola ficha."
+    },
+    {
+      "id": "nota-personal",
+      "x": 0,
+      "y": -150,
+      "w": 700,
+      "page": "page-4",
+      "text": "Cada rol conserva su propia página. Modelos usa la cuadrícula con foto del panel actual; Choferes y Jefes usan la tabla.\nLos tres llevan el bloque de OTP de Telegram, igual que hoy. Fotos y Contenido cubre la aprobación de exclusivas,\nde catálogo y del contenido semanal, con sus cuatro estados."
+    },
+    {
+      "id": "nota-sistema",
+      "x": 0,
+      "y": -150,
+      "w": 620,
+      "page": "page-5",
+      "text": "Los valores están tomados del panel actual: negro #000000, barra lateral #050505, dorado #C5A55A,\nbordes zinc-800, radio de 12 px en controles y 16 px en tarjetas, Cinzel para cifras y Montserrat para texto."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}

@@ -102,6 +102,11 @@ export interface LiquidationDebt {
   remainingAmount: number;
 }
 
+/** Deuda tal como la devuelve GET /liquidations/debts, con la empleada resuelta. */
+export interface DebtWithEmployee extends LiquidationDebt {
+  employee: { id: string; name: string; realName: string } | null;
+}
+
 export interface CreateDebtInput {
   amount: number;
   description: string;

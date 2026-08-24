@@ -1,0 +1,310 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body {
+      margin: 0;
+      background-color: #000000;
+      color: #ffffff;
+      font-family: Montserrat, system-ui, -apple-system, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+    * { box-sizing: border-box; }
+    .shell { display: flex; min-height: 100vh; }
+
+    /* ---- sidebar (w-64, bg-[#050505], border-zinc-800/80) ---- */
+    .sb { width: 256px; flex-shrink: 0; background-color: #050505; border-right: 1px solid rgba(39,39,42,0.8); display: flex; flex-direction: column; }
+    .sb-head { padding: 24px; border-bottom: 1px solid rgba(39,39,42,0.8); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .sb-logo { width: 48px; height: 48px; border-radius: 12px; border: 1px solid rgba(197,165,90,0.3); display: flex; align-items: center; justify-content: center; }
+    .sb-brand { margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.25em; color: #C5A55A; text-transform: uppercase; }
+    .sb-nav { flex: 1 1 auto; padding: 24px 12px; display: flex; flex-direction: column; gap: 24px; }
+    .sb-group { display: flex; flex-direction: column; gap: 4px; }
+    .sb-group-title { padding: 0 12px 2px; font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #71717a; }
+    .sb-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; color: #a1a1aa; }
+    .sb-item.is-active { color: #000000; background-color: #C5A55A; box-shadow: 0 4px 6px -1px rgba(197,165,90,0.2); }
+    .sb-foot { padding: 16px; border-top: 1px solid rgba(39,39,42,0.8); background-color: rgba(9,9,11,0.4); display: flex; flex-direction: column; gap: 8px; }
+    .sb-profile { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 12px; background-color: rgba(24,24,27,0.6); border: 1px solid rgba(39,39,42,0.8); }
+    .sb-profile-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .sb-avatar { width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; background-color: rgba(197,165,90,0.2); display: flex; align-items: center; justify-content: center; }
+    .sb-profile-text { min-width: 0; }
+    .sb-profile-name { margin: 0; font-size: 12px; font-weight: 700; color: #ffffff; }
+    .sb-profile-mail { margin: 2px 0 0; font-size: 10px; color: #71717a; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+    .sb-logout { display: flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 12px; background-color: rgba(24,24,27,0.8); border: 1px solid #27272a; font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #a1a1aa; }
+
+    /* ---- main ---- */
+    .main { flex: 1 1 auto; min-width: 0; background-color: #000000; padding: 32px; display: flex; flex-direction: column; gap: 24px; }
+    .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 1px solid #27272a; padding-bottom: 20px; }
+    .page-title { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 30px; font-weight: 600; line-height: 1.15; color: #E8D5A3; }
+    .page-sub { margin: 6px 0 0; font-size: 13px; color: #71717a; }
+    .head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+    /* ---- controls ---- */
+    .seg { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 12px; border: 1px solid #27272a; background-color: #09090b; }
+    .seg-item { padding: 7px 14px; border-radius: 9px; font-size: 12px; font-weight: 600; color: #a1a1aa; }
+    .seg-item.is-on { background-color: #C5A55A; color: #000000; }
+    .btn { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 12px; border: 1px solid rgba(197,165,90,0.3); background-color: rgba(197,165,90,0.08); font-size: 12px; font-weight: 700; letter-spacing: 0.05em; color: #C5A55A; }
+    .btn-solid { border-color: #C5A55A; background-color: #C5A55A; color: #000000; }
+    .btn-ghost { border-color: #27272a; background-color: #09090b; color: #d4d4d8; }
+    .field { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; border: 1px solid #27272a; background-color: #000000; font-size: 13px; color: #71717a; }
+
+    /* ---- panels ---- */
+    .panel { border-radius: 16px; border: 1px solid #27272a; background-color: rgba(0,0,0,0.4); display: flex; flex-direction: column; overflow: hidden; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid #27272a; }
+    .panel-title { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 16px; font-weight: 600; letter-spacing: 0.04em; color: #e4e4e7; }
+    .panel-sub { margin: 4px 0 0; font-size: 11px; color: #71717a; }
+    .panel-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* ---- kpi ---- */
+    .kpis { display: grid; gap: 16px; }
+    .kpi { border-radius: 16px; border: 1px solid #27272a; background-color: rgba(0,0,0,0.4); padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+    .kpi-label { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #71717a; }
+    .kpi-value { font-family: Cinzel, Georgia, serif; font-size: 26px; font-weight: 600; line-height: 1.1; color: #ffffff; font-variant-numeric: tabular-nums; }
+    .kpi-foot { font-size: 11px; color: #71717a; }
+    .up { color: #4ade80; font-weight: 600; }
+    .down { color: #f87171; font-weight: 600; }
+
+    /* ---- table ---- */
+    .tbl { width: 100%; border-collapse: collapse; }
+    .tbl th { text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #71717a; border-bottom: 1px solid #27272a; white-space: nowrap; }
+    .tbl td { padding: 13px 16px; font-size: 13px; color: #d4d4d8; border-bottom: 1px solid rgba(39,39,42,0.55); vertical-align: middle; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .strong { color: #ffffff; font-weight: 600; }
+    .muted { color: #71717a; font-size: 11px; }
+    .tfoot td { background-color: rgba(24,24,27,0.5); font-weight: 700; color: #ffffff; border-top: 1px solid #27272a; }
+
+    /* ---- badges ---- */
+    .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; white-space: nowrap; }
+    .b-gold { border: 1px solid rgba(197,165,90,0.3); background-color: rgba(197,165,90,0.1); color: #C5A55A; }
+    .b-green { border: 1px solid rgba(74,222,128,0.25); background-color: rgba(74,222,128,0.08); color: #4ade80; }
+    .b-red { border: 1px solid rgba(248,113,113,0.25); background-color: rgba(248,113,113,0.08); color: #f87171; }
+    .b-amber { border: 1px solid rgba(251,191,36,0.25); background-color: rgba(251,191,36,0.08); color: #fbbf24; }
+    .b-blue { border: 1px solid rgba(96,165,250,0.25); background-color: rgba(96,165,250,0.08); color: #60a5fa; }
+    .b-zinc { border: 1px solid #27272a; background-color: rgba(24,24,27,0.6); color: #a1a1aa; }
+    .dot { width: 6px; height: 6px; border-radius: 999px; background-color: currentColor; }
+
+    /* ---- misc ---- */
+    .row { display: flex; align-items: center; gap: 10px; }
+    .col { display: flex; flex-direction: column; gap: 4px; }
+    .grid { display: grid; gap: 16px; }
+    .avatar { width: 34px; height: 34px; border-radius: 10px; background-color: rgba(197,165,90,0.12); border: 1px solid rgba(197,165,90,0.25); display: flex; align-items: center; justify-content: center; font-family: Cinzel, Georgia, serif; font-size: 13px; font-weight: 600; color: #C5A55A; flex-shrink: 0; }
+    .bar-track { height: 6px; border-radius: 999px; background-color: #18181b; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #8B7635, #C5A55A); }
+    .divider { height: 1px; background-color: #27272a; }
+    .list { display: flex; flex-direction: column; }
+    .list-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 20px; border-bottom: 1px solid rgba(39,39,42,0.55); }
+    .list-item:last-child { border-bottom: none; }
+    .kv { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid rgba(39,39,42,0.5); }
+    .kv:last-child { border-bottom: none; }
+    .kv-k { font-size: 12px; color: #71717a; }
+    .kv-v { font-size: 13px; color: #e4e4e7; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .note { font-size: 11px; color: #71717a; line-height: 1.5; }
+    .sect-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #8B7635; }
+
+    /* ---- campos navegables: abren la ficha detallada del registro ---- */
+    .link { color: #ffffff; font-weight: 600; border-bottom: 1px solid rgba(197,165,90,0.35); }
+    .link:hover { color: #E8D5A3; border-bottom-color: #C5A55A; }
+
+    /* ---- tarjeta de modelo (misma anatomía que ModelosDashboard) ---- */
+    .card { background-color: rgba(24,24,27,0.3); border: 1px solid #27272a; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+    .card-photo { aspect-ratio: 3 / 4; position: relative; background: linear-gradient(160deg, #101013, #050505); border-bottom: 1px solid #27272a; display: flex; align-items: center; justify-content: center; }
+    .card-photo-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2em; color: #52525b; }
+    .card-tl { position: absolute; top: 8px; left: 8px; }
+    .card-tr { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .card-body { padding: 20px; flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; }
+    .card-name { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 20px; font-weight: 700; color: #ffffff; }
+    .card-foot { margin-top: auto; display: flex; gap: 12px; padding-top: 14px; border-top: 1px solid rgba(39,39,42,0.6); }
+    .card-action { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #E8D5A3; }
+    .card-action.is-muted { color: #a1a1aa; }
+    .price-chip { display: inline-block; background-color: rgba(197,165,90,0.1); color: #C5A55A; border: 1px solid rgba(197,165,90,0.3); padding: 6px 12px; border-radius: 8px; font-size: 14px; font-family: ui-monospace, Menlo, monospace; font-weight: 700; }
+
+    /* ---- OTP de Telegram (mismo bloque del panel actual) ---- */
+    .otp-row { display: flex; align-items: center; gap: 8px; }
+    .otp-code { background-color: rgba(197,165,90,0.1); color: #C5A55A; border: 1px solid rgba(197,165,90,0.3); padding: 6px 12px; border-radius: 8px; font-size: 14px; font-family: ui-monospace, Menlo, monospace; font-weight: 700; letter-spacing: 0.08em; }
+    .otp-generate { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #C5A55A; }
+
+    /* ---- revisión de fotos ---- */
+    .shot { border-radius: 12px; border: 1px solid #27272a; background: linear-gradient(160deg, #101013, #050505); aspect-ratio: 3 / 4; display: flex; align-items: center; justify-content: center; position: relative; }
+    .shot-actions { display: flex; gap: 6px; }
+    .shot-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 6px; border-radius: 9px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+  </style>
+</helmet>
+<div class="shell">
+
+<aside class="sb">
+  <div class="sb-head">
+    <div class="sb-logo"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+    <p class="sb-brand">Colombia Sexys ERP</p>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-group">
+      <span class="sb-group-title">Núcleo</span>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span>Centro de Mando</span></div>
+    </div>
+    <div class="sb-group">
+      <span class="sb-group-title">Finanzas</span>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg><span>Liquidaciones</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/></svg><span>Cartera y Deudas</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5v5h-2M3 18v-5m2 5h2m10 0h2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg><span>Cortes de Choferes</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V10M9 21V10M15 21V10M19 21V10M2 10l10-6 10 6"/></svg><span>Cuentas Bancarias</span></div>
+    </div>
+    <div class="sb-group">
+      <span class="sb-group-title">Operación</span>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Servicios</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg><span>Transporte</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Turnos</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg><span>Evidencias</span></div>
+    </div>
+    <div class="sb-group">
+      <span class="sb-group-title">Personal</span>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg><span>Modelos</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2-5a2 2 0 0 1 1.9-1.4h10.2A2 2 0 0 1 19 8l2 5v5h-2M3 18v-5m2 5h2m10 0h2"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg><span>Choferes</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Jefes</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg><span>Candidatas</span></div>
+    </div>
+    <div class="sb-group">
+      <span class="sb-group-title">Control</span>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><span>Fotos y Contenido</span></div>
+      <div class="sb-item is-active"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2H2z"/><path d="M22 4h-6a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2H22z"/></svg><span>Onboarding</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 21h10M5 7h14M7 7l-3 6h6zM17 7l-3 6h6z"/></svg><span>Disciplina</span></div>
+      <div class="sb-item"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 7l-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/></svg><span>Indicadores</span></div>
+    </div>
+  </nav>
+  <div class="sb-foot">
+    <div class="sb-profile">
+      <div class="sb-profile-left">
+        <div class="sb-avatar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <div class="sb-profile-text">
+          <p class="sb-profile-name">Mauricio García</p>
+          <p class="sb-profile-mail">admin@colombiasexys.com</p>
+        </div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </div>
+    <div class="sb-logout"><span>Cerrar Sesión</span></div>
+  </div>
+</aside>
+  <main class="main">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Onboarding</h1>
+        <p class="page-sub">Selección, reglamentos y vinculación de personal</p>
+      </div>
+      <div class="head-actions"><div class="btn btn-ghost"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg><span>Exportar</span></div><div class="btn btn-solid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg><span>Nueva candidata</span></div></div>
+    </div>
+
+    <div class="kpis" style="grid-template-columns: repeat(4, minmax(0, 1fr))">
+      <div class="kpi">
+        <div class="kpi-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg><span>Candidatas en curso</span></div>
+        <div class="kpi-value">15</div>
+        <div class="kpi-foot"><span class="up">+6</span> esta semana</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 7l-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/></svg><span>Conversión a activa</span></div>
+        <div class="kpi-value">26 %</div>
+        <div class="kpi-foot">Sobre 34 registros del mes</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Tiempo medio de vinculación</span></div>
+        <div class="kpi-value">6,4 días</div>
+        <div class="kpi-foot">De registro a catálogo activo</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2H2z"/><path d="M22 4h-6a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2H22z"/></svg><span>Reglamentos por aprobar</span></div>
+        <div class="kpi-value">9</div>
+        <div class="kpi-foot">4 con intentos agotados</div>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: minmax(0,1fr) minmax(0,1.1fr)">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">Embudo de vinculación</h2>
+            <p class="panel-sub">candidata_seleccion → empleada_onboarding</p>
+          </div>
+          <span class="badge b-zinc">Agosto</span>
+        </div>
+      <div class="panel-body">
+        <div class="col" style="gap:8px">
+          <div class="row" style="justify-content:space-between"><span class="kv-k">Candidatas registradas</span><span class="kv-v">34 <span class="muted">· 100 %</span></span></div>
+          <div class="bar-track" style="height:10px"><div class="bar-fill" style="width:100%; background:#C5A55A"></div></div>
+        </div>
+        <div class="col" style="gap:8px">
+          <div class="row" style="justify-content:space-between"><span class="kv-k">Cuestionario de selección</span><span class="kv-v">26 <span class="muted">· 76 %</span></span></div>
+          <div class="bar-track" style="height:10px"><div class="bar-fill" style="width:76%; background:#C5A55A"></div></div>
+        </div>
+        <div class="col" style="gap:8px">
+          <div class="row" style="justify-content:space-between"><span class="kv-k">Entrevista aprobada</span><span class="kv-v">19 <span class="muted">· 56 %</span></span></div>
+          <div class="bar-track" style="height:10px"><div class="bar-fill" style="width:56%; background:#E8D5A3"></div></div>
+        </div>
+        <div class="col" style="gap:8px">
+          <div class="row" style="justify-content:space-between"><span class="kv-k">Onboarding iniciado</span><span class="kv-v">15 <span class="muted">· 44 %</span></span></div>
+          <div class="bar-track" style="height:10px"><div class="bar-fill" style="width:44%; background:#8B7635"></div></div>
+        </div>
+        <div class="col" style="gap:8px">
+          <div class="row" style="justify-content:space-between"><span class="kv-k">Reglamentos aprobados</span><span class="kv-v">11 <span class="muted">· 32 %</span></span></div>
+          <div class="bar-track" style="height:10px"><div class="bar-fill" style="width:32%; background:#3f3f46"></div></div>
+        </div>
+        <div class="col" style="gap:8px">
+          <div class="row" style="justify-content:space-between"><span class="kv-k">Activas en catálogo</span><span class="kv-v">9 <span class="muted">· 26 %</span></span></div>
+          <div class="bar-track" style="height:10px"><div class="bar-fill" style="width:26%; background:#4ade80"></div></div>
+        </div>
+      </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">Reglamentos publicados</h2>
+            <p class="panel-sub">reglamento_empleada · preguntas y opciones</p>
+          </div>
+          <div class="btn btn-ghost"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2H2z"/><path d="M22 4h-6a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2H22z"/></svg><span>Nuevo reglamento</span></div>
+        </div>
+        <table class="tbl">
+          <thead><tr><th>Reglamento</th><th>Versión</th><th style="text-align:right">Preguntas</th><th style="text-align:right">Aprobación mínima</th><th style="text-align:right">Intentos</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td><span class="strong">Reglamento general</span></td><td><span class="muted">v4</span></td><td class="num">20</td><td class="num">80 %</td><td class="num">3</td><td><span class="badge b-green">Publicado</span></td></tr>
+            <tr><td><span class="strong">Protocolo de seguridad</span></td><td><span class="muted">v2</span></td><td class="num">12</td><td class="num">90 %</td><td class="num">2</td><td><span class="badge b-green">Publicado</span></td></tr>
+            <tr><td><span class="strong">Manejo de efectivo</span></td><td><span class="muted">v3</span></td><td class="num">15</td><td class="num">85 %</td><td class="num">3</td><td><span class="badge b-green">Publicado</span></td></tr>
+            <tr><td><span class="strong">Política de transporte</span></td><td><span class="muted">v1</span></td><td class="num">8</td><td class="num">80 %</td><td class="num">3</td><td><span class="badge b-green">Publicado</span></td></tr>
+            <tr><td><span class="strong">Uso del bot de Telegram</span></td><td><span class="muted">v1</span></td><td class="num">10</td><td class="num">80 %</td><td class="num">3</td><td><span class="badge b-amber">Borrador</span></td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">Candidatas en proceso</h2>
+            <p class="panel-sub">candidata_seleccion · respuestas y avance</p>
+          </div>
+          <div class="head-actions"><div class="field" style="width:260px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><span>Buscar candidata</span></div><div class="seg"><span class="seg-item is-on">Todas</span><span class="seg-item">En proceso</span><span class="seg-item">Descartadas</span></div></div>
+        </div>
+        <table class="tbl">
+          <thead><tr><th>Candidata</th><th>Registro</th><th style="text-align:right">Screening</th><th>Etapa actual</th><th>Avance</th><th>Estado</th><th></th></tr></thead>
+          <tbody>
+            <tr><td><div class="row"><div class="avatar">CN</div><div class="col"><span class="link">Carolina Nieto</span><span class="muted">candidata</span></div></div></td><td><span class="muted">23 ago</span></td><td class="num">8 / 10</td><td>Reglamentos</td><td><div style="display:flex; align-items:center; gap:10px; min-width:180px"><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:60%"></div></div><span class="muted" style="font-variant-numeric:tabular-nums">60 %</span></div></td><td><span class="badge b-amber">En proceso</span></td><td><div style="display:flex;justify-content:flex-end"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div></td></tr>
+            <tr><td><div class="row"><div class="avatar">PA</div><div class="col"><span class="link">Paula Arango</span><span class="muted">candidata</span></div></div></td><td><span class="muted">22 ago</span></td><td class="num">9 / 10</td><td>Entrevista</td><td><div style="display:flex; align-items:center; gap:10px; min-width:180px"><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:40%"></div></div><span class="muted" style="font-variant-numeric:tabular-nums">40 %</span></div></td><td><span class="badge b-amber">En proceso</span></td><td><div style="display:flex;justify-content:flex-end"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div></td></tr>
+            <tr><td><div class="row"><div class="avatar">JM</div><div class="col"><span class="link">Juliana Mejía</span><span class="muted">candidata</span></div></div></td><td><span class="muted">21 ago</span></td><td class="num">10 / 10</td><td>Activación</td><td><div style="display:flex; align-items:center; gap:10px; min-width:180px"><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:90%"></div></div><span class="muted" style="font-variant-numeric:tabular-nums">90 %</span></div></td><td><span class="badge b-green">Lista</span></td><td><div style="display:flex;justify-content:flex-end"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div></td></tr>
+            <tr><td><div class="row"><div class="avatar">VG</div><div class="col"><span class="link">Verónica Gómez</span><span class="muted">candidata</span></div></div></td><td><span class="muted">20 ago</span></td><td class="num">6 / 10</td><td>Selección</td><td><div style="display:flex; align-items:center; gap:10px; min-width:180px"><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:20%"></div></div><span class="muted" style="font-variant-numeric:tabular-nums">20 %</span></div></td><td><span class="badge b-blue">En revisión</span></td><td><div style="display:flex;justify-content:flex-end"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div></td></tr>
+            <tr><td><div class="row"><div class="avatar">LT</div><div class="col"><span class="link">Laura Torres</span><span class="muted">candidata</span></div></div></td><td><span class="muted">19 ago</span></td><td class="num">4 / 10</td><td>Selección</td><td><div style="display:flex; align-items:center; gap:10px; min-width:180px"><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:20%"></div></div><span class="muted" style="font-variant-numeric:tabular-nums">20 %</span></div></td><td><span class="badge b-red">Descartada</span></td><td><div style="display:flex;justify-content:flex-end"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div></td></tr>
+            <tr><td><div class="row"><div class="avatar">AC</div><div class="col"><span class="link">Alejandra Castro</span><span class="muted">candidata</span></div></div></td><td><span class="muted">18 ago</span></td><td class="num">10 / 10</td><td>Reglamentos</td><td><div style="display:flex; align-items:center; gap:10px; min-width:180px"><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:70%"></div></div><span class="muted" style="font-variant-numeric:tabular-nums">70 %</span></div></td><td><span class="badge b-amber">En proceso</span></td><td><div style="display:flex;justify-content:flex-end"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></div></td></tr>
+          </tbody>
+        </table>
+      </section>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>

@@ -85,6 +85,13 @@ export class LiquidationsController {
     return this.service.confirmWeeklySettlement(query, actor);
   }
 
+  // Cartera completa: evita que la vista de deudas pida una peticion por empleada.
+  @Get('debts')
+  @Roles('admin', 'jefe')
+  getAllDebts(@GetUser() actor: Usuarios) {
+    return this.service.listAllDebts(actor);
+  }
+
   @Get('employees/:employeeId/debts')
   @Roles('admin', 'jefe')
   getDebts(

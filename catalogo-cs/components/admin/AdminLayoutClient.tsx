@@ -13,14 +13,15 @@ import EditProfileModal from "@/components/admin/EditProfileModal";
 
 import {
   Activity,
-  Award,
   BookOpen,
   Car,
   Clock,
   CreditCard,
   Eye,
   FileCheck,
+  Image as ImageIcon,
   Landmark,
+  Map as MapIcon,
   MapPin,
   Scale,
   Settings,
@@ -30,12 +31,14 @@ import {
   User,
   UserPlus,
   Users,
+  Wallet,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
   label: string;
   href: string;
-  icon: any;
+  icon: LucideIcon;
 }
 
 interface NavGroup {
@@ -45,16 +48,32 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    title: "Operaciones en Vivo",
+    title: "Nucleo",
     items: [
-      { label: "Dashboard", href: "/admin/dashboard", icon: Eye },
-      { label: "Mapa", href: "/admin/map", icon: MapPin },
+      { label: "Centro de Mando", href: "/admin/dashboard", icon: Eye },
+    ],
+  },
+  {
+    title: "Finanzas",
+    items: [
+      { label: "Liquidaciones", href: "/admin/liquidations", icon: CreditCard },
+      { label: "Cartera y Deudas", href: "/admin/cartera", icon: Wallet },
+      { label: "Cortes de Choferes", href: "/admin/driver-settlements", icon: Car },
+      { label: "Cuentas Bancarias", href: "/admin/bank-accounts", icon: Landmark },
+    ],
+  },
+  {
+    title: "Operacion",
+    items: [
       { label: "Servicios", href: "/admin/services", icon: Activity },
+      { label: "Transporte", href: "/admin/transport", icon: MapPin },
+      { label: "Turnos", href: "/admin/turnos", icon: Clock },
+      { label: "Mapa", href: "/admin/map", icon: MapIcon },
       { label: "Evidencias", href: "/admin/evidence", icon: FileCheck },
     ],
   },
   {
-    title: "Personal & Equipos",
+    title: "Personal",
     items: [
       { label: "Modelos", href: "/admin/modelos", icon: Users },
       { label: "Choferes", href: "/admin/choferes", icon: Car },
@@ -63,20 +82,12 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    title: "Finanzas & Cortes",
+    title: "Control",
     items: [
-      { label: "Liquidaciones", href: "/admin/liquidations", icon: CreditCard },
-      { label: "Cuentas Bancarias", href: "/admin/bank-accounts", icon: Landmark },
-    ],
-  },
-  {
-    title: "Control & Normativas",
-    items: [
-      { label: "Reportes & Disciplina", href: "/admin/reports", icon: Scale },
-      { label: "Indicadores (KPIs)", href: "/admin/kpis", icon: TrendingUp },
+      { label: "Fotos y Contenido", href: "/admin/fotos", icon: ImageIcon },
+      { label: "Reportes y Disciplina", href: "/admin/reports", icon: Scale },
+      { label: "Indicadores", href: "/admin/kpis", icon: TrendingUp },
       { label: "Retos", href: "/admin/retos", icon: Trophy },
-      { label: "Turnos", href: "/admin/turnos", icon: Clock },
-      { label: "Transporte", href: "/admin/transport", icon: Award },
       { label: "Reglamentos", href: "/admin/regulations", icon: BookOpen },
     ],
   },

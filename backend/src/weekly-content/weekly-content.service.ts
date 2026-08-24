@@ -48,6 +48,25 @@ export class WeeklyContentService {
   }
 
   /**
+   * Cola de revision completa, para la pantalla de Fotos y Contenido del ERP.
+   *
+   * getSubmissionsByEmployee resuelve una modelo a la vez, asi que una cola
+   * global habria requerido una peticion por modelo. Devuelve la empleada
+   * resuelta para poder mostrar nombre y foto de perfil junto a cada envio.
+   */
+  async listSubmissions(
+    estado?: SubmissionStatus,
+    limit = 60,
+  ): Promise<WeeklyPhotoSubmission[]> {
+    return this.submissionRepo.find({
+      where: estado ? { estado } : {},
+      relations: { empleada: true },
+      order: { createdAt: 'DESC' },
+      take: Math.min(Math.max(limit, 1), 200),
+    });
+  }
+
+  /**
    * Obtener el conteo de fotos pendientes por modelo agrupado
    */
   async getPendingCountByEmployee(): Promise<Record<string, number>> {

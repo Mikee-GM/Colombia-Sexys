@@ -90,7 +90,7 @@ export async function deleteJefeAction(id: string): Promise<{ success: boolean; 
   }
 }
 
-// TODO: verificar si POST /users/{id}/telegram-otp existe en el backend
+// Verificado: UsersController expone POST /users/{id}/telegram-otp con roles admin y jefe.
 export async function generateTelegramOtpAction(id: string): Promise<{ success: boolean; code?: string; expiresAt?: string; error?: string }> {
   try {
     const data = await apiFetch<any>(`/users/${id}/telegram-otp`, {
