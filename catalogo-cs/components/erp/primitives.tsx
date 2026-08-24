@@ -172,6 +172,18 @@ export function StatusBadge({
 }
 
 /* -------------------------------------------------------------------------- */
+/* Codigo de servicio                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Codigo corto y legible de un servicio a partir de su UUID.
+ *
+ * El listado y la ficha muestran el mismo identificador, asi que vive aqui en
+ * lugar de repetirse en cada pantalla.
+ */
+export const codigoServicio = (id: string) => `SR-${id.slice(-6).toUpperCase()}`;
+
+/* -------------------------------------------------------------------------- */
 /* RecordLink                                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -362,13 +374,14 @@ export function KpiGrid({
   columns = 4,
   children,
 }: {
-  columns?: 3 | 4 | 5;
+  columns?: 3 | 4 | 5 | 6;
   children: ReactNode;
 }) {
   const columnClasses = {
     3: "sm:grid-cols-2 lg:grid-cols-3",
     4: "sm:grid-cols-2 xl:grid-cols-4",
     5: "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5",
+    6: "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6",
   } as const;
 
   return (
