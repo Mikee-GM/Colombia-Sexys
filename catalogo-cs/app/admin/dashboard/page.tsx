@@ -2,14 +2,18 @@ import { redirect } from "next/navigation";
 
 import { ErpPageHeader } from "@/components/erp/primitives";
 import CentroDeMando from "@/components/erp/centro-de-mando";
+import SemanaEnCurso from "@/components/erp/semana-en-curso";
 import GodEyeDashboard from "@/components/admin/god-eye/GodEyeDashboard";
 import {
   getGodEyeOverviewAction,
   getGodEyeActorsAction,
 } from "@/lib/actions/god-eye";
 import { getPendingAppeals } from "@/lib/actions/discipline";
+import { getWeeklySummary } from "@/app/admin/liquidations/actions";
+import { getServices } from "@/lib/data/services";
 import { getCurrentUser } from "@/lib/auth";
 import { optionalSource } from "@/lib/optional-source";
+import { getOperationalWeek } from "@/lib/week-range";
 
 export const dynamic = "force-dynamic";
 
@@ -40,14 +44,19 @@ export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin");
 
-  const [overview, actors, appeals] = await Promise.all([
-    optionalSource(getGodEyeOverviewAction(), OVERVIEW_VACIO, "el centro de mando"),
+  const contexto = "el centro de mando";
+  const { startDate, endDate } = getOperationalWeek();
+
+  const [overview, actors, appeals, services, summary] = await Promise.all([
+    optionalSource(getGodEyeOverviewAction(), OVERVIEW_VACIO, contexto),
     optionalSource(
       getGodEyeActorsAction(),
       { employees: [], drivers: [], bosses: [] },
-      "el centro de mando",
+      contexto,
     ),
-    optionalSource(getPendingAppeals(), [], "el centro de mando"),
+    optionalSource(getPendingAppeals(), [], contexto),
+    optionalSource(getServices(), [], contexto),
+    optionalSource(getWeeklySummary(startDate, endDate), [], contexto),
   ]);
 
   return (
@@ -59,6 +68,13 @@ export default async function DashboardPage() {
 
       {/* Resumen del ERP; debajo queda el tablero detallado que ya existia. */}
       <CentroDeMando overview={overview} />
+
+      <SemanaEnCurso
+        services={services ?? []}
+        summary={summary ?? []}
+        startDate={startDate}
+        endDate={endDate}
+      />
 
       <GodEyeDashboard
         initialOverview={overview}
