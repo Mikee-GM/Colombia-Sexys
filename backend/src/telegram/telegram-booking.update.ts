@@ -70,6 +70,10 @@ import { DedicatedBotContext } from './telegram-bot-registry.service';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
 import { TelegramSession } from './entities/telegram-session.entity';
+import {
+  buildSessionKey,
+  type SessionKeyContext,
+} from './telegram-session.key';
 
 interface SessionData {
   step?:
@@ -6554,8 +6558,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * desde otros chats (jefe, empleada) vean el estado más reciente.
    */
   private async persistSession(ctx: BotContext): Promise<void> {
-    const sessionKey =
-      ctx.from && ctx.chat ? `${ctx.from.id}:${ctx.chat.id}` : undefined;
+    // La clave se construye igual que en el middleware de sesion. Antes se
+    // armaba aqui a mano y sin el prefijo del bot dedicado, asi que en el bot
+    // de cada modelo esta escritura iba a una fila que nadie leia.
+    const sessionKey = buildSessionKey(ctx as unknown as SessionKeyContext);
     if (!sessionKey || !ctx.session) return;
     try {
       await this.telegramSessionRepository.save({
@@ -6564,6 +6570,36 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       });
     } catch (err) {
       this.logger.warn('No se pudo persistir la sesión del cliente:', err);
+    }
+  }
+
+  /**
+   * Recarga la sesion guardada sobre el contexto que quedo en el buffer.
+   *
+   * El buffer retiene el `ctx` del mensaje que lo abrio y lo procesa hasta 20 s
+   * despues, asi que `ctx.session` es una foto vieja: cualquier dato que se
+   * haya guardado entre medias —las horas que el cliente acababa de dar, el
+   * metodo de pago, la ubicacion— no esta ahi. Al vaciar el buffer se relee la
+   * fila y se vuelca sobre el mismo objeto, para que las referencias que ya
+   * apuntan a `ctx.session` sigan siendo validas.
+   */
+  private async reloadSession(ctx: BotContext): Promise<void> {
+    const sessionKey = buildSessionKey(ctx as unknown as SessionKeyContext);
+    if (!sessionKey || !ctx.session) return;
+    try {
+      const row = await this.telegramSessionRepository.findOne({
+        where: { key: sessionKey },
+      });
+      if (!row?.data) return;
+
+      const stored = row.data as Record<string, unknown>;
+      const live = ctx.session as unknown as Record<string, unknown>;
+      for (const field of Object.keys(live)) {
+        if (!(field in stored)) delete live[field];
+      }
+      Object.assign(live, stored);
+    } catch (err) {
+      this.logger.warn('No se pudo releer la sesión del cliente:', err);
     }
   }
 
@@ -6646,6 +6682,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const ctx = buffer.ctx;
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
+    if (!ctx.session) return;
+
+    // El contexto lleva hasta 20 s en el buffer: antes de decidir nada hay que
+    // partir del estado guardado y no de la foto con la que entro el mensaje.
+    await this.reloadSession(ctx);
     const session = ctx.session;
     if (!session) return;
 

@@ -22,6 +22,10 @@ import { AuthModule } from '../auth/auth.module';
 import { ServicesModule } from '../services/services.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { TelegramSession } from './entities/telegram-session.entity';
+import {
+  buildSessionKey,
+  type SessionKeyContext,
+} from './telegram-session.key';
 import { AiModule } from '../ai/ai.module';
 import { Viajes } from '../trips/entities/trip.entity';
 
@@ -97,13 +101,8 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
         //
         // La misma función la usan el cerrojo y la sesión: si divergieran, el
         // cerrojo estaría protegiendo una clave distinta de la que se escribe.
-        const getSessionKey = (ctx: Context): string | undefined => {
-          if (!ctx.from || !ctx.chat) return undefined;
-          const base = `${ctx.from.id}:${ctx.chat.id}`;
-          const employeeId = (ctx as { dedicatedBotEmployeeId?: string })
-            .dedicatedBotEmployeeId;
-          return employeeId ? `${employeeId}:${base}` : base;
-        };
+        const getSessionKey = (ctx: Context): string | undefined =>
+          buildSessionKey(ctx as SessionKeyContext);
 
         const store = new TelegramSessionStore(sessionRepository);
 
