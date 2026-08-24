@@ -85,6 +85,7 @@ const navGroups: NavGroup[] = [
     title: "Control",
     items: [
       { label: "Fotos y Contenido", href: "/admin/fotos", icon: ImageIcon },
+      { label: "Onboarding", href: "/admin/onboarding", icon: UserPlus },
       { label: "Reportes y Disciplina", href: "/admin/reports", icon: Scale },
       { label: "Indicadores", href: "/admin/kpis", icon: TrendingUp },
       { label: "Retos", href: "/admin/retos", icon: Trophy },

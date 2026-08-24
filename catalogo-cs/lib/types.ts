@@ -774,3 +774,42 @@ export type Directorio = Record<
   "client" | "employee" | "driver" | "boss",
   Record<string, string>
 >;
+
+/** Reglamento vigente de un rol, tal como lo publica el panel. */
+export type Regulation = {
+  id: string;
+  targetRole: "empleada" | "chofer" | "jefe";
+  title: string;
+  content: string;
+  passingScore: number;
+  publicationKey: string;
+  publishedAt: string;
+  updatedAt?: string;
+  /** El endpoint de admin devuelve el cuestionario junto al reglamento. */
+  questions?: Array<{ id: string; text: string }>;
+};
+
+/**
+ * Estado del reglamento de una persona del staff.
+ *
+ * `onboarding` es null mientras no se le haya asignado ninguno; cuando existe,
+ * `status` avanza de pending a completed y `bestScore` guarda el mejor intento.
+ */
+export type StaffOnboarding = ApiUser & {
+  onboarding: {
+    id: string;
+    userId: string;
+    employeeId: string | null;
+    status: "pending" | "in_progress" | "completed";
+    active: boolean;
+    isRenewal: boolean;
+    attemptCount: number;
+    bestScore: number;
+    trustScore: number;
+    assignedAt: string;
+    regulationSentAt: string | null;
+    readAt: string | null;
+    completedAt: string | null;
+    lastDeliveryError: string | null;
+  } | null;
+};
