@@ -469,6 +469,17 @@ export function extractHirePaymentMethod(
   return undefined;
 }
 
+/**
+ * Roles de oficina, que nunca deben entrar al flujo de cliente.
+ *
+ * La empleada y el chofer si pasan por el: sus manejadores dependen de que el
+ * mensaje siga su curso. Solo el jefe y el admin quedan fuera, que son quienes
+ * hablan con los clientes desde el grupo y no desde su chat privado.
+ */
+export function esCuentaDeOficina(rol?: string | null): boolean {
+  return rol === 'jefe' || rol === 'admin';
+}
+
 export function detectGroupServiceIntent(
   text: string,
 ): 'grupal' | 'incierta' | 'individual' {
@@ -5802,6 +5813,38 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
+
+    /*
+     * Un jefe o un admin escribiendo en privado no es un cliente.
+     *
+     * Este flujo trataba como cliente a cualquiera que escribiera al bot en
+     * privado, sin mirar si el chat estaba vinculado a una cuenta del sistema.
+     * El resultado era que, tras vincularse, al jefe le contestaba la IA
+     * haciendose pasar por una modelo y sus mensajes se guardaban como
+     * conversacion de cliente. La empleada y el chofer no entran aqui: tienen
+     * sus propios manejadores y su flujo si depende de este.
+     */
+    if (ctx.chat?.type === 'private') {
+      const cuentaDelSistema = await this.usuariosRepository.findOne({
+        where: { telegramChatId: telegramId },
+        select: { id: true, rol: true },
+      });
+
+      if (esCuentaDeOficina(cuentaDelSistema?.rol)) {
+        await ctx.reply(
+          [
+            'Estas vinculado como ' +
+              cuentaDelSistema!.rol +
+              ', asi que aqui no',
+            'se atiende una reserva.',
+            '',
+            'Usa el boton Mi Panel o el comando /panel para abrir el panel web,',
+            'y responde a los clientes desde el tema del servicio en el grupo.',
+          ].join('\n'),
+        );
+        return;
+      }
+    }
 
     // Flujo 1: Mensajes del Cliente hacia el Súpergrupo del Jefe Asignado (Webhook de Entrada)
     if (ctx.chat?.type === 'private') {

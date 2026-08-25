@@ -15,6 +15,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, MoreThan } from 'typeorm';
 import { AuthService } from '../auth/auth.service';
 import { PanelAccessService } from '../auth/panel-access.service';
+import { botonesDePortal } from './telegram-portal-buttons';
 import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
@@ -147,7 +148,9 @@ export class TelegramAuthUpdate {
             ? this.employeeMenu()
             : user.rol === 'chofer'
               ? this.driverMenu()
-              : {}),
+              : user.rol === 'jefe' || user.rol === 'admin'
+                ? this.bossMenu()
+                : {}),
         },
       );
       return;
@@ -825,10 +828,7 @@ export class TelegramAuthUpdate {
         ].join('\n'),
         {
           parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [Markup.button.webApp('Abrir mi portal', url)],
-            [Markup.button.url('Abrir en el navegador', url)],
-          ]),
+          ...Markup.inlineKeyboard(botonesDePortal(url)),
         },
       );
     } catch (error) {
@@ -837,6 +837,17 @@ export class TelegramAuthUpdate {
         'No se pudo generar el acceso a tu portal. Intenta de nuevo en un momento.',
       );
     }
+  }
+
+  /**
+   * Menu del jefe y del admin.
+   *
+   * La empleada y el chofer tenian su teclado desde el primer saludo, pero el
+   * jefe no recibia ninguno: para abrir su panel tenia que saber que existia el
+   * comando /panel y teclearlo. Un boton fijo lo deja a la vista.
+   */
+  private bossMenu() {
+    return Markup.keyboard([['Mi Panel']]).resize();
   }
 
   private employeeMenu() {
@@ -956,6 +967,16 @@ export class TelegramAuthUpdate {
    */
   @Command('panel')
   async onPanel(@Ctx() ctx: Context) {
+    await this.enviarEnlaceDePanel(ctx, null);
+  }
+
+  /**
+   * El boton del teclado del jefe. Va en su propio metodo y no apilado sobre
+   * `onPanel`: dos decoradores de escucha en el mismo metodo dependen de que la
+   * metadata se acumule, y aqui no hace falta arriesgarse.
+   */
+  @Hears('Mi Panel')
+  async onPanelButton(@Ctx() ctx: Context) {
     await this.enviarEnlaceDePanel(ctx, null);
   }
 

@@ -12,7 +12,11 @@ describe('PanelAccessService', () => {
     query: jest.fn(),
   };
   const usuarios = { findOne: jest.fn() };
-  const configService = { get: jest.fn(() => 'https://panel.example.com') };
+  const configService = {
+    get: jest.fn((clave: string) =>
+      clave === 'PANEL_BASE_URL' ? 'https://panel.example.com' : undefined,
+    ),
+  };
 
   const service = new PanelAccessService(
     tokens as any,
@@ -112,5 +116,64 @@ describe('PanelAccessService', () => {
       );
       expect(tokens.query).not.toHaveBeenCalled();
     });
+  });
+});
+
+/**
+ * El origen del enlace se resolvia solo desde PANEL_BASE_URL, que no existe en
+ * el despliegue: los enlaces salian a localhost y Telegram rechazaba el mensaje
+ * entero por no ser https.
+ */
+describe('PanelAccessService origen del enlace', () => {
+  function build(env: Record<string, string | undefined>) {
+    const tokens = {
+      save: jest.fn(),
+      create: jest.fn((v) => v),
+      query: jest.fn(),
+    };
+    const usuarios = {
+      findOne: jest.fn().mockResolvedValue({ id: 'u-1', activo: true }),
+    };
+    const configService = { get: jest.fn((clave: string) => env[clave]) };
+    return new PanelAccessService(
+      tokens as any,
+      usuarios as any,
+      configService as any,
+    );
+  }
+
+  it('usa WEB_URL cuando no hay PANEL_BASE_URL, que es lo que hay desplegado', async () => {
+    const service = build({ WEB_URL: 'https://rvcs-pruebas.com.mx' });
+
+    const { url } = await service.issueLink('u-1', null);
+
+    expect(url.startsWith('https://rvcs-pruebas.com.mx/acceso/')).toBe(true);
+  });
+
+  it('completa con https un origen configurado sin esquema', async () => {
+    const service = build({ WEB_URL: 'rvcs-pruebas.com.mx' });
+
+    const { url } = await service.issueLink('u-1', null);
+
+    expect(url.startsWith('https://rvcs-pruebas.com.mx/acceso/')).toBe(true);
+  });
+
+  it('respeta el orden de preferencia entre las tres variables', async () => {
+    const service = build({
+      PANEL_BASE_URL: 'https://panel.example.com',
+      WEB_URL: 'https://otro.example.com',
+    });
+
+    const { url } = await service.issueLink('u-1', null);
+
+    expect(url.startsWith('https://panel.example.com/acceso/')).toBe(true);
+  });
+
+  it('quita la barra final para no generar una doble', async () => {
+    const service = build({ WEB_URL: 'https://panel.example.com/' });
+
+    const { url } = await service.issueLink('u-1', null);
+
+    expect(url).not.toContain('//acceso');
   });
 });

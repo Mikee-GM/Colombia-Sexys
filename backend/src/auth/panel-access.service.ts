@@ -66,13 +66,7 @@ export class PanelAccessService {
       }),
     );
 
-    const base = (
-      this.configService.get<string>('PANEL_BASE_URL') ??
-      this.configService.get<string>('FRONTEND_URL') ??
-      'http://localhost:3000'
-    ).replace(/\/$/, '');
-
-    return { url: `${base}/acceso/${token}`, expiresAt };
+    return { url: `${this.baseUrl()}/acceso/${token}`, expiresAt };
   }
 
   /**
@@ -125,6 +119,36 @@ export class PanelAccessService {
       this.logger.log(`Pases de acceso caducados eliminados: ${affected}`);
     }
     return affected ?? 0;
+  }
+
+  /**
+   * Origen del panel, normalizado.
+   *
+   * Se miran las tres variables que usa el proyecto porque conviven: el
+   * despliegue configura `WEB_URL`, que era la que leian los portales de
+   * Telegram, y `PANEL_BASE_URL` se admite para poder apuntar el panel a otro
+   * host sin mover el resto.
+   *
+   * El valor puede venir sin esquema —en el entorno real esta como
+   * `rvcs-pruebas.com.mx`— y sin el no es una URL valida. Se completa con https
+   * y no con http porque Telegram rechaza los botones de Mini App que no sean
+   * https, y porque el panel siempre se sirve cifrado.
+   */
+  private baseUrl(): string {
+    const configurado =
+      this.configService.get<string>('PANEL_BASE_URL') ??
+      this.configService.get<string>('WEB_URL') ??
+      this.configService.get<string>('FRONTEND_URL');
+
+    if (!configurado?.trim()) {
+      this.logger.warn(
+        'Sin PANEL_BASE_URL, WEB_URL ni FRONTEND_URL: los enlaces de acceso apuntaran a localhost.',
+      );
+      return 'http://localhost:3000';
+    }
+
+    const limpio = configurado.trim().replace(/\/+$/, '');
+    return /^https?:\/\//i.test(limpio) ? limpio : `https://${limpio}`;
   }
 
   /**

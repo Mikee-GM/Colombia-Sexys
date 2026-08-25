@@ -1,5 +1,6 @@
 import {
   detectGroupServiceIntent,
+  esCuentaDeOficina,
   detectOpenEndedDuration,
   extractHireDuration,
   extractHirePaymentMethod,
@@ -206,5 +207,30 @@ describe('Telegram booking session input parsing', () => {
     expect(session.duracionPactadaHoras * session.trioCombinedRatePerHour).toBe(
       5800,
     );
+  });
+});
+
+/**
+ * Quien no debe caer en el flujo de cliente.
+ *
+ * El manejador de texto trataba como cliente a cualquiera que escribiera al bot
+ * en privado, sin mirar si el chat estaba vinculado a una cuenta del sistema.
+ * Tras vincularse, al jefe le contestaba la IA haciendose pasar por una modelo.
+ */
+describe('esCuentaDeOficina', () => {
+  it.each(['jefe', 'admin'])('deja fuera del flujo de cliente a %s', (rol) => {
+    expect(esCuentaDeOficina(rol)).toBe(true);
+  });
+
+  it.each(['empleada', 'chofer'])(
+    'no toca a %s, cuyo flujo depende del manejador de texto',
+    (rol) => {
+      expect(esCuentaDeOficina(rol)).toBe(false);
+    },
+  );
+
+  it('trata un chat sin cuenta vinculada como cliente', () => {
+    expect(esCuentaDeOficina(undefined)).toBe(false);
+    expect(esCuentaDeOficina(null)).toBe(false);
   });
 });

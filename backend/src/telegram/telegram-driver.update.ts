@@ -26,6 +26,7 @@ import { DisciplineService } from '../discipline/discipline.service';
 import { SettlementsService } from '../transport-operations/settlements.service';
 import { AuthService } from '../auth/auth.service';
 import { PanelAccessService } from '../auth/panel-access.service';
+import { botonesDePortal } from './telegram-portal-buttons';
 import { describeError } from '../common/errors/error-message';
 
 /**
@@ -127,10 +128,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
         ].join('\n'),
         {
           parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [Markup.button.webApp('Abrir mi portal', url)],
-            [Markup.button.url('Abrir en el navegador', url)],
-          ]),
+          ...Markup.inlineKeyboard(botonesDePortal(url)),
         },
       );
     } catch (error) {
