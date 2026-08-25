@@ -21,6 +21,38 @@ import { installSendThrottle } from './telegram-send-throttle';
  * update. Los handlers existentes lo usan para saber de qué empleada es el
  * chat sin cambiar su firma.
  */
+/** Margen para que Telegram conteste al identificar un bot al arrancarlo. */
+const GETME_TIMEOUT_MS = 10_000;
+
+/**
+ * Falla una promesa que tarda de mas, en vez de esperarla para siempre.
+ *
+ * Las llamadas a la API de Telegram no traen limite de tiempo propio: una que
+ * no responde se queda colgada indefinidamente y arrastra a todo lo que la
+ * espere.
+ */
+function conLimiteDeTiempo<T>(
+  promesa: Promise<T>,
+  ms: number,
+  descripcion: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const temporizador = setTimeout(() => {
+      reject(new Error(`${descripcion} no respondio en ${ms} ms`));
+    }, ms);
+    promesa.then(
+      (valor) => {
+        clearTimeout(temporizador);
+        resolve(valor);
+      },
+      (error) => {
+        clearTimeout(temporizador);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
+
 export interface DedicatedBotContext extends Context {
   dedicatedBotEmployeeId?: string;
   dedicatedBotId?: string;
@@ -85,13 +117,28 @@ export class TelegramBotRegistryService
     );
   }
 
-  async onModuleInit(): Promise<void> {
+  onModuleInit(): void {
     this.assertPollingIsSafe();
 
     // El bot central manda tanto como los dedicados: avisos a jefes, ofertas a
     // choferes y los barridos periodicos salen todos por aqui.
     installSendThrottle(this.centralBot, 'central');
 
+    /*
+     * Los bots dedicados se levantan FUERA del arranque, a proposito.
+     *
+     * Nest espera a que terminen todos los `onModuleInit` antes de dar la
+     * aplicacion por iniciada, y nestjs-telegraf lanza el bot central en su
+     * propio hook. Si aqui se esperaba a `getMe()` de cada bot dedicado —una
+     * llamada de red, en serie, sin limite de tiempo— un solo token colgado o
+     * un 429 de Telegram por ráfaga bastaba para detener el arranque entero y
+     * dejar sin lanzar tambien al central: ningun bot respondia y desde fuera
+     * parecia que los clientes habian dejado de escribir.
+     */
+    void this.arrancarBotsDedicados();
+  }
+
+  private async arrancarBotsDedicados(): Promise<void> {
     let records: EmployeeTelegramBot[];
     try {
       records = await this.botsRepository.find({
@@ -114,12 +161,33 @@ export class TelegramBotRegistryService
     this.logger.log(
       `Levantando ${records.length} bot(s) dedicados por ${this.usesWebhooks ? 'webhook' : 'long polling'}.`,
     );
+    let arriba = 0;
+    const caidos: string[] = [];
     for (const record of records) {
-      await this.startBot(record).catch((error: unknown) => {
+      try {
+        await this.startBot(record);
+        arriba += 1;
+      } catch (error: unknown) {
+        caidos.push(record.employeeId);
         this.logger.error(
           `No se pudo levantar el bot de la empleada ${record.employeeId}: ${String(error)}`,
         );
-      });
+      }
+    }
+
+    /*
+     * Resumen en una linea. Cada fallo ya se registro por separado, pero el
+     * recuento es lo que permite ver de un vistazo que el problema es general
+     * —todos caidos, apunta a configuracion o a Telegram— y no de un token
+     * suelto. Un bot caido devuelve su enlace del catalogo al bot central.
+     */
+    if (caidos.length) {
+      this.logger.error(
+        `Bots dedicados: ${arriba} arriba, ${caidos.length} caidos. Los caidos ` +
+          'atenderan por el bot central hasta que arranquen.',
+      );
+    } else {
+      this.logger.log(`Bots dedicados: ${arriba} arriba, ninguno caido.`);
     }
   }
 
@@ -179,7 +247,13 @@ export class TelegramBotRegistryService
     const bot = this.buildBot(record, token);
 
     try {
-      const me = await bot.telegram.getMe();
+      // Con limite de tiempo: `getMe` no lo trae, y sin el un token que no
+      // responde deja colgado el arranque del resto de los bots.
+      const me = await conLimiteDeTiempo(
+        bot.telegram.getMe(),
+        GETME_TIMEOUT_MS,
+        `getMe del bot de la empleada ${record.employeeId}`,
+      );
       bot.botInfo = me;
 
       if (this.usesWebhooks) {

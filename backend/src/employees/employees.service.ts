@@ -446,16 +446,17 @@ export class EmployeesService {
    * Stampa el username del bot propio de cada modelo. El catálogo lo usa para
    * mandar al cliente al bot correcto en vez de al central.
    *
-   * Basta con que el bot esté configurado y se conozca su usuario; no se exige
-   * que nuestro proceso lo tenga levantado ahora mismo. El enlace `t.me` es de
-   * Telegram y funciona igual: abre el chat con esa modelo aunque nuestro
-   * sondeo esté caído.
+   * Solo se enlaza a un bot que este proceso consiguió arrancar (`activo`).
    *
-   * Antes se filtraba por `status = 'activo'`, y eso ataba el enlace público al
-   * estado del proceso: si al reiniciar el backend un bot fallaba al arrancar
-   * (un 409 de Telegram por doble sondeo, un corte de red, un límite de tasa),
-   * su fila quedaba en 'error' y el catálogo devolvía en silencio a esa modelo
-   * al bot central hasta que alguien la volviera a vincular a mano.
+   * Se probó lo contrario —enlazar a cualquier bot configurado, arrancado o
+   * no— y sale mucho peor: el enlace abre el chat, porque `t.me` es de
+   * Telegram, pero al otro lado no hay nadie escuchando y el cliente se queda
+   * sin respuesta. Mandarlo al bot central es peor experiencia que hablar con
+   * la modelo, pero le contesta alguien; el silencio es una venta perdida.
+   *
+   * Que un bot caiga a `error` y su enlace vuelva al central es, por tanto, el
+   * comportamiento correcto: la señal de alarma es la fila en `error`, y lo que
+   * hay que arreglar es por qué no arranca, no el enlace.
    */
   private async attachBotUsernames(
     employees: Empleadas[],
@@ -466,7 +467,7 @@ export class EmployeesService {
         await this.dataSource.query(
           `SELECT employee_id, bot_username
            FROM employee_telegram_bots
-           WHERE bot_username IS NOT NULL AND status <> 'deshabilitado'`,
+           WHERE bot_username IS NOT NULL AND status = 'activo'`,
         );
       const byEmployee = new Map(
         rows.map((row) => [row.employee_id, row.bot_username]),
