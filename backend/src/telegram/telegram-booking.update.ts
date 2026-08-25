@@ -1389,10 +1389,19 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
   private async getAvailableEmployees(
     excludeId?: string,
   ): Promise<Empleadas[]> {
+    /*
+     * `usuario: { enJornada: true }` ademas de `disponible`: quien cerro su
+     * jornada no vuelve a estar libre en un rato, ya no trabaja hoy, asi que
+     * ofrecerla solo sirve para que el cliente espere en vano.
+     */
     const employees = await this.empleadasRepository.find({
-      where: { disponible: true, catalogoActivo: true },
+      where: {
+        disponible: true,
+        catalogoActivo: true,
+        usuario: { enJornada: true },
+      },
       order: { nombreArtistico: 'ASC' },
-      relations: { empleadaFotos: true },
+      relations: { empleadaFotos: true, usuario: true },
     });
     const busyServices = await this.serviciosRepository.find({
       where: { estado: In(['en_curso']) },
@@ -1410,6 +1419,34 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * cliente se perdía; ahora se le saluda y se le muestra con quién puede hablar.
    */
   private async replyWithAvailableEmployees(ctx: BotContext): Promise<void> {
+    /*
+     * En el bot propio de una modelo no se ofrecen otras.
+     *
+     * Cada modelo tiene su bot, y un bot solo puede escribirle a quien lo haya
+     * iniciado: los botones llevarian a una conversacion que el cliente no ha
+     * abierto y los mensajes se perderian en silencio. Ademas, contestar por
+     * otra chica desde el chat de esta se lee como una suplantacion.
+     */
+    const dedicatedEmployeeId = (ctx as DedicatedBotContext)
+      .dedicatedBotEmployeeId;
+    if (dedicatedEmployeeId) {
+      const web = (process.env.WEB_URL || process.env.PANEL_BASE_URL || '')
+        .trim()
+        .replace(/\/+$/, '');
+      const destino = web
+        ? /^https?:\/\//i.test(web)
+          ? web
+          : `https://${web}`
+        : null;
+
+      await ctx.reply(
+        destino
+          ? `Puedes ver a las demas chicas disponibles aqui: ${destino}`
+          : 'Puedes escribirnos mas tarde o buscar a otra chica en nuestro catalogo.',
+      );
+      return;
+    }
+
     const available = await this.getAvailableEmployees();
     if (!available.length) {
       await ctx.reply(
@@ -1623,24 +1660,50 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }
   }
 
+  /**
+   * Abre la conversacion de contratacion con una modelo.
+   *
+   * Entra tanto desde el enlace del catalogo como desde un cliente que escribe
+   * en frio al bot propio de ella. Cuando la modelo no puede atender, no se
+   * responde con un mensaje que deja al cliente sin salida: se le ofrece a
+   * quien si esta libre, que es lo unico que le sirve en ese momento.
+   */
   async startHireSession(ctx: any, empleadaId: string) {
     const empleada = await this.empleadasRepository.findOne({
       where: { id: empleadaId },
+      relations: { usuario: true },
     });
 
     if (!empleada || !empleada.catalogoActivo) {
       await ctx.reply(
-        'La empleada seleccionada no está activa en el catálogo.',
+        'Esa chica no esta disponible por ahora. Estas son las que si pueden atenderte:',
       );
+      await this.replyWithAvailableEmployees(ctx);
       return;
     }
+
     const activeService = await this.serviciosRepository.findOne({
       where: { empleadaId, estado: 'en_curso' },
     });
+
+    /*
+     * Cerrar la jornada es distinto de estar ocupada: la ocupada vuelve mas
+     * tarde y por eso se ofrece esperarla, la que ya cerro su dia no. Se
+     * comprueba antes que `disponible` para no proponer una espera imposible.
+     */
+    if (empleada.usuario && empleada.usuario.enJornada === false) {
+      await ctx.reply(
+        `${empleada.nombreArtistico} ya termino por hoy y no va a tomar mas servicios. Estas si estan disponibles ahora:`,
+      );
+      await this.replyWithAvailableEmployees(ctx);
+      return;
+    }
+
     if (!activeService && !empleada.disponible) {
       await ctx.reply(
-        'La empleada no está disponible operativamente en este momento.',
+        `${empleada.nombreArtistico} no puede atenderte en este momento. Estas si estan disponibles:`,
       );
+      await this.replyWithAvailableEmployees(ctx);
       return;
     }
     const queuedService = activeService

@@ -8,10 +8,13 @@ import {
   Delete,
   UseGuards,
   Query,
+  Req,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { WorkShiftStatusDto } from './dto/work-shift-status.dto';
+import { WorkShiftStatusService } from './work-shift-status.service';
 import { Usuarios } from './entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -30,7 +33,10 @@ import {
 @Controller('users')
 @ApiControllerDocs('users', true)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly workShiftStatus: WorkShiftStatusService,
+  ) {}
 
   @Post()
   @ApiCreateDocs({
@@ -51,6 +57,34 @@ export class UsersController {
   @Roles('admin', 'jefe')
   findAll(@Query('rol') rol?: Usuarios['rol']) {
     return this.usersService.findAll(rol);
+  }
+
+  /**
+   * Estado de jornada de quien pregunta. Sin `:id`: cada quien consulta y
+   * cambia el suyo, y no hace falta que el panel sepa su propio id.
+   */
+  @Get('me/jornada')
+  @UseGuards(JwtAuthGuard)
+  getMyWorkShift(@Req() req: any) {
+    return this.workShiftStatus.getStatus(req.user.id);
+  }
+
+  /**
+   * Cierra o reabre la jornada. Cualquier rol puede cambiar el suyo; lo que
+   * cambia segun el rol es a quien se avisa.
+   */
+  @Patch('me/jornada')
+  @UseGuards(JwtAuthGuard)
+  setMyWorkShift(@Body() dto: WorkShiftStatusDto, @Req() req: any) {
+    return this.workShiftStatus.setStatus(req.user, dto.enJornada);
+  }
+
+  /** Personal fuera de jornada, para el panel de admin. */
+  @Get('off-duty')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'jefe')
+  listOffDuty() {
+    return this.workShiftStatus.listOffDuty();
   }
 
   @Get(':id')

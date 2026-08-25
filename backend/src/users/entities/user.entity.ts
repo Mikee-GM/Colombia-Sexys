@@ -77,6 +77,32 @@ export class Usuarios {
   })
   disponible: boolean;
 
+  /**
+   * Si la persona esta dentro de su jornada de trabajo.
+   *
+   * No es lo mismo que `disponible`, que dice si puede tomar algo *ahora*: una
+   * modelo en servicio y una que ya termino su dia estan las dos no
+   * disponibles, pero solo la segunda dejo de trabajar. Mezclarlas impedia
+   * distinguir "esta ocupada" de "ya no cuenten conmigo hoy".
+   */
+  @Column('boolean', { name: 'en_jornada', default: () => 'true' })
+  @ApiProperty({
+    description: 'La persona sigue dentro de su jornada de trabajo',
+    example: true,
+  })
+  enJornada: boolean;
+
+  @Column('timestamp with time zone', {
+    name: 'jornada_actualizada_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Cuando cambio por ultima vez su estado de jornada',
+    type: String,
+    format: 'date-time',
+  })
+  jornadaActualizadaAt: Date | null;
+
   @Column('bigint', { name: 'telegram_chat_id', nullable: true, unique: true })
   @ApiPropertyOptional({
     description: 'Telegram Chat Id',

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
 import type {
   DriverShiftCandidates,
+  DriverShiftsForDriver,
   DriverShiftDetail,
   DriverShiftSummary,
 } from "@/lib/types";
@@ -18,6 +19,14 @@ export async function getDriverShift(id: string) {
 
 export async function getDriverShiftCandidates(id: string) {
   return apiFetch<DriverShiftCandidates>(`/driver-shifts/${id}/candidates`);
+}
+
+/**
+ * Turnos vistos desde la ficha de un chofer: los que ya tiene y los que puede
+ * tomar. Es la vista contraria a la de la malla, que parte del turno.
+ */
+export async function getShiftsForDriver(driverId: string) {
+  return apiFetch<DriverShiftsForDriver>(`/driver-shifts/driver/${driverId}`);
 }
 
 export async function createDriverShift(input: {
@@ -64,6 +73,7 @@ export async function assignDriverToShift(shiftId: string, driverId: string) {
     body: JSON.stringify({ driverId }),
   });
   revalidatePath("/admin/turnos");
+  revalidatePath("/admin/choferes");
 }
 
 export async function unassignDriverFromShift(
@@ -74,4 +84,5 @@ export async function unassignDriverFromShift(
     method: "DELETE",
   });
   revalidatePath("/admin/turnos");
+  revalidatePath("/admin/choferes");
 }

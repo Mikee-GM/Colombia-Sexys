@@ -749,6 +749,13 @@ export type DriverShiftDetail = DriverShift & {
   assignedDrivers: DriverShiftPerson[];
 };
 
+/** Turnos de un chofer concreto: los que tiene y los que puede tomar. */
+export type DriverShiftsForDriver = {
+  driverId: string;
+  assigned: DriverShiftSummary[];
+  available: DriverShiftSummary[];
+};
+
 export type DriverShiftCandidates = {
   shiftId: string;
   capacity: number | null;

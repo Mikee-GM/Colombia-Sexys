@@ -20,6 +20,7 @@ import {
   type BadgeTone,
 } from "@/components/erp/primitives";
 import type { GodEyeOverview } from "@/lib/actions/god-eye";
+import type { OffDutyPerson } from "@/lib/actions/work-shift";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
@@ -61,8 +62,11 @@ function hora(iso: string | null) {
 
 export default function CentroDeMando({
   overview,
+  offDuty = [],
 }: {
   overview: GodEyeOverview;
+  /** Personal que cerro su jornada, de cualquier rol. */
+  offDuty?: OffDutyPerson[];
 }) {
   const { metrics, activeServices, pendingReports } = overview;
 
@@ -72,6 +76,9 @@ export default function CentroDeMando({
   );
 
   /* Cada alerta apunta a la pantalla donde se resuelve. */
+  /* Los tres roles: el admin quiere ver quien no esta trabajando hoy. */
+  const fueraDeJornada = offDuty;
+
   const alertas = [
     {
       id: "recibos",
@@ -111,6 +118,17 @@ export default function CentroDeMando({
       titulo: "Calificaciones negativas recientes",
       detalle: "Revisar la interaccion asociada",
       href: "/admin/reports",
+      tone: "amber" as BadgeTone,
+    },
+    {
+      id: "jornada",
+      cantidad: fueraDeJornada.length,
+      titulo: "Personal fuera de jornada",
+      detalle: fueraDeJornada
+        .slice(0, 3)
+        .map((persona) => persona.nombre)
+        .join(", "),
+      href: "/admin/choferes",
       tone: "amber" as BadgeTone,
     },
   ].filter((alerta) => alerta.cantidad > 0);

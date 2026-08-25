@@ -87,7 +87,14 @@ export class PanelAccessService {
 
     if (!token || token.length > 200) throw rechazo;
 
-    const result: PanelAccessToken[] = await this.tokens.query(
+    /*
+     * En Postgres, TypeORM devuelve `[filas, afectadas]` para UPDATE y DELETE,
+     * y solo las filas para el resto. Leer `result[0]` como si fuera la fila
+     * daba el array entero: los campos salian undefined y un pase ya usado
+     * -- array vacio, que es truthy -- se colaba hasta reventar contra la
+     * base en vez de rechazarse limpiamente.
+     */
+    const result = await this.tokens.query(
       `UPDATE public.panel_access_tokens
           SET used_at = now()
         WHERE token_hash = $1
@@ -98,8 +105,14 @@ export class PanelAccessService {
       [hashToken(token)],
     );
 
-    const row = result?.[0];
-    if (!row) throw rechazo;
+    const filas: Array<{
+      userId?: string;
+      chatId?: string | null;
+      redirectPath?: string | null;
+    }> = Array.isArray(result?.[0]) ? result[0] : (result ?? []);
+
+    const row = filas[0];
+    if (!row?.userId) throw rechazo;
 
     // Un mensaje reenviado no debe servirle a otro chat.
     if (row.chatId && chatId && row.chatId !== chatId) throw rechazo;

@@ -22,6 +22,7 @@ import type {
   DriverShiftDetail,
   DriverShiftSummary,
 } from "@/lib/types";
+import { formatDays } from "@/lib/driver-shifts";
 import {
   assignDriverToShift,
   createDriverShift,
@@ -50,17 +51,6 @@ const SEMANA = [
   { dia: 6, label: "Sabado", corto: "Sab" },
   { dia: 0, label: "Domingo", corto: "Dom" },
 ] as const;
-
-/** Los dias llegan como en Date.getDay(): 0 es domingo. */
-const DAY_LABELS = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
-
-function formatDays(daysOfWeek: number[]) {
-  if (daysOfWeek.length === 7) return "Todos los dias";
-  return [...daysOfWeek]
-    .sort((a, b) => (a || 7) - (b || 7))
-    .map((day) => DAY_LABELS[day])
-    .join(", ");
-}
 
 export default function TurnosClient({
   initialShifts,

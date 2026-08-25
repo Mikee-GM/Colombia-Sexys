@@ -34,6 +34,13 @@ export class DriverShiftsController {
     return this.driverShifts.listShifts();
   }
 
+  // Vista contraria a la del turno: los turnos de un chofer, para su ficha.
+  // Va antes que `:id` para que 'driver' no se lea como el id de un turno.
+  @Get('driver/:driverId')
+  forDriver(@Param('driverId', ParseUUIDPipe) driverId: string) {
+    return this.driverShifts.listShiftsForDriver(driverId);
+  }
+
   @Get(':id')
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.driverShifts.getShift(id);

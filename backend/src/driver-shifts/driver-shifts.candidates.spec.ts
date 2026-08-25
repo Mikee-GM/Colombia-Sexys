@@ -80,3 +80,92 @@ describe('DriverShiftsService listCandidates', () => {
     expect(result.assignedCount).toBe(1);
   });
 });
+
+/**
+ * Vista por chofer, para operar los turnos desde su ficha. Lo que importa es
+ * que no ofrezca turnos que al asignarse fallarian: inactivos o llenos.
+ */
+describe('DriverShiftsService listShiftsForDriver', () => {
+  const shifts = { find: jest.fn() };
+  const assignments = { find: jest.fn(), createQueryBuilder: jest.fn() };
+  const choferesRepository = { findOneBy: jest.fn() };
+
+  const service = new DriverShiftsService(
+    shifts as any,
+    assignments as any,
+    choferesRepository as any,
+    {} as any,
+    {} as any,
+  );
+
+  function conteos(filas: Array<{ shiftId: string; count: number }>) {
+    assignments.createQueryBuilder.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue(filas),
+    });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    choferesRepository.findOneBy.mockResolvedValue({ id: 'chofer-1' });
+  });
+
+  it('separa lo que ya tiene de lo que puede tomar', async () => {
+    shifts.find.mockResolvedValue([
+      { id: 'mio', active: true, capacity: 3 },
+      { id: 'libre', active: true, capacity: 3 },
+    ]);
+    assignments.find.mockResolvedValue([{ shiftId: 'mio' }]);
+    conteos([{ shiftId: 'mio', count: 1 }]);
+
+    const result = await service.listShiftsForDriver('chofer-1');
+
+    expect(result.assigned.map((s) => s.id)).toEqual(['mio']);
+    expect(result.available.map((s) => s.id)).toEqual(['libre']);
+  });
+
+  it('no ofrece un turno lleno, porque asignarlo daria conflicto', async () => {
+    shifts.find.mockResolvedValue([{ id: 'lleno', active: true, capacity: 2 }]);
+    assignments.find.mockResolvedValue([]);
+    conteos([{ shiftId: 'lleno', count: 2 }]);
+
+    const result = await service.listShiftsForDriver('chofer-1');
+
+    expect(result.available).toEqual([]);
+  });
+
+  it('no ofrece un turno desactivado', async () => {
+    shifts.find.mockResolvedValue([
+      { id: 'apagado', active: false, capacity: null },
+    ]);
+    assignments.find.mockResolvedValue([]);
+    conteos([]);
+
+    const result = await service.listShiftsForDriver('chofer-1');
+
+    expect(result.available).toEqual([]);
+  });
+
+  it('ofrece un turno sin tope aunque ya tenga gente', async () => {
+    shifts.find.mockResolvedValue([
+      { id: 'sin-tope', active: true, capacity: null },
+    ]);
+    assignments.find.mockResolvedValue([]);
+    conteos([{ shiftId: 'sin-tope', count: 9 }]);
+
+    const result = await service.listShiftsForDriver('chofer-1');
+
+    expect(result.available.map((s) => s.id)).toEqual(['sin-tope']);
+    expect(result.available[0].assignedCount).toBe(9);
+  });
+
+  it('falla si el chofer no existe', async () => {
+    choferesRepository.findOneBy.mockResolvedValue(null);
+
+    await expect(service.listShiftsForDriver('fantasma')).rejects.toThrow(
+      'Chofer no encontrado',
+    );
+  });
+});

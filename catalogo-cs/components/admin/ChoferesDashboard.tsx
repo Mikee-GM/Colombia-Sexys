@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import DriverShiftsPanel from "@/components/admin/driver-shifts-panel";
+import type { OffDutyPerson } from "@/lib/actions/work-shift";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -51,10 +53,17 @@ const formatPhoneNumber = (value: string): string => {
 };
 
 interface ChoferesDashboardProps {
+  /** Quien cerro su jornada, para marcarlo en su tarjeta. */
+  offDuty?: OffDutyPerson[];
   initialChoferes: Chofer[];
 }
 
-export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboardProps) {
+export default function ChoferesDashboard({
+  initialChoferes,
+  offDuty = [],
+}: ChoferesDashboardProps) {
+  /* La jornada se guarda por usuario, no por chofer: se cruza por usuarioId. */
+  const fueraDeJornada = new Set(offDuty.map((persona) => persona.id));
   const [choferes, setChoferes] = useState<Chofer[]>(initialChoferes);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -315,6 +324,20 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
                   {saving ? "Guardando..." : editingChofer ? "Guardar Cambios" : "Crear Chofer"}
                 </button>
               </form>
+
+              {/*
+                Fuera del formulario y solo al editar: los turnos se guardan al
+                instante contra su propio endpoint, no con el boton de arriba, y
+                un chofer que aun no existe no tiene id al que asignarlos.
+              */}
+              {editingChofer && (
+                <div className="mt-6">
+                  <DriverShiftsPanel
+                    driverId={editingChofer.id}
+                    driverName={editingChofer.nombre}
+                  />
+                </div>
+              )}
             </motion.div>
           </div>
         )}
@@ -386,6 +409,11 @@ export default function ChoferesDashboard({ initialChoferes }: ChoferesDashboard
                   <td className="px-6 py-4 text-base font-semibold text-white">
                     <div className="flex items-center gap-2">
                       <span>{chofer.nombre}</span>
+                      {fueraDeJornada.has(chofer.usuarioId) && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-950/60 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                          Fuera de jornada
+                        </span>
+                      )}
                       {chofer.sancionada && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-red-950/80 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-400">
                           ⛔ Sancionado

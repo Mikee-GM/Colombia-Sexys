@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { OffDutyPerson } from "@/lib/actions/work-shift";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -28,10 +29,17 @@ const inputClass =
   "w-full bg-black/40 border border-zinc-800 text-white text-sm font-medium px-4 py-3 rounded-lg transition-all duration-300 focus:border-[#C5A55A]/60 focus:bg-black/60 focus:ring-4 focus:ring-[#C5A55A]/10 placeholder:text-zinc-600 focus:outline-none tracking-wide";
 
 interface JefesDashboardProps {
+  /** Quien cerro su jornada, para marcarlo en su fila. */
+  offDuty?: OffDutyPerson[];
   initialJefes: Jefe[];
 }
 
-export default function JefesDashboard({ initialJefes }: JefesDashboardProps) {
+export default function JefesDashboard({
+  initialJefes,
+  offDuty = [],
+}: JefesDashboardProps) {
+  /* La jornada es del usuario, y un jefe es un usuario: se cruza por su id. */
+  const fueraDeJornada = new Set(offDuty.map((persona) => persona.id));
   const [jefes, setJefes] = useState<Jefe[]>(initialJefes);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -278,6 +286,11 @@ export default function JefesDashboard({ initialJefes }: JefesDashboardProps) {
                 <tr key={jefe.id} className="border-b border-zinc-800/40 hover:bg-zinc-900/10 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-white">
                     {jefe.nombre || "-"} {jefe.apellido || ""}
+                    {fueraDeJornada.has(jefe.id) && (
+                      <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-950/60 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+                        Fuera de jornada
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-zinc-300">
                     {jefe.email}

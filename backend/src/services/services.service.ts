@@ -41,6 +41,21 @@ import { describeError } from '../common/errors/error-message';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 
 /**
+ * Si una persona del equipo puede hacerse cargo de algo ahora.
+ *
+ * Son dos preguntas distintas y las dos tienen que cumplirse: `disponible` dice
+ * que no esta ocupada en este momento, `enJornada` que sigue trabajando hoy.
+ * Mirar solo la primera hacia que a alguien que ya cerro su dia le siguieran
+ * cayendo servicios.
+ */
+export function puedeAtender(persona: {
+  disponible?: boolean | null;
+  enJornada?: boolean | null;
+}): boolean {
+  return persona.disponible !== false && persona.enJornada !== false;
+}
+
+/**
  * Estados en los que un viaje ya salio a la calle. Si se cancela estando aqui,
  * lo mas probable es que haya costado dinero.
  */
@@ -370,12 +385,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             const mainJefe = await this.usuariosRepository.findOne({
               where: { id: emp.jefeId, activo: true },
             });
-            if (!mainJefe || !mainJefe.disponible) {
+            /*
+             * El relevo al jefe secundario ya existia para `disponible`; la
+             * jornada cerrada cuenta igual, y con mas motivo: quien termino su
+             * dia no va a atender el servicio en un rato.
+             */
+            if (!mainJefe || !puedeAtender(mainJefe)) {
               if (emp.jefeSecundarioId) {
                 const secJefe = await this.usuariosRepository.findOne({
                   where: { id: emp.jefeSecundarioId, activo: true },
                 });
-                if (secJefe && secJefe.disponible) {
+                if (secJefe && puedeAtender(secJefe)) {
                   assignedJefeId = emp.jefeSecundarioId;
                 }
               }
@@ -1777,6 +1797,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       .innerJoinAndSelect('chofer.usuario', 'usuario')
       .where('chofer.disponible = :disponible', { disponible: true })
       .andWhere('usuario.activo = :usuarioActivo', { usuarioActivo: true })
+      // Quien cerro su jornada no vuelve a estar libre en un rato: no se le
+      // ofrecen viajes hasta que la reabra.
+      .andWhere('usuario.enJornada = :enJornada', { enJornada: true })
       .andWhere('usuario.telegramChatId IS NOT NULL')
       .andWhere('chofer.ubicacionLat IS NOT NULL')
       .andWhere('chofer.ubicacionLng IS NOT NULL');

@@ -174,6 +174,53 @@ export class DriverShiftsService {
     return new Set(rows.map((row) => row.subject_id));
   }
 
+  /**
+   * Turnos de un chofer concreto, para operar desde su ficha.
+   *
+   * La API de turnos estaba centrada en el turno: para saber que tiene asignado
+   * un chofer habia que abrir cada turno y mirar su lista. Desde la ficha del
+   * chofer hace falta la vista contraria, y en una sola peticion, porque el
+   * modal necesita las dos listas a la vez.
+   *
+   * `disponibles` excluye los turnos inactivos y los que ya estan al tope: si
+   * el modal los ofreciera, asignarlos fallaria con un conflicto.
+   */
+  async listShiftsForDriver(driverId: string) {
+    const driver = await this.choferesRepository.findOneBy({ id: driverId });
+    if (!driver) throw new NotFoundException('Chofer no encontrado');
+
+    const [shifts, misAsignaciones, conteos] = await Promise.all([
+      this.shifts.find({ order: { createdAt: 'DESC' } }),
+      this.assignments.find({ where: { driverId } }),
+      this.assignments
+        .createQueryBuilder('a')
+        .select('a.shiftId', 'shiftId')
+        .addSelect('COUNT(*)::int', 'count')
+        .groupBy('a.shiftId')
+        .getRawMany<{ shiftId: string; count: number }>(),
+    ]);
+
+    const asignados = new Set(misAsignaciones.map((row) => row.shiftId));
+    const ocupacion = new Map(conteos.map((row) => [row.shiftId, row.count]));
+
+    const conConteo = (shift: DriverShift) => ({
+      ...shift,
+      assignedCount: ocupacion.get(shift.id) ?? 0,
+    });
+
+    return {
+      driverId,
+      assigned: shifts.filter((s) => asignados.has(s.id)).map(conConteo),
+      available: shifts
+        .filter((shift) => {
+          if (asignados.has(shift.id) || !shift.active) return false;
+          if (shift.capacity == null) return true;
+          return (ocupacion.get(shift.id) ?? 0) < shift.capacity;
+        })
+        .map(conConteo),
+    };
+  }
+
   async assignDriver(
     shiftId: string,
     dto: AssignDriverShiftDto,

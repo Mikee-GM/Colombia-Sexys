@@ -14,6 +14,7 @@ import { getServices } from "@/lib/data/services";
 import { getCurrentUser } from "@/lib/auth";
 import { optionalSource } from "@/lib/optional-source";
 import { getOperationalWeek } from "@/lib/week-range";
+import { getOffDutyStaff } from "@/lib/actions/work-shift";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,8 @@ export default async function DashboardPage() {
   const contexto = "el centro de mando";
   const { startDate, endDate } = getOperationalWeek();
 
-  const [overview, actors, appeals, services, summary] = await Promise.all([
+  const [overview, actors, appeals, services, summary, offDuty] =
+    await Promise.all([
     optionalSource(getGodEyeOverviewAction(), OVERVIEW_VACIO, contexto),
     optionalSource(
       getGodEyeActorsAction(),
@@ -57,7 +59,8 @@ export default async function DashboardPage() {
     optionalSource(getPendingAppeals(), [], contexto),
     optionalSource(getServices(), [], contexto),
     optionalSource(getWeeklySummary(startDate, endDate), [], contexto),
-  ]);
+    optionalSource(getOffDutyStaff(), [], contexto),
+    ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,7 +70,7 @@ export default async function DashboardPage() {
       />
 
       {/* Resumen del ERP; debajo queda el tablero detallado que ya existia. */}
-      <CentroDeMando overview={overview} />
+      <CentroDeMando overview={overview} offDuty={offDuty ?? []} />
 
       <SemanaEnCurso
         services={services ?? []}

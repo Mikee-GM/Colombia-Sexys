@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { getDriverPortalData } from "@/lib/actions/driver-portal";
 import DriverPortalView from "@/components/chofer/DriverPortalView";
+import { getCurrentUser } from "@/lib/auth";
+import { getMyWorkShift } from "@/lib/actions/work-shift";
 
 export const metadata: Metadata = {
   title: "Mi Portal -- Colombia Sexys",
@@ -15,6 +17,10 @@ interface PageProps {
 export default async function DriverPortalPage({ searchParams }: PageProps) {
   const { token } = await searchParams;
   const result = await getDriverPortalData(token);
+
+  /* Solo con sesion: un enlace antiguo con token no lleva cookie. */
+  const sesion = await getCurrentUser();
+  const workShift = sesion ? await getMyWorkShift() : null;
 
   if (!result.success || !result.data) {
     return (
@@ -34,5 +40,5 @@ export default async function DriverPortalPage({ searchParams }: PageProps) {
     );
   }
 
-  return <DriverPortalView initialData={result.data} />;
+  return <DriverPortalView initialData={result.data} workShift={workShift} />;
 }

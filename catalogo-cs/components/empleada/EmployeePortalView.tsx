@@ -5,15 +5,22 @@ import Image from "next/image";
 import type { EmployeePortalData } from "@/lib/types";
 import { formatCurrency as formatCurrencyCOP } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
+import type { WorkShiftStatus } from "@/lib/actions/work-shift";
 
 interface EmployeePortalViewProps {
   initialData: EmployeePortalData;
   token?: string;
+  /** Nulo cuando se entra con un enlace antiguo, sin sesion. */
+  workShift?: WorkShiftStatus | null;
 }
 
 type TabType = "resumen" | "ranking" | "servicios" | "reputacion" | "fotos";
 
-export default function EmployeePortalView({ initialData }: EmployeePortalViewProps) {
+export default function EmployeePortalView({
+  initialData,
+  workShift,
+}: EmployeePortalViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>("resumen");
   const data = initialData;
 
@@ -138,6 +145,16 @@ export default function EmployeePortalView({ initialData }: EmployeePortalViewPr
         {/* ================= TAB 1: RESUMEN Y FINANZAS ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">
+            {/*
+              Cerrar la jornada le avisa a su jefe. Solo aparece con sesion
+              propia: un enlace antiguo con token no identifica a la persona.
+            */}
+            {workShift !== undefined && workShift !== null && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <WorkShiftToggle initialStatus={workShift} />
+              </div>
+            )}
+
             {/* SERVICIO ACTIVO ALERTA (SI EXISTE) */}
             {data.activeService && (
               <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-emerald-900/20 to-black border border-emerald-500/40 shadow-lg relative overflow-hidden">

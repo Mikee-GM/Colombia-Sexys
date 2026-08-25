@@ -4,9 +4,13 @@ import React, { useState, useEffect } from "react";
 import type { DriverPortalData } from "@/lib/types";
 import { formatCurrency as formatCurrencyCOP } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
+import type { WorkShiftStatus } from "@/lib/actions/work-shift";
 
 interface DriverPortalViewProps {
   initialData: DriverPortalData;
+  /** Nulo cuando se entra con un enlace antiguo, sin sesion. */
+  workShift?: WorkShiftStatus | null;
 }
 
 type TabType = "resumen" | "ranking" | "viajes" | "reputacion";
@@ -17,7 +21,10 @@ const ZONA_LABEL: Record<string, string> = {
   domicilio: "Domicilio",
 };
 
-export default function DriverPortalView({ initialData }: DriverPortalViewProps) {
+export default function DriverPortalView({
+  initialData,
+  workShift,
+}: DriverPortalViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>("resumen");
   const data = initialData;
 
@@ -139,6 +146,13 @@ export default function DriverPortalView({ initialData }: DriverPortalViewProps)
         {/* ================= TAB 1: RESUMEN ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Cerrar la jornada queda marcado en el panel de admin. */}
+            {workShift !== undefined && workShift !== null && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <WorkShiftToggle initialStatus={workShift} />
+              </div>
+            )}
+
             {data.activeTrip && (
               <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-emerald-900/20 to-black border border-emerald-500/40 shadow-lg relative overflow-hidden">
                 <div className="flex items-center justify-between mb-2">

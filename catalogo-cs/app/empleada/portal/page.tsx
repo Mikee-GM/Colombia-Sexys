@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { getEmployeePortalData } from "@/lib/actions/employee-portal";
 import EmployeePortalView from "@/components/empleada/EmployeePortalView";
+import { getCurrentUser } from "@/lib/auth";
+import { getMyWorkShift } from "@/lib/actions/work-shift";
 
 export const metadata: Metadata = {
   title: "Mi Portal -- Colombia Sexys",
@@ -15,6 +17,14 @@ interface PageProps {
 export default async function EmployeePortalPage({ searchParams }: PageProps) {
   const { token } = await searchParams;
   const result = await getEmployeePortalData(token);
+
+  /*
+   * El estado de jornada solo se pide si hay sesion. Un enlace antiguo con
+   * `?token=` entra sin cookie, y pedirlo mandaria al login a alguien que si
+   * tiene permiso para ver su portal.
+   */
+  const sesion = await getCurrentUser();
+  const workShift = sesion ? await getMyWorkShift() : null;
 
   if (!result.success || !result.data) {
     return (
@@ -34,5 +44,11 @@ export default async function EmployeePortalPage({ searchParams }: PageProps) {
     );
   }
 
-  return <EmployeePortalView initialData={result.data} token={token} />;
+  return (
+    <EmployeePortalView
+      initialData={result.data}
+      token={token}
+      workShift={workShift}
+    />
+  );
 }

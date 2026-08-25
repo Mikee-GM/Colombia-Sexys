@@ -248,7 +248,9 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       where: {
         disponible: true,
         catalogoActivo: true,
-        usuario: { activo: true },
+        // `enJornada` ademas de `activo`: una modelo que cerro su dia no debe
+        // aparecer como candidata para un servicio grupal de esta noche.
+        usuario: { activo: true, enJornada: true },
       },
       relations: { usuario: true, empleadaFotos: true, jefe: true },
     });

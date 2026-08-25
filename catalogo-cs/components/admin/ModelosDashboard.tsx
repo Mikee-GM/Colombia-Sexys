@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { OffDutyPerson } from "@/lib/actions/work-shift";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,8 +30,9 @@ interface ModelosDashboardProps {
 export default function ModelosDashboard({
   initialModelos,
   initialJefes,
-  initialApartments,
-}: ModelosDashboardProps) {
+  initialApartments, offDuty = [] }: ModelosDashboardProps & { offDuty?: OffDutyPerson[] }) {
+  /* La jornada es del usuario: se cruza por usuarioId. */
+  const fueraDeJornada = new Set(offDuty.map((persona) => persona.id));
   const [modelos, setModelos] = useState<Modelo[]>(initialModelos);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -168,6 +170,11 @@ export default function ModelosDashboard({
         <h3 className="font-heading text-xl font-bold text-white mb-2">
           {modelo.nombre}
         </h3>
+        {modelo.usuarioId && fueraDeJornada.has(modelo.usuarioId) && (
+          <span className="mb-2 inline-flex w-fit items-center rounded-full border border-amber-500/40 bg-amber-950/60 px-2 py-0.5 text-[10px] font-bold text-amber-400">
+            Fuera de jornada
+          </span>
+        )}
         <ReliabilityRating
           score={modelo.trustScore}
           compact

@@ -235,6 +235,8 @@ export class DriversService {
       .innerJoinAndSelect('chofer.usuario', 'usuario')
       .where('chofer.disponible = :disponible', { disponible: true })
       .andWhere('usuario.activo = :usuarioActivo', { usuarioActivo: true })
+      // Fuera de jornada no entra al reparto, aunque siga marcado disponible.
+      .andWhere('usuario.enJornada = :enJornada', { enJornada: true })
       .andWhere('usuario.telegramChatId IS NOT NULL')
       .andWhere('chofer.ubicacionLat IS NOT NULL')
       .andWhere('chofer.ubicacionLng IS NOT NULL')
