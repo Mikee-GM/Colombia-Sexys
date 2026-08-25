@@ -95,6 +95,10 @@ import { ServiceExtensionsModule } from './service-extensions/service-extensions
         XAI_API_KEY: Joi.string().allow('').optional(),
         BANK_ACCOUNT_DETAILS: Joi.string().allow('').optional(),
         MAX_DAILY_AI_CALLS: Joi.number().default(15),
+        // Tope de llamadas simultaneas al modelo. Sin el, un grupo de clientes
+        // escribiendo a la vez se lleva un 429 en bloque.
+        AI_MAX_CONCURRENT_CALLS: Joi.number().integer().min(1).default(12),
+        DATABASE_POOL_MAX: Joi.number().integer().min(5).max(200).default(30),
         SCHEDULE_TRAVEL_SPEED_KMH: Joi.number().positive().default(25),
         SCHEDULE_PREPARATION_MINUTES: Joi.number().min(0).default(10),
         DRIVER_DISPATCH_RANKING_BAND_KM: Joi.number().positive().default(1.5),
@@ -125,10 +129,25 @@ import { ServiceExtensionsModule } from './service-extensions/service-extensions
         synchronize: false, // Regla Heavy DB: no sincronización automática en producción/desarrollo estructurado, usar migraciones.
         migrationsRun: false,
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
+        /*
+         * El pool es el primer techo del sistema bajo carga.
+         *
+         * Un turno de conversacion con la IA hace del orden de una decena de
+         * consultas, y el buffer de 20 s hace que varios clientes las lancen a
+         * la vez en vez de repartidas. Con 20 conexiones bastaban unos pocos
+         * clientes simultaneos para agotarlo; al agotarse, cada consulta de mas
+         * lanzaba a los 5 s y el cliente se quedaba sin respuesta.
+         *
+         * Se sube el valor por defecto y se deja configurable: el limite real
+         * es `max_connections` de Postgres (100 de serie), que hay que repartir
+         * entre las instancias del backend y las migraciones.
+         */
         extra: {
-          max: 20,
+          max: Number(
+            configService.get<string | number>('DATABASE_POOL_MAX') ?? 30,
+          ),
           idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 5000,
+          connectionTimeoutMillis: 10000,
         },
       }),
     }),
