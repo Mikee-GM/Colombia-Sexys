@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Redirect a una ruta de la propia aplicacion.
@@ -23,6 +23,42 @@ export function redirectToPath(path: string, status: 307 | 308 = 307) {
     status,
     headers: { Location: safeInternalPath(path) },
   });
+}
+
+/**
+ * Redirect interno desde el middleware.
+ *
+ * El middleware NO admite un `Location` relativo: Next valida la respuesta y
+ * hace `new URL(location)` sobre ella, que lanza `ERR_INVALID_URL` con una
+ * ruta suelta. Sintoma en produccion: `TypeError: Invalid URL { input:
+ * '/admin' }` y el panel entero sin poder entrar. En un route handler si
+ * funciona relativo, y por eso `redirectToPath` se queda como esta.
+ *
+ * La URL absoluta se arma sobre el host por el que llego la peticion, dando
+ * prioridad a las cabeceras del proxy inverso. Asi se evita tambien el
+ * problema que motivo el redirect relativo: dentro del contenedor el servidor
+ * escucha en `0.0.0.0`, y armar el destino con esa direccion produce enlaces a
+ * los que el navegador no puede ir.
+ */
+export function redirectFromRequest(
+  request: NextRequest,
+  path: string,
+  status: 307 | 308 = 307,
+) {
+  const destino = request.nextUrl.clone();
+  const [pathname, search] = safeInternalPath(path).split("?");
+  destino.pathname = pathname;
+  destino.search = search ? `?${search}` : "";
+
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (host) {
+    destino.host = host;
+    const proto = request.headers.get("x-forwarded-proto");
+    if (proto) destino.protocol = `${proto}:`;
+  }
+
+  return NextResponse.redirect(destino, status);
 }
 
 /**
