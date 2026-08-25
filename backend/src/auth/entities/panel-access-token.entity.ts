@@ -10,7 +10,12 @@ import {
 import { Usuarios } from '../../users/entities/user.entity';
 
 /**
- * Pase de un solo uso para entrar al panel web desde Telegram.
+ * Pase de vida corta para entrar al panel web desde Telegram.
+ *
+ * Se gasta al canjearlo, con una ventana de cortesia de un par de minutos: el
+ * enlace se abre por GET y basta con que lo toque la previsualizacion de
+ * Telegram para quemarlo antes de que llegue el usuario. Ver
+ * `PanelAccessService`.
  *
  * El jefe ya probo quien es cuando vinculo su cuenta: el bot solo habla con
  * chats vinculados. Pedirle usuario y contrasena otra vez para editar un

@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class PanelAccessDto {
-  @ApiProperty({ description: 'Pase de un solo uso entregado por el bot' })
+  @ApiProperty({ description: 'Pase de vida corta entregado por el bot' })
   @IsNotEmpty()
   @IsString()
   @MaxLength(200)
