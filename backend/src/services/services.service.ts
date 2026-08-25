@@ -10,7 +10,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, LessThanOrEqual, Not, Repository } from 'typeorm';
+import { In, IsNull, LessThanOrEqual, Not, Repository } from 'typeorm';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { Servicios } from './entities/service.entity';
@@ -33,10 +33,17 @@ import {
 import { DisciplineService } from '../discipline/discipline.service';
 import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entity';
 import { SaveBankAccountDto } from './dto/bank-account.dto';
+import { CancelServiceDto } from './dto/cancel-service.dto';
 import { UploadService } from '../upload/upload.service';
 import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
 import { describeError } from '../common/errors/error-message';
+
+/**
+ * Estados en los que un viaje ya salio a la calle. Si se cancela estando aqui,
+ * lo mas probable es que haya costado dinero.
+ */
+const DISPATCHED_TRIP_STATES = ['aceptado', 'en_camino', 'llegado', 'en_curso'];
 
 /**
  * Tope por defecto del listado de servicios. Generoso para que los paneles
@@ -793,7 +800,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return { deleted: true };
   }
 
-  async cancel(id: string, actor: Usuarios): Promise<{ cancelled: boolean }> {
+  async cancel(
+    id: string,
+    actor: Usuarios,
+    dto: CancelServiceDto,
+  ): Promise<{ cancelled: boolean }> {
     const service = await this.findOne(id);
     this.assertActorCanManageService(service, actor);
     if (service.serviceType === 'grupal') {
@@ -808,8 +819,20 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    // Se guarda el estado previo: un servicio ya aceptado o en curso implica
+    // avisarle al cliente, a la empleada y al chofer que ya estaban en camino.
+    const estadoPrevio = service.estado;
+
     service.estado = 'cancelado';
+    service.motivoCancelacion = dto.reason;
+    service.notaCancelacion = dto.note?.trim() || null;
+    service.canceladoPorUserId = actor.id;
+    service.canceladoAt = new Date();
     await this.serviciosRepository.save(service);
+
+    const viajesActivos = (service.viajes ?? []).filter(
+      (trip) => !['finalizado', 'cancelado', 'rechazado'].includes(trip.estado),
+    );
     await this.viajesRepository.update(
       {
         servicioId: id,
@@ -817,6 +840,22 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
       { estado: 'cancelado' },
     );
+
+    // Un Uber que ya estaba despachado se pago aunque el servicio no ocurriera.
+    // No se puede saber desde aqui si el viaje llego a pedirse, asi que se deja
+    // marcado para que la oficina cierre el costo en vez de perderlo.
+    const uberPorCerrar = viajesActivos.filter(
+      (trip) =>
+        trip.proveedorTransporte === 'uber' &&
+        !trip.fareConfirmedAt &&
+        DISPATCHED_TRIP_STATES.includes(trip.estado),
+    );
+    if (uberPorCerrar.length > 0) {
+      await this.viajesRepository.update(
+        { id: In(uberPorCerrar.map((trip) => trip.id)) },
+        { canceladoConCosto: true },
+      );
+    }
 
     const anotherActiveService = await this.serviciosRepository.exists({
       where: {
@@ -830,11 +869,102 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         .getRepository(Empleadas)
         .update(service.empleadaId, { disponible: true });
     }
+    // El gasto de transporte de un servicio cancelado tambien tiene que llegar
+    // al corte, aunque no haya venta ni comision que repartir.
+    await this.liquidationSync.syncCancelledRecord(service.id);
+
+    await this.notifyServiceCancelled(service, estadoPrevio, viajesActivos);
+
     this.realtimeEventsService.emitToBoss(service.jefeId, {
       type: 'service_cancelled',
       data: { id: service.id },
     });
     return { cancelled: true };
+  }
+
+  /**
+   * Avisos de una cancelacion manual.
+   *
+   * Antes la cancelacion solo cambiaba estados en la base: el cliente se
+   * quedaba esperando a alguien que ya no iba a llegar y el chofer seguia
+   * creyendo que tenia el viaje asignado. Ningun fallo de mensajeria debe
+   * revertir la cancelacion, por eso cada envio va aislado.
+   */
+  private async notifyServiceCancelled(
+    service: Servicios,
+    estadoPrevio: string,
+    viajesActivos: Viajes[],
+  ): Promise<void> {
+    const yaConfirmado = estadoPrevio === 'agendado' || estadoPrevio === 'en_curso';
+
+    if (service.cliente?.telegramChatId || service.clienteTelegramId) {
+      const chatId =
+        service.cliente?.telegramChatId ?? service.clienteTelegramId!;
+      try {
+        const mensaje = await this.aiMessageService.generate(
+          'service_cancelled',
+          { employeeName: service.empleada?.nombreArtistico },
+          yaConfirmado
+            ? 'Qué pena contigo, al final no voy a poder ir, discúlpame de verdad'
+            : 'Qué pena contigo, esta vez no voy a poder ir',
+        );
+        await this.botFor(service.empleadaId).telegram.sendMessage(
+          chatId,
+          mensaje,
+        );
+      } catch (err) {
+        this.logger.error(
+          'Error al notificar al cliente de la cancelación:',
+          err,
+        );
+      }
+    }
+
+    if (yaConfirmado && service.empleadaId) {
+      try {
+        const empleadaUser = await this.usuariosRepository.findOne({
+          where: { id: service.empleada?.usuarioId },
+        });
+        if (empleadaUser?.telegramChatId) {
+          await this.botFor(service.empleadaId).telegram.sendMessage(
+            empleadaUser.telegramChatId,
+            'El servicio fue cancelado desde la oficina. Ya no tienes que asistir y quedas libre para el siguiente.',
+          );
+        }
+      } catch (err) {
+        this.logger.error(
+          'Error al notificar a la empleada de la cancelación:',
+          err,
+        );
+      }
+    }
+
+    const choferIds = [
+      ...new Set(
+        viajesActivos
+          .map((trip) => trip.choferId)
+          .filter((choferId): choferId is string => Boolean(choferId)),
+      ),
+    ];
+    for (const choferId of choferIds) {
+      try {
+        const chofer = await this.choferesRepository.findOne({
+          where: { id: choferId },
+          relations: { usuario: true },
+        });
+        if (chofer?.usuario?.telegramChatId) {
+          await this.bot.telegram.sendMessage(
+            chofer.usuario.telegramChatId,
+            'El servicio fue cancelado desde la oficina. El viaje asignado queda sin efecto y estás libre para tomar otros.',
+          );
+        }
+      } catch (err) {
+        this.logger.error(
+          'Error al notificar al chofer de la cancelación:',
+          err,
+        );
+      }
+    }
   }
 
   async aceptar(
@@ -1223,6 +1353,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     // 1. Actualizar estado del servicio a 'cancelado'
     servicio.estado = 'cancelado';
     servicio.jefeId = jefeId;
+    servicio.motivoCancelacion = 'rechazado_por_jefe';
+    servicio.canceladoPorUserId = jefeId;
+    servicio.canceladoAt = new Date();
     await this.serviciosRepository.save(servicio);
 
     // Una reserva rechazada no vuelve disponible a quien aún sigue en servicio.
@@ -2071,6 +2204,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       return;
 
     servicio.estado = 'cancelado';
+    // La cancelacion por demora no tiene autor humano: queda como del sistema.
+    servicio.motivoCancelacion = 'modelo_tardanza';
+    servicio.canceladoPorUserId = null;
+    servicio.canceladoAt = new Date();
     await this.serviciosRepository.save(servicio);
 
     const viajeIda = servicio.viajes.find((v) => v.tipo === 'ida');
@@ -2814,6 +2951,141 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         totalFinal: updated?.totalFinal,
       },
     });
+  }
+
+  /**
+   * Viajes cancelados que siguen esperando el cierre de su costo.
+   *
+   * Es la bandeja que evita que un Uber ya pagado se pierda: mientras aparezca
+   * aqui, hay dinero gastado que todavia no entro a ningun corte.
+   */
+  async listPendingCancellationCosts(actor: Usuarios): Promise<
+    Array<{
+      id: string;
+      tipo: 'ida' | 'regreso';
+      servicioId: string;
+      empleadaNombre: string | null;
+      canceladoAt: Date | null;
+      motivoCancelacion: string | null;
+      notaCancelacion: string | null;
+      uberScreenshotUrl: string | null;
+    }>
+  > {
+    const trips = await this.viajesRepository.find({
+      where: {
+        canceladoConCosto: true,
+        fareConfirmedAt: IsNull(),
+        ...(actor.rol === 'admin' ? {} : { servicio: { jefeId: actor.id } }),
+      },
+      relations: { servicio: { empleada: true } },
+      order: { horaNotificacion: 'DESC' },
+      take: 100,
+    });
+
+    return trips.map((trip) => ({
+      id: trip.id,
+      tipo: trip.tipo,
+      servicioId: trip.servicioId,
+      empleadaNombre: trip.servicio?.empleada?.nombreArtistico ?? null,
+      canceladoAt: trip.servicio?.canceladoAt ?? null,
+      motivoCancelacion: trip.servicio?.motivoCancelacion ?? null,
+      notaCancelacion: trip.servicio?.notaCancelacion ?? null,
+      uberScreenshotUrl: trip.uberScreenshotUrl,
+    }));
+  }
+
+  /**
+   * Cierra el costo de un viaje cancelado que ya estaba despachado.
+   *
+   * Es la contraparte de la bandera que pone `cancel`: la oficina confirma la
+   * tarifa que de verdad se pago, o declara con un cero que el viaje nunca
+   * llego a salir. En ambos casos el viaje deja de estar pendiente y el corte
+   * se recalcula con el gasto real.
+   */
+  async settleCancelledTripCost(
+    tripId: string,
+    actorId: string,
+    amount: number,
+    chargeToClient = false,
+  ): Promise<{ settled: true; amount: number; chargeToClient: boolean }> {
+    if (
+      !Number.isFinite(amount) ||
+      amount < 0 ||
+      Math.abs(Math.round(amount * 100) - amount * 100) > 1e-8
+    ) {
+      throw new BadRequestException(
+        'El costo no puede ser negativo y admite máximo dos decimales',
+      );
+    }
+
+    const trip = await this.getAuthorizedUberTrip(tripId, actorId);
+    if (!trip.canceladoConCosto) {
+      throw new ConflictException(
+        'Este viaje no quedó pendiente de cerrar por una cancelación',
+      );
+    }
+    if (trip.fareConfirmedAt) {
+      throw new ConflictException('El costo de este viaje ya fue cerrado');
+    }
+
+    const actor = await this.usuariosRepository.findOneBy({ id: actorId });
+    if (!actor) throw new ConflictException('Usuario no autorizado');
+
+    // Declarar que no costo nada no necesita comprobante; cobrar si.
+    const hasScreenshot = Boolean(
+      trip.uberScreenshotUrl || trip.telegramUberFileId,
+    );
+    const override = amount > 0 && !hasScreenshot;
+    if (override && actor.rol !== 'admin') {
+      throw new ConflictException(
+        'Sin captura del Uber solo un administrador puede registrar el costo',
+      );
+    }
+
+    // Un viaje que no costo nada no se le puede cobrar a nadie.
+    const cobrado = amount > 0 && chargeToClient;
+
+    await this.viajesRepository.update(trip.id, {
+      tarifa: amount,
+      fareConfirmedAt: new Date(),
+      fareConfirmedByUserId: actorId,
+      fareConfirmationOverride: override,
+      costoCobradoAlCliente: cobrado,
+    });
+    await this.liquidationSync.syncCancelledRecord(trip.servicioId);
+
+    return { settled: true, amount, chargeToClient: cobrado };
+  }
+
+  /**
+   * Corrige el motivo de una cancelacion ya registrada.
+   *
+   * Los servicios cancelados antes de que existiera el campo no tienen motivo,
+   * y en una cancelacion apurada se elige mal. Sin poder corregirlo, el dato
+   * que decide quien asume el costo se queda mal para siempre. No se toca
+   * `canceladoPorUserId`: quien cancelo sigue siendo quien cancelo, aunque otro
+   * complete despues el motivo.
+   */
+  async updateCancellationDetails(
+    id: string,
+    actor: Usuarios,
+    dto: CancelServiceDto,
+  ): Promise<{ updated: true }> {
+    const service = await this.findOne(id);
+    this.assertActorCanManageService(service, actor);
+
+    if (service.estado !== 'cancelado') {
+      throw new ConflictException(
+        'Solo un servicio cancelado tiene motivo de cancelación',
+      );
+    }
+
+    await this.serviciosRepository.update(id, {
+      motivoCancelacion: dto.reason,
+      notaCancelacion: dto.note?.trim() || null,
+    });
+
+    return { updated: true };
   }
 
   private async getAuthorizedUberTrip(

@@ -230,4 +230,85 @@ describe('OfficeLiquidationSyncService', () => {
       ['serviceId'],
     );
   });
+
+  describe('syncCancelledRecord', () => {
+    function cancelled(viajes: unknown[]) {
+      return {
+        id: 'service',
+        estado: 'cancelado',
+        empleadaId: 'employee',
+        jefeId: 'boss',
+        jefe: { rol: 'jefe' },
+        metodoPago: 'efectivo',
+        canceladoAt: new Date('2026-07-18T20:00:00Z'),
+        createdAt: new Date('2026-07-18T18:00:00Z'),
+        viajes,
+      };
+    }
+
+    it('lleva al corte el Uber ya pagado de un servicio cancelado', async () => {
+      services.findOne.mockResolvedValue(
+        cancelled([
+          {
+            proveedorTransporte: 'uber',
+            tarifa: 500,
+            fareConfirmedAt: new Date('2026-07-18T20:05:00Z'),
+          },
+        ]),
+      );
+
+      await sync.syncCancelledRecord('service');
+
+      expect(records.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cancelled: true,
+          companyTransportExpense: 500,
+          serviceTotal: 0,
+          // Un servicio que no ocurrio no le cobra transporte al cliente.
+          customerTransportCharge: 0,
+          employeeCashDue: 0,
+        }),
+      );
+    });
+
+    it('le cobra al cliente el traslado que la oficina marco como cobrado', async () => {
+      services.findOne.mockResolvedValue(
+        cancelled([
+          {
+            proveedorTransporte: 'uber',
+            tarifa: 500,
+            fareConfirmedAt: new Date('2026-07-18T20:05:00Z'),
+            costoCobradoAlCliente: true,
+          },
+        ]),
+      );
+
+      await sync.syncCancelledRecord('service');
+
+      expect(records.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          companyTransportExpense: 500,
+          customerTransportCharge: 500,
+        }),
+      );
+    });
+
+    it('ignora el Uber cuyo costo aun no se ha cerrado', async () => {
+      services.findOne.mockResolvedValue(
+        cancelled([
+          { proveedorTransporte: 'uber', tarifa: 0, fareConfirmedAt: null },
+        ]),
+      );
+
+      await expect(sync.syncCancelledRecord('service')).resolves.toBeNull();
+      expect(records.save).not.toHaveBeenCalled();
+    });
+
+    it('no toca un servicio que no está cancelado', async () => {
+      services.findOne.mockResolvedValue(finalized());
+
+      await expect(sync.syncCancelledRecord('service')).resolves.toBeNull();
+      expect(records.save).not.toHaveBeenCalled();
+    });
+  });
 });

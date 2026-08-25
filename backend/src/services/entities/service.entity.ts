@@ -21,6 +21,10 @@ import { ColumnNumericTransformer } from '../../common/transformers/column-numer
 import { ServiceParticipant } from '../../group-services/entities/service-participant.entity';
 import { ServicePayment } from '../../group-services/entities/service-payment.entity';
 import { PaymentReceiptValidations } from './payment-receipt-validation.entity';
+import {
+  CANCELLATION_REASONS,
+  type CancellationReason,
+} from '../cancellation-reasons';
 
 @Index('idx_servicios_cliente', ['clienteId'], {})
 @Index('idx_servicios_created_at', ['createdAt'], {})
@@ -330,6 +334,43 @@ export class Servicios {
     example: 'pendiente',
   })
   estado: 'pendiente' | 'agendado' | 'en_curso' | 'finalizado' | 'cancelado';
+
+  @Column('varchar', {
+    name: 'motivo_cancelacion',
+    length: 40,
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description:
+      'Motivo por el que se canceló el servicio. Solo tiene valor si el estado es cancelado',
+    enum: CANCELLATION_REASONS,
+  })
+  motivoCancelacion: CancellationReason | null;
+
+  @Column('text', { name: 'nota_cancelacion', nullable: true })
+  @ApiPropertyOptional({
+    description: 'Detalle libre de la cancelación, escrito por quien canceló',
+  })
+  notaCancelacion: string | null;
+
+  @Column('uuid', { name: 'cancelado_por_user_id', nullable: true })
+  @ApiPropertyOptional({
+    description:
+      'Usuario que canceló. Vacío cuando la cancelación fue automática del sistema',
+  })
+  canceladoPorUserId: string | null;
+
+  @Column('timestamp with time zone', {
+    name: 'cancelado_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Momento de la cancelación',
+    type: String,
+    format: 'date-time',
+    example: '2026-07-09T12:00:00.000Z',
+  })
+  canceladoAt: Date | null;
 
   @Column('uuid', { name: 'servicio_previo_id', nullable: true })
   servicioPrevioId: string | null;

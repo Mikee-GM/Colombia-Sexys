@@ -1,3 +1,5 @@
+import type { CancellationReason } from "@/lib/cancellation-reasons";
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -135,6 +137,10 @@ export type Service = {
   horaLlegadaCasa: string | null;
   prorrogasUsadas: number;
   estado: ServiceStatus;
+  motivoCancelacion?: CancellationReason | null;
+  notaCancelacion?: string | null;
+  canceladoPorUserId?: string | null;
+  canceladoAt?: string | null;
   notas: string | null;
   notasJefe?: string | null;
   iaActiva: boolean;
@@ -176,6 +182,10 @@ export type Trip = {
   uberScreenshotUploadedAt?: string | null;
   driverPayout?: number;
   fareConfirmedAt?: string | null;
+  /** Se cancelo ya despachado: su costo real sigue pendiente de cerrar. */
+  canceladoConCosto?: boolean;
+  /** El costo de ese viaje cancelado se le cobro al cliente. */
+  costoCobradoAlCliente?: boolean;
   fareConfirmationOverride?: boolean;
   driverSettlementId?: string | null;
   passengers?: TripPassenger[];

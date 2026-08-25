@@ -34,9 +34,17 @@ import {
   getServiceByIdAction,
   getServiceMessagesAction,
   sendServiceMessageAction,
+  updateCancellationAction,
   updateServiceAction,
   uploadUberScreenshotAction,
 } from "@/lib/data/services";
+import CancelServiceDialog from "./cancel-service-dialog";
+import {
+  CANCELLATION_REASON_LABEL,
+  SELECTABLE_CANCELLATION_REASONS,
+  cancellationReasonLabel,
+  type CancellationReason,
+} from "@/lib/cancellation-reasons";
 
 interface ServiceDetailDialogProps {
   service: Service | null;
@@ -55,6 +63,8 @@ export default function ServiceDetailDialog({
   const [activeTab, setActiveTab] = useState<"detalles" | "chat" | "transporte">("detalles");
   const [editing, setEditing] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [editingCancellation, setEditingCancellation] = useState(false);
   const [pendingAction, setPendingAction] = useState(false);
 
   // Edit form state
@@ -157,18 +167,41 @@ export default function ServiceDetailDialog({
     }
   };
 
-  const handleCancelService = async () => {
-    if (!window.confirm("¿Confirmas que deseas cancelar este servicio?")) return;
+  const handleCancelService = async (
+    reason: CancellationReason,
+    note: string,
+  ) => {
     setPendingAction(true);
     try {
-      const res = await cancelServiceAction(service.id);
+      const res = await cancelServiceAction(service.id, reason, note);
       if (!res.success) {
         throw new Error(res.error || "Error al cancelar");
       }
+      setCancelling(false);
       toast.success("Servicio cancelado");
       await reloadCurrentService();
     } catch (err: any) {
       toast.error(err.message || "No se pudo cancelar el servicio");
+    } finally {
+      setPendingAction(false);
+    }
+  };
+
+  const handleSaveCancellation = async (
+    reason: CancellationReason,
+    note: string,
+  ) => {
+    setPendingAction(true);
+    try {
+      const res = await updateCancellationAction(service.id, reason, note);
+      if (!res.success) {
+        throw new Error(res.error || "Error al guardar el motivo");
+      }
+      setEditingCancellation(false);
+      toast.success("Motivo de la cancelación guardado");
+      await reloadCurrentService();
+    } catch (err: any) {
+      toast.error(err.message || "No se pudo guardar el motivo");
     } finally {
       setPendingAction(false);
     }
@@ -201,6 +234,14 @@ export default function ServiceDetailDialog({
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
       onClick={(e) => e.target === e.currentTarget && !pendingAction && onClose()}
     >
+      {cancelling && (
+        <CancelServiceDialog
+          serviceLabel={service.empleada?.nombreArtistico || "este servicio"}
+          disabled={pendingAction}
+          onConfirm={handleCancelService}
+          onCancel={() => setCancelling(false)}
+        />
+      )}
       <div className="w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800 bg-black/40">
@@ -272,6 +313,50 @@ export default function ServiceDetailDialog({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {activeTab === "detalles" && (
             <>
+              {service.estado === "cancelado" && (
+                <div className="rounded-2xl border border-red-900/50 bg-red-950/20 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-red-400">
+                      Servicio cancelado
+                    </p>
+                    <button
+                      type="button"
+                      disabled={pendingAction}
+                      onClick={() => setEditingCancellation(!editingCancellation)}
+                      className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {editingCancellation ? "Cerrar" : "Editar motivo"}
+                    </button>
+                  </div>
+
+                  {editingCancellation ? (
+                    <CancellationEditor
+                      initialReason={service.motivoCancelacion ?? ""}
+                      initialNote={service.notaCancelacion ?? ""}
+                      disabled={pendingAction}
+                      onSave={handleSaveCancellation}
+                    />
+                  ) : (
+                    <>
+                      <p className="mt-2 text-sm text-zinc-200">
+                        {cancellationReasonLabel(service.motivoCancelacion)}
+                      </p>
+                      {service.notaCancelacion && (
+                        <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
+                          {service.notaCancelacion}
+                        </p>
+                      )}
+                      <p className="mt-2 text-[11px] text-zinc-500">
+                        {service.canceladoAt
+                          ? `Cancelado el ${formatAvailabilityTime(service.canceladoAt)}`
+                          : "Sin fecha de cancelacion registrada"}
+                        {service.canceladoPorUserId ? "" : " - cancelacion automatica del sistema"}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* Botonera de acciones rápidas principales */}
               <div className="flex flex-wrap gap-2 p-4 rounded-2xl border border-zinc-800/80 bg-black/40">
                 {service.estado === "pendiente" && (
@@ -308,7 +393,7 @@ export default function ServiceDetailDialog({
                   <button
                     type="button"
                     disabled={pendingAction}
-                    onClick={handleCancelService}
+                    onClick={() => setCancelling(true)}
                     className="inline-flex items-center gap-2 rounded-xl border border-red-950 bg-red-950/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-400 hover:bg-red-900/40 transition-all disabled:opacity-50 ml-auto"
                   >
                     <Ban size={15} /> Cancelar
@@ -1017,6 +1102,62 @@ function AdminTripCard({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Edicion del motivo de una cancelacion ya registrada.
+ *
+ * Los servicios cancelados antes de que existiera el campo llegan sin motivo,
+ * y en una cancelacion apurada se elige mal. Corregirlo no cambia quien
+ * cancelo: eso queda tal cual se registro.
+ */
+function CancellationEditor({
+  initialReason,
+  initialNote,
+  disabled,
+  onSave,
+}: {
+  initialReason: CancellationReason | "";
+  initialNote: string;
+  disabled: boolean;
+  onSave: (reason: CancellationReason, note: string) => void;
+}) {
+  const [reason, setReason] = useState<CancellationReason | "">(initialReason);
+  const [note, setNote] = useState(initialNote);
+
+  return (
+    <div className="mt-3 space-y-3">
+      <select
+        value={reason}
+        onChange={(e) => setReason(e.target.value as CancellationReason)}
+        className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-[#C5A55A]"
+      >
+        <option value="">Sin registrar</option>
+        {SELECTABLE_CANCELLATION_REASONS.map((value) => (
+          <option key={value} value={value}>
+            {CANCELLATION_REASON_LABEL[value]}
+          </option>
+        ))}
+      </select>
+
+      <input
+        value={note}
+        maxLength={500}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Detalle, opcional"
+        className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2.5 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-[#C5A55A]"
+      />
+
+      <button
+        type="button"
+        disabled={disabled || !reason}
+        onClick={() => reason && onSave(reason, note)}
+        className="rounded-xl border border-[#C5A55A]/50 bg-[#C5A55A]/10 px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-[#C5A55A] hover:bg-[#C5A55A]/20 transition-colors disabled:opacity-40"
+      >
+        Guardar motivo
+      </button>
     </div>
   );
 }

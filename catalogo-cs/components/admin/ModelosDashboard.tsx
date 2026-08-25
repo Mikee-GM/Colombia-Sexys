@@ -178,10 +178,12 @@ export default function ModelosDashboard({
             <TelegramOtpButton usuarioId={modelo.usuarioId} />
           </div>
         )}
-        <div className="mt-auto flex gap-3 pt-3.5 border-t border-zinc-800/60">
+        {/* flex-wrap: con 4 acciones la fila no cabe en una tarjeta de la
+            rejilla de 4 columnas y "Eliminar" se salia del borde. */}
+        <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 pt-3.5 border-t border-zinc-800/60">
           <Link
             href={`/admin/modelos/${modelo._id}`}
-            className="text-xs font-bold tracking-wider text-[#E8D5A3] uppercase hover:text-white transition-colors"
+            className="text-xs font-bold tracking-wider text-[#E8D5A3] uppercase whitespace-nowrap hover:text-white transition-colors"
           >
             Expediente
           </Link>
@@ -190,7 +192,7 @@ export default function ModelosDashboard({
               setEditingModelo(modelo);
               setShowModal(true);
             }}
-            className="text-xs font-bold tracking-wider text-[#C5A55A] uppercase hover:text-white transition-colors"
+            className="text-xs font-bold tracking-wider text-[#C5A55A] uppercase whitespace-nowrap hover:text-white transition-colors"
           >
             Editar
           </button>
@@ -201,13 +203,13 @@ export default function ModelosDashboard({
                 name: modelo.nombre,
               })
             }
-            className="text-xs font-bold tracking-wider text-[#C5A55A] uppercase hover:text-white transition-colors"
+            className="text-xs font-bold tracking-wider text-[#C5A55A] uppercase whitespace-nowrap hover:text-white transition-colors"
           >
             Exámenes
           </button>
           <button
             onClick={() => setConfirmDelete(modelo)}
-            className="text-xs font-bold tracking-wider text-zinc-500 uppercase hover:text-red-400 transition-colors ml-auto"
+            className="ml-auto text-xs font-bold tracking-wider text-zinc-500 uppercase whitespace-nowrap hover:text-red-400 transition-colors"
           >
             Eliminar
           </button>

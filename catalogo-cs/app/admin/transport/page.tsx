@@ -2,7 +2,11 @@ import Link from "next/link";
 
 import { ErpPageHeader } from "@/components/erp/primitives";
 import TransportConfigurationClient from "@/components/admin/transport-configuration-client";
-import { getTransportConfiguration } from "./actions";
+import UberCanceladosPanel from "@/components/erp/uber-cancelados-panel";
+import {
+  getPendingCancellationCosts,
+  getTransportConfiguration,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +18,10 @@ export const dynamic = "force-dynamic";
  * de transporte, y aqui aparecian mezclados en la misma pantalla.
  */
 export default async function TransportPage() {
-  const configuration = await getTransportConfiguration();
+  const [configuration, pendingCancellationCosts] = await Promise.all([
+    getTransportConfiguration(),
+    getPendingCancellationCosts(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,6 +46,8 @@ export default async function TransportPage() {
           </>
         }
       />
+
+      <UberCanceladosPanel initial={pendingCancellationCosts ?? []} />
 
       <TransportConfigurationClient initial={configuration} />
     </div>

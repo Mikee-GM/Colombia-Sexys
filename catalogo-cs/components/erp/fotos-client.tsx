@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
-import { Check, ImageIcon, Lock, X } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
+import { Check, ImageIcon, Lock, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -18,11 +19,13 @@ import {
   type BadgeTone,
 } from "@/components/erp/primitives";
 import {
+  deletePhotoSubmission,
   reviewPhotoSubmission,
   type PhotoSubmission,
   type ReviewAction,
   type SubmissionStatus,
 } from "@/app/admin/fotos/actions";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { formatDateTime } from "@/lib/calculations";
 
 const ESTADO_TONE: Record<SubmissionStatus, BadgeTone> = {
@@ -51,6 +54,10 @@ export default function FotosClient({
   const [pending, startTransition] = useTransition();
   /** Ids ya resueltos en esta sesion, para sacarlos de la cola sin recargar. */
   const [resueltas, setResueltas] = useState<Set<string>>(new Set());
+  /** Ids borrados en esta sesion, para sacarlos del historial sin recargar. */
+  const [borradas, setBorradas] = useState<Set<string>>(new Set());
+  /** Envio en espera de confirmacion de borrado. */
+  const [porBorrar, setPorBorrar] = useState<PhotoSubmission | null>(null);
 
   const pendientes = useMemo(
     () =>
@@ -61,8 +68,11 @@ export default function FotosClient({
   );
 
   const historial = useMemo(
-    () => submissions.filter((s) => s.estado !== "pendiente").slice(0, 20),
-    [submissions],
+    () =>
+      submissions
+        .filter((s) => s.estado !== "pendiente" && !borradas.has(s.id))
+        .slice(0, 20),
+    [submissions, borradas],
   );
 
   const conteos = useMemo(() => {
@@ -80,6 +90,25 @@ export default function FotosClient({
       modelos: new Set(pendientes.map((s) => s.empleadaId)).size,
     };
   }, [submissions, pendientes]);
+
+  const borrar = (submission: PhotoSubmission) => {
+    if (pending) return;
+
+    startTransition(async () => {
+      try {
+        await deletePhotoSubmission(submission.id);
+        setBorradas((prev) => new Set(prev).add(submission.id));
+        setPorBorrar(null);
+        toast.success("Foto borrada y retirada del catalogo");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "No fue posible borrar la foto",
+        );
+      }
+    });
+  };
 
   const revisar = (submission: PhotoSubmission, action: ReviewAction) => {
     if (pending) return;
@@ -108,6 +137,25 @@ export default function FotosClient({
 
   return (
     <div className="flex flex-col gap-6">
+      <AnimatePresence>
+        {porBorrar && (
+          <ConfirmDialog
+            key="confirm-delete-foto"
+            title={`Borrar la foto de "${nombreDe(porBorrar)}"`}
+            description={
+              porBorrar.estado === "aprobada_publica"
+                ? "La foto se retirara del catalogo publico y se borrara el archivo. No se puede deshacer."
+                : porBorrar.estado === "aprobada_privada"
+                  ? "La foto se retirara de las fotos exclusivas y se borrara el archivo. No se puede deshacer."
+                  : "Se borrara el registro de la revision y el archivo. No se puede deshacer."
+            }
+            labelConfirm="Si, borrar"
+            onConfirm={() => borrar(porBorrar)}
+            onCancel={() => setPorBorrar(null)}
+          />
+        )}
+      </AnimatePresence>
+
       <ErpPageHeader
         title="Fotos y Contenido"
         description="Aprobacion de fotos exclusivas, de catalogo y contenido semanal"
@@ -188,35 +236,38 @@ export default function FotosClient({
                   </span>
                 </div>
 
-                <div className="flex gap-1.5">
+                {/* Rejilla en vez de una sola fila: en la tarjeta de la cola
+                    (hasta 6 columnas) las tres acciones no caben a lo ancho y
+                    las etiquetas se desbordaban. */}
+                <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
                     disabled={pending}
                     onClick={() => revisar(submission, "aprobar_publica")}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-green-400/25 bg-green-400/[0.08] px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-green-400 transition-colors hover:bg-green-400/20 disabled:opacity-50"
+                    className="flex min-w-0 items-center justify-center gap-1 rounded-[9px] border border-green-400/25 bg-green-400/[0.08] px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-green-400 transition-colors hover:bg-green-400/20 disabled:opacity-50"
                   >
-                    <Check className="h-3 w-3" />
-                    Publica
+                    <Check className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Publica</span>
                   </button>
 
                   <button
                     type="button"
                     disabled={pending}
                     onClick={() => revisar(submission, "aprobar_privada")}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-[9px] border border-[#C5A55A]/30 bg-[#C5A55A]/10 px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A]/20 disabled:opacity-50"
+                    className="flex min-w-0 items-center justify-center gap-1 rounded-[9px] border border-[#C5A55A]/30 bg-[#C5A55A]/10 px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A]/20 disabled:opacity-50"
                   >
-                    <Lock className="h-3 w-3" />
-                    Exclusiva
+                    <Lock className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Exclusiva</span>
                   </button>
 
                   <button
                     type="button"
                     disabled={pending}
                     onClick={() => revisar(submission, "rechazar")}
-                    className="flex items-center justify-center rounded-[9px] border border-red-400/25 bg-red-400/[0.08] px-2.5 py-2 text-red-400 transition-colors hover:bg-red-400/20 disabled:opacity-50"
-                    title="Rechazar"
+                    className="col-span-2 flex min-w-0 items-center justify-center gap-1 rounded-[9px] border border-red-400/25 bg-red-400/[0.08] px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-red-400 transition-colors hover:bg-red-400/20 disabled:opacity-50"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Rechazar</span>
                   </button>
                 </div>
               </div>
@@ -245,13 +296,14 @@ export default function FotosClient({
               <Th>Semana</Th>
               <Th>Resultado</Th>
               <Th>Revisada</Th>
+              <Th numeric>Acciones</Th>
             </tr>
           </thead>
 
           <tbody>
             {historial.length === 0 ? (
               <tr>
-                <Td colSpan={4} className="py-10 text-center text-zinc-500">
+                <Td colSpan={5} className="py-10 text-center text-zinc-500">
                   Todavia no hay revisiones registradas.
                 </Td>
               </tr>
@@ -273,6 +325,18 @@ export default function FotosClient({
                     {submission.revisadoAt
                       ? formatDateTime(submission.revisadoAt)
                       : "Sin fecha"}
+                  </Td>
+                  <Td numeric>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => setPorBorrar(submission)}
+                      className="inline-flex items-center gap-1.5 rounded-[9px] border border-red-400/25 bg-red-400/[0.08] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.04em] text-red-400 transition-colors hover:bg-red-400/20 disabled:opacity-50"
+                      title="Borrar la foto y retirarla del catalogo"
+                    >
+                      <Trash2 className="h-3 w-3 shrink-0" />
+                      Borrar
+                    </button>
                   </Td>
                 </tr>
               ))

@@ -5,6 +5,7 @@ export type OperationalMessageEvent =
   | 'booking_received'
   | 'service_accepted'
   | 'service_rejected'
+  | 'service_cancelled'
   | 'employee_on_the_way'
   | 'employee_arrived'
   | 'appointment_reminder';
@@ -34,6 +35,7 @@ Ejemplos del tono deseado según el evento:
 - booking_received: "Listo, dame un momentico y miro si puedo ir contigo"
 - service_accepted: "Oyeee, sí puedo ir contigo, nos vemos en un ratico"
 - service_rejected: "Qué pena contigo, esta vez no voy a poder ir"
+- service_cancelled: "Qué pena contigo, al final no voy a poder ir, discúlpame de verdad"
 - employee_on_the_way: "Ya voy para allá, nos vemos en un ratico"
 - employee_arrived: "Ya llegué al punto que cuadramos, aquí te espero"
 - appointment_reminder: "Hola, te confirmo que todo sigue en pie para nuestra cita, ya me estoy alistando"

@@ -26,8 +26,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import {
   SelectTransportDto,
   UberFareDto,
+  CancelledTripCostDto,
   UberStatusDto,
 } from './dto/transport-action.dto';
+import { CancelServiceDto } from './dto/cancel-service.dto';
 import {
   ApiActionDocs,
   ApiControllerDocs,
@@ -152,8 +154,13 @@ export class ServicesController {
   }
 
   @Post(':id/cancel')
-  cancel(@Param('id') id: string, @Req() req: any) {
-    return this.servicesService.cancel(id, req.user);
+  @ApiActionDocs('Cancelar un servicio', true, 'ID del servicio')
+  cancel(
+    @Param('id') id: string,
+    @Body() dto: CancelServiceDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.cancel(id, req.user, dto);
   }
 
   @Post(':id/aceptar')
@@ -225,6 +232,46 @@ export class ServicesController {
       req.user.id,
       dto.amount,
     );
+  }
+
+  // Bandeja del dinero de transporte que se gasto en servicios cancelados y
+  // todavia no entra a ningun corte.
+  @Get('trips/pending-cancellation-cost')
+  pendingCancellationCosts(@Req() req: any) {
+    return this.servicesService.listPendingCancellationCosts(req.user);
+  }
+
+  // Cierre del Uber que quedo pendiente al cancelar el servicio: la tarifa real
+  // o un cero si el viaje nunca salio.
+  @Post('trips/:tripId/cancellation-cost')
+  @ApiActionDocs(
+    'Cerrar el costo de un viaje cancelado',
+    true,
+    'ID del viaje',
+    'tripId',
+  )
+  settleCancelledTripCost(
+    @Param('tripId') tripId: string,
+    @Body() dto: CancelledTripCostDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.settleCancelledTripCost(
+      tripId,
+      req.user.id,
+      dto.amount,
+      dto.chargeToClient ?? false,
+    );
+  }
+
+  // Completar o corregir el motivo de una cancelacion ya registrada.
+  @Patch(':id/cancellation')
+  @ApiActionDocs('Corregir el motivo de una cancelación', true, 'ID del servicio')
+  updateCancellation(
+    @Param('id') id: string,
+    @Body() dto: CancelServiceDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.updateCancellationDetails(id, req.user, dto);
   }
 
   @Patch('trips/:tripId/transport')

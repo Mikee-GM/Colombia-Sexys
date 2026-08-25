@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
 import type { ConversationMessage, Service } from "@/lib/types";
+import type { CancellationReason } from "@/lib/cancellation-reasons";
 
 function revalidateAdminViews() {
   try {
@@ -97,9 +98,16 @@ export async function updateServiceAction(
   }
 }
 
-export async function cancelServiceAction(serviceId: string) {
+export async function cancelServiceAction(
+  serviceId: string,
+  reason: CancellationReason,
+  note?: string,
+) {
   try {
-    await apiFetch(`/services/${serviceId}/cancel`, { method: "POST" });
+    await apiFetch(`/services/${serviceId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason, note: note?.trim() || undefined }),
+    });
     revalidateAdminViews();
     return { success: true };
   } catch (error) {
@@ -216,9 +224,47 @@ export async function uploadUberScreenshotAction(formData: FormData) {
   }
 }
 
+/**
+ * Completa o corrige el motivo de una cancelacion ya registrada. Los servicios
+ * cancelados antes de que existiera el campo no tienen ninguno, y en una
+ * cancelacion apurada se elige mal; sin poder corregirlo, el dato que decide
+ * quien asume el costo se queda mal para siempre.
+ */
+export async function updateCancellationAction(
+  serviceId: string,
+  reason: CancellationReason,
+  note?: string,
+) {
+  try {
+    await apiFetch(`/services/${serviceId}/cancellation`, {
+      method: "PATCH",
+      body: JSON.stringify({ reason, note: note?.trim() || undefined }),
+    });
+    revalidateAdminViews();
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar el motivo de la cancelación",
+    };
+  }
+}
+
+/**
+ * `/clients` responde paginado (`{ items, total, limit, offset }`), no un array.
+ * Se normaliza aqui para que la vista siempre reciba una lista iterable.
+ */
 export async function getClientsAction() {
   try {
-    const clients = await apiFetch<any[]>("/clients");
+    const response = await apiFetch<any>("/clients?limit=200");
+    const clients = Array.isArray(response)
+      ? response
+      : Array.isArray(response?.items)
+        ? response.items
+        : [];
     return { success: true, data: clients };
   } catch (error) {
     return {

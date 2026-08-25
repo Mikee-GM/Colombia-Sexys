@@ -26,6 +26,7 @@ import {
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { Service, Trip } from "@/lib/types";
+import { cancellationReasonLabel } from "@/lib/cancellation-reasons";
 
 /**
  * Ficha completa de un servicio.
@@ -90,10 +91,20 @@ export default function ServicioDetalle({ service }: { service: Service }) {
   const pagado = num(service.totalPaid);
   const saldo = num(service.pendingBalance);
 
+  /*
+   * En un servicio cancelado el cargo original de transporte ya no aplica:
+   * mostrarlo contra un costo de cero pintaba un margen que nunca existio. Solo
+   * cuenta lo que la oficina decidio cobrarle al cliente viaje por viaje.
+   */
   const transporteCobrado =
-    service.customerTransportCharge != null
-      ? num(service.customerTransportCharge)
-      : num(service.transportFeeSnapshot);
+    service.estado === "cancelado"
+      ? viajes.reduce(
+          (sum, trip) => (trip.costoCobradoAlCliente ? sum + num(trip.tarifa) : sum),
+          0,
+        )
+      : service.customerTransportCharge != null
+        ? num(service.customerTransportCharge)
+        : num(service.transportFeeSnapshot);
   const costoTransporte = viajes.reduce(
     (sum, trip) =>
       sum +
@@ -141,6 +152,39 @@ export default function ServicioDetalle({ service }: { service: Service }) {
           </>
         }
       />
+
+      {service.estado === "cancelado" ? (
+        <Panel title="Cancelacion" subtitle="servicios - motivo_cancelacion">
+          <div className="flex flex-col">
+            <Row
+              label="Motivo"
+              hint="motivo_cancelacion"
+              value={cancellationReasonLabel(service.motivoCancelacion)}
+            />
+            <Row
+              label="Cancelado el"
+              hint="cancelado_at"
+              value={fechaHora(service.canceladoAt) ?? "Sin registrar"}
+            />
+            <Row
+              label="Origen"
+              hint="cancelado_por_user_id"
+              value={
+                service.canceladoPorUserId
+                  ? "Cancelacion manual desde la oficina"
+                  : "Cancelacion automatica del sistema"
+              }
+            />
+            {service.notaCancelacion ? (
+              <Row
+                label="Detalle"
+                hint="nota_cancelacion"
+                value={service.notaCancelacion}
+              />
+            ) : null}
+          </div>
+        </Panel>
+      ) : null}
 
       <KpiGrid columns={4}>
         <KpiCard
@@ -280,9 +324,21 @@ export default function ServicioDetalle({ service }: { service: Service }) {
                           )}
                         </Td>
                         <Td>
-                          <StatusBadge tone={TRIP_TONE[trip.estado] ?? "zinc"}>
-                            {trip.estado.replaceAll("_", " ")}
-                          </StatusBadge>
+                          {trip.canceladoConCosto && !trip.fareConfirmedAt ? (
+                            <StatusBadge tone="red">Costo por cerrar</StatusBadge>
+                          ) : trip.canceladoConCosto ? (
+                            <StatusBadge
+                              tone={trip.costoCobradoAlCliente ? "gold" : "zinc"}
+                            >
+                              {trip.costoCobradoAlCliente
+                                ? "Cobrado al cliente"
+                                : "Lo asume la casa"}
+                            </StatusBadge>
+                          ) : (
+                            <StatusBadge tone={TRIP_TONE[trip.estado] ?? "zinc"}>
+                              {trip.estado.replaceAll("_", " ")}
+                            </StatusBadge>
+                          )}
                         </Td>
                       </tr>
                     );

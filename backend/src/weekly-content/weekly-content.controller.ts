@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Param,
   Body,
   Query,
@@ -79,5 +80,13 @@ export class WeeklyContentController {
     @Req() req: any,
   ) {
     return this.weeklyContentService.reviewSubmission(id, dto.action, req.user);
+  }
+
+  // Borrado de una foto ya revisada: la baja del catalogo o de exclusivas y
+  // limpia el registro. Solo admin, por ser destructivo e irreversible.
+  @Delete('submissions/:id')
+  @Roles('admin')
+  async deleteSubmission(@Param('id') id: string) {
+    return this.weeklyContentService.deleteSubmission(id);
   }
 }

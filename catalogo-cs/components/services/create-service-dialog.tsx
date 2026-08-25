@@ -71,17 +71,19 @@ export default function CreateServiceDialog({
         ]);
 
         if (isMounted) {
-          if (clientsRes.success && clientsRes.data) {
-            setClients(clientsRes.data);
-            if (!selectedClientId && clientsRes.data.length > 0) {
-              setSelectedClientId(preselectedClientId || clientsRes.data[0].id);
-            }
+          // Las acciones pueden devolver un objeto paginado o un error: nunca
+          // asumimos que `data` es un array, o el render revienta con .map.
+          const clientList = Array.isArray(clientsRes.data) ? clientsRes.data : [];
+          const locationList = Array.isArray(locsRes.data) ? locsRes.data : [];
+
+          setClients(clientList);
+          if (!selectedClientId && clientList.length > 0) {
+            setSelectedClientId(preselectedClientId || clientList[0].id);
           }
-          if (locsRes.success && locsRes.data) {
-            setLocations(locsRes.data);
-            if (locsRes.data.length > 0 && !presetLocationId) {
-              setPresetLocationId(locsRes.data[0].id);
-            }
+
+          setLocations(locationList);
+          if (locationList.length > 0 && !presetLocationId) {
+            setPresetLocationId(locationList[0].id);
           }
         }
       } catch (err) {
@@ -115,6 +117,7 @@ export default function CreateServiceDialog({
   const totalBase = hourlyRate * durationHours;
 
   const filteredClients = useMemo(() => {
+    if (!Array.isArray(clients)) return [];
     if (!clientSearch.trim()) return clients;
     const term = clientSearch.toLowerCase();
     return clients.filter(
@@ -273,7 +276,7 @@ export default function CreateServiceDialog({
                   className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:border-[#C5A55A] outline-none"
                   required
                 >
-                  {employees.map((emp) => (
+                  {(Array.isArray(employees) ? employees : []).map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.nombreArtistico} - ${emp.precioBaseHora}/hr {emp.disponible ? "(🟢 Disponible)" : "(🔴 Ocupada)"}
                     </option>
@@ -375,7 +378,7 @@ export default function CreateServiceDialog({
                     className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:border-[#C5A55A] outline-none"
                     required
                   >
-                    {locations.map((loc) => (
+                    {(Array.isArray(locations) ? locations : []).map((loc) => (
                       <option key={loc.id} value={loc.id}>
                         🏨 {loc.name} {loc.address ? `(${loc.address})` : ""}
                       </option>

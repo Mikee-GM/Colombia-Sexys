@@ -185,6 +185,31 @@ export class Viajes {
   @Column('boolean', { name: 'fare_confirmation_override', default: false })
   fareConfirmationOverride: boolean;
 
+  /**
+   * El viaje se cancelo cuando ya estaba despachado, asi que pudo costar
+   * dinero de verdad. Mientras siga en `true` sin `fareConfirmedAt`, la oficina
+   * debe cerrar el costo: confirmar la tarifa real o declarar que no salio.
+   */
+  @Column('boolean', { name: 'cancelado_con_costo', default: false })
+  @ApiProperty({
+    description:
+      'El viaje se cancelo ya despachado y su costo sigue pendiente de cerrar',
+    example: false,
+  })
+  canceladoConCosto: boolean;
+
+  /**
+   * Al cerrar el costo de un viaje cancelado, la oficina decide si ese monto se
+   * le cobra al cliente o lo absorbe la casa. No hay regla fija: depende de si
+   * la cancelacion fue culpa suya y de que tan tarde aviso.
+   */
+  @Column('boolean', { name: 'costo_cobrado_al_cliente', default: false })
+  @ApiProperty({
+    description: 'El costo del viaje cancelado se le cobra al cliente',
+    example: false,
+  })
+  costoCobradoAlCliente: boolean;
+
   @Column('uuid', { name: 'driver_settlement_id', nullable: true })
   driverSettlementId: string | null;
 

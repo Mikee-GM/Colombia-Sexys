@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/api-server";
 import { getCurrentUser, isRedirectError } from "@/lib/auth";
 import type { CashObligationSummary, ConversationMessage, Employee, GroupServiceRequest, Service } from "@/lib/types";
 import { redirect } from "next/navigation";
+import type { CancellationReason } from "@/lib/cancellation-reasons";
 
 async function requireJefe() {
   const user = await getCurrentUser();
@@ -139,10 +140,17 @@ export async function refreshJefeServices() {
   return getJefeServices();
 }
 
-export async function cancelJefeService(serviceId: string) {
+export async function cancelJefeService(
+  serviceId: string,
+  reason: CancellationReason,
+  note?: string,
+) {
   try {
     await assertOwnedService(serviceId);
-    await apiFetch(`/services/${serviceId}/cancel`, { method: "POST" });
+    await apiFetch(`/services/${serviceId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason, note: note?.trim() || undefined }),
+    });
     return { success: true };
   } catch (error) {
     if (isRedirectError(error)) throw error;

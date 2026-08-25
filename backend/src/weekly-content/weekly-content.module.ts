@@ -10,6 +10,7 @@ import { EmpleadaFotos } from '../employee-photos/entities/employee-photo.entity
 import { EmpleadaFotosExclusivas } from '../employee-photos/entities/employee-private-photo.entity';
 import { ConductReport } from '../discipline/entities/conduct-report.entity';
 import { TelegramModule } from '../telegram/telegram.module';
+import { UploadModule } from '../upload/upload.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { TelegramModule } from '../telegram/telegram.module';
       ConductReport,
     ]),
     forwardRef(() => TelegramModule),
+    UploadModule,
   ],
   controllers: [WeeklyContentController],
   providers: [WeeklyContentService, WeeklyContentScheduler],

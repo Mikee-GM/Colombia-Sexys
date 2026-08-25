@@ -14,6 +14,7 @@ import { Empleadas } from '../employees/entities/employee.entity';
 import { EmpleadaFotos } from '../employee-photos/entities/employee-photo.entity';
 import { EmpleadaFotosExclusivas } from '../employee-photos/entities/employee-private-photo.entity';
 import { Usuarios } from '../users/entities/user.entity';
+import { UploadService } from '../upload/upload.service';
 
 @Injectable()
 export class WeeklyContentService {
@@ -28,6 +29,7 @@ export class WeeklyContentService {
     private readonly fotosRepo: Repository<EmpleadaFotos>,
     @InjectRepository(EmpleadaFotosExclusivas)
     private readonly fotosExclusivasRepo: Repository<EmpleadaFotosExclusivas>,
+    private readonly uploadService: UploadService,
   ) {}
 
   /**
@@ -212,6 +214,57 @@ export class WeeklyContentService {
     }
 
     return await this.submissionRepo.save(submission);
+  }
+
+  /**
+   * Borrar una foto ya revisada: quita la copia publicada (catalogo o
+   * exclusivas), el registro de la cola y, si nadie mas la usa, el archivo en R2.
+   *
+   * Solo aplica a fotos ya revisadas; las pendientes se resuelven con
+   * reviewSubmission para que quede registro de quien decidio.
+   */
+  async deleteSubmission(
+    submissionId: string,
+  ): Promise<{ deleted: true; id: string }> {
+    const submission = await this.submissionRepo.findOne({
+      where: { id: submissionId },
+    });
+
+    if (!submission) {
+      throw new NotFoundException('Foto semanal no encontrada.');
+    }
+
+    if (submission.estado === 'pendiente') {
+      throw new BadRequestException(
+        'Una foto pendiente debe aprobarse o rechazarse antes de borrarse.',
+      );
+    }
+
+    await this.fotosRepo.delete({
+      empleadaId: submission.empleadaId,
+      url: submission.url,
+    });
+    await this.fotosExclusivasRepo.delete({
+      empleadaId: submission.empleadaId,
+      url: submission.url,
+    });
+    await this.submissionRepo.delete({ id: submission.id });
+
+    // Si la modelo tiene esa misma imagen como foto de perfil, el archivo sigue
+    // en uso y borrarlo dejaria el perfil roto.
+    const enUsoComoPerfil = await this.empleadasRepo.count({
+      where: { id: submission.empleadaId, fotoPerfilUrl: submission.url },
+    });
+
+    if (enUsoComoPerfil === 0) {
+      try {
+        await this.uploadService.deleteFile(submission.url);
+      } catch {
+        // Un archivo huerfano en R2 no debe bloquear el borrado del registro.
+      }
+    }
+
+    return { deleted: true, id: submission.id };
   }
 
   /**

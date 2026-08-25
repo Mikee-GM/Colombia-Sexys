@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
+import type { CancellationReason } from "@/lib/cancellation-reasons";
 
 export type PresetLocation = {
   id: string;
@@ -48,6 +49,81 @@ export async function savePresetLocation(id: string | null, input: PresetLocatio
 export async function deletePresetLocation(id: string) {
   await apiFetch(`/transport-operations/locations/${id}`, { method: "DELETE" });
   revalidatePath("/admin/transport");
+}
+
+export type PendingCancellationCost = {
+  id: string;
+  tipo: "ida" | "regreso";
+  servicioId: string;
+  empleadaNombre: string | null;
+  canceladoAt: string | null;
+  motivoCancelacion: CancellationReason | null;
+  notaCancelacion: string | null;
+  uberScreenshotUrl: string | null;
+};
+
+/**
+ * Ubers de servicios cancelados cuyo costo sigue sin cerrarse. Mientras algo
+ * aparezca aqui hay dinero gastado que no entro a ningun corte.
+ */
+export async function getPendingCancellationCosts() {
+  return apiFetch<PendingCancellationCost[]>(
+    "/services/trips/pending-cancellation-cost",
+  );
+}
+
+/**
+ * Cierra el costo de un viaje cancelado. `chargeToClient` decide si ese monto
+ * se le cobra al cliente o lo absorbe la casa: no hay regla fija, depende de
+ * quien causo la cancelacion y de con cuanto tiempo aviso.
+ */
+export async function settleCancellationCost(
+  tripId: string,
+  amount: number,
+  chargeToClient: boolean,
+) {
+  try {
+    await apiFetch(`/services/trips/${tripId}/cancellation-cost`, {
+      method: "POST",
+      body: JSON.stringify({ amount, chargeToClient }),
+    });
+    revalidatePath("/admin/transport");
+    revalidatePath("/admin/services");
+    return { success: true as const };
+  } catch (error) {
+    return {
+      success: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo cerrar el costo del viaje",
+    };
+  }
+}
+
+/** Completa o corrige el motivo de una cancelacion ya registrada. */
+export async function updateCancellationDetails(
+  serviceId: string,
+  reason: CancellationReason,
+  note?: string,
+) {
+  try {
+    await apiFetch(`/services/${serviceId}/cancellation`, {
+      method: "PATCH",
+      body: JSON.stringify({ reason, note: note?.trim() || undefined }),
+    });
+    revalidatePath("/admin/transport");
+    revalidatePath("/admin/services");
+    return { success: true as const };
+  } catch (error) {
+    return {
+      success: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar el motivo de la cancelación",
+    };
+  }
 }
 
 export async function getCashObligations() { return apiFetch<CashSummary>("/transport-operations/cash-obligations"); }

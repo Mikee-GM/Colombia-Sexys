@@ -45,3 +45,18 @@ export async function reviewPhotoSubmission(id: string, action: ReviewAction) {
   revalidatePath("/admin/fotos");
   return result;
 }
+
+/**
+ * Borra una foto ya revisada. Ademas del registro, el backend la baja del
+ * catalogo publico o de las exclusivas, asi que hay que revalidar tambien las
+ * vistas de la modelo.
+ */
+export async function deletePhotoSubmission(id: string) {
+  const result = await apiFetch<{ deleted: true; id: string }>(
+    `/weekly-content/submissions/${id}`,
+    { method: "DELETE" },
+  );
+  revalidatePath("/admin/fotos");
+  revalidatePath("/admin/modelos");
+  return result;
+}
