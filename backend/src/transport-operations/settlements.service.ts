@@ -16,6 +16,7 @@ import { DriverSettlement } from './entities/driver-settlement.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Choferes } from '../drivers/entities/driver.entity';
 import { Usuarios } from '../users/entities/user.entity';
+import { LiquidationAudit } from '../liquidations/entities/liquidation-audit.entity';
 
 @Injectable()
 export class SettlementsService {
@@ -169,6 +170,133 @@ export class SettlementsService {
       actor,
     );
     return this.obligations.findOneByOrFail({ id });
+  }
+
+  /**
+   * Abonos de efectivo de una empleada, para el historial de su ficha.
+   *
+   * Incluye los revertidos: son justamente lo que hay que poder ver para
+   * entender por que un saldo cambio de un dia para otro.
+   */
+  async cashPayments(employeeId: string, actor: Usuarios) {
+    await this.assertEmployeeAccess(employeeId, actor);
+    return this.dataSource.getRepository(EmployeeCashPayment).find({
+      where: { employeeId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Deshace un abono de efectivo.
+   *
+   * Se puede hacer sin adivinar nada porque `employee_cash_payment_allocations`
+   * guarda que obligacion toco el abono y por cuanto: revertir es restar cada
+   * asignacion de la obligacion correspondiente. Las filas de asignacion se
+   * conservan —son la prueba de lo que se deshizo— y quien manda a partir de
+   * aqui es la marca `revertedAt` del abono.
+   *
+   * Los abonos con origen `weekly_offset` no se revierten por aqui: los crea la
+   * confirmacion del corte semanal, y deshacer solo el abono dejaria la fila de
+   * la liquidacion diciendo que se pago algo que ya no esta pagado. Su entrada
+   * es deshacer la liquidacion entera, que llama aqui con `permitirOffset`.
+   */
+  async revertCashPayment(
+    paymentId: string,
+    actor: Usuarios,
+    reason?: string,
+    permitirOffset = false,
+  ) {
+    return this.dataSource.transaction((manager) =>
+      this.revertCashPaymentWith(manager, paymentId, actor, reason, permitirOffset),
+    );
+  }
+
+  /**
+   * La reversa en si, sobre un `EntityManager` que pone quien llama.
+   *
+   * Existe aparte porque deshacer la liquidacion semanal tiene que revertir el
+   * abono y borrar la fila del corte en la misma transaccion: si solo una de
+   * las dos cuajara, el efectivo quedaria contado como entregado sin corte que
+   * lo respalde, o al reves.
+   */
+  async revertCashPaymentWith(
+    manager: DataSource['manager'],
+    paymentId: string,
+    actor: Usuarios,
+    reason?: string,
+    permitirOffset = false,
+  ) {
+    const payments = manager.getRepository(EmployeeCashPayment);
+    const payment = await payments.findOne({
+      where: { id: paymentId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!payment) throw new NotFoundException('Abono no encontrado');
+    await this.assertEmployeeAccess(payment.employeeId, actor);
+    if (payment.revertedAt) {
+      throw new ConflictException('El abono ya estaba revertido');
+    }
+    if (payment.origin === 'weekly_offset' && !permitirOffset) {
+      throw new ConflictException(
+        'Este abono lo generó el corte semanal: deshaz la liquidación de la semana',
+      );
+    }
+
+    const allocations = await manager
+      .getRepository(EmployeeCashPaymentAllocation)
+      .findBy({ paymentId: payment.id });
+
+    for (const allocation of allocations) {
+      const obligation = await manager
+        .getRepository(EmployeeCashObligation)
+        .findOne({
+          where: { id: allocation.obligationId },
+          lock: { mode: 'pessimistic_write' },
+        });
+      if (!obligation) continue;
+      obligation.paidAmount = Math.max(
+        0,
+        Number(obligation.paidAmount) - Number(allocation.amount),
+      );
+      obligation.status =
+        obligation.paidAmount >= Number(obligation.amount)
+          ? 'paid'
+          : 'pending';
+      /*
+       * Vuelve a `ready`, no a `provisional`: el abono solo pudo aplicarse
+       * sobre una obligacion ya calculada, asi que ese es su estado previo.
+       */
+      obligation.calculationStatus =
+        obligation.status === 'paid' ? 'paid' : 'ready';
+      obligation.updatedAt = new Date();
+      await manager.save(obligation);
+    }
+
+    const antes = { ...payment };
+    payment.revertedAt = new Date();
+    payment.revertedByUserId = actor.id;
+    payment.revertedReason = reason?.trim() || null;
+    await payments.save(payment);
+
+    /*
+     * El asiento va al mismo registro que el resto del dinero
+     * (`liquidation_audit_log`), aunque el abono viva en transporte: para
+     * responder "quien movio este saldo y cuando" hace falta un solo sitio
+     * donde mirar, no uno por modulo.
+     */
+    const auditoria = manager.getRepository(LiquidationAudit);
+    await auditoria.save(
+      auditoria.create({
+        entityType: 'cash_payment',
+        entityId: payment.id,
+        action: 'reverted',
+        actorUserId: actor.id,
+        beforeValue: antes as unknown as Record<string, unknown>,
+        afterValue: payment as unknown as Record<string, unknown>,
+      }),
+    );
+
+    return payment;
   }
 
   async driverReport(startDate: string, endDate: string) {

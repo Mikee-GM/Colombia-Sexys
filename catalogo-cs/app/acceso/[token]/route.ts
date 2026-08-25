@@ -1,6 +1,7 @@
 import { copyBackendCookies } from "@/lib/auth-cookies";
 import { getApiBaseUrl } from "@/lib/api-server";
 import { redirectToPath } from "@/lib/redirect";
+import { inicioParaRol } from "@/lib/roles";
 
 /**
  * Canje del pase de vida corta que el bot le manda al jefe.
@@ -37,16 +38,17 @@ export async function GET(
       return redirectToPath("/admin?acceso=caducado");
     }
 
-    /* Si el pase no trae destino, cada rol aterriza donde le sirve. */
-    const destinoPorRol =
-      {
-        jefe: "/jefe",
-        admin: "/admin/dashboard",
-        empleada: "/empleada/portal",
-        chofer: "/chofer/portal",
-      }[data.user.rol as string] ?? "/admin/dashboard";
-
-    const redirect = redirectToPath(data.redirectPath || destinoPorRol);
+    /*
+     * Si el pase no trae destino, cada rol aterriza donde le sirve. El mapa
+     * vive en `lib/roles` junto al del middleware: si divergieran, este
+     * mandaria al usuario justo a donde el otro no le deja entrar.
+     *
+     * Un rol desconocido ya no cae en `/admin/dashboard`: ese valor por defecto
+     * convertia cualquier hueco en un envio a la parte mas sensible del panel.
+     */
+    const redirect = redirectToPath(
+      data.redirectPath || inicioParaRol(data.user.rol as string),
+    );
     copyBackendCookies(response, redirect);
     return redirect;
   } catch (error) {

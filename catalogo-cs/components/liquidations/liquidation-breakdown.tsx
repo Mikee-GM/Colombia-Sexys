@@ -22,7 +22,7 @@ export default function LiquidationBreakdown({ cut }: Props) {
 
   const deductions: BreakdownItem[] = [
     { label: "Pagos electrónicos", value: cut.cardTotal },
-    { label: "Extras para la empleada", value: cut.calculatedExtras },
+    { label: "Extras (100% para la empleada)", value: cut.calculatedExtras },
     { label: "Membresías utilizadas", value: cut.membershipTotal },
     { label: "Bonificaciones de promoción", value: cut.promotionTotal },
     { label: "Transporte", value: cut.transportTotal },

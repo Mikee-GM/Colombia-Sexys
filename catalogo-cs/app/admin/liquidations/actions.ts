@@ -92,7 +92,7 @@ export async function getDebts(employeeId: string) {
   );
 }
 
-/** Cartera completa para /admin/cartera, en una sola peticion. */
+/** Cartera completa, en una sola peticion. */
 export async function getAllDebts() {
   return await apiFetch<DebtWithEmployee[]>("/liquidations/debts");
 }

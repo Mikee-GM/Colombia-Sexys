@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 /**
  * Transporte: los viajes y su configuracion.
  *
- * El efectivo por entregar vive en /admin/cartera y los cortes de choferes en
+ * El efectivo por entregar vive en /admin/dinero y los cortes de choferes en
  * /admin/driver-settlements: son dinero por cobrar y por pagar, no ajustes de
  * transporte, y aqui aparecian mezclados en la misma pantalla.
  */
@@ -51,7 +51,7 @@ export default async function TransportPage() {
             </Link>
 
             <Link
-              href="/admin/cartera"
+              href="/admin/dinero"
               className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-xs font-bold uppercase tracking-[0.05em] text-zinc-300 transition-colors hover:text-white"
             >
               Efectivo por entregar

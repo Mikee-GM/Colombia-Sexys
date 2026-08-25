@@ -8,6 +8,7 @@ import {
 import { BACKEND_API_VERSION } from "@/lib/api-constants";
 import { parseSetCookieHeaders, type ParsedCookie } from "@/lib/set-cookie";
 import { redirectToPath } from "@/lib/redirect";
+import { inicioParaRol, puedeEntrarEn } from "@/lib/roles";
 
 function backendUrl() {
   return process.env.BACKEND_API_URL || "http://localhost:4000";
@@ -56,6 +57,43 @@ async function renovarSesion(
   }
 }
 
+/** Cabecera `Cookie` con lo que lleva la peticion, incluidas las renovadas. */
+function cabeceraDeCookies(request: NextRequest): string {
+  return request.cookies
+    .getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ");
+}
+
+/**
+ * Rol de la sesion, segun el backend.
+ *
+ * Se pregunta a `/auth/me` en vez de leer el JWT aqui: el backend verifica la
+ * firma y comprueba que la sesion siga viva, mientras que descodificar el token
+ * en el middleware daria por bueno cualquier payload que alguien pusiera en la
+ * cookie. Una decision de autorizacion no puede apoyarse en un dato sin
+ * verificar.
+ */
+async function rolDeLaSesion(cookieHeader: string): Promise<string | null> {
+  if (!cookieHeader) return null;
+  const destino = new URL(
+    `/api/v${BACKEND_API_VERSION}/auth/me`,
+    backendUrl(),
+  );
+  try {
+    const response = await fetch(destino, {
+      cache: "no-store",
+      headers: { Cookie: cookieHeader },
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { rol?: unknown };
+    return typeof data?.rol === "string" ? data.rol : null;
+  } catch {
+    // Backend inalcanzable: sin poder comprobar el rol no se deja pasar.
+    return null;
+  }
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
@@ -85,29 +123,50 @@ export async function middleware(request: NextRequest) {
     }
 
     // B) Rutas protegidas de /admin/* y /jefe/*.
-    if (request.cookies.has(ACCESS_COOKIE)) {
-      return NextResponse.next();
+    let renovadas: ParsedCookie[] | null = null;
+
+    if (!request.cookies.has(ACCESS_COOKIE)) {
+      /*
+       * Sin access token, pero eso no significa que la sesion haya terminado:
+       * la cookie tiene la vida corta del token y el navegador la borra sola al
+       * caducar. Ese es justo el momento de renovar, y lo que antes faltaba: se
+       * redirigia al login a quien tenia sesion perfectamente valida, cada vez
+       * que recargaba pasados quince minutos.
+       */
+      renovadas = await renovarSesion(request);
+      if (!renovadas) {
+        return redirectToPath("/admin");
+      }
+      /*
+       * Las cookies nuevas van a dos sitios: a la peticion, para que el render
+       * de esta misma pagina ya vea la sesion renovada y no haga falta un viaje
+       * de ida y vuelta; y a la respuesta, para que el navegador las guarde.
+       */
+      for (const { name, value } of renovadas) {
+        request.cookies.set(name, value);
+      }
     }
 
     /*
-     * Sin access token, pero eso no significa que la sesion haya terminado: la
-     * cookie tiene la vida corta del token y el navegador la borra sola al
-     * caducar. Ese es justo el momento de renovar, y lo que antes faltaba: se
-     * redirigia al login a quien tenia sesion perfectamente valida, cada vez
-     * que recargaba pasados quince minutos.
+     * C) El rol, que es lo que faltaba.
+     *
+     * Hasta aqui bastaba con TENER sesion: cualquier cuenta autenticada —un
+     * jefe, una empleada, un chofer— podia abrir cualquier pagina de `/admin`.
+     * Y el boton "Abrir en el panel" que se manda al grupo del jefe llevaba una
+     * ruta de administracion, asi que el jefe acababa dentro del panel de admin
+     * ya autenticado sin haber hecho nada raro.
      */
-    const renovadas = await renovarSesion(request);
-    if (!renovadas) {
+    const area = isAdminRoute ? "admin" : "jefe";
+    const rol = await rolDeLaSesion(cabeceraDeCookies(request));
+    if (!rol) {
       return redirectToPath("/admin");
     }
+    if (!puedeEntrarEn(area, rol)) {
+      return redirectToPath(inicioParaRol(rol));
+    }
 
-    /*
-     * Las cookies nuevas van a dos sitios: a la peticion, para que el render de
-     * esta misma pagina ya vea la sesion renovada y no haga falta un viaje de
-     * ida y vuelta; y a la respuesta, para que el navegador las guarde.
-     */
-    for (const { name, value } of renovadas) {
-      request.cookies.set(name, value);
+    if (!renovadas) {
+      return NextResponse.next();
     }
     const response = NextResponse.next({
       request: { headers: request.headers },

@@ -163,6 +163,14 @@ interface SessionData {
   appealSubjectId?: string;
   fechaProgramada?: string;
   tipoAgenda?: 'inmediato' | 'programado';
+  /**
+   * El teclado nativo de "compartir ubicacion" sigue puesto y hay que quitarlo.
+   *
+   * Quitarlo exige mandar un mensaje, asi que se marca aqui y viaja pegado a la
+   * siguiente respuesta de verdad. Mandar un mensaje solo para eso obligaba a
+   * inventarse un acuse suelto, que es justo lo que delata al bot.
+   */
+  quitarTecladoPendiente?: boolean;
   humanTakeover?: boolean;
   iaActiva?: boolean;
   /**
@@ -637,12 +645,22 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    */
   private static readonly MAX_FALLOS_IA_SEGUIDOS = 3;
 
+  /**
+   * Margen antes de vaciar el buffer adelantado.
+   *
+   * Solo tiene que dar tiempo a que el manejador en curso termine y el
+   * middleware de sesion guarde: el vaciado arranca releyendo esa fila.
+   */
+  private static readonly BUFFER_NUDGE_DELAY_MS = 1_500;
+
   private readonly clientMessageBuffers = new Map<
     string,
     {
       messages: string[];
       timer: NodeJS.Timeout;
       ctx: BotContext;
+      /** Se guarda para poder reprogramar el vaciado desde otro manejador. */
+      empleada: Empleadas;
     }
   >();
   private readonly userLocationCache = new Map<
@@ -1170,7 +1188,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       // Texto plano a proposito: por aqui sale lo que redacta la IA y con
       // Markdown un `[texto](url)` generado por el modelo se convertiria en un
       // enlace pinchable, justo lo que el prompt promete no mandar nunca.
-      await ctx.reply(text);
+      //
+      // Si quedaba pendiente retirar el teclado de compartir ubicacion, se
+      // retira con este mismo mensaje en vez de con uno inventado para ello.
+      if (ctx.session?.quitarTecladoPendiente) {
+        ctx.session.quitarTecladoPendiente = false;
+        await ctx.reply(text, Markup.removeKeyboard());
+      } else {
+        await ctx.reply(text);
+      }
     } catch (err) {
       this.logger.error('Error in sendDelayedReply:', err);
       try {
@@ -4698,6 +4724,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           );
         }
       }
+
+      // El hilo de la conversacion tiene que enterarse del pin: si no, el
+      // modelo —que venia de pedir la ubicacion— la vuelve a pedir en su
+      // siguiente turno aunque la sesion ya la tenga guardada.
+      this.recordLocationInHistory(
+        ctx.session,
+        ctx.session.locationNameSnapshot || notasUbicacion,
+      );
     }
 
     try {
@@ -4715,9 +4749,32 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       // naturalidad. Nada de errores ni de volver a pedir la ubicación.
       if (!duracionPactadaHoras && !ctx.session?.duracionIndefinida) {
         if (ctx.session) ctx.session.step = 'CHAT_CON_EMPLEADA';
+
+        /*
+         * Si el cliente acaba de escribir y su mensaje sigue en el buffer, la
+         * IA esta a punto de contestarle: se adelanta ese vaciado —que ahora ya
+         * sabe que el pin llego— y no se manda ningun acuse. Antes salian los
+         * dos: el acuse al instante y, veinte segundos despues, una respuesta
+         * que volvia a pedir la ubicacion.
+         */
+        if (ctx.session) ctx.session.quitarTecladoPendiente = true;
+        const laIaVaAContestar = this.adelantarBufferDelCliente(
+          telegramId,
+          empleadaId,
+        );
+        await this.persistSession(ctx);
+        if (laIaVaAContestar) return;
+
+        // Sin nada pendiente, el acuse va con la pausa de siempre: instantaneo
+        // se lee como un robot, que es justo lo que el personaje no puede ser.
         const ack = '¡Perfecto mi amor, ya me llegó tu ubicación! 📍';
-        await ctx.reply(ack, Markup.removeKeyboard());
+        await this.sendDelayedReply(ctx, ack);
         await this.recordDraftConversation(ctx, 'ia', ack);
+        if (ctx.session) {
+          const history = trimChatHistory(ctx.session.chatHistory || []);
+          history.push({ role: 'model', parts: [{ text: ack }] });
+          ctx.session.chatHistory = history;
+        }
         await this.persistSession(ctx);
         return;
       }
@@ -6279,6 +6336,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           messages: [userMessage],
           timer,
           ctx,
+          empleada,
         });
         return;
       }
@@ -6884,6 +6942,62 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
   /** Un cliente hablando con dos modelos tiene dos buffers, no uno. */
   private messageBufferKey(telegramId: string, empleadaId: string): string {
     return `${empleadaId}:${telegramId}`;
+  }
+
+  /**
+   * Adelanta el vaciado del buffer de mensajes de un cliente.
+   *
+   * El buffer agrupa lo que el cliente escribe durante 20 s antes de pasarselo
+   * a la IA. Cuando en mitad de esa ventana llega algo que NO es texto —el pin
+   * de ubicacion, que tiene su propio manejador y responde al instante—, el
+   * mensaje agrupado se contestaba casi veinte segundos despues y sin enterarse
+   * de lo que habia pasado entre medias. El cliente veia dos respuestas
+   * descoordinadas: una automatica al pin y, un rato despues, la IA
+   * contestandole a lo anterior como si el pin no existiera.
+   *
+   * No se vacia aqui mismo a proposito: este manejador todavia no ha escrito su
+   * sesion, y el vaciado empieza releyendola. Se deja correr un instante para
+   * que el middleware de sesion guarde primero.
+   *
+   * Devuelve `true` si habia algo pendiente, para que quien llama sepa que la
+   * IA va a contestar enseguida y no haga falta un acuse automatico.
+   */
+  private adelantarBufferDelCliente(
+    telegramId: string,
+    empleadaId: string,
+  ): boolean {
+    const bufferKey = this.messageBufferKey(telegramId, empleadaId);
+    const buffer = this.clientMessageBuffers.get(bufferKey);
+    if (!buffer) return false;
+
+    clearTimeout(buffer.timer);
+    buffer.timer = setTimeout(() => {
+      void this.flushClientMessageBuffer(bufferKey, buffer.empleada);
+    }, TelegramBookingUpdate.BUFFER_NUDGE_DELAY_MS);
+    return true;
+  }
+
+  /**
+   * Deja constancia en el historial de que el pin ya llego.
+   *
+   * El prompt lleva la ubicacion confirmada, pero el modelo se guia sobre todo
+   * por el hilo de la conversacion, y ahi el pin no aparecia: como el ultimo
+   * turno suyo habia sido pedirla, volvia a pedirla. Entra como turno del
+   * cliente porque es el quien la mando.
+   */
+  private recordLocationInHistory(
+    session: SessionData,
+    descripcion?: string | null,
+  ): void {
+    const detalle = descripcion
+      ? capClientMessage(stripControlMarkers(descripcion))
+      : '';
+    const texto = detalle
+      ? `Ya te mandé mi ubicación por Telegram: ${detalle}`
+      : 'Ya te mandé mi ubicación por Telegram, te llegó el pin.';
+    const history = trimChatHistory(session.chatHistory || []);
+    history.push({ role: 'user', parts: [{ text: texto }] });
+    session.chatHistory = history;
   }
 
   private async flushClientMessageBuffer(

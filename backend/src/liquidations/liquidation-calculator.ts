@@ -94,10 +94,22 @@ export function calculateCut(records: LiquidationRecord[]): CutResult {
     promotionTotal += promotion;
     membershipTotal += toCents(record.membershipAmount);
 
+    /*
+     * Los extras son integros de la empleada.
+     *
+     * Antes se le retenia un 15 % a partir de 1000: la casa se quedaba una
+     * parte de algo que es suyo por completo, y como la hoja solo mostraba el
+     * resultado ya recortado, la retencion no aparecia por ningun lado. Ni la
+     * empleada ni la oficina podian ver por que el numero no cuadraba con lo
+     * que se habia cobrado.
+     *
+     * `rawExtrasTotal` y `calculatedExtras` se conservan los dos porque el
+     * corte los usa para cosas distintas —lo cobrado al cliente y lo que se le
+     * paga a ella— aunque ahora valgan lo mismo.
+     */
     const extra = toCents(record.electronicExtraAmount ?? record.extraAmount);
     rawExtrasTotal += extra;
-    // El umbral son 1000 unidades, que en centavos son 100_000.
-    calculatedExtras += extra >= 100_000 ? Math.round(extra * 0.85) : extra;
+    calculatedExtras += extra;
 
     if (record.paymentMethod === 'efectivo') cashTotal += serviceTotal;
     if (record.paymentMethod === 'transferencia') transferTotal += serviceTotal;
