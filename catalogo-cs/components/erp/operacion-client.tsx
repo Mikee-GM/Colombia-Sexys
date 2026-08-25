@@ -72,12 +72,12 @@ const num = (value: unknown) => Number(value ?? 0) || 0;
 /* -------------------------------------------------------------------------- */
 
 /**
- * Dia calendario en Bogota como "YYYY-MM-DD".
+ * Dia calendario en la zona horaria de la operacion como "YYYY-MM-DD".
  *
  * El rango se compara por dia local y no por UTC, porque un servicio de las
- * 22:00 en Bogota cae al dia siguiente en UTC y se saldria del tablero de hoy.
+ * 22:00 en la zona horaria de la operacion cae al dia siguiente en UTC y se saldria del tablero de hoy.
  */
-function diaBogota(value: string | number | Date) {
+function diaLocal(value: string | number | Date) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat("en-CA", {
@@ -210,12 +210,12 @@ export default function OperacionClient({
    */
   const delRango = useMemo(() => {
     const referenciaAhora = ahora ?? Date.now();
-    const hoy = diaBogota(referenciaAhora);
+    const hoy = diaLocal(referenciaAhora);
     const semana = getOperationalWeek(new Date(referenciaAhora));
 
     return services
       .filter((service) => {
-        const dia = diaBogota(referencia(service));
+        const dia = diaLocal(referencia(service));
         if (!dia) return false;
         if (rango === "hoy") return dia === hoy;
         return dia >= semana.startDate && dia <= semana.endDate;

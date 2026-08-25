@@ -28,8 +28,8 @@ const DIAS = [
   { dia: 0, corto: "Dom" },
 ] as const;
 
-/** Dia de la semana de una fecha, leido en Bogota y no en UTC. */
-function diaSemanaBogota(value: string) {
+/** Dia de la semana de una fecha, leido en la zona horaria de la operacion y no en UTC. */
+function diaSemanaLocal(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
 
@@ -50,7 +50,7 @@ function diaSemanaBogota(value: string) {
   return mapa[nombre] ?? null;
 }
 
-function fechaBogota(value: string) {
+function fechaLocal(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat("en-CA", {
@@ -85,14 +85,14 @@ export default function SemanaEnCurso({
 }) {
   /*
    * Un servicio cuenta en el dia en que se presto y no en el que se creo, y
-   * los cancelados no facturan. La fecha se resuelve en Bogota porque un
+   * los cancelados no facturan. La fecha se resuelve en la zona horaria de la operacion porque un
    * servicio de las 22:00 cae al dia siguiente en UTC.
    */
   const facturables = services.filter((service) => {
     if (service.estado === "cancelado") return false;
     const referencia =
       service.horaInicioServicio ?? service.fechaProgramada ?? service.createdAt;
-    const dia = fechaBogota(referencia);
+    const dia = fechaLocal(referencia);
     return dia !== null && dia >= startDate && dia <= endDate;
   });
 
@@ -103,7 +103,7 @@ export default function SemanaEnCurso({
           service.horaInicioServicio ??
           service.fechaProgramada ??
           service.createdAt;
-        return diaSemanaBogota(referencia) === dia;
+        return diaSemanaLocal(referencia) === dia;
       })
       .reduce((suma, service) => suma + num(service.totalFinal), 0);
 

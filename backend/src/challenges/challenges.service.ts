@@ -9,6 +9,7 @@ import { DataSource, Repository } from 'typeorm';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { Usuarios } from '../users/entities/user.entity';
+import { APP_LOCALE } from '../common/locale';
 import { CreateChallengeDto } from './dto/challenges.dto';
 import { ChallengeParticipant } from './entities/challenge-participant.entity';
 import {
@@ -450,7 +451,7 @@ export class ChallengesService {
     if (!challenge) return;
     const rows = await this.participants.find({ where: { challengeId } });
     const metricLabel = this.metricLabel(challenge.metric);
-    const endsAtLabel = challenge.endsAt.toLocaleDateString('es-CO', {
+    const endsAtLabel = challenge.endsAt.toLocaleDateString(APP_LOCALE, {
       day: 'numeric',
       month: 'long',
     });

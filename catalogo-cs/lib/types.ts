@@ -734,7 +734,16 @@ export type DriverShift = {
 
 export type DriverShiftSummary = DriverShift & { assignedCount: number };
 
-export type DriverShiftPerson = { id: string; nombre: string; score: number };
+export type DriverShiftPerson = {
+  id: string;
+  nombre: string;
+  score: number;
+  /**
+   * Estado de despacho del chofer ahora mismo. Es informativo: no decide quien
+   * puede tomar un turno, porque asignar turnos es planear la semana.
+   */
+  disponible?: boolean;
+};
 
 export type DriverShiftDetail = DriverShift & {
   assignedDrivers: DriverShiftPerson[];

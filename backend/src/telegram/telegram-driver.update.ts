@@ -25,6 +25,7 @@ import {
 import { DisciplineService } from '../discipline/discipline.service';
 import { SettlementsService } from '../transport-operations/settlements.service';
 import { AuthService } from '../auth/auth.service';
+import { PanelAccessService } from '../auth/panel-access.service';
 import { describeError } from '../common/errors/error-message';
 
 /**
@@ -71,6 +72,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     private readonly disciplineService: DisciplineService,
     private readonly settlementsService: SettlementsService,
     private readonly authService: AuthService,
+    private readonly panelAccessService: PanelAccessService,
   ) {
     this.cacheCleanupInterval = setInterval(() => {
       const now = Date.now();
@@ -88,6 +90,12 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     }
   }
 
+  /**
+   * Portal del chofer, con el mismo pase de un solo uso que el resto.
+   *
+   * El enlace ya no lleva un token de siete dias incrustado: en un chat que
+   * guarda historial y se reenvia, eso era una llave valida toda la semana.
+   */
   @Hears(['🚚 Mi Portal', '/portal'])
   async onDriverPortal(@Ctx() ctx: Context) {
     const telegramId = ctx.from?.id.toString();
@@ -97,29 +105,40 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     });
     if (!user) return;
 
-    const token = await this.authService.generatePortalToken(user);
-    const baseUrl =
-      process.env.WEB_URL ||
-      process.env.FRONTEND_URL ||
-      'https://colombia-sexys.com';
-    const portalUrl = `${baseUrl.replace(/\/$/, '')}/chofer/portal?token=${encodeURIComponent(token)}`;
+    try {
+      const { url, expiresAt } = await this.panelAccessService.issueLink(
+        user.id,
+        telegramId,
+        '/chofer/portal',
+      );
+      const minutos = Math.max(
+        1,
+        Math.round((expiresAt.getTime() - Date.now()) / 60_000),
+      );
 
-    await ctx.reply(
-      `🚚 *¡Hola! Tu Portal de Chofer*\n\n` +
-        `Accede a tu panel para consultar:\n` +
-        `🏆 Tu posición en el *Ranking* de choferes\n` +
-        `💵 Tus *Ganancias* y viajes acumulados\n` +
-        `📋 Tu historial de *Viajes*\n` +
-        `⭐ Tu *Reputación* y comentarios\n\n` +
-        `_Haz clic en el botón de abajo para abrir la Mini App de forma segura:_`,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [Markup.button.webApp('✨ Abrir Mi Portal', portalUrl)],
-          [Markup.button.url('🌐 Abrir en el navegador', portalUrl)],
-        ]),
-      },
-    );
+      await ctx.reply(
+        [
+          '*Tu portal de chofer esta listo*',
+          '',
+          'Adentro tienes tu posicion en el ranking, tus ganancias y viajes,',
+          'tu historial y tu reputacion.',
+          '',
+          `Este enlace entra sin pedirte contrasena, sirve una sola vez y caduca en ${minutos} minutos.`,
+        ].join('\n'),
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.webApp('Abrir mi portal', url)],
+            [Markup.button.url('Abrir en el navegador', url)],
+          ]),
+        },
+      );
+    } catch (error) {
+      this.logger.error('No se pudo emitir el pase del portal:', error);
+      await ctx.reply(
+        'No se pudo generar el acceso a tu portal. Intenta de nuevo en un momento.',
+      );
+    }
   }
 
   @Hears('/reputacion')

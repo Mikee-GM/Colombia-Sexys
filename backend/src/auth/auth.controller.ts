@@ -14,6 +14,8 @@ import { timingSafeEqual } from 'crypto';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
+import { PanelAccessService } from './panel-access.service';
+import { PanelAccessDto } from './dto/panel-access.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CsrfGuard } from './guards/csrf.guard';
@@ -37,7 +39,10 @@ import { Usuarios } from '../users/entities/user.entity';
 @Controller('auth')
 @ApiControllerDocs('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly panelAccessService: PanelAccessService,
+  ) {}
 
   // Limite estricto: el global de 100/min no sirve de nada contra fuerza bruta
   // de credenciales.
@@ -98,6 +103,37 @@ export class AuthController {
       request.signedCookies?.[ACCESS_COOKIE] as string | undefined,
     );
     this.clearAuthCookies(response);
+  }
+
+  /**
+   * Canjea el pase de un solo uso que el bot le manda al jefe y abre sesion.
+   *
+   * Sustituye una prueba de identidad por otra equivalente: el pase solo existe
+   * porque el chat de Telegram ya estaba vinculado a esa cuenta. Se limita el
+   * ritmo igual que el login, porque tambien abre sesion.
+   */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('panel-access')
+  @HttpCode(HttpStatus.OK)
+  async panelAccess(
+    @Body() dto: PanelAccessDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const { user, redirectPath } = await this.panelAccessService.consume(
+      dto.token,
+      dto.chatId ?? null,
+    );
+
+    const deviceId =
+      request.headers['x-device-id']?.toString().slice(0, 128) ||
+      request.headers['user-agent']?.slice(0, 128) ||
+      'telegram-link';
+
+    const result = await this.authService.issueSessionFor(user, deviceId);
+    this.setAuthCookies(response, result);
+
+    return { user: result.user, redirectPath };
   }
 
   @Get('me')

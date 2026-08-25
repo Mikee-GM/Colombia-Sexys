@@ -14,6 +14,7 @@ import { Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, MoreThan } from 'typeorm';
 import { AuthService } from '../auth/auth.service';
+import { PanelAccessService } from '../auth/panel-access.service';
 import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
@@ -50,6 +51,7 @@ export class TelegramAuthUpdate {
     @InjectRepository(Viajes)
     private readonly viajesRepository: Repository<Viajes>,
     private readonly authService: AuthService,
+    private readonly panelAccessService: PanelAccessService,
     @Inject(forwardRef(() => TelegramService))
     private readonly telegramService: TelegramService,
     @Inject(forwardRef(() => TelegramBookingUpdate))
@@ -786,34 +788,55 @@ export class TelegramAuthUpdate {
   }
 
   @Hears(['👑 Mi Portal', '/portal'])
+  /**
+   * Portal de la empleada, con el mismo pase de un solo uso que el panel.
+   *
+   * Antes el enlace llevaba incrustado un token de siete dias. Telegram guarda
+   * el historial del chat y los mensajes se reenvian, asi que ese enlace era
+   * una llave valida durante una semana en un sitio que no controlamos. El pase
+   * dura minutos, sirve una vez y queda atado al chat que lo pidio.
+   */
   @Command('portal')
   async onEmployeePortal(@Ctx() ctx: Context) {
     const employee = await this.getEmployeeFromContext(ctx);
     if (!employee || !employee.usuario) return;
 
-    const token = await this.authService.generatePortalToken(employee.usuario);
-    const baseUrl =
-      process.env.WEB_URL ||
-      process.env.FRONTEND_URL ||
-      'https://colombia-sexys.com';
-    const portalUrl = `${baseUrl.replace(/\/$/, '')}/empleada/portal?token=${encodeURIComponent(token)}`;
+    const chatId = ctx.from?.id.toString() ?? null;
 
-    await ctx.reply(
-      `👑 *¡Hola, ${employee.nombreArtistico}! Tu Portal Exclusivo*\n\n` +
-        `Accede a tu panel para consultar:\n` +
-        `🏆 Tu posición en el *Ranking Global*\n` +
-        `💵 Tus *Ganancias Netas* y horas acumuladas\n` +
-        `📋 Tu historial de *Servicios* y estatus de transporte\n` +
-        `⭐ Tus *Calificaciones* y comentarios de clientes\n\n` +
-        `_Haz clic en el botón de abajo para abrir la Mini App de forma segura:_`,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [Markup.button.webApp('✨ Abrir Mi Portal', portalUrl)],
-          [Markup.button.url('🌐 Abrir en el navegador', portalUrl)],
-        ]),
-      },
-    );
+    try {
+      const { url, expiresAt } = await this.panelAccessService.issueLink(
+        employee.usuario.id,
+        chatId,
+        '/empleada/portal',
+      );
+      const minutos = Math.max(
+        1,
+        Math.round((expiresAt.getTime() - Date.now()) / 60_000),
+      );
+
+      await ctx.reply(
+        [
+          `*Hola, ${employee.nombreArtistico}. Tu portal esta listo*`,
+          '',
+          'Adentro tienes tu posicion en el ranking, tus ganancias netas y horas,',
+          'tu historial de servicios y tus calificaciones.',
+          '',
+          `Este enlace entra sin pedirte contrasena, sirve una sola vez y caduca en ${minutos} minutos.`,
+        ].join('\n'),
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.webApp('Abrir mi portal', url)],
+            [Markup.button.url('Abrir en el navegador', url)],
+          ]),
+        },
+      );
+    } catch (error) {
+      this.logger.error('No se pudo emitir el pase del portal:', error);
+      await ctx.reply(
+        'No se pudo generar el acceso a tu portal. Intenta de nuevo en un momento.',
+      );
+    }
   }
 
   private employeeMenu() {
@@ -922,8 +945,35 @@ export class TelegramAuthUpdate {
     );
   }
 
+  /**
+   * Abre el panel web sin volver a teclear usuario y contrasena.
+   *
+   * Antes esto devolvia un token en crudo para pegar a mano. Operar desde
+   * Telegram es lento para un servicio manual o para corregir un dato, y la
+   * friccion del login remataba el problema. El chat ya esta vinculado a la
+   * cuenta, asi que el pase solo cambia una prueba de identidad por otra
+   * equivalente, con vida corta y un solo uso.
+   */
   @Command('panel')
   async onPanel(@Ctx() ctx: Context) {
+    await this.enviarEnlaceDePanel(ctx, null);
+  }
+
+  /** Mismo pase, pero aterrizando en la ficha del servicio del boton. */
+  @Action(/^panel_servicio:(.+)$/)
+  async onPanelServicio(@Ctx() ctx: Context) {
+    const servicioId = (ctx as any).match?.[1] as string | undefined;
+    await ctx.answerCbQuery().catch(() => undefined);
+    await this.enviarEnlaceDePanel(
+      ctx,
+      servicioId ? `/admin/services/${servicioId}` : null,
+    );
+  }
+
+  private async enviarEnlaceDePanel(
+    ctx: Context,
+    redirectPath: string | null,
+  ): Promise<void> {
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
 
@@ -933,19 +983,42 @@ export class TelegramAuthUpdate {
 
     if (!user || (user.rol !== 'jefe' && user.rol !== 'admin')) {
       await ctx.reply(
-        '❌ No tienes permisos de Jefe o Administrador para acceder al panel.',
+        'No tienes permisos de jefe o administrador para acceder al panel.',
       );
       return;
     }
 
-    const token = await this.authService.createPanelAccessToken(user);
+    try {
+      const { url, expiresAt } = await this.panelAccessService.issueLink(
+        user.id,
+        telegramId,
+        redirectPath,
+      );
+      const minutos = Math.max(
+        1,
+        Math.round((expiresAt.getTime() - Date.now()) / 60_000),
+      );
 
-    await ctx.reply(
-      `🔑 *Token de Acceso Jefes:*\n\n` +
-        `\`${token}\`\n\n` +
-        `Válido 15 minutos. Úsalo para autenticar tu panel externo en el flujo de Server-Sent Events (SSE).`,
-      { parse_mode: 'Markdown' },
-    );
+      await ctx.reply(
+        [
+          '*Tu panel, listo para entrar*',
+          '',
+          'Este enlace abre la sesion sin pedirte usuario ni contrasena.',
+          `Sirve una sola vez y caduca en ${minutos} minutos.`,
+        ].join('\n'),
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.url('Abrir el panel', url)],
+          ]),
+        },
+      );
+    } catch (error) {
+      this.logger.error('No se pudo emitir el pase de panel:', error);
+      await ctx.reply(
+        'No se pudo generar el acceso al panel. Intenta de nuevo en un momento.',
+      );
+    }
   }
 
   @On('photo')

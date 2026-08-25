@@ -45,7 +45,7 @@ const num = (value: unknown) => Number(value ?? 0) || 0;
 
 const codigoViaje = (id: string) => `VJ-${id.slice(-6).toUpperCase()}`;
 
-function diaBogota(value: string | number | Date) {
+function diaLocal(value: string | number | Date) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat("en-CA", {
@@ -144,7 +144,7 @@ export default function TransporteClient({
    */
   const viajes = useMemo<ViajeConServicio[]>(() => {
     const referenciaAhora = ahora ?? Date.now();
-    const hoy = diaBogota(referenciaAhora);
+    const hoy = diaLocal(referenciaAhora);
     const semana = getOperationalWeek(new Date(referenciaAhora));
 
     return services
@@ -152,7 +152,7 @@ export default function TransporteClient({
         (service.viajes ?? []).map((trip) => ({ trip, service })),
       )
       .filter(({ trip, service }) => {
-        const dia = diaBogota(trip.horaNotificacion ?? service.createdAt);
+        const dia = diaLocal(trip.horaNotificacion ?? service.createdAt);
         if (!dia) return false;
         if (rango === "hoy") return dia === hoy;
         return dia >= semana.startDate && dia <= semana.endDate;

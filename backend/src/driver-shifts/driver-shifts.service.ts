@@ -104,25 +104,74 @@ export class DriverShiftsService {
     return { ...shift, assignedDrivers };
   }
 
-  /** Choferes elegibles para este turno (activos, no asignados ya), ordenados por score descendente. */
+  /**
+   * Choferes elegibles para este turno, ordenados por score descendente.
+   *
+   * Elegible significa con cuenta activa y sin veto disciplinario vigente, no
+   * "libre en este momento". Antes se filtraba por `disponible`, que es el
+   * estado de despacho: se pone en `true` cuando el chofer se marca listo y
+   * vuelve a `false` mientras hace un viaje, y nace en `false`. Con eso la
+   * lista de candidatos salia casi siempre vacia y el turno no se le podia
+   * asignar a nadie, aunque asignar un turno es planear la semana y no repartir
+   * el viaje de ahora.
+   */
   async listCandidates(shiftId: string) {
     const shift = await this.getShiftOrFail(shiftId);
     const alreadyAssigned = await this.assignments.find({
       where: { shiftId },
     });
     const excludedIds = new Set(alreadyAssigned.map((row) => row.driverId));
+
     const drivers = await this.choferesRepository.find({
-      where: { disponible: true },
-      select: { id: true, nombre: true },
+      where: { usuario: { activo: true } },
+      relations: { usuario: true },
+      select: { id: true, nombre: true, disponible: true },
     });
-    const eligible = drivers.filter((driver) => !excludedIds.has(driver.id));
+
+    const bannedIds = await this.listBannedDriverIds(
+      drivers.map((driver) => driver.id),
+    );
+
+    const eligible = drivers.filter(
+      (driver) => !excludedIds.has(driver.id) && !bannedIds.has(driver.id),
+    );
     const scored = await this.scoreDrivers(eligible.map((d) => d.id));
+
+    /* `disponible` viaja como dato informativo: ya no decide quien aparece. */
+    const disponiblePorId = new Map(
+      drivers.map((driver) => [driver.id, driver.disponible]),
+    );
+
     return {
       shiftId: shift.id,
       capacity: shift.capacity,
       assignedCount: alreadyAssigned.length,
-      candidates: scored.sort((a, b) => b.score - a.score),
+      candidates: scored
+        .map((candidate) => ({
+          ...candidate,
+          disponible: disponiblePorId.get(candidate.id) ?? false,
+        }))
+        .sort((a, b) => b.score - a.score),
     };
+  }
+
+  /**
+   * Choferes con una sancion vigente que impide programarlos. Un veto activo
+   * no deberia poder entrar a la malla de turnos de la semana siguiente.
+   */
+  private async listBannedDriverIds(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows: Array<{ subject_id: string }> = await this.dataSource.query(
+      `SELECT DISTINCT subject_id
+         FROM disciplinary_sanctions
+        WHERE subject_type = 'driver'
+          AND status = 'active'
+          AND starts_at <= now()
+          AND (type = 'permanent_ban' OR ends_at > now())
+          AND subject_id = ANY($1::uuid[])`,
+      [ids],
+    );
+    return new Set(rows.map((row) => row.subject_id));
   }
 
   async assignDriver(

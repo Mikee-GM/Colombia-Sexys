@@ -5050,6 +5050,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               `jefe_editar_srv:${nuevoServicio.id}`,
             ),
           ],
+          // Editar a fondo desde Telegram es lento; el panel lo hace en dos
+          // clics y este boton entra ya en la ficha de este servicio.
+          [
+            Markup.button.callback(
+              'Abrir en el panel',
+              `panel_servicio:${nuevoServicio.id}`,
+            ),
+          ],
         ]);
 
         let sentInGroup = false;

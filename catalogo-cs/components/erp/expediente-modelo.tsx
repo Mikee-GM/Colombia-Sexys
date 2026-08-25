@@ -21,6 +21,7 @@ import {
   Th,
   type BadgeTone,
 } from "@/components/erp/primitives";
+import GaleriaFotos from "@/components/erp/galeria-fotos";
 import TelegramOtpButton from "@/components/erp/telegram-otp-button";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
@@ -506,6 +507,14 @@ export default function ExpedienteModelo({
           </Panel>
         </div>
       </div>
+
+      {/* A lo ancho: la galeria necesita el espacio y es lo que mas se toca. */}
+      <GaleriaFotos
+        empleadaId={employee.id}
+        nombre={employee.nombreArtistico}
+        galeriaInicialPublica={employee.empleadaFotos ?? []}
+        galeriaInicialExclusiva={employee.fotosExclusivas ?? []}
+      />
     </div>
   );
 }

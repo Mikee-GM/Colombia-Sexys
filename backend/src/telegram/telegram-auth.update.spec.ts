@@ -27,6 +27,7 @@ describe('TelegramAuthUpdate deep links', () => {
       {} as any, // serviciosRepository
       {} as any, // viajesRepository
       {} as any, // authService
+      {} as any, // panelAccessService
       {} as any, // telegramService
       bookingUpdate as any, // telegramBookingUpdate
       {} as any, // telegramOnboardingService

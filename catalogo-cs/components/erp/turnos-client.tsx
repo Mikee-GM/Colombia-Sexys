@@ -701,7 +701,7 @@ export default function TurnosClient({
             </div>
 
             <h4 className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
-              Candidatos disponibles, ordenados por desempeno
+              Choferes elegibles, ordenados por desempeno
             </h4>
 
             {isFull ? (
@@ -714,7 +714,8 @@ export default function TurnosClient({
             <div className="flex flex-col gap-2">
               {candidates?.candidates.length === 0 ? (
                 <p className="text-[13px] text-zinc-500">
-                  No hay mas choferes elegibles.
+                  No hay mas choferes elegibles. Se listan los que tienen cuenta
+                  activa y ninguna sancion vigente, esten o no libres ahora.
                 </p>
               ) : (
                 candidates?.candidates.map((driver) => (
@@ -722,8 +723,18 @@ export default function TurnosClient({
                     key={driver.id}
                     className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800/60 px-3.5 py-2.5"
                   >
-                    <span className="text-[13px] text-zinc-300">
-                      {driver.nombre}
+                    <span className="flex min-w-0 items-center gap-2 text-[13px] text-zinc-300">
+                      <span className="truncate">{driver.nombre}</span>
+                      {/* Informativo: un chofer ocupado igual puede tomar turno. */}
+                      <span
+                        className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.04em] ${
+                          driver.disponible
+                            ? "bg-emerald-400/10 text-emerald-400"
+                            : "bg-zinc-800 text-zinc-500"
+                        }`}
+                      >
+                        {driver.disponible ? "Libre" : "Ocupado"}
+                      </span>
                     </span>
 
                     <div className="flex items-center gap-3">

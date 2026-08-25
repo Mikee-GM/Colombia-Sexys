@@ -19,6 +19,7 @@ import {
   getClientsAction,
 } from "@/lib/data/services";
 import type { Client, Employee, PresetServiceLocation, Service } from "@/lib/types";
+import { formatCurrency } from "@/lib/calculations";
 
 interface CreateServiceDialogProps {
   open: boolean;
@@ -47,6 +48,12 @@ export default function CreateServiceDialog({
   const [selectedClientId, setSelectedClientId] = useState(preselectedClientId || "");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(preselectedEmployeeId || "");
   const [durationHours, setDurationHours] = useState<number>(1);
+  /**
+   * Duracion abierta. Las horas pactadas siguen viajando al backend porque se
+   * usan para reservar la agenda; lo que cambia es que al finalizar se cuentan
+   * las reales en vez de darlas por cerradas.
+   */
+  const [openEnded, setOpenEnded] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"efectivo" | "tarjeta" | "transferencia">("efectivo");
   const [locationType, setLocationType] = useState<"preset" | "custom">("preset");
   const [presetLocationId, setPresetLocationId] = useState<string>("");
@@ -170,6 +177,7 @@ export default function CreateServiceDialog({
         clienteId: selectedClientId,
         empleadaId: selectedEmployeeId,
         duracionPactadaHoras: durationHours,
+        duracionIndefinida: openEnded,
         metodoPago: paymentMethod,
         ubicacionClienteLat: lat,
         ubicacionClienteLng: lng,
@@ -286,19 +294,23 @@ export default function CreateServiceDialog({
 
               {/* Duración y Método de Pago */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Duración */}
+                {/* Duración: atajos frecuentes, campo libre e indefinido */}
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Clock size={14} className="text-[#C5A55A]" /> Duración (Horas)
+                    <Clock size={14} className="text-[#C5A55A]" /> Duración
                   </label>
+
                   <div className="flex gap-2">
                     {[1, 2, 3, 4].map((h) => (
                       <button
                         key={h}
                         type="button"
-                        onClick={() => setDurationHours(h)}
+                        onClick={() => {
+                          setOpenEnded(false);
+                          setDurationHours(h);
+                        }}
                         className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-                          durationHours === h
+                          !openEnded && durationHours === h
                             ? "bg-[#C5A55A] text-zinc-950 shadow-md shadow-amber-500/20"
                             : "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:border-zinc-700"
                         }`}
@@ -307,6 +319,46 @@ export default function CreateServiceDialog({
                       </button>
                     ))}
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={24}
+                      step={0.5}
+                      value={openEnded ? "" : durationHours}
+                      disabled={openEnded}
+                      onChange={(e) => {
+                        const value = Number(e.target.value);
+                        if (Number.isFinite(value)) setDurationHours(value);
+                      }}
+                      placeholder="Otra cantidad"
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white outline-none focus:border-[#C5A55A] disabled:text-zinc-600"
+                    />
+                    <span className="text-xs text-zinc-500">horas</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setOpenEnded(!openEnded)}
+                    className={`w-full rounded-xl py-2 text-xs font-bold transition-all ${
+                      openEnded
+                        ? "bg-[#C5A55A] text-zinc-950 shadow-md shadow-amber-500/20"
+                        : "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                    }`}
+                  >
+                    Tiempo indefinido
+                  </button>
+
+                  {openEnded && (
+                    <p className="text-[11px] leading-relaxed text-zinc-500">
+                      Las horas se cuentan al finalizar el servicio y se
+                      redondean hacia arriba a partir de los 15 minutos. Se
+                      reservan {durationHours}{" "}
+                      {durationHours === 1 ? "hora" : "horas"} en la agenda como
+                      estimacion inicial.
+                    </p>
+                  )}
                 </div>
 
                 {/* Método de Pago */}
@@ -476,14 +528,22 @@ export default function CreateServiceDialog({
               {/* Resumen de Total */}
               <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 flex items-center justify-between">
                 <div>
-                  <span className="text-xs text-zinc-400">Total Base del Servicio:</span>
+                  <span className="text-xs text-zinc-400">
+                    {openEnded ? "Estimado inicial:" : "Total Base del Servicio:"}
+                  </span>
                   <p className="text-xs text-zinc-300">
-                    ${hourlyRate}/hr × {durationHours} {durationHours === 1 ? "hora" : "horas"}
+                    {formatCurrency(hourlyRate)}/hr × {durationHours}{" "}
+                    {durationHours === 1 ? "hora" : "horas"}
                   </p>
+                  {openEnded && (
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      El total definitivo sale de las horas reales al cerrar.
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <span className="text-lg font-black text-[#C5A55A]">
-                    ${totalBase.toLocaleString("es-MX")}
+                    {formatCurrency(totalBase)}
                   </span>
                 </div>
               </div>

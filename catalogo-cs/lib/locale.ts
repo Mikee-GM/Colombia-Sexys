@@ -1,11 +1,12 @@
 /**
  * Configuracion regional unica de la aplicacion.
  *
- * La operacion es colombiana. Varias vistas fijaban por su cuenta la zona
- * horaria de Ciudad de Mexico, que va una hora detras de Bogota, de modo que
- * las horas mostradas en los portales y en la disponibilidad de las modelos
- * quedaban corridas.
+ * El negocio se opera desde Mexico, aunque las modelos del catalogo sean
+ * colombianas: el dinero se cobra y se liquida en pesos mexicanos y la agenda
+ * corre en hora de Ciudad de Mexico. Existe este modulo unico porque varias
+ * vistas fijaban su propia zona horaria por su cuenta, y basta una diferencia
+ * de una hora para que la disponibilidad de una modelo se muestre corrida.
  */
-export const APP_TIME_ZONE = "America/Bogota";
+export const APP_TIME_ZONE = "America/Mexico_City";
 
-export const APP_LOCALE = "es-CO";
+export const APP_LOCALE = "es-MX";

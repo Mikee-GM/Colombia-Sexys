@@ -13,6 +13,7 @@ import EvaluationHistorySheet from "@/components/admin/evaluations/evaluation-hi
 import CreateServiceDialog from "@/components/services/create-service-dialog";
 import ServiceStatusBadge from "@/components/services/service-status-badge";
 import CancelServiceDialog from "@/components/services/cancel-service-dialog";
+import GaleriaFotos from "@/components/erp/galeria-fotos";
 import { type CancellationReason } from "@/lib/cancellation-reasons";
 import {
   cancelJefeService,
@@ -433,73 +434,25 @@ function ChatPanel({ service, messages, setMessages, onClose }: { service: Servi
   return <aside className="fixed inset-x-3 bottom-3 z-50 flex max-h-[75vh] flex-col rounded-2xl border border-[#C5A55A]/60 bg-[#050505] shadow-2xl md:left-auto md:right-6 md:w-[420px]"><header className="flex items-center justify-between border-b border-zinc-800 p-4"><div><p className="font-heading text-xl">Conversación</p><p className="text-xs text-zinc-500">{service.cliente?.nombreTelegram || "Cliente"}</p></div><button onClick={onClose} aria-label="Cerrar"><X size={19} /></button></header>{hasPriorContext && <div className="border-b border-zinc-800 bg-[#C5A55A]/5 px-4 py-3 text-xs leading-relaxed text-[#E8D5A3]">Esta conversación comenzó antes de que el servicio fuera creado. El historial previo se muestra para conservar el contexto.</div>}<div className="flex-1 space-y-3 overflow-y-auto p-4">{messages.length === 0 && <p className="py-10 text-center text-sm text-zinc-600">Todavía no hay mensajes.</p>}{messages.map((message) => { const presentation = senderPresentation[message.emisor]; return <div key={message.id} className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${presentation.className}`}><p className="mb-1 text-[9px] font-semibold uppercase tracking-[0.14em] opacity-60">{presentation.label}</p><p className="whitespace-pre-wrap">{message.mensaje}</p><time className="mt-1 block text-[10px] opacity-60">{new Date(message.enviadoAt).toLocaleTimeString(APP_LOCALE, { hour: "2-digit", minute: "2-digit", timeZone: APP_TIME_ZONE })}</time></div>; })}</div><div className="flex gap-2 border-t border-zinc-800 p-3"><textarea value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} maxLength={4000} placeholder="Escribe un mensaje" className="min-h-11 flex-1 resize-none rounded-xl border border-zinc-800 bg-black px-3 py-2 text-sm outline-none focus:border-[#C5A55A]" /><button onClick={send} className="rounded-xl bg-[#C5A55A] px-4 text-black" aria-label="Enviar"><Send size={18} /></button></div></aside>;
 }
 
+/**
+ * Fotos de una modelo desde el panel del jefe.
+ *
+ * Antes esta pantalla solo dejaba ver, subir y borrar exclusivas, mientras que
+ * el catalogo publico se administraba en otro lado. Ahora monta la misma
+ * galeria que el expediente del ERP, asi que se puede hacer lo mismo entrando
+ * por donde sea.
+ */
 function ExclusivePhotosPanel({ employee, onClose }: { employee: Employee; onClose: () => void }) {
-  const [photos, setPhotos] = useState<{ id: string; url: string; orden: number }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-
-  const fetchPhotos = async () => {
-    setLoading(true);
-    try {
-      const data = await getPrivatePhotosAction(employee.id);
-      setPhotos(data);
-    } catch {
-      toast.error("Error al cargar fotos exclusivas");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPhotos();
-  }, [employee.id]);
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      setUploading(true);
-      const compressed = await imageCompression(file, {
-        maxSizeMB: 0.5,
-        maxWidthOrHeight: 1080,
-        useWebWorker: true,
-      });
-      const formData = new FormData();
-      formData.append("files", compressed);
-      const [uploadedUrl] = await uploadImagesAction(formData);
-      await addPrivatePhotoAction(employee.id, uploadedUrl);
-      toast.success("Foto exclusiva añadida");
-      await fetchPhotos();
-    } catch (err: any) {
-      toast.error(err.message || "Error al subir foto exclusiva");
-    } finally {
-      setUploading(false);
-      e.target.value = "";
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("¿Eliminar esta foto exclusiva?")) return;
-    try {
-      await deletePrivatePhotoAction(id);
-      toast.success("Foto exclusiva eliminada");
-      setPhotos((current) => current.filter((p) => p.id !== id));
-    } catch (err: any) {
-      toast.error(err.message || "Error al eliminar");
-    }
-  };
-
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm"
-      onMouseDown={(e) => e.target === e.currentTarget && !uploading && onClose()}
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-[#090909] p-6 shadow-2xl">
-        <div className="flex items-center justify-between mb-5">
+      <div className="relative w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-[#090909] p-6 shadow-2xl">
+        <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Fotos Exclusivas</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Fotos de la modelo</p>
             <h3 className="mt-1 font-heading text-2xl text-white">{employee.nombreArtistico}</h3>
-            <p className="mt-1 text-xs text-zinc-500">Estas fotos son enviadas por Telegram a clientes que las solicitan. No se publican en la web.</p>
           </div>
           <button
             type="button"
@@ -510,53 +463,7 @@ function ExclusivePhotosPanel({ employee, onClose }: { employee: Employee; onClo
           </button>
         </div>
 
-        <div className="mb-5">
-          <div className="relative inline-block overflow-hidden">
-            <button
-              type="button"
-              disabled={uploading}
-              className="flex items-center gap-2 rounded-xl bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black hover:bg-[#D4AF37] disabled:opacity-50 transition-colors"
-            >
-              <Camera size={16} />
-              {uploading ? "Subiendo..." : "Subir Foto Exclusiva"}
-            </button>
-            <input
-              type="file"
-              accept="image/*"
-              disabled={uploading}
-              onChange={handleUpload}
-              className="absolute inset-0 cursor-pointer opacity-0"
-            />
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="py-16 text-center text-sm text-zinc-500">Cargando fotos exclusivas...</div>
-        ) : photos.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-zinc-800 py-16 text-center">
-            <Camera size={32} className="mx-auto text-zinc-700" />
-            <p className="mt-3 text-sm text-zinc-400">No hay fotos exclusivas para esta modelo.</p>
-            <p className="mt-1 text-xs text-zinc-600">Sube fotos o pídele a la modelo que las envíe por Telegram.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {photos.map((photo) => (
-              <div
-                key={photo.id}
-                className="group relative aspect-[3/4] overflow-hidden rounded-xl border border-zinc-800 bg-black"
-              >
-                <Image src={photo.url} alt="Foto exclusiva" fill className="object-cover" unoptimized />
-                <button
-                  type="button"
-                  onClick={() => handleDelete(photo.id)}
-                  className="absolute right-2 top-2 rounded-lg bg-black/80 p-2 text-red-400 opacity-0 transition-all hover:bg-red-950 group-hover:opacity-100"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        <GaleriaFotos empleadaId={employee.id} nombre={employee.nombreArtistico} compact />
 
         <div className="mt-6 flex justify-end border-t border-zinc-800 pt-4">
           <button

@@ -208,6 +208,101 @@ export async function deletePrivatePhotoAction(id: string): Promise<void> {
   revalidatePath("/admin/modelos");
 }
 
+// --- GALERIAS: PUBLICAS Y EXCLUSIVAS ---
+
+/** Las dos galerias de una modelo, tal como las nombra el backend. */
+export type PhotoGallery = "publica" | "exclusiva";
+
+export async function getGalleryAction(
+  empleadaId: string,
+  gallery: PhotoGallery,
+): Promise<{ id: string; url: string; orden: number }[]> {
+  try {
+    const path =
+      gallery === "publica"
+        ? `/employees/${empleadaId}`
+        : `/employee-photos/private/${empleadaId}`;
+
+    if (gallery === "exclusiva") {
+      return await apiFetch<any[]>(path, { authenticated: true });
+    }
+
+    const empleada = await apiFetch<any>(path, { authenticated: true });
+    return [...(empleada?.empleadaFotos ?? [])].sort(
+      (a, b) => (a.orden ?? 0) - (b.orden ?? 0),
+    );
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    console.error("getGalleryAction error:", error);
+    return [];
+  }
+}
+
+export async function addGalleryPhotoAction(
+  empleadaId: string,
+  gallery: PhotoGallery,
+  url: string,
+  orden = 0,
+) {
+  const path =
+    gallery === "publica" ? "/employee-photos" : "/employee-photos/private";
+  const data = await apiFetch<any>(path, {
+    method: "POST",
+    body: JSON.stringify({ empleadaId, url, orden }),
+    authenticated: true,
+  });
+  revalidateGalleries();
+  return data;
+}
+
+export async function deleteGalleryPhotoAction(
+  id: string,
+  gallery: PhotoGallery,
+): Promise<void> {
+  const path =
+    gallery === "publica"
+      ? `/employee-photos/${id}`
+      : `/employee-photos/private/${id}`;
+  await apiFetch<void>(path, { method: "DELETE", authenticated: true });
+  revalidateGalleries();
+}
+
+/**
+ * Reescribe el orden completo de una galeria. Se manda la lista entera porque
+ * mover una foto recoloca a todas las demas.
+ */
+export async function reorderGalleryAction(
+  empleadaId: string,
+  gallery: PhotoGallery,
+  ids: string[],
+): Promise<void> {
+  await apiFetch<void>("/employee-photos/gallery/reorder", {
+    method: "PATCH",
+    body: JSON.stringify({ empleadaId, gallery, ids }),
+    authenticated: true,
+  });
+  revalidateGalleries();
+}
+
+/** Pasa una foto de publica a exclusiva o al reves, sin volver a subirla. */
+export async function movePhotoAction(
+  id: string,
+  from: PhotoGallery,
+  to: PhotoGallery,
+): Promise<void> {
+  await apiFetch<void>(`/employee-photos/${id}/move`, {
+    method: "POST",
+    body: JSON.stringify({ from, to }),
+    authenticated: true,
+  });
+  revalidateGalleries();
+}
+
+function revalidateGalleries() {
+  revalidatePath("/admin/modelos");
+  revalidatePath("/admin/fotos");
+}
+
 // --- CONTENIDO SEMANAL (VALIDAR CONTENIDO SEMANAL) ---
 
 export async function getWeeklySubmissionsAction(

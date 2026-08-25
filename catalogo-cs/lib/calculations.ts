@@ -1,3 +1,5 @@
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+
 export function getStartAndEndOfWeek(date: Date) {
   const d = new Date(date);
   const day = d.getDay();
@@ -42,27 +44,30 @@ export function getWeekStringFromDate(date: Date) {
  * Formato unico de moneda de la aplicacion: pesos colombianos.
  *
  * Es el unico formateador de dinero que deben usar las vistas. Varias
- * pantallas definian su propio helper con Intl.NumberFormat en es-MX y moneda
- * MXN, de modo que el panel y los portales mostraban pesos mexicanos en un
- * negocio colombiano.
+ * pantallas definian su propio helper, de modo que la misma cifra se veia
+ * distinta segun por donde se entrara.
  *
- * Se fija a cero decimales porque el peso colombiano no se opera con centavos
- * y las cifras redondas evitan que la misma suma se vea distinta segun la
- * pantalla.
+ * El negocio se opera desde Mexico, aunque las modelos sean colombianas: las
+ * cifras van en pesos mexicanos. Se fija a cero decimales porque los importes
+ * se manejan redondos y asi la misma suma no cambia de forma entre pantallas.
  */
 export const formatCurrency = (value: number | string | null | undefined) =>
-  `$${(Number(value) || 0).toLocaleString("es-CO", {
+  `${(Number(value) || 0).toLocaleString(APP_LOCALE, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   })}`;
 
 export const formatDate = (dateString: string | Date) =>
-  new Date(dateString).toLocaleDateString("es-CO", { dateStyle: "short" });
+  new Date(dateString).toLocaleDateString(APP_LOCALE, {
+    dateStyle: "short",
+    timeZone: APP_TIME_ZONE,
+  });
 
 export const formatDateTime = (dateString: string | Date) =>
-  new Date(dateString).toLocaleString("es-CO", {
+  new Date(dateString).toLocaleString(APP_LOCALE, {
     dateStyle: "short",
     timeStyle: "short",
+    timeZone: APP_TIME_ZONE,
   });
 
 export function sortRecordsByServiceNumber(records: any[]) {

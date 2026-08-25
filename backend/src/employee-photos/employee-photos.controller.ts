@@ -12,6 +12,7 @@ import { EmployeePhotosService } from './employee-photos.service';
 import { CreateEmployeePhotoDto } from './dto/create-employee-photo.dto';
 import { UpdateEmployeePhotoDto } from './dto/update-employee-photo.dto';
 import { EmpleadaFotos } from './entities/employee-photo.entity';
+import { MovePhotoDto, ReorderPhotosDto } from './dto/gallery.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -110,5 +111,28 @@ export class EmployeePhotosController {
   @Roles('admin', 'jefe')
   removePrivate(@Param('id') id: string) {
     return this.employeePhotosService.removePrivatePhoto(id);
+  }
+
+  // --- GALERIAS ---
+
+  @Patch('gallery/reorder')
+  @Roles('admin', 'jefe')
+  reorderGallery(@Body() dto: ReorderPhotosDto) {
+    return this.employeePhotosService.reorderGallery(
+      dto.empleadaId,
+      dto.gallery,
+      dto.ids,
+    );
+  }
+
+  // Pasa una foto de publica a exclusiva o al reves, sin volver a subirla.
+  @Post(':id/move')
+  @Roles('admin', 'jefe')
+  moveBetweenGalleries(@Param('id') id: string, @Body() dto: MovePhotoDto) {
+    return this.employeePhotosService.moveBetweenGalleries(
+      id,
+      dto.from,
+      dto.to,
+    );
   }
 }

@@ -754,6 +754,13 @@ export class TelegramAdminUpdate {
             `jefe_editar_srv:${serviceId}`,
           ),
         ],
+        // Atajo al panel, ya dentro de la ficha de este servicio.
+        [
+          Markup.button.callback(
+            'Abrir en el panel',
+            `panel_servicio:${serviceId}`,
+          ),
+        ],
       ]),
     });
   }

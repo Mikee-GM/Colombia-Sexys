@@ -1,11 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   IsEnum,
+  Max,
+  Min,
 } from 'class-validator';
 
 export class CreateServiceDto {
@@ -29,10 +32,25 @@ export class CreateServiceDto {
   @IsEnum(['efectivo', 'tarjeta', 'transferencia'])
   metodoPago: 'efectivo' | 'tarjeta' | 'transferencia';
 
-  @ApiProperty()
+  /**
+   * Horas pactadas. En un servicio indefinido es solo la estimacion inicial
+   * para reservar agenda: las horas reales se cuentan al finalizar.
+   */
+  @ApiProperty({ minimum: 0.5, maximum: 24 })
   @IsNotEmpty()
   @IsNumber()
+  @Min(0.5)
+  @Max(24)
   duracionPactadaHoras: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Duracion abierta: las horas se cuentan al finalizar y se redondean hacia arriba a partir de los 15 minutos',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  duracionIndefinida?: boolean;
 
   @ApiProperty()
   @IsNotEmpty()

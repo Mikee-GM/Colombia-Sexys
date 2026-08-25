@@ -2,6 +2,7 @@
 
 import { getStartAndEndOfWeek, getWeekStringFromDate } from "@/lib/calculations";
 import { Button } from "@/components/ui/button";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 interface Props {
   currentDate: Date;
@@ -13,7 +14,12 @@ export default function WeekSelector({ currentDate, onPrev, onNext }: Props) {
   const { start, end } = getStartAndEndOfWeek(currentDate);
   const weekLabel = getWeekStringFromDate(currentDate);
 
-  const formatShort = (d: Date) => d.toLocaleDateString("es-CO", { day: "2-digit", month: "short" });
+  const formatShort = (d: Date) =>
+    d.toLocaleDateString(APP_LOCALE, {
+      day: "2-digit",
+      month: "short",
+      timeZone: APP_TIME_ZONE,
+    });
 
   return (
     <div className="flex items-center gap-4 bg-zinc-900 border border-brand-gold/30 rounded-full px-6 py-2 shadow-[0_0_15px_rgba(197,165,90,0.1)]">

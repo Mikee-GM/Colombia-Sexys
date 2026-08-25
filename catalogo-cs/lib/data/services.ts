@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
-import type { ConversationMessage, Service } from "@/lib/types";
+import type { Client, ConversationMessage, Service } from "@/lib/types";
 import type { CancellationReason } from "@/lib/cancellation-reasons";
+import { asList } from "@/lib/paginated";
 
 function revalidateAdminViews() {
   try {
@@ -259,13 +260,8 @@ export async function updateCancellationAction(
  */
 export async function getClientsAction() {
   try {
-    const response = await apiFetch<any>("/clients?limit=200");
-    const clients = Array.isArray(response)
-      ? response
-      : Array.isArray(response?.items)
-        ? response.items
-        : [];
-    return { success: true, data: clients };
+    const response = await apiFetch<unknown>("/clients?limit=200");
+    return { success: true, data: asList<Client>(response) };
   } catch (error) {
     return {
       success: false,

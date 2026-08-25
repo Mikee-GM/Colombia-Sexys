@@ -5,6 +5,7 @@ import { EmployeePhotosController } from './employee-photos.controller';
 import { EmpleadaFotos } from './entities/employee-photo.entity';
 import { EmpleadaFotosExclusivas } from './entities/employee-private-photo.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
+import { UploadModule } from '../upload/upload.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { Empleadas } from '../employees/entities/employee.entity';
       EmpleadaFotosExclusivas,
       Empleadas,
     ]),
+    UploadModule,
   ],
   controllers: [EmployeePhotosController],
   providers: [EmployeePhotosService],

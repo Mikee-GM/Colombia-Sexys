@@ -73,6 +73,22 @@ export class AuthService {
     return this.createTokenPair(user, deviceId);
   }
 
+  /**
+   * Abre sesion para un usuario ya identificado por otra via.
+   *
+   * Lo usa el canje del pase de Telegram: la contrasena no interviene porque la
+   * identidad ya quedo probada al vincular el chat. Todo lo demas -- par de
+   * tokens, sesion registrada, expiraciones -- es identico a un login normal,
+   * asi que la sesion resultante no es mas larga ni mas poderosa.
+   */
+  async issueSessionFor(user: Usuarios, deviceId: string): Promise<AuthTokens> {
+    if (!user.activo) {
+      throw new UnauthorizedException('Usuario inactivo');
+    }
+    await this.usuariosRepository.update(user.id, { lastLoginAt: new Date() });
+    return this.createTokenPair(user, deviceId);
+  }
+
   async refresh(refreshToken: string): Promise<AuthTokens> {
     const payload = await this.verifyRefreshToken(refreshToken);
 
@@ -231,20 +247,6 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }
-  }
-
-  /**
-   * Access token respaldado por una sesion real, para los paneles externos que
-   * se autentican con un token pegado a mano (comando /panel del bot). Antes se
-   * firmaba un JWT suelto: no aparecia en `auth_sessions`, asi que no habia
-   * forma de revocarlo y desde que JwtStrategy exige `sid` tampoco valdria.
-   */
-  async createPanelAccessToken(
-    user: Usuarios,
-    deviceId = 'telegram-panel',
-  ): Promise<string> {
-    const { accessToken } = await this.createTokenPair(user, deviceId);
-    return accessToken;
   }
 
   async generatePortalToken(user: Usuarios): Promise<string> {
