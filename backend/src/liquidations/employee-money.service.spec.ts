@@ -196,10 +196,14 @@ describe('Listado de dinero por empleada', () => {
         );
       }),
     };
-    interno.employees = { find: async () => datos.empleadas ?? [] };
-    interno.debts = { find: async () => datos.deudas ?? [] };
-    interno.obligations = { find: async () => datos.obligaciones ?? [] };
-    interno.settlements = { find: async () => datos.confirmadas ?? [] };
+    interno.employees = { find: () => Promise.resolve(datos.empleadas ?? []) };
+    interno.debts = { find: () => Promise.resolve(datos.deudas ?? []) };
+    interno.obligations = {
+      find: () => Promise.resolve(datos.obligaciones ?? []),
+    };
+    interno.settlements = {
+      find: () => Promise.resolve(datos.confirmadas ?? []),
+    };
     return servicio;
   }
 

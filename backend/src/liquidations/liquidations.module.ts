@@ -48,6 +48,10 @@ import { TransportOperationsModule } from '../transport-operations/transport-ope
     LiquidationsRepository,
     OfficeLiquidationSyncService,
   ],
-  exports: [LiquidationsService, EmployeeMoneyService, OfficeLiquidationSyncService],
+  exports: [
+    LiquidationsService,
+    EmployeeMoneyService,
+    OfficeLiquidationSyncService,
+  ],
 })
 export class LiquidationsModule {}

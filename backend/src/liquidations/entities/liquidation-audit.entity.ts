@@ -9,11 +9,7 @@ export class LiquidationAudit {
 
   @Column('varchar', { name: 'entity_type', length: 30 })
   entityType:
-    | 'record'
-    | 'debt'
-    | 'payment'
-    | 'weekly_settlement'
-    | 'cash_payment';
+    'record' | 'debt' | 'payment' | 'weekly_settlement' | 'cash_payment';
 
   @Column('uuid', { name: 'entity_id' })
   entityId: string;

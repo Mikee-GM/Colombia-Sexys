@@ -34,36 +34,38 @@ function nuevoManager(datos: {
     getRepository(entidad: unknown) {
       if (entidad === EmployeeCashPayment) {
         return {
-          findOne: async () => datos.payment ?? null,
-          save: async (fila: unknown) => {
+          findOne: () => Promise.resolve(datos.payment ?? null),
+          save: (fila: unknown) => {
             guardados.push(fila);
-            return fila;
+            return Promise.resolve(fila);
           },
         };
       }
       if (entidad === EmployeeCashPaymentAllocation) {
-        return { findBy: async () => datos.allocations ?? [] };
+        return { findBy: () => Promise.resolve(datos.allocations ?? []) };
       }
       if (entidad === EmployeeCashObligation) {
         return {
-          findOne: async ({ where }: { where: { id: string } }) =>
-            obligations.find((fila) => fila.id === where.id) ?? null,
+          findOne: ({ where }: { where: { id: string } }) =>
+            Promise.resolve(
+              obligations.find((fila) => fila.id === where.id) ?? null,
+            ),
         };
       }
       if (entidad === LiquidationAudit) {
         return {
           create: (fila: Partial<LiquidationAudit>) => fila,
-          save: async (fila: Partial<LiquidationAudit>) => {
+          save: (fila: Partial<LiquidationAudit>) => {
             auditoria.push(fila);
-            return fila;
+            return Promise.resolve(fila);
           },
         };
       }
       throw new Error(`Repositorio inesperado: ${String(entidad)}`);
     },
-    save: async (fila: unknown) => {
+    save: (fila: unknown) => {
       guardados.push(fila);
-      return fila;
+      return Promise.resolve(fila);
     },
   } as unknown as ManagerFalso;
 

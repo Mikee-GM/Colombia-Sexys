@@ -207,7 +207,13 @@ export class SettlementsService {
     permitirOffset = false,
   ) {
     return this.dataSource.transaction((manager) =>
-      this.revertCashPaymentWith(manager, paymentId, actor, reason, permitirOffset),
+      this.revertCashPaymentWith(
+        manager,
+        paymentId,
+        actor,
+        reason,
+        permitirOffset,
+      ),
     );
   }
 
@@ -259,9 +265,7 @@ export class SettlementsService {
         Number(obligation.paidAmount) - Number(allocation.amount),
       );
       obligation.status =
-        obligation.paidAmount >= Number(obligation.amount)
-          ? 'paid'
-          : 'pending';
+        obligation.paidAmount >= Number(obligation.amount) ? 'paid' : 'pending';
       /*
        * Vuelve a `ready`, no a `provisional`: el abono solo pudo aplicarse
        * sobre una obligacion ya calculada, asi que ese es su estado previo.
