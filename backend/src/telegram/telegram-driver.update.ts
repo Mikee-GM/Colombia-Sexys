@@ -16,6 +16,7 @@ import { ServicesService } from '../services/services.service';
 import { TelegramService } from './telegram.service';
 import { Servicios } from '../services/entities/service.entity';
 import { AiMessageService } from '../ai/ai-message.service';
+import { TelegramBotRegistryService } from './telegram-bot-registry.service';
 import { EmployeeReportsService } from '../employee-reports/employee-reports.service';
 import { ReportCategory } from '../employee-reports/entities/employee-report.entity';
 import {
@@ -74,6 +75,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     private readonly settlementsService: SettlementsService,
     private readonly authService: AuthService,
     private readonly panelAccessService: PanelAccessService,
+    private readonly botRegistry: TelegramBotRegistryService,
   ) {
     this.cacheCleanupInterval = setInterval(() => {
       const now = Date.now();
@@ -1106,10 +1108,15 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           },
           'Ya voy para allá, nos vemos en un ratico',
         );
-        await ctx.telegram.sendMessage(
-          trip.servicio.cliente.telegramChatId,
-          clientMessage,
-        );
+        // Al cliente se le habla por el bot de la modelo. Este handler corre
+        // en el bot central —quien pulsa es el chofer—, y el cliente no tiene
+        // conversacion abierta con el central: enviar por ahi no llega.
+        await this.botRegistry
+          .botForEmployeeOrCentral(trip.servicio.empleadaId)
+          .telegram.sendMessage(
+            trip.servicio.cliente.telegramChatId,
+            clientMessage,
+          );
       } catch (telegramErr) {
         this.logger.error(
           `Error al notificar al cliente sobre viaje en camino (chatId: ${trip.servicio.cliente.telegramChatId}):`,
@@ -1481,10 +1488,15 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           { employeeName: trip.servicio.empleada.nombreArtistico },
           'Ya llegué al punto que cuadramos, aquí te espero',
         );
-        await ctx.telegram.sendMessage(
-          trip.servicio.cliente.telegramChatId,
-          clientMessage,
-        );
+        // Al cliente se le habla por el bot de la modelo. Este handler corre
+        // en el bot central —quien pulsa es el chofer—, y el cliente no tiene
+        // conversacion abierta con el central: enviar por ahi no llega.
+        await this.botRegistry
+          .botForEmployeeOrCentral(trip.servicio.empleadaId)
+          .telegram.sendMessage(
+            trip.servicio.cliente.telegramChatId,
+            clientMessage,
+          );
       } catch (telegramErr) {
         this.logger.error(
           `Error al notificar al cliente sobre llegada (chatId: ${trip.servicio.cliente.telegramChatId}):`,

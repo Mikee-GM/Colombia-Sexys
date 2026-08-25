@@ -66,12 +66,16 @@ import { ExtensionsService } from '../extensions/extensions.service';
 import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
-import { DedicatedBotContext } from './telegram-bot-registry.service';
+import {
+  DedicatedBotContext,
+  TelegramBotRegistryService,
+} from './telegram-bot-registry.service';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
 import { TelegramSession } from './entities/telegram-session.entity';
 import {
   buildSessionKey,
+  parseSessionKey,
   type SessionKeyContext,
 } from './telegram-session.key';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
@@ -686,6 +690,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly groupServicesService: GroupServicesService,
     private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
+    private readonly botRegistry: TelegramBotRegistryService,
   ) {
     // TTL / Inactivity Cleanup: run every 5 minutes to clean up users inactive for > 1 hour
     this.locationCleanupInterval = setInterval(() => {
@@ -5775,7 +5780,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             (actor.rol === 'jefe' && service.jefeId === actor.id)) &&
           service.clienteTelegramId
         ) {
-          await ctx.telegram.sendMessage(service.clienteTelegramId, text);
+          // Por el bot de la modelo, no por `ctx.telegram`. El jefe escribe
+          // desde su grupo, que vive en el bot central, pero el cliente solo
+          // ha abierto conversacion con el bot dedicado: enviar por el central
+          // lo rechaza Telegram y la respuesta del jefe se pierde en silencio.
+          await this.botRegistry
+            .botForEmployeeOrCentral(service.empleadaId)
+            .telegram.sendMessage(service.clienteTelegramId, text);
           await this.recordConversation(service, 'jefe', text);
         } else if (
           !service &&
@@ -5791,9 +5802,23 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               s.data?.bossGroupId === chatId,
           );
           if (matched) {
-            const clientTelegramId = matched.key.split(':')[0];
+            /*
+             * La clave se descompone con el mismo formato con el que se armo.
+             * Leer `key.split(':')[0]` daba el id de la EMPLEADA en las
+             * sesiones de un bot dedicado —ahi la clave lleva ese prefijo—, de
+             * modo que el mensaje del jefe salia hacia un destinatario que no
+             * existe y el cliente no recibia nada.
+             */
+            const parsedKey = parseSessionKey(matched.key);
+            const clientTelegramId = parsedKey?.fromId;
             if (clientTelegramId) {
-              await ctx.telegram.sendMessage(clientTelegramId, text);
+              // Y sale por el bot que el cliente si tiene abierto.
+              const empleadaId =
+                (matched.data?.empleadaId as string | undefined) ??
+                parsedKey?.employeeId;
+              await this.botRegistry
+                .botForEmployeeOrCentral(empleadaId)
+                .telegram.sendMessage(clientTelegramId, text);
               const client = await this.clientesRepository.findOne({
                 where: { telegramChatId: clientTelegramId },
               });
@@ -7964,9 +7989,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       // Notificar al cliente en privado
       if (client.telegramChatId) {
         const clientMsg = `¡Listo amor! Tu servicio con *${empleada.nombreArtistico}* por ${duracion} hora(s) ha sido confirmado. Ya nos estamos preparando para salir a verte.`;
-        await ctx.telegram.sendMessage(client.telegramChatId, clientMsg, {
-          parse_mode: 'Markdown',
-        });
+        // El comando lo lanza el jefe desde su grupo (bot central), pero este
+        // mensaje va al cliente y tiene que salir por el bot de la modelo.
+        await this.botRegistry
+          .botForEmployeeOrCentral(empleada.id)
+          .telegram.sendMessage(client.telegramChatId, clientMsg, {
+            parse_mode: 'Markdown',
+          });
         await this.recordConversation(newService, 'ia', clientMsg);
       }
     } catch (err: any) {

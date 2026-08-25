@@ -1462,8 +1462,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         { employeeName: next.empleada?.nombreArtistico, eta },
         `Soy el asistente de la agencia. La cita anterior se extendió; la nueva hora aproximada de llegada de ${next.empleada?.nombreArtistico || 'la empleada'} es ${eta}.`,
       );
-      await this.bot.telegram
-        .sendMessage(next.cliente.telegramChatId, message)
+      // Va al cliente, asi que sale por el bot de la modelo como el resto de
+      // los avisos suyos; el central solo sirve de respaldo.
+      await this.botFor(next.empleadaId)
+        .telegram.sendMessage(next.cliente.telegramChatId, message)
         .catch(() => undefined);
       await this.recordAgencyMessage(next, message);
     }
