@@ -49,4 +49,5 @@ export const ADVISORY_LOCKS = {
   challenges: 811_002,
   weeklyContent: 811_003,
   onboardingReminders: 811_004,
+  authCleanup: 811_005,
 } as const;

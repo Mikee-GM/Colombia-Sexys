@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -30,6 +30,8 @@ type AuthTokens = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
@@ -247,6 +249,54 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }
+  }
+
+  /**
+   * Borra sesiones que ya no puede usar nadie.
+   *
+   * Cada refresco rota la sesion: crea una fila nueva y revoca la anterior. Con
+   * un access token de 15 minutos, un usuario activo deja decenas de filas al
+   * dia y la tabla no para de crecer.
+   *
+   * Solo se borra lo que no cambia el comportamiento de `refresh`. Una fila
+   * ausente se trata como sesion comprometida y revoca todas las del usuario,
+   * exactamente igual que una caducada o una ya revocada, asi que quitar esas
+   * filas no relaja nada. Lo que si importa es no tocar las recientes: la
+   * ventana de 30 segundos que tolera dos refrescos simultaneos necesita
+   * encontrar la fila, y sin ella una renovacion legitima cerraria la sesion
+   * del usuario. De ahi el margen de 30 dias, muy por encima de esa ventana.
+   *
+   * El borrado va por lotes: la primera pasada sobre una base vieja puede
+   * encontrar muchisimas filas y no conviene sostener ese bloqueo de golpe.
+   */
+  async purgeStaleSessions(
+    batchSize = 5_000,
+    maxBatches = 20,
+  ): Promise<number> {
+    let total = 0;
+
+    for (let i = 0; i < maxBatches; i += 1) {
+      const result: [unknown[], number] = await this.sessionsRepository.query(
+        `DELETE FROM auth_sessions
+          WHERE id IN (
+            SELECT id FROM auth_sessions
+             WHERE expires_at < now() - interval '30 days'
+                OR (revoked_at IS NOT NULL
+                    AND revoked_at < now() - interval '30 days')
+             LIMIT $1
+          )`,
+        [batchSize],
+      );
+
+      const borradas = Array.isArray(result) ? (result[1] ?? 0) : 0;
+      total += borradas;
+      if (borradas < batchSize) break;
+    }
+
+    if (total > 0) {
+      this.logger.log(`Sesiones caducadas eliminadas: ${total}`);
+    }
+    return total;
   }
 
   async generatePortalToken(user: Usuarios): Promise<string> {

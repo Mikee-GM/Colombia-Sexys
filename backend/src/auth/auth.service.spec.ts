@@ -152,3 +152,61 @@ describe('AuthService.refresh', () => {
     expect(revokeAll).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * El barrido de sesiones toca datos de autenticacion, asi que lo que se prueba
+ * no es que borre, sino que no borre de mas: una fila que aun puede presentarse
+ * y desaparece hace que `refresh` trate la renovacion como sesion comprometida
+ * y cierre todas las sesiones del usuario.
+ */
+describe('AuthService.purgeStaleSessions', () => {
+  function build(lotes: number[]) {
+    const query = jest.fn();
+    for (const borradas of lotes) {
+      query.mockResolvedValueOnce([[], borradas]);
+    }
+    const service = new AuthService(
+      {} as unknown as Repository<Usuarios>,
+      { query } as unknown as Repository<AuthSession>,
+      {} as unknown as JwtService,
+    );
+    return { service, query };
+  }
+
+  it('solo borra lo caducado o revocado hace tiempo', async () => {
+    const { service, query } = build([0]);
+
+    await service.purgeStaleSessions();
+
+    const sql = query.mock.calls[0][0] as string;
+    expect(sql).toContain("expires_at < now() - interval '30 days'");
+    expect(sql).toContain("revoked_at < now() - interval '30 days'");
+    // Nunca una sesion viva: sin su fila, refresh la daria por comprometida.
+    expect(sql).not.toMatch(/revoked_at IS NULL/);
+  });
+
+  it('sigue por lotes mientras cada pasada llene el lote', async () => {
+    const { service, query } = build([5000, 5000, 120]);
+
+    const total = await service.purgeStaleSessions(5000);
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(total).toBe(10_120);
+  });
+
+  it('para en la primera pasada corta, sin consultar de mas', async () => {
+    const { service, query } = build([10]);
+
+    await service.purgeStaleSessions(5000);
+
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('respeta el tope de lotes aunque siempre vengan llenos', async () => {
+    const { service, query } = build(Array(30).fill(100));
+
+    await service.purgeStaleSessions(100, 3);
+
+    expect(query).toHaveBeenCalledTimes(3);
+  });
+});

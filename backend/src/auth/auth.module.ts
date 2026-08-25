@@ -9,6 +9,7 @@ import { AuthService } from './auth.service';
 import { AuthSession } from './entities/auth-session.entity';
 import { PanelAccessToken } from './entities/panel-access-token.entity';
 import { PanelAccessService } from './panel-access.service';
+import { AuthCleanupScheduler } from './auth-cleanup.scheduler';
 import { CsrfGuard } from './guards/csrf.guard';
 import { PortalAuthGuard } from './guards/portal-auth.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -34,6 +35,7 @@ import { ACCESS_TOKEN_TTL_SECONDS } from './auth.constants';
   providers: [
     AuthService,
     PanelAccessService,
+    AuthCleanupScheduler,
     JwtStrategy,
     CsrfGuard,
     PortalAuthGuard,

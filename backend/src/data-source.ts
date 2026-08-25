@@ -72,5 +72,20 @@ export const AppDataSource = new DataSource({
   // Loading src/**/*.ts here would make plain Node parse TypeScript files.
   entities: [join(backendRoot, 'dist/**/*.entity.js')],
   migrations: [join(backendRoot, 'dist/migrations/*.js')],
+  /*
+   * Una transaccion por migracion, no una unica para todas.
+   *
+   * El modo por defecto de TypeORM es 'all': todas las pendientes dentro de una
+   * sola transaccion. Eso impide que una migracion se declare no transaccional
+   * -- el ejecutor lanza ForbiddenTransactionModeOverrideError en cuanto una lo
+   * intenta -- y hay operaciones que Postgres no admite dentro de transaccion,
+   * como CREATE INDEX CONCURRENTLY.
+   *
+   * A cambio se pierde el rollback conjunto: si falla la tercera de cinco, las
+   * dos primeras quedan aplicadas. Cada migracion sigue siendo atomica por si
+   * misma, y todas las de este repositorio usan IF EXISTS / IF NOT EXISTS, asi
+   * que reintentar el despliegue es seguro.
+   */
+  migrationsTransactionMode: 'each',
   subscribers: [],
 });
