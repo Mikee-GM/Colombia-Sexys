@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { Logger, UnauthorizedException } from '@nestjs/common';
 import { PanelAccessService } from './panel-access.service';
 
 /**
@@ -258,5 +258,53 @@ describe('PanelAccessService origen del enlace', () => {
     const { url } = await service.issueLink('u-1', null);
 
     expect(url).not.toContain('//acceso');
+  });
+
+  /*
+   * `0.0.0.0` es la direccion con la que un servidor dice "escucho en todas mis
+   * interfaces", y se cuela en la variable del enlace con facilidad porque es
+   * justo lo que se configura para que el proceso acepte conexiones de fuera.
+   * Como destino no vale: el enlace llega al personal y no abre en ningun
+   * navegador. Desde el backend se ve bien formado, asi que si no se avisa aqui
+   * el fallo no deja rastro en ningun log.
+   */
+  it('avisa cuando el origen es una direccion de escucha y no un destino', async () => {
+    const service = build({ WEB_URL: 'http://0.0.0.0:3000' });
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    await service.issueLink('u-1', null);
+
+    expect(error).toHaveBeenCalledTimes(1);
+    const mensaje = error.mock.calls[0][0] as string;
+    expect(mensaje).toContain('0.0.0.0');
+    // El aviso tiene que nombrar la variable que hay que corregir.
+    expect(mensaje).toContain('PANEL_BASE_URL');
+    error.mockRestore();
+  });
+
+  it('tambien avisa con la direccion de escucha de IPv6', async () => {
+    const service = build({ WEB_URL: 'http://[::]:3000' });
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    await service.issueLink('u-1', null);
+
+    expect(error).toHaveBeenCalledTimes(1);
+    error.mockRestore();
+  });
+
+  it('no avisa de un origen publico correcto', async () => {
+    const service = build({ WEB_URL: 'https://rvcs-pruebas.com.mx' });
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    await service.issueLink('u-1', null);
+
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 });

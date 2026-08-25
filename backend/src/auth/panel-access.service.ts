@@ -39,6 +39,13 @@ const PUERTOS_BLOQUEADOS = new Set([
 ]);
 
 /**
+ * Hosts que significan "escucha en todas las interfaces" y no son un destino al
+ * que se pueda navegar. Sirven para configurar por donde escucha un servidor,
+ * nunca para construir un enlace.
+ */
+const HOSTS_NO_NAVEGABLES = new Set(['0.0.0.0', '::', '[::]', '0']);
+
+/**
  * Rutas a las que se permite redirigir tras canjear el pase. Solo destinos
  * internos: con la sesion recien abierta, un salto a un sitio ajeno seria un
  * regalo para quien pudiera influir en el destino.
@@ -201,32 +208,56 @@ export class PanelAccessService {
 
     const limpio = configurado.trim().replace(/\/+$/, '');
     const url = /^https?:\/\//i.test(limpio) ? limpio : `https://${limpio}`;
-    this.avisarSiElPuertoEstaBloqueado(url);
+    this.avisarSiElOrigenNoEsNavegable(url);
     return url;
   }
 
   /**
-   * Avisa si el origen usa un puerto que los navegadores se niegan a abrir.
+   * Avisa si el origen configurado no sirve como destino en un navegador.
    *
-   * Chrome y Firefox tienen una lista de puertos reservados a otros protocolos
-   * y rechazan la peticion antes de hacerla, con un "no tienes permisos para
-   * usar el puerto de red restringido" que no menciona ni el puerto ni la
-   * configuracion. Desde el backend el enlace se ve perfectamente formado, asi
-   * que sin este aviso el fallo solo se manifiesta en el navegador de quien
-   * abre el portal y no deja rastro en ningun log.
+   * Desde el backend un enlace mal configurado se ve perfectamente formado: se
+   * arma sin error y se manda sin queja. El fallo solo aparece en el navegador
+   * de quien lo abre, y no deja rastro en ningun log. De ahi que valga la pena
+   * gritarlo aqui, con el nombre de la variable que hay que corregir.
    */
-  private avisarSiElPuertoEstaBloqueado(url: string): void {
+  private avisarSiElOrigenNoEsNavegable(url: string): void {
+    let host: string;
     let puerto: string;
     try {
-      puerto = new URL(url).port;
+      const parsed = new URL(url);
+      host = parsed.hostname;
+      puerto = parsed.port;
     } catch {
       this.logger.error(
         `El origen del panel no es una URL valida: "${url}". Revisa PANEL_BASE_URL o WEB_URL.`,
       );
       return;
     }
+
+    /*
+     * `0.0.0.0` es la direccion con la que un servidor dice "escucho en todas
+     * mis interfaces". Como destino no significa nada: el navegador no tiene a
+     * donde ir. Se cuela con facilidad porque es lo que se pone para que el
+     * proceso acepte conexiones desde fuera -- el contenedor del panel arranca
+     * con HOSTNAME=0.0.0.0 -- y de ahi acaba copiada en la variable del enlace.
+     */
+    if (HOSTS_NO_NAVEGABLES.has(host)) {
+      this.logger.error(
+        `El origen del panel apunta a "${host}", que es una direccion de escucha ` +
+          'y no un destino: el enlace que reciba el personal no abrira en ningun ' +
+          'navegador. Pon en PANEL_BASE_URL (o WEB_URL) el dominio publico por el ' +
+          'que se entra al panel, no la direccion en la que escucha el proceso.',
+      );
+      return;
+    }
+
     if (!puerto) return;
 
+    /*
+     * Chrome y Firefox rechazan la peticion antes de hacerla, con un "no tienes
+     * permisos para usar el puerto de red restringido" que no menciona ni el
+     * puerto ni la configuracion.
+     */
     if (PUERTOS_BLOQUEADOS.has(Number(puerto))) {
       this.logger.error(
         `El origen del panel usa el puerto ${puerto}, que los navegadores bloquean: ` +

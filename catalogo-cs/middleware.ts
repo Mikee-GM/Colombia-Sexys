@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth-constants";
 import { BACKEND_API_VERSION } from "@/lib/api-constants";
 import { parseSetCookieHeaders, type ParsedCookie } from "@/lib/set-cookie";
+import { redirectToPath } from "@/lib/redirect";
 
 function backendUrl() {
   return process.env.BACKEND_API_URL || "http://localhost:4000";
@@ -97,7 +98,7 @@ export async function middleware(request: NextRequest) {
      */
     const renovadas = await renovarSesion(request);
     if (!renovadas) {
-      return NextResponse.redirect(new URL("/admin", request.url));
+      return redirectToPath("/admin");
     }
 
     /*
