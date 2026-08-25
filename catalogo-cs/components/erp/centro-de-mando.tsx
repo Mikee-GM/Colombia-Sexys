@@ -79,6 +79,36 @@ export default function CentroDeMando({
   /* Los tres roles: el admin quiere ver quien no esta trabajando hoy. */
   const fueraDeJornada = offDuty;
 
+  /*
+   * La alerta lleva a la pantalla del rol de quien cerro su jornada mas
+   * reciente. Antes apuntaba siempre a choferes, asi que al cerrar una modelo
+   * su dia el admin acababa en una lista donde ella no aparece.
+   */
+  const PAGINA_POR_ROL: Record<OffDutyPerson["rol"], string> = {
+    empleada: "/admin/modelos",
+    chofer: "/admin/choferes",
+    jefe: "/admin/jefes",
+    // No hay pantalla propia de administradores: /admin/jefes es donde se ve
+    // al personal de coordinacion.
+    admin: "/admin/jefes",
+  };
+  const hrefJornada =
+    PAGINA_POR_ROL[fueraDeJornada[0]?.rol ?? "chofer"] ?? "/admin/choferes";
+
+  /* La hora del cambio es el dato que el admin necesita: sin ella solo sabe
+   * que alguien cerro, no si fue hace cinco minutos o a media manana. */
+  const detalleJornada = fueraDeJornada
+    .slice(0, 3)
+    .map((persona) => {
+      if (!persona.jornadaActualizadaAt) return persona.nombre;
+      const hora = new Date(persona.jornadaActualizadaAt).toLocaleString(
+        APP_LOCALE,
+        { timeZone: APP_TIME_ZONE, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" },
+      );
+      return `${persona.nombre} (${hora})`;
+    })
+    .join(", ");
+
   const alertas = [
     {
       id: "recibos",
@@ -124,11 +154,8 @@ export default function CentroDeMando({
       id: "jornada",
       cantidad: fueraDeJornada.length,
       titulo: "Personal fuera de jornada",
-      detalle: fueraDeJornada
-        .slice(0, 3)
-        .map((persona) => persona.nombre)
-        .join(", "),
-      href: "/admin/choferes",
+      detalle: detalleJornada,
+      href: hrefJornada,
       tone: "amber" as BadgeTone,
     },
   ].filter((alerta) => alerta.cantidad > 0);

@@ -175,8 +175,43 @@ export class PanelAccessService {
 
     const limpio = configurado.trim().replace(/\/+$/, '');
     const url = /^https?:\/\//i.test(limpio) ? limpio : `https://${limpio}`;
+    this.avisarSiElOrigenEsLocal(url);
     this.avisarSiElPuertoEstaBloqueado(url);
     return url;
+  }
+
+  /**
+   * Avisa si el origen del panel apunta a la propia maquina.
+   *
+   * Estos enlaces se envian por Telegram al telefono de otra persona, asi que
+   * un origen local nunca puede funcionar: en su dispositivo `localhost` es su
+   * propio telefono y el portal aparece como "no se puede abrir". El caso tipico
+   * es desplegar con Compose sin definir `DOCKER_WEB_URL` en el `.env` de la
+   * raiz, porque el bloque `environment` de compose gana sobre `backend/.env` y
+   * cae al valor por defecto `http://localhost:3001`.
+   */
+  private avisarSiElOrigenEsLocal(url: string): void {
+    let host: string;
+    try {
+      host = new URL(url).hostname.toLowerCase();
+    } catch {
+      return; // El formato ya lo reporta avisarSiElPuertoEstaBloqueado.
+    }
+    const esLocal =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host.endsWith('.localhost');
+    if (!esLocal) return;
+
+    this.logger.error(
+      `El origen del panel es "${url}", una direccion local: los enlaces de acceso ` +
+        'que se envian por Telegram apuntaran al dispositivo de quien los abre y ' +
+        'fallaran con "no se puede abrir". Si despliegas con Docker Compose, define ' +
+        'DOCKER_WEB_URL en el .env de la raiz: el bloque environment de compose ' +
+        'ignora el WEB_URL de backend/.env.',
+    );
   }
 
   /**

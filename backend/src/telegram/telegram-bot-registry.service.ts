@@ -215,6 +215,9 @@ export class TelegramBotRegistryService
       );
     } catch (error: unknown) {
       const message = describeError(error);
+      // El usuario del bot no se borra al fallar el arranque: es un dato de
+      // identidad, no de estado. Conservarlo permite que el enlace del catálogo
+      // siga apuntando a la modelo correcta mientras se resuelve la caída.
       await this.botsRepository.update(record.id, {
         status: 'error',
         lastError: message.slice(0, 500),

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import type { DriverPortalData } from "@/lib/types";
-import { formatCurrency as formatCurrencyCOP } from "@/lib/calculations";
+import { formatCurrency as formatCurrencyMXN } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
@@ -39,7 +39,7 @@ export default function DriverPortalView({
     }
   }, []);
 
-  const formatCurrency = formatCurrencyCOP;
+  const formatCurrency = formatCurrencyMXN;
 
   const formatDate = (iso: string) => {
     try {
