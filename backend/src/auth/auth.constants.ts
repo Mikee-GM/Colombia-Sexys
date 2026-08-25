@@ -12,10 +12,23 @@ export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutos
 export const REFRESH_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60; // 1 año de sesión por defecto
 
 /**
- * La cookie de refresh solo se envia a la ruta que la consume. Mandarla en
- * cada peticion la expone sin ninguna ventaja.
+ * Alcance de la cookie de refresh.
+ *
+ * Estuvo acotada a `/auth/refresh` para no mandarla en cada peticion, pero esa
+ * ruta no existe en ningun lado: el backend publica el endpoint bajo el prefijo
+ * global y la version (`/api/v1/auth/refresh`) y el navegador lo pide a traves
+ * del proxy del front (`/api/auth/refresh`). Como el navegador solo manda una
+ * cookie cuando la ruta pedida cuelga de su `Path`, no coincidia con ninguna de
+ * las dos y la cookie no salia nunca: el refresh fallaba siempre y la sesion
+ * moria al caducar el access token, sin forma de renovarse.
+ *
+ * Ademas la renovacion tiene que ocurrir al pintar la pagina -- recargar es un
+ * render de servidor --, y ahi la cookie solo esta disponible si su `Path`
+ * cubre la ruta de la pagina. Con cualquier alcance mas estrecho que la raiz la
+ * renovacion en servidor es imposible, asi que el ahorro de no enviarla cuesta
+ * la sesion entera. Sigue siendo httpOnly, firmada y `Secure` en produccion.
  */
-export const REFRESH_COOKIE_PATH = '/auth/refresh';
+export const REFRESH_COOKIE_PATH = '/';
 
 export function cookieOptions(
   maxAgeSeconds: number,
