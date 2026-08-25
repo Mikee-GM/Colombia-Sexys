@@ -31,6 +31,7 @@ import { DisciplineService } from '../discipline/discipline.service';
 import { DedicatedBotContext } from './telegram-bot-registry.service';
 import { hashLinkCode } from './telegram-link-code';
 import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
+import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 
 @Update()
 export class TelegramAuthUpdate {
@@ -340,7 +341,7 @@ export class TelegramAuthUpdate {
 
     const buttons = ratings.map((rating: any) => [
       Markup.button.callback(
-        `${'★'.repeat(rating.stars)}${'☆'.repeat(5 - rating.stars)} — ${new Date(rating.createdAt).toLocaleDateString('es-MX')}`,
+        `${'★'.repeat(rating.stars)}${'☆'.repeat(5 - rating.stars)} — ${new Date(rating.createdAt).toLocaleDateString(APP_LOCALE)}`,
         `appeal_select:${rating.id}`,
       ),
     ]);
@@ -603,8 +604,9 @@ export class TelegramAuthUpdate {
       .where('servicio.empleadaId = :employeeId', { employeeId: employee.id })
       .andWhere('servicio.estado = :status', { status: 'finalizado' })
       .andWhere(
-        `(servicio.horaFinServicio AT TIME ZONE 'America/Mexico_City')::date = ` +
-          `(CURRENT_TIMESTAMP AT TIME ZONE 'America/Mexico_City')::date`,
+        `(servicio.horaFinServicio AT TIME ZONE :zone)::date = ` +
+          `(CURRENT_TIMESTAMP AT TIME ZONE :zone)::date`,
+        { zone: APP_TIME_ZONE },
       )
       .orderBy('servicio.horaFinServicio', 'DESC')
       .getMany();
@@ -844,8 +846,8 @@ export class TelegramAuthUpdate {
 
   private formatTime(date: Date | null): string {
     if (!date) return 'Sin registrar';
-    return new Intl.DateTimeFormat('es-MX', {
-      timeZone: 'America/Mexico_City',
+    return new Intl.DateTimeFormat(APP_LOCALE, {
+      timeZone: APP_TIME_ZONE,
       hour: '2-digit',
       minute: '2-digit',
     }).format(new Date(date));

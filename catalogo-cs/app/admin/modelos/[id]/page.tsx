@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth";
+import { optionalSource } from "@/lib/optional-source";
 import { getEmployee } from "@/lib/data/employees";
 import { getDossier, getEmployeeRatingComments } from "@/lib/actions/discipline";
 import { getDebts, getLiquidationReport } from "@/app/admin/liquidations/actions";
@@ -26,14 +27,17 @@ export default async function ExpedienteModeloPage({
   const { id } = await params;
   const { startDate, endDate } = getOperationalWeek();
 
-  const employee = await getEmployee(id).catch(() => null);
+  const contexto = "el expediente de la modelo";
+
+  /* Una modelo inexistente da 404; una sesion caida tiene que ir al login. */
+  const employee = await optionalSource(getEmployee(id), null, contexto);
   if (!employee) notFound();
 
   const [dossier, debts, report, ratings] = await Promise.all([
-    getDossier("employee", id).catch(() => null),
-    getDebts(id).catch(() => []),
-    getLiquidationReport(startDate, endDate, id).catch(() => null),
-    getEmployeeRatingComments(id).catch(() => []),
+    optionalSource(getDossier("employee", id), null, contexto),
+    optionalSource(getDebts(id), [], contexto),
+    optionalSource(getLiquidationReport(startDate, endDate, id), null, contexto),
+    optionalSource(getEmployeeRatingComments(id), [], contexto),
   ]);
 
   return (

@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
-import DisciplineDashboard from "@/components/employee-reports/discipline-dashboard";
+
+import DisciplinaClient from "@/components/erp/disciplina-client";
 import { getConductReports, getSanctions } from "@/lib/actions/discipline";
+import { getDirectorio } from "@/lib/actions/directorio";
 import { getCurrentUser } from "@/lib/auth";
+import { optionalSource } from "@/lib/optional-source";
+
+export const dynamic = "force-dynamic";
 
 export default async function JefeReportsPage() {
   const user = await getCurrentUser();
@@ -9,16 +14,19 @@ export default async function JefeReportsPage() {
   if (user.rol === "admin") redirect("/admin/reports");
   if (user.rol !== "jefe") redirect("/admin");
 
-  const [reports, sanctions] = await Promise.all([
-    getConductReports(),
-    getSanctions(),
+  /* El jefe no ve apelaciones: /discipline/appeals es solo de admin. */
+  const [reports, sanctions, directorio] = await Promise.all([
+    optionalSource(getConductReports(), [], "disciplina"),
+    optionalSource(getSanctions(), [], "disciplina"),
+    getDirectorio(),
   ]);
 
   return (
-    <DisciplineDashboard
+    <DisciplinaClient
       role="jefe"
-      initialReports={reports}
-      initialSanctions={sanctions}
+      initialReports={reports ?? []}
+      initialSanctions={sanctions ?? []}
+      directorio={directorio}
     />
   );
 }

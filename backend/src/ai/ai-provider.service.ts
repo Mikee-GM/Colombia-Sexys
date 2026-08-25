@@ -2,7 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /** Modelos por defecto si el entorno no dice otra cosa. */
-const DEFAULT_CHAT_MODEL = 'grok-4.20-0309-non-reasoning';
+const DEFAULT_CHAT_MODEL = 'grok-4.3-latest';
+
+/**
+ * La vision se queda en el modelo sin razonamiento a proposito: solo extrae
+ * datos de comprobantes de transferencia y capturas de Uber, y razonar ahi sube
+ * el costo y la latencia sin mejorar la lectura.
+ */
 const DEFAULT_VISION_MODEL = 'grok-4.20-0309-non-reasoning';
 
 /**
@@ -11,6 +17,24 @@ const DEFAULT_VISION_MODEL = 'grok-4.20-0309-non-reasoning';
  * que no confirme el servicio) y con temperaturas altas se las salta mucho mas.
  */
 const DEFAULT_CHAT_TEMPERATURE = 0.45;
+
+/**
+ * Presupuesto de tokens de la respuesta al cliente.
+ *
+ * Con un modelo que razona, lo que piensa se descuenta de este mismo tope, asi
+ * que un presupuesto ajustado a la respuesta visible se agota razonando y la
+ * API devuelve contenido vacio. Aqui eso no se nota como un error: el bot
+ * acabaria pasandole el chat al jefe en cada mensaje. El tope deja sitio al
+ * razonamiento; que la respuesta sea corta lo gobierna el prompt, no este
+ * numero.
+ */
+const MAX_CHAT_TOKENS = 1500;
+
+/**
+ * Razonar tarda mas que responder de corrido, y el cliente ya espero los 20 s
+ * del buffer de mensajes. Un corte aqui tambien termina en traspaso al jefe.
+ */
+const CHAT_TIMEOUT_MS = 60_000;
 
 @Injectable()
 export class AiProviderService {
@@ -66,9 +90,8 @@ export class AiProviderService {
 
     const messages = [{ role: 'system', content: systemPrompt }, ...history];
 
-    // Explicit 30 seconds timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const timeoutId = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
 
     try {
       const response = await fetch('https://api.x.ai/v1/chat/completions', {
@@ -80,7 +103,7 @@ export class AiProviderService {
         body: JSON.stringify({
           model: this.chatModel,
           messages,
-          max_tokens: 450,
+          max_tokens: MAX_CHAT_TOKENS,
           temperature: this.chatTemperature,
         }),
         signal: controller.signal,
@@ -94,11 +117,27 @@ export class AiProviderService {
       }
 
       const data = await response.json();
-      return data.choices?.[0]?.message?.content || '';
+      const content = data.choices?.[0]?.message?.content || '';
+
+      // Una respuesta vacia no puede devolverse como si fuera valida: el
+      // llamador la enviaria a Telegram, el envio fallaria y el chat acabaria
+      // en manos del jefe sin dejar claro por que. El motivo habitual es que el
+      // modelo agoto el presupuesto razonando, y eso conviene verlo en el log.
+      if (!content.trim()) {
+        this.logger.error(
+          `El modelo ${this.chatModel} devolvio una respuesta vacia ` +
+            `(finish_reason: ${data.choices?.[0]?.finish_reason ?? 'desconocido'}).`,
+        );
+        throw new Error('La IA devolvió una respuesta vacía.');
+      }
+
+      return content;
     } catch (err: any) {
       clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
-        this.logger.error('xAI API call timed out after 30 seconds');
+        this.logger.error(
+          `xAI API call timed out after ${CHAT_TIMEOUT_MS / 1000} seconds`,
+        );
         throw new Error(
           'La llamada a la API de IA superó el tiempo límite de espera.',
         );

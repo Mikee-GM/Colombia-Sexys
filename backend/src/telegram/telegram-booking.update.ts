@@ -70,6 +70,11 @@ import { DedicatedBotContext } from './telegram-bot-registry.service';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
 import { TelegramSession } from './entities/telegram-session.entity';
+import {
+  buildSessionKey,
+  type SessionKeyContext,
+} from './telegram-session.key';
+import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 
 interface SessionData {
   step?:
@@ -398,13 +403,30 @@ export function validateReceiptAnalysis(
   return { valid: true, amount };
 }
 
+/**
+ * Horas del servicio a partir de lo que escribio el cliente.
+ *
+ * Un numero suelto solo cuenta si el mensaje entero es ese numero, que es como
+ * se responde a "¿cuantas horas?". Metido en una frase hay que exigir la
+ * unidad: antes cualquier cifra entre 1 y 24 se tomaba como la duracion, asi
+ * que "carrera 15", "a las 10" o "somos 2" cambiaban en silencio las horas
+ * pactadas y el total a cobrar.
+ */
 export function extractHireDuration(text: string): number | undefined {
   if (/\d+[.,]\d+/.test(text)) {
     return undefined;
   }
 
-  const match = text.match(/\b(\d+)(?:\s*(?:h|hr|hrs|hora|horas))?\b/i);
-  if (match) {
+  const soloNumero = text.trim().match(/^(\d+)$/);
+  if (soloNumero) {
+    const hours = parseInt(soloNumero[1], 10);
+    if (hours >= 1 && hours <= 24) return hours;
+    return undefined;
+  }
+
+  // Se recorren todas las cifras con unidad, no solo la primera: en "llego a
+  // las 9, quiero 3 horas" la que vale es la segunda.
+  for (const match of text.matchAll(/\b(\d+)\s*(?:h|hr|hrs|hora|horas)\b/gi)) {
     const hours = parseInt(match[1], 10);
     if (hours >= 1 && hours <= 24) return hours;
   }
@@ -475,21 +497,44 @@ export function detectGroupServiceIntent(
   return 'individual';
 }
 
+/** Sustantivos a los que puede referirse "abierto" cuando habla de duracion. */
+const DURACION_SUSTANTIVO =
+  '(?:servicio|tiempo|duracion|horas?|rato|plan|cita|encuentro)';
+
 /**
  * Detecta que el cliente quiere un servicio de duración abierta / indefinida.
+ *
+ * "Abierto" solo cuenta junto a un sustantivo de duración. Suelto es la palabra
+ * mas ambigua de esta conversacion —"¿el motel esta abierto?", "¿eres
+ * abierta?"— y como esto se evalua en cada mensaje, bastaba una de esas para
+ * borrar las horas que el cliente ya habia pactado y pasar el servicio a
+ * indefinido sin que nadie lo pidiera.
  */
 export function detectOpenEndedDuration(text: string): boolean {
   const normalized = text
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
     .toLowerCase();
-  return (
-    /\b(indefinid[ao]s?|indeterminad[ao]s?|abiert[ao]s?|ilimitad[ao]s?)\b/.test(
-      normalized,
-    ) ||
-    /\b(sin\s+(limite|hora\s+de\s+salida|tiempo\s+definido)|el\s+tiempo\s+que\s+sea|hasta\s+que\s+(se\s+acabe|nos\s+cansemos|yo\s+diga|amanezca)|no\s+se\s+cuantas\s+horas|las\s+que\s+salgan)\b/.test(
+
+  // Estas no necesitan contexto: no aparecen en esta conversacion hablando de
+  // otra cosa.
+  if (
+    /\b(indefinid[ao]s?|indeterminad[ao]s?|ilimitad[ao]s?)\b/.test(normalized)
+  )
+    return true;
+
+  if (
+    new RegExp(
+      `\\b${DURACION_SUSTANTIVO}\\s+(?:\\w+\\s+){0,2}?abiert[ao]s?\\b`,
+    ).test(normalized) ||
+    new RegExp(`\\babiert[ao]s?\\s+(?:de\\s+)?${DURACION_SUSTANTIVO}\\b`).test(
       normalized,
     )
+  )
+    return true;
+
+  return /\b(sin\s+(limite|hora\s+de\s+salida|tiempo\s+definido)|el\s+tiempo\s+que\s+sea|hasta\s+que\s+(se\s+acabe|nos\s+cansemos|yo\s+diga|amanezca)|no\s+se\s+cuantas\s+horas|las\s+que\s+salgan)\b/.test(
+    normalized,
   );
 }
 
@@ -527,10 +572,10 @@ export function buildConversationTranscript(
     .map((item, index) => {
       const label = TRANSCRIPT_SENDER_LABELS[item.emisor] ?? '⚙️ SISTEMA';
       const time = item.enviadoAt
-        ? new Date(item.enviadoAt).toLocaleTimeString('es-MX', {
+        ? new Date(item.enviadoAt).toLocaleTimeString(APP_LOCALE, {
             hour: '2-digit',
             minute: '2-digit',
-            timeZone: 'America/Mexico_City',
+            timeZone: APP_TIME_ZONE,
           })
         : '';
       const header = `${index + 1}. ${label}${time ? ` · ${time}` : ''}`;
@@ -1548,13 +1593,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           startDate.getTime() + (durationHours * 60 + 45) * 60_000,
         );
         schedules.push({
-          inicio: startDate.toLocaleString('es-MX', {
-            timeZone: 'America/Mexico_City',
+          inicio: startDate.toLocaleString(APP_LOCALE, {
+            timeZone: APP_TIME_ZONE,
             dateStyle: 'short',
             timeStyle: 'short',
           }),
-          fin: endDate.toLocaleString('es-MX', {
-            timeZone: 'America/Mexico_City',
+          fin: endDate.toLocaleString(APP_LOCALE, {
+            timeZone: APP_TIME_ZONE,
             timeStyle: 'short',
           }),
           descripcion:
@@ -1633,10 +1678,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           )
         : null;
       const eta = estimated
-        ? estimated.toLocaleTimeString('es-MX', {
+        ? estimated.toLocaleTimeString(APP_LOCALE, {
             hour: '2-digit',
             minute: '2-digit',
-            timeZone: 'America/Mexico_City',
+            timeZone: APP_TIME_ZONE,
           })
         : 'por confirmar';
       const busyMessage = queuedService
@@ -1757,8 +1802,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         (transportConfig as any)?.externalLocationFee ?? 0,
       ),
       ubicacionesPreestablecidas: ubicacionesData,
-      fechaHoraActual: new Date().toLocaleString('es-MX', {
-        timeZone: 'America/Mexico_City',
+      fechaHoraActual: new Date().toLocaleString(APP_LOCALE, {
+        timeZone: APP_TIME_ZONE,
       }),
       horariosOcupados: busySchedules,
       tieneFotosExclusivas,
@@ -3708,7 +3753,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         servicioConTotal.totalTransporte ??
         0,
     );
-    const formatoMoneda = new Intl.NumberFormat('es-MX', {
+    const formatoMoneda = new Intl.NumberFormat(APP_LOCALE, {
       style: 'currency',
       currency: 'MXN',
     });
@@ -3796,7 +3841,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const clienteChatId = servicio.cliente?.telegramChatId;
     if (!clienteChatId) return;
 
-    const formatoMoneda = new Intl.NumberFormat('es-MX', {
+    const formatoMoneda = new Intl.NumberFormat(APP_LOCALE, {
       style: 'currency',
       currency: 'MXN',
     });
@@ -4589,7 +4634,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const total = totalBase + transportCharge;
 
       if (!ctx.session) ctx.session = {};
-      const formatoMoneda = new Intl.NumberFormat('es-MX', {
+      const formatoMoneda = new Intl.NumberFormat(APP_LOCALE, {
         style: 'currency',
         currency: 'MXN',
       });
@@ -4843,7 +4888,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             );
             // Acumulamos en memoria
             nuevoServicioEnc.horaInicioEstimada = estimada;
-            horaEstimadaStr = estimada.toLocaleTimeString('es-MX', {
+            horaEstimadaStr = estimada.toLocaleTimeString(APP_LOCALE, {
               hour: '2-digit',
               minute: '2-digit',
             });
@@ -4944,8 +4989,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         const clientName =
           client.nombreTelegram || ctx.from?.first_name || 'Cliente';
         const fechaProgFormatted = nuevoServicio.fechaProgramada
-          ? new Date(nuevoServicio.fechaProgramada).toLocaleString('es-MX', {
-              timeZone: 'America/Mexico_City',
+          ? new Date(nuevoServicio.fechaProgramada).toLocaleString(APP_LOCALE, {
+              timeZone: APP_TIME_ZONE,
             })
           : null;
 
@@ -4979,11 +5024,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           }` +
           (!isProgramado && nuevoServicio.horaInicioEstimada
             ? `\n• *Llegada estimada:* ${nuevoServicio.horaInicioEstimada.toLocaleTimeString(
-                'es-MX',
+                APP_LOCALE,
                 {
                   hour: '2-digit',
                   minute: '2-digit',
-                  timeZone: 'America/Mexico_City',
+                  timeZone: APP_TIME_ZONE,
                 },
               )}`
             : '');
@@ -5122,7 +5167,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         }
       }
 
-      const formatoMoneda = new Intl.NumberFormat('es-MX', {
+      const formatoMoneda = new Intl.NumberFormat(APP_LOCALE, {
         style: 'currency',
         currency: 'MXN',
       });
@@ -5136,7 +5181,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ? `*Resumen de nuestra cita programada:*\n\n`
         : `*Resumen de nuestra cita:*\n\n`;
       if (isProgramado && nuevoServicio.fechaProgramada) {
-        msgExito += `*Fecha y hora:* ${new Date(nuevoServicio.fechaProgramada).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}\n`;
+        msgExito += `*Fecha y hora:* ${new Date(nuevoServicio.fechaProgramada).toLocaleString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}\n`;
       }
       if (isOpenEnded) {
         msgExito += `*Tiempo:* indefinido (se cuenta al terminar)\n`;
@@ -6554,8 +6599,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * desde otros chats (jefe, empleada) vean el estado más reciente.
    */
   private async persistSession(ctx: BotContext): Promise<void> {
-    const sessionKey =
-      ctx.from && ctx.chat ? `${ctx.from.id}:${ctx.chat.id}` : undefined;
+    // La clave se construye igual que en el middleware de sesion. Antes se
+    // armaba aqui a mano y sin el prefijo del bot dedicado, asi que en el bot
+    // de cada modelo esta escritura iba a una fila que nadie leia.
+    const sessionKey = buildSessionKey(ctx as unknown as SessionKeyContext);
     if (!sessionKey || !ctx.session) return;
     try {
       await this.telegramSessionRepository.save({
@@ -6564,6 +6611,36 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       });
     } catch (err) {
       this.logger.warn('No se pudo persistir la sesión del cliente:', err);
+    }
+  }
+
+  /**
+   * Recarga la sesion guardada sobre el contexto que quedo en el buffer.
+   *
+   * El buffer retiene el `ctx` del mensaje que lo abrio y lo procesa hasta 20 s
+   * despues, asi que `ctx.session` es una foto vieja: cualquier dato que se
+   * haya guardado entre medias —las horas que el cliente acababa de dar, el
+   * metodo de pago, la ubicacion— no esta ahi. Al vaciar el buffer se relee la
+   * fila y se vuelca sobre el mismo objeto, para que las referencias que ya
+   * apuntan a `ctx.session` sigan siendo validas.
+   */
+  private async reloadSession(ctx: BotContext): Promise<void> {
+    const sessionKey = buildSessionKey(ctx as unknown as SessionKeyContext);
+    if (!sessionKey || !ctx.session) return;
+    try {
+      const row = await this.telegramSessionRepository.findOne({
+        where: { key: sessionKey },
+      });
+      if (!row?.data) return;
+
+      const stored = row.data as Record<string, unknown>;
+      const live = ctx.session as unknown as Record<string, unknown>;
+      for (const field of Object.keys(live)) {
+        if (!(field in stored)) delete live[field];
+      }
+      Object.assign(live, stored);
+    } catch (err) {
+      this.logger.warn('No se pudo releer la sesión del cliente:', err);
     }
   }
 
@@ -6646,6 +6723,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const ctx = buffer.ctx;
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
+    if (!ctx.session) return;
+
+    // El contexto lleva hasta 20 s en el buffer: antes de decidir nada hay que
+    // partir del estado guardado y no de la foto con la que entro el mensaje.
+    await this.reloadSession(ctx);
     const session = ctx.session;
     if (!session) return;
 
@@ -6917,13 +6999,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         comprobanteRecibido: Boolean(session.comprobanteEnviado),
         servicioAceptado: false,
         metodoPago: session.metodoPago,
-        fechaHoraActual: new Date().toLocaleString('es-MX', {
-          timeZone: 'America/Mexico_City',
+        fechaHoraActual: new Date().toLocaleString(APP_LOCALE, {
+          timeZone: APP_TIME_ZONE,
         }),
         horariosOcupados: busySchedules,
         fechaProgramadaPactada: session.fechaProgramada
-          ? new Date(session.fechaProgramada).toLocaleString('es-MX', {
-              timeZone: 'America/Mexico_City',
+          ? new Date(session.fechaProgramada).toLocaleString(APP_LOCALE, {
+              timeZone: APP_TIME_ZONE,
             })
           : null,
         tieneFotosExclusivas,
@@ -7161,12 +7243,18 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 .map((h) => extractHirePaymentMethod(h.parts[0]?.text || ''))
                 .find((method) => Boolean(method));
 
-            if (
+            /*
+             * La duracion solo se toca si el bloque la trae. Junto a ella va la
+             * fecha programada, porque el modelo reescribe la reserva entera
+             * cuando la incluye y su ausencia significa "ahora mismo".
+             */
+            const traeDuracion =
               isOpenEndedData ||
               (Number.isInteger(parsedDuracion) &&
                 parsedDuracion >= 1 &&
-                parsedDuracion <= 24)
-            ) {
+                parsedDuracion <= 24);
+
+            if (traeDuracion) {
               if (isOpenEndedData) {
                 session.duracionIndefinida = true;
                 session.duracionPactadaHoras = undefined;
@@ -7190,78 +7278,85 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 session.fechaProgramada = undefined;
                 session.tipoAgenda = 'inmediato';
               }
+            }
 
-              if (userProvidedPayment) {
-                session.metodoPago = userProvidedPayment;
-              } else if (
-                parsedData.pago &&
-                extractHirePaymentMethod(userMessage)
-              ) {
-                session.metodoPago = parsedData.pago;
-              }
+            /*
+             * El metodo de pago se guarda venga o no la duracion en este mismo
+             * bloque. Antes colgaba del `if` de arriba, asi que el turno en el
+             * que el cliente solo decia como iba a pagar se descartaba entero:
+             * la reserva no avanzaba y la IA volvia a preguntar el pago.
+             */
+            if (userProvidedPayment) {
+              session.metodoPago = userProvidedPayment;
+            } else if (
+              parsedData.pago &&
+              extractHirePaymentMethod(userMessage)
+            ) {
+              session.metodoPago = parsedData.pago;
+            }
 
-              if (
-                (session.duracionPactadaHoras || session.duracionIndefinida) &&
-                session.metodoPago
-              ) {
-                history.push({ role: 'model', parts: [{ text: cleanText }] });
-                session.chatHistory = history;
+            /* Se cierra en cuanto estan los dos datos, los diera el turno que los diera. */
+            if (
+              (session.duracionPactadaHoras || session.duracionIndefinida) &&
+              session.metodoPago
+            ) {
+              history.push({ role: 'model', parts: [{ text: cleanText }] });
+              session.chatHistory = history;
 
-                // Si el cliente ya mandó su pin antes, no se le vuelve a pedir:
-                // se continúa directo con el cierre de la contratación.
-                if (this.hasConfirmedLocation(session)) {
-                  session.step = 'AWAITING_LOCATION';
-                  if (cleanText) {
-                    await this.sendDelayedReply(ctx, cleanText);
-                    await this.recordDraftConversation(ctx, 'ia', cleanText);
-                  }
-                  await this.applyDraftPaymentMethod(ctx, session.metodoPago);
-                  return;
-                }
-
+              // Si el cliente ya mandó su pin antes, no se le vuelve a pedir:
+              // se continúa directo con el cierre de la contratación.
+              if (this.hasConfirmedLocation(session)) {
                 session.step = 'AWAITING_LOCATION';
-                const presetName = parsedData.ubicacionPreestablecida;
-                let matchedLocation: any = null;
-                if (presetName && typeof presetName === 'string') {
-                  const activeLocs =
-                    await this.transportOperations.activeLocations();
-                  matchedLocation =
-                    activeLocs.find(
-                      (loc) =>
-                        loc.name
-                          .toLowerCase()
-                          .includes(presetName.toLowerCase().trim()) ||
-                        presetName
-                          .toLowerCase()
-                          .includes(loc.name.toLowerCase().trim()),
-                    ) || null;
-                }
-
-                if (matchedLocation) {
+                if (cleanText) {
                   await this.sendDelayedReply(ctx, cleanText);
                   await this.recordDraftConversation(ctx, 'ia', cleanText);
-
-                  session.presetLocationId = matchedLocation.id;
-                  session.locationNameSnapshot = matchedLocation.name;
-                  session.locationAddressSnapshot = matchedLocation.address;
-                  session.customerTransportCharge = 0;
-
-                  await this.onLocation(ctx, {
-                    latitude: Number(matchedLocation.latitude),
-                    longitude: Number(matchedLocation.longitude),
-                    title: matchedLocation.name,
-                    address: matchedLocation.address,
-                  });
-                  return;
                 }
-
-                const askLocation =
-                  cleanText ||
-                  'Mándame tu ubicación en pin con el botón de abajo, mor.';
-                await this.replyWithServiceLocationOptions(ctx, askLocation);
-                await this.recordDraftConversation(ctx, 'ia', askLocation);
+                await this.applyDraftPaymentMethod(ctx, session.metodoPago);
                 return;
               }
+
+              session.step = 'AWAITING_LOCATION';
+              const presetName = parsedData.ubicacionPreestablecida;
+              let matchedLocation: any = null;
+              if (presetName && typeof presetName === 'string') {
+                const activeLocs =
+                  await this.transportOperations.activeLocations();
+                matchedLocation =
+                  activeLocs.find(
+                    (loc) =>
+                      loc.name
+                        .toLowerCase()
+                        .includes(presetName.toLowerCase().trim()) ||
+                      presetName
+                        .toLowerCase()
+                        .includes(loc.name.toLowerCase().trim()),
+                  ) || null;
+              }
+
+              if (matchedLocation) {
+                await this.sendDelayedReply(ctx, cleanText);
+                await this.recordDraftConversation(ctx, 'ia', cleanText);
+
+                session.presetLocationId = matchedLocation.id;
+                session.locationNameSnapshot = matchedLocation.name;
+                session.locationAddressSnapshot = matchedLocation.address;
+                session.customerTransportCharge = 0;
+
+                await this.onLocation(ctx, {
+                  latitude: Number(matchedLocation.latitude),
+                  longitude: Number(matchedLocation.longitude),
+                  title: matchedLocation.name,
+                  address: matchedLocation.address,
+                });
+                return;
+              }
+
+              const askLocation =
+                cleanText ||
+                'Mándame tu ubicación en pin con el botón de abajo, mor.';
+              await this.replyWithServiceLocationOptions(ctx, askLocation);
+              await this.recordDraftConversation(ctx, 'ia', askLocation);
+              return;
             }
           } catch (jsonErr) {
             this.logger.error(

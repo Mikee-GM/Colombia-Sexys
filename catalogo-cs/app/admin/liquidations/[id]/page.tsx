@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth";
+import { optionalSource } from "@/lib/optional-source";
 import { getLiquidationReport } from "../actions";
 import { getOperationalWeek } from "@/lib/week-range";
 import LiquidacionEmpleada from "@/components/erp/liquidacion-empleada";
@@ -27,8 +28,15 @@ export default async function LiquidacionEmpleadaPage({
   const startDate = start ?? semana.startDate;
   const endDate = end ?? semana.endDate;
 
-  const report = await getLiquidationReport(startDate, endDate, id).catch(
-    () => null,
+  /*
+   * Un corte que no existe termina en 404, pero una sesion caida tiene que
+   * llegar al login: sin distinguirlas, la empleada correcta se veia como si
+   * no existiera.
+   */
+  const report = await optionalSource(
+    getLiquidationReport(startDate, endDate, id),
+    null,
+    "el corte de la empleada",
   );
   if (!report) notFound();
 

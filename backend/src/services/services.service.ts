@@ -38,6 +38,7 @@ import { UploadService } from '../upload/upload.service';
 import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
 import { describeError } from '../common/errors/error-message';
+import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 
 /**
  * Estados en los que un viaje ya salio a la calle. Si se cancela estando aqui,
@@ -1034,8 +1035,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       const employeeChatId = servicio.empleada?.usuario?.telegramChatId;
       if (employeeChatId) {
         const fechaStr = servicio.fechaProgramada
-          ? new Date(servicio.fechaProgramada).toLocaleString('es-MX', {
-              timeZone: 'America/Mexico_City',
+          ? new Date(servicio.fechaProgramada).toLocaleString(APP_LOCALE, {
+              timeZone: APP_TIME_ZONE,
             })
           : 'próximamente';
         let msg = isFutureScheduled
@@ -1430,10 +1431,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       data: next,
     });
     if (next.cliente?.telegramChatId) {
-      const eta = next.horaInicioEstimada.toLocaleTimeString('es-MX', {
+      const eta = next.horaInicioEstimada.toLocaleTimeString(APP_LOCALE, {
         hour: '2-digit',
         minute: '2-digit',
-        timeZone: 'America/Mexico_City',
+        timeZone: APP_TIME_ZONE,
       });
       const message = await this.aiMessageService.generateAgencyMessage(
         'scheduled_eta_updated',
@@ -1793,7 +1794,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     // con choferes que no usan el sistema de turnos). Uno que sí tiene turnos asignados
     // solo es elegible si ahora mismo está dentro de uno de sus turnos activos.
     const nowInMexicoCity = new Date(
-      new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' }),
+      new Date().toLocaleString('en-US', { timeZone: APP_TIME_ZONE }),
     );
     const currentDow = nowInMexicoCity.getDay();
     const yesterdayDow = (currentDow + 6) % 7;

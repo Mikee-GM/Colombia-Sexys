@@ -16,6 +16,7 @@ import { WeeklyContentSchedule } from './entities/weekly-content-schedule.entity
 import { Empleadas } from '../employees/entities/employee.entity';
 import { TelegramService } from '../telegram/telegram.service';
 import { ConductReport } from '../discipline/entities/conduct-report.entity';
+import { APP_TIME_ZONE } from '../common/locale';
 
 @Injectable()
 export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
@@ -85,11 +86,11 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
 
   private async runWeeklyCycle(): Promise<void> {
     const now = new Date();
-    const cdmxDate = new Date(
-      now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }),
+    const localDate = new Date(
+      now.toLocaleString('en-US', { timeZone: APP_TIME_ZONE }),
     );
-    const day = cdmxDate.getDay(); // 0 = dom, 5 = vie, 6 = sab
-    const hour = cdmxDate.getHours();
+    const day = localDate.getDay(); // 0 = dom, 5 = vie, 6 = sab
+    const hour = localDate.getHours();
 
     const currentFriday = this.weeklyContentService.getCurrentCycleFriday();
 

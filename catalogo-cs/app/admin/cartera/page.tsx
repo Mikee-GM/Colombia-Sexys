@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth";
+import { optionalSource } from "@/lib/optional-source";
 import { getAllDebts } from "@/app/admin/liquidations/actions";
 import { getCashObligations } from "@/app/admin/transport/actions";
 import CarteraClient from "@/components/erp/cartera-client";
@@ -15,12 +16,12 @@ export default async function CarteraPage() {
 
   // La cartera son las deudas mas el efectivo que aun no entregan las empleadas.
   const [debts, cash] = await Promise.all([
-    getAllDebts().catch(() => []),
-    getCashObligations().catch(() => ({
-      obligations: [],
-      employees: [],
-      total: 0,
-    })),
+    optionalSource(getAllDebts(), [], "la cartera"),
+    optionalSource(
+      getCashObligations(),
+      { obligations: [], employees: [], total: 0 },
+      "la cartera",
+    ),
   ]);
 
   return (

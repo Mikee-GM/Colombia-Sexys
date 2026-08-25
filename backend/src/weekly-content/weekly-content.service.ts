@@ -15,6 +15,7 @@ import { EmpleadaFotos } from '../employee-photos/entities/employee-photo.entity
 import { EmpleadaFotosExclusivas } from '../employee-photos/entities/employee-private-photo.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { UploadService } from '../upload/upload.service';
+import { APP_TIME_ZONE } from '../common/locale';
 
 @Injectable()
 export class WeeklyContentService {
@@ -272,15 +273,15 @@ export class WeeklyContentService {
    */
   getCurrentCycleFriday(): string {
     const now = new Date();
-    // Convertir a horario CDMX
-    const cdmxDate = new Date(
-      now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }),
+    // Convertir a la hora local de la operacion
+    const localDate = new Date(
+      now.toLocaleString('en-US', { timeZone: APP_TIME_ZONE }),
     );
-    const day = cdmxDate.getDay(); // 0 = domingo, 5 = viernes, 6 = sábado
+    const day = localDate.getDay(); // 0 = domingo, 5 = viernes, 6 = sábado
     // Días a retroceder hasta el viernes (si es viernes es 0)
     const diff = (day + 7 - 5) % 7;
-    const friday = new Date(cdmxDate);
-    friday.setDate(cdmxDate.getDate() - diff);
+    const friday = new Date(localDate);
+    friday.setDate(localDate.getDate() - diff);
 
     const year = friday.getFullYear();
     const month = String(friday.getMonth() + 1).padStart(2, '0');

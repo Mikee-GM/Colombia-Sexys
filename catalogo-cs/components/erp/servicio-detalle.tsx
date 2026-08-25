@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import {
+  codigoServicio,
   Empty,
   ErpPageHeader,
   ErpTable,
@@ -79,8 +80,6 @@ function fechaHora(iso: string | null | undefined) {
   }
 }
 
-const codigoCorto = (id: string) => `SR-${id.slice(-6).toUpperCase()}`;
-
 export default function ServicioDetalle({ service }: { service: Service }) {
   const viajes = service.viajes ?? [];
   const pagos = service.pagos ?? [];
@@ -130,7 +129,7 @@ export default function ServicioDetalle({ service }: { service: Service }) {
   return (
     <div className="flex flex-col gap-6">
       <ErpPageHeader
-        title={`Servicio ${codigoCorto(service.id)}`}
+        title={`Servicio ${codigoServicio(service.id)}`}
         description={`${
           service.serviceType === "grupal" ? "Grupal" : "Individual"
         } - creado el ${fechaHora(service.createdAt) ?? "sin fecha"}`}

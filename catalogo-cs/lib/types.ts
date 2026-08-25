@@ -168,6 +168,8 @@ export type Service = {
   empleada?: Employee;
 };
 
+export type TripZone = "montecarlo" | "majestic" | "domicilio";
+
 export type Trip = {
   id: string;
   servicioId: string;
@@ -176,6 +178,7 @@ export type Trip = {
   tipo: "ida" | "regreso";
   estado: "notificado" | "aceptado" | "en_camino" | "llegado" | "en_curso" | "finalizado" | "rechazado" | "cancelado";
   proveedorTransporte: "interno" | "uber";
+  zona?: TripZone;
   tarifa: string | number;
   telegramUberFileId?: string | null;
   uberScreenshotUrl?: string | null;
@@ -188,6 +191,15 @@ export type Trip = {
   costoCobradoAlCliente?: boolean;
   fareConfirmationOverride?: boolean;
   driverSettlementId?: string | null;
+  /**
+   * Ciclo de la oferta al chofer. El backend ya los guarda en viajes y son lo
+   * que permite medir cuanto tarda en aceptarse un viaje y cuantas ofertas
+   * vencieron sin respuesta.
+   */
+  ofertaExpiraEn?: string | null;
+  horaNotificacion?: string;
+  horaAceptacion?: string | null;
+  horaFinViaje?: string | null;
   passengers?: TripPassenger[];
 };
 
@@ -760,3 +772,54 @@ export type CreateManualServiceInput = {
   clienteTelegramId?: string;
 };
 
+
+/**
+ * Nombres de las personas del sistema, indexados por tipo e id.
+ *
+ * Los reportes de conducta y las sanciones guardan a quien senalan como un par
+ * de tipo e id, sin nombre, asi que el panel disciplinario necesita esta
+ * traduccion para no mostrar UUIDs.
+ */
+export type Directorio = Record<
+  "client" | "employee" | "driver" | "boss",
+  Record<string, string>
+>;
+
+/** Reglamento vigente de un rol, tal como lo publica el panel. */
+export type Regulation = {
+  id: string;
+  targetRole: "empleada" | "chofer" | "jefe";
+  title: string;
+  content: string;
+  passingScore: number;
+  publicationKey: string;
+  publishedAt: string;
+  updatedAt?: string;
+  /** El endpoint de admin devuelve el cuestionario junto al reglamento. */
+  questions?: Array<{ id: string; text: string }>;
+};
+
+/**
+ * Estado del reglamento de una persona del staff.
+ *
+ * `onboarding` es null mientras no se le haya asignado ninguno; cuando existe,
+ * `status` avanza de pending a completed y `bestScore` guarda el mejor intento.
+ */
+export type StaffOnboarding = ApiUser & {
+  onboarding: {
+    id: string;
+    userId: string;
+    employeeId: string | null;
+    status: "pending" | "in_progress" | "completed";
+    active: boolean;
+    isRenewal: boolean;
+    attemptCount: number;
+    bestScore: number;
+    trustScore: number;
+    assignedAt: string;
+    regulationSentAt: string | null;
+    readAt: string | null;
+    completedAt: string | null;
+    lastDeliveryError: string | null;
+  } | null;
+};
