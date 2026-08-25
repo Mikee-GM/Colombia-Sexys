@@ -10,6 +10,22 @@ import { Usuarios } from '../users/entities/user.entity';
 const TTL_MINUTES = 5;
 
 /**
+ * Cortesia tras el primer canje.
+ *
+ * El pase se canjea en una peticion GET, asi que basta con que algo abra el
+ * enlace una vez para gastarlo: la previsualizacion del enlace, el prefetch del
+ * navegador dentro de Telegram, o el propio usuario tocando primero "Abrir mi
+ * portal" y luego "Abrir en el navegador". Con un solo uso estricto, el intento
+ * de verdad llegaba con el pase ya quemado y el portal contestaba que el enlace
+ * no era valido.
+ *
+ * Durante esta ventana el mismo pase se admite otra vez. Sigue atado al chat al
+ * que se emitio y sigue caducando con `expires_at`, asi que lo que se amplia es
+ * el margen para abrirlo, no la vida del enlace.
+ */
+const GRACE_SECONDS = 120;
+
+/**
  * Puertos que los navegadores se niegan a abrir por estar reservados a otros
  * protocolos. Es la lista que comparten Chrome y Firefox.
  */
@@ -85,10 +101,15 @@ export class PanelAccessService {
   /**
    * Canjea el pase. Devuelve el usuario y a donde llevarlo.
    *
-   * El marcado como usado va en un UPDATE condicional, no en un `find` seguido
-   * de un `save`: dos aperturas simultaneas del mismo enlace -- la de la
+   * El marcado va en un UPDATE condicional, no en un `find` seguido de un
+   * `save`: dos aperturas simultaneas del mismo enlace -- la de la
    * previsualizacion de Telegram y la del dedo del jefe -- llegarian a la vez y
    * las dos veria el pase sin usar.
+   *
+   * Ese UPDATE resolvia el empate, pero dejaba fuera al segundo: quien abria el
+   * enlace por segunda vez, aunque fuera el mismo usuario un segundo despues,
+   * recibia "el enlace ya se uso". Por eso el pase se admite durante
+   * `GRACE_SECONDS` a partir del primer canje.
    */
   async consume(
     token: string,
@@ -106,16 +127,21 @@ export class PanelAccessService {
      * daba el array entero: los campos salian undefined y un pase ya usado
      * -- array vacio, que es truthy -- se colaba hasta reventar contra la
      * base en vez de rechazarse limpiamente.
+     *
+     * `used_at` se fija con COALESCE para que la ventana de cortesia se mida
+     * desde el primer canje y no se renueve con cada reintento: si no, cada
+     * reapertura correria la ventana hacia adelante y el pase valdria
+     * indefinidamente mientras alguien lo siguiera abriendo.
      */
     const result = await this.tokens.query(
       `UPDATE public.panel_access_tokens
-          SET used_at = now()
+          SET used_at = COALESCE(used_at, now())
         WHERE token_hash = $1
-          AND used_at IS NULL
           AND expires_at > now()
+          AND (used_at IS NULL OR used_at > now() - $2::interval)
       RETURNING user_id AS "userId", chat_id AS "chatId",
                 redirect_path AS "redirectPath"`,
-      [hashToken(token)],
+      [hashToken(token), `${GRACE_SECONDS} seconds`],
     );
 
     const filas: Array<{

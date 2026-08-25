@@ -4,7 +4,7 @@ import { copyBackendCookies } from "@/lib/auth-cookies";
 import { getApiBaseUrl } from "@/lib/api-server";
 
 /**
- * Canje del pase de un solo uso que el bot le manda al jefe.
+ * Canje del pase de vida corta que el bot le manda al jefe.
  *
  * Es un route handler y no una pagina porque hay que escribir cookies durante
  * una navegacion GET, y un Server Component no puede hacerlo.

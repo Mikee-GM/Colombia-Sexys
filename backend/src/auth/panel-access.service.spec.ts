@@ -87,12 +87,52 @@ describe('PanelAccessService', () => {
       expect(result.user.id).toBe('jefe-1');
       expect(result.redirectPath).toBe('/admin/services/abc');
       // El marcado como usado va en el propio UPDATE, no en una lectura previa.
-      expect(tokens.query.mock.calls[0][0]).toContain('SET used_at = now()');
-      expect(tokens.query.mock.calls[0][0]).toContain('used_at IS NULL');
-      expect(tokens.query.mock.calls[0][0]).toContain('expires_at > now()');
+      const [sql, params] = tokens.query.mock.calls[0];
+      expect(sql).toContain('SET used_at = COALESCE(used_at, now())');
+      expect(sql).toContain('expires_at > now()');
+      // El plazo lo pone la base, no el reloj del proceso.
+      expect(sql).toContain('used_at > now() - $2::interval');
+      expect(params[1]).toMatch(/^\d+ seconds$/);
     });
 
-    it('rechaza un pase ya usado o caducado', async () => {
+    /*
+     * El pase se gasta con abrir el enlace, y Telegram lo abre solo al
+     * previsualizarlo: con un unico uso, la apertura de verdad llegaba tarde y
+     * el portal respondia que el enlace ya no valia. La ventana de cortesia la
+     * evalua la propia consulta, asi que aqui se comprueba que la condicion va
+     * escrita y que la fila que devuelve se acepta como cualquier otra.
+     */
+    it('admite el mismo pase dentro de la ventana de cortesia', async () => {
+      tokens.query.mockResolvedValue(
+        filasDeUpdate([
+          { userId: 'jefe-1', chatId: '555', redirectPath: '/admin' },
+        ]),
+      );
+
+      const primero = await service.consume('pase', '555');
+      const segundo = await service.consume('pase', '555');
+
+      expect(primero.user.id).toBe('jefe-1');
+      expect(segundo.user.id).toBe('jefe-1');
+      expect(segundo.redirectPath).toBe('/admin');
+    });
+
+    it('no renueva la ventana en cada reintento: used_at se fija una sola vez', async () => {
+      tokens.query.mockResolvedValue(
+        filasDeUpdate([{ userId: 'jefe-1', chatId: null, redirectPath: null }]),
+      );
+
+      await service.consume('pase');
+
+      // Sin el COALESCE, cada reapertura correria used_at y el pase valdria
+      // mientras alguien lo siguiera abriendo.
+      expect(tokens.query.mock.calls[0][0]).not.toMatch(
+        /SET\s+used_at\s*=\s*now\(\)/,
+      );
+    });
+
+    it('rechaza un pase caducado o con la cortesia ya agotada', async () => {
+      // La base no devuelve fila: ni sin usar, ni dentro del plazo, ni vigente.
       tokens.query.mockResolvedValue(filasDeUpdate([]));
 
       await expect(service.consume('pase', '555')).rejects.toBeInstanceOf(

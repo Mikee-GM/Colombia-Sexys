@@ -106,7 +106,11 @@ export class AuthController {
   }
 
   /**
-   * Canjea el pase de un solo uso que el bot le manda al jefe y abre sesion.
+   * Canjea el pase que el bot le manda al jefe y abre sesion.
+   *
+   * El pase se gasta al usarlo, salvo la breve cortesia que aplica
+   * `PanelAccessService` para que la previsualizacion de Telegram no lo queme
+   * antes de que el enlace llegue a abrirse de verdad.
    *
    * Sustituye una prueba de identidad por otra equivalente: el pase solo existe
    * porque el chat de Telegram ya estaba vinculado a esa cuenta. Se limita el
