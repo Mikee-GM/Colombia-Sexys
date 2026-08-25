@@ -980,15 +980,34 @@ export class TelegramAuthUpdate {
     await this.enviarEnlaceDePanel(ctx, null);
   }
 
-  /** Mismo pase, pero aterrizando en la ficha del servicio del boton. */
+  /**
+   * Mismo pase, pero aterrizando en la ficha del servicio del boton.
+   *
+   * El destino NO puede fijarse a `/admin/...`: este boton se manda al grupo
+   * del jefe, y `/admin` es el area del administrador. Un jefe que lo pulsaba
+   * acababa dentro del panel de administracion, ya autenticado, sin haber hecho
+   * nada raro. Ahora el destino se decide con el rol de quien pulsa, y quien no
+   * tiene ficha de servicio propia aterriza en su area.
+   */
   @Action(/^panel_servicio:(.+)$/)
   async onPanelServicio(@Ctx() ctx: Context) {
     const servicioId = (ctx as any).match?.[1] as string | undefined;
     await ctx.answerCbQuery().catch(() => undefined);
-    await this.enviarEnlaceDePanel(
-      ctx,
-      servicioId ? `/admin/services/${servicioId}` : null,
-    );
+
+    const telegramId = ctx.from?.id.toString();
+    const actor = telegramId
+      ? await this.usuariosRepository.findOne({
+          where: { telegramChatId: telegramId },
+          select: { id: true, rol: true },
+        })
+      : null;
+
+    const destino =
+      actor?.rol === 'admin' && servicioId
+        ? `/admin/services/${servicioId}`
+        : null;
+
+    await this.enviarEnlaceDePanel(ctx, destino);
   }
 
   private async enviarEnlaceDePanel(

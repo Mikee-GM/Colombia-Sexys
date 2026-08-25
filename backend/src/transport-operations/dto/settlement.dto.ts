@@ -17,6 +17,10 @@ export class CashPaymentDto {
   amount: number;
   @IsOptional() @IsString() @Length(1, 240) note?: string;
 }
+/** Motivo opcional del deshacer, para que el historial explique el cambio. */
+export class RevertCashPaymentDto {
+  @IsOptional() @IsString() @Length(1, 240) reason?: string;
+}
 export class SettlementPeriodDto {
   @IsDateString() startDate: string;
   @IsDateString() endDate: string;

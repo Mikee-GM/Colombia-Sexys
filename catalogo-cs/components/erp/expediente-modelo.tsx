@@ -244,10 +244,10 @@ export default function ExpedienteModelo({
             flush
             action={
               <Link
-                href="/admin/cartera"
+                href={`/admin/dinero/${employee.id}`}
                 className="text-[11px] font-bold uppercase tracking-wider text-[#C5A55A] transition-colors hover:text-[#E8D5A3]"
               >
-                Ir a cartera
+                Ver su dinero
               </Link>
             }
           >

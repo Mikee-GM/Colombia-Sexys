@@ -93,13 +93,32 @@ describe('liquidation calculator', () => {
     expect(result.transportTotal).toBe(120);
   });
 
-  it('aplica 85 por ciento a extras desde mil', () => {
-    const result = calculateCut([
+  /**
+   * El fallo que cubre esta prueba: los extras son integros de la empleada,
+   * pero a partir de mil se le retenia un 15 %. La casa se quedaba parte de
+   * algo que es suyo por completo y, como la hoja mostraba el numero ya
+   * recortado, la retencion no aparecia por ningun lado.
+   */
+  it('paga los extras completos a la empleada, sin importar el monto', () => {
+    const grande = calculateCut([
       record({ extraAmount: 1000, electronicExtraAmount: 1000 }),
     ]);
+    expect(grande.calculatedExtras).toBe(1000);
+    expect(grande.rawExtrasTotal).toBe(1000);
+    expect(grande.result).toBe(-2500);
 
-    expect(result.calculatedExtras).toBe(850);
-    expect(result.result).toBe(-2350);
+    const pequeno = calculateCut([
+      record({ extraAmount: 400, electronicExtraAmount: 400 }),
+    ]);
+    expect(pequeno.calculatedExtras).toBe(400);
+  });
+
+  it('no deja diferencia entre el extra cobrado y el que se le paga', () => {
+    const result = calculateCut([
+      record({ extraAmount: 5000, electronicExtraAmount: 5000 }),
+    ]);
+
+    expect(result.calculatedExtras).toBe(result.rawExtrasTotal);
   });
 
   it('usa únicamente el corte de oficina sin generar discrepancia', () => {

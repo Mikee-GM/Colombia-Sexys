@@ -119,8 +119,15 @@ export default function LiquidacionEmpleada({
               label="Comision de la empresa"
               value={formatCurrency(cut.companyCommission)}
             />
+            {/*
+              Los extras son integros de la empleada: no entran en el reparto
+              con la casa. Se dice explicitamente porque la etiqueta anterior
+              ("Extras calculados") no aclaraba de quien era ese dinero, y
+              ademas el calculo le retenia un 15 % que no aparecia por ningun
+              lado.
+            */}
             <Fila
-              label="Extras calculados"
+              label="Extras (integros para ella)"
               value={formatCurrency(cut.calculatedExtras)}
             />
             <Fila

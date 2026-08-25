@@ -128,6 +128,10 @@ export async function updateCancellationDetails(
 
 export async function getCashObligations() { return apiFetch<CashSummary>("/transport-operations/cash-obligations"); }
 export async function getDriverSettlements(startDate: string, endDate: string) { return apiFetch<DriverTripSettlement[]>(`/transport-operations/driver-settlements?startDate=${startDate}&endDate=${endDate}`); }
-export async function registerCashPayment(employeeId: string, amount: number, note?: string) { const result = await apiFetch("/transport-operations/cash-payments", { method: "POST", body: JSON.stringify({ employeeId, amount, note }) }); revalidatePath("/admin/transport"); return result; }
-export async function closeCashObligation(id: string) { const result = await apiFetch(`/transport-operations/cash-obligations/${id}/close`, { method: "POST" }); revalidatePath("/admin/transport"); return result; }
+// El panel de efectivo vive en /admin/dinero desde que se saco de Transporte.
+// Revalidar solo /admin/transport dejaba la otra tabla con el saldo viejo: el
+// abono se registraba, salia el aviso de exito y el numero no se movia hasta
+// recargar a mano.
+export async function registerCashPayment(employeeId: string, amount: number, note?: string) { const result = await apiFetch("/transport-operations/cash-payments", { method: "POST", body: JSON.stringify({ employeeId, amount, note }) }); revalidatePath("/admin/transport"); revalidatePath("/admin/dinero"); revalidatePath("/admin/liquidations"); return result; }
+export async function closeCashObligation(id: string) { const result = await apiFetch(`/transport-operations/cash-obligations/${id}/close`, { method: "POST" }); revalidatePath("/admin/transport"); revalidatePath("/admin/dinero"); revalidatePath("/admin/liquidations"); return result; }
 export async function payDriverSettlement(driverId: string, startDate: string, endDate: string) { const result = await apiFetch(`/transport-operations/driver-settlements/${driverId}/pay`, { method: "POST", body: JSON.stringify({ startDate, endDate }) }); revalidatePath("/admin/transport"); return result; }
