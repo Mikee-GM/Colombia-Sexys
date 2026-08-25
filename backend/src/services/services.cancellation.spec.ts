@@ -10,7 +10,9 @@ describe('ServicesService cancel', () => {
   const serviciosRepository = {
     findOne: jest.fn(),
     update: jest.fn(),
-    save: jest.fn(async (value) => value),
+    // Devuelve el valor tal cual, sin `async`: el codigo lo espera igual y una
+    // arrow asincrona sin await no pasa el lint.
+    save: jest.fn((value) => value),
     exists: jest.fn().mockResolvedValue(false),
     manager: { getRepository: jest.fn(() => ({ update: jest.fn() })) },
   };
@@ -20,7 +22,9 @@ describe('ServicesService cancel', () => {
   const realtime = { emitToBoss: jest.fn() };
   const bot = { telegram: { sendMessage: jest.fn() } };
   const aiMessageService = {
-    generate: jest.fn().mockResolvedValue('Que pena contigo, no voy a poder ir'),
+    generate: jest
+      .fn()
+      .mockResolvedValue('Que pena contigo, no voy a poder ir'),
   };
   const liquidationSync = {
     syncCancelledRecord: jest.fn().mockResolvedValue(null),
@@ -90,7 +94,9 @@ describe('ServicesService cancel', () => {
       note: '   ',
     });
 
-    expect(serviciosRepository.save.mock.calls[0][0].notaCancelacion).toBeNull();
+    expect(
+      serviciosRepository.save.mock.calls[0][0].notaCancelacion,
+    ).toBeNull();
   });
 
   it('le avisa al cliente que ya no se va a poder', async () => {

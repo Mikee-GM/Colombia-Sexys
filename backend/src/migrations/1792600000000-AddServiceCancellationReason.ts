@@ -13,9 +13,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * migracion no tienen forma de recuperar su motivo: se quedan en NULL y las
  * vistas los muestran como "sin registrar" en vez de inventarles una causa.
  */
-export class AddServiceCancellationReason1792600000000
-  implements MigrationInterface
-{
+export class AddServiceCancellationReason1792600000000 implements MigrationInterface {
   name = 'AddServiceCancellationReason1792600000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

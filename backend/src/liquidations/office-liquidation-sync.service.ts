@@ -53,14 +53,19 @@ export class OfficeLiquidationSyncService {
     // Solo cuenta el transporte con costo ya cerrado: un Uber pendiente de
     // confirmar entraria como cero y falsearia el corte de la semana.
     const cerrados = (service.viajes ?? []).filter((trip) =>
-      trip.proveedorTransporte === 'uber' ? Boolean(trip.fareConfirmedAt) : true,
+      trip.proveedorTransporte === 'uber'
+        ? Boolean(trip.fareConfirmedAt)
+        : true,
     );
     const costoDe = (trip: (typeof cerrados)[number]) =>
       trip.proveedorTransporte === 'uber'
         ? Number(trip.tarifa || 0)
         : Number(trip.driverPayout || 0);
 
-    const transportCost = cerrados.reduce((sum, trip) => sum + costoDe(trip), 0);
+    const transportCost = cerrados.reduce(
+      (sum, trip) => sum + costoDe(trip),
+      0,
+    );
 
     // Lo que se le recupera al cliente de esos traslados. La oficina lo decide
     // viaje por viaje al cerrar el costo; lo que no se cobra lo absorbe la casa.

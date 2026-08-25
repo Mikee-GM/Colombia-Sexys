@@ -265,7 +265,11 @@ export class ServicesController {
 
   // Completar o corregir el motivo de una cancelacion ya registrada.
   @Patch(':id/cancellation')
-  @ApiActionDocs('Corregir el motivo de una cancelación', true, 'ID del servicio')
+  @ApiActionDocs(
+    'Corregir el motivo de una cancelación',
+    true,
+    'ID del servicio',
+  )
   updateCancellation(
     @Param('id') id: string,
     @Body() dto: CancelServiceDto,

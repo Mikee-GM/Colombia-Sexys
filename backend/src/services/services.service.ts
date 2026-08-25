@@ -896,7 +896,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     estadoPrevio: string,
     viajesActivos: Viajes[],
   ): Promise<void> {
-    const yaConfirmado = estadoPrevio === 'agendado' || estadoPrevio === 'en_curso';
+    const yaConfirmado =
+      estadoPrevio === 'agendado' || estadoPrevio === 'en_curso';
 
     if (service.cliente?.telegramChatId || service.clienteTelegramId) {
       const chatId =

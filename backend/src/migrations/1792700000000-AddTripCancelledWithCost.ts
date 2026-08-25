@@ -13,9 +13,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * cierre el costo a mano: confirmar la tarifa real o declarar que no salio.
  * Adivinarlo seria peor que preguntarlo.
  */
-export class AddTripCancelledWithCost1792700000000
-  implements MigrationInterface
-{
+export class AddTripCancelledWithCost1792700000000 implements MigrationInterface {
   name = 'AddTripCancelledWithCost1792700000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

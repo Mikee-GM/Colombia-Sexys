@@ -9,9 +9,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * cobra; si la cancelacion fue por un error de la oficina, no. La decision se
  * toma caso por caso al cerrar el viaje, asi que tiene que guardarse por viaje.
  */
-export class AddTripCancellationChargedToClient1792800000000
-  implements MigrationInterface
-{
+export class AddTripCancellationChargedToClient1792800000000 implements MigrationInterface {
   name = 'AddTripCancellationChargedToClient1792800000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

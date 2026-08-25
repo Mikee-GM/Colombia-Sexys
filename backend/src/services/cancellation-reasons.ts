@@ -28,7 +28,8 @@ export type CancellationReason = (typeof CANCELLATION_REASONS)[number];
  * A quien se le atribuye la cancelacion. Es una funcion y no una columna para
  * que la atribucion se pueda reajustar sin migrar los servicios ya cancelados.
  */
-export type CancellationParty = 'cliente' | 'empleada' | 'operacion' | 'ninguno';
+export type CancellationParty =
+  'cliente' | 'empleada' | 'operacion' | 'ninguno';
 
 const PARTY_BY_REASON: Record<CancellationReason, CancellationParty> = {
   cliente_desistio: 'cliente',
