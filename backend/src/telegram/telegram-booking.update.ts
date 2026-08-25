@@ -82,7 +82,6 @@ interface SessionData {
     | 'AWAITING_LOCATION'
     | 'AWAITING_PAYMENT_METHOD'
     | 'AWAITING_MIXED_TRANSFER_AMOUNT'
-    | 'AWAITING_PRESENCE_CONFIRMATION'
     | 'AWAITING_PAYMENT_RECEIPT'
     | 'AWAITING_FINAL_PAYMENT_RECEIPT'
     | 'AWAITING_RATING_COMMENT'
@@ -132,12 +131,6 @@ interface SessionData {
   esperandoEmpleadaId?: string;
   /** true en cuanto el cliente envía una foto de comprobante de transferencia. */
   comprobanteEnviado?: boolean;
-  /**
-   * El cliente confirmó que ya está instalado en el lugar del servicio. Se pide
-   * antes de cobrar para no mandar a la modelo a un sitio donde el cliente
-   * todavía no llegó.
-   */
-  presenciaConfirmada?: boolean;
   /** Id de la validación del comprobante ya recibido. */
   comprobanteValidationId?: string;
   /** Servicio pendiente de cobro final (duración indefinida por transferencia). */
@@ -1973,29 +1966,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     );
   }
 
-  /**
-   * El cliente confirma que ya está en el lugar. Se marca la sesión y se
-   * reanuda el flujo de pago exactamente donde se había pausado, reutilizando
-   * el método de pago que ya había elegido.
-   */
-  @Action('presencia_confirmada')
-  async onPresenceConfirmed(@Ctx() ctx: BotContext) {
-    await ctx.answerCbQuery();
-    const session = ctx.session;
-    if (!session || session.step !== 'AWAITING_PRESENCE_CONFIRMATION') {
-      await ctx.reply('No hay ningún proceso de contratación activo.');
-      return;
-    }
-    session.presenciaConfirmada = true;
-    session.step = 'AWAITING_PAYMENT_METHOD';
-    try {
-      await ctx.editMessageReplyMarkup(undefined);
-    } catch {
-      // El mensaje puede haber sido editado o eliminado; el flujo continua.
-    }
-    await this.proceedWithPayment(ctx);
-  }
-
   @Action(/^pago_(efectivo|tarjeta|transferencia|mixto)$/)
   async onSelectPayment(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery();
@@ -2061,28 +2031,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    // Antes de cobrar hay que saber que el cliente ya está instalado: cobrar y
-    // despachar a la modelo a un lugar donde él todavía no llegó era una de las
-    // fuentes de fricción reportadas.
-    if (!session.presenciaConfirmada) {
-      session.step = 'AWAITING_PRESENCE_CONFIRMATION';
-      await ctx.reply(
-        'Antes de continuar con el pago, necesito confirmar que ya estás instalado en el lugar.\n\nComparte tu *ubicación en tiempo real* (toca el clip, luego Ubicación, y elige "Compartir ubicación en tiempo real") o confirma con el botón.',
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                'Ya estoy instalado',
-                'presencia_confirmada',
-              ),
-            ],
-          ]),
-        },
-      );
-      return;
-    }
-
+    /*
+     * No se le pregunta al cliente si ya esta en el lugar. Se hacia antes de
+     * cobrar, es decir antes de que el jefe hubiera aceptado siquiera el
+     * servicio: a esas alturas la pregunta no tiene sentido y el boton invitaba
+     * a confirmar una presencia que nadie habia pedido todavia.
+     */
     await this.proceedWithPayment(ctx);
   }
 
@@ -2366,7 +2320,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     if (bossGroupId && !threadId) {
       try {
-        const topic = await ctx.telegram.createForumTopic(
+        const topic = await this.bot.telegram.createForumTopic(
           bossGroupId,
           `👤 Cliente: ${clientName}`,
         );
@@ -2413,7 +2367,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     let sent = false;
     if (bossGroupId) {
       try {
-        await ctx.telegram.sendMessage(bossGroupId, messageText, {
+        await this.bot.telegram.sendMessage(bossGroupId, messageText, {
           parse_mode: 'Markdown',
           message_thread_id: threadId || undefined,
           ...inlineKeyboard,
@@ -2426,7 +2380,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     if (!sent && bossPrivateId) {
       try {
-        await ctx.telegram.sendMessage(bossPrivateId, messageText, {
+        await this.bot.telegram.sendMessage(bossPrivateId, messageText, {
           parse_mode: 'Markdown',
           ...inlineKeyboard,
         });
@@ -2502,7 +2456,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const trioUserChatId = trioEmployee.usuario?.telegramChatId;
       if (trioUserChatId && trioUserChatId !== '111111111') {
         try {
-          await ctx.telegram.sendMessage(
+          await this.bot.telegram.sendMessage(
             trioUserChatId,
             `🔔 *Aviso de Servicio en Trío*\n\n` +
               `Hola *${trioEmployee.nombreArtistico}*, fuiste confirmada para un servicio en *Trío* junto con *${mainEmployee.nombreArtistico}*.\n` +
@@ -4578,7 +4532,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const bookingAlive = Boolean(ctx.session?.empleadaId);
     const acceptsLocation =
       step === 'AWAITING_LOCATION' ||
-      step === 'AWAITING_PRESENCE_CONFIRMATION' ||
       (bookingAlive &&
         (step === 'CHAT_CON_EMPLEADA' ||
           step === 'AWAITING_DURATION' ||
@@ -4590,15 +4543,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    // Mandar la ubicación estando en el paso de confirmación de presencia vale
-    // como confirmación: es justo lo que se le pidió.
-    if (step === 'AWAITING_PRESENCE_CONFIRMATION' && ctx.session) {
-      ctx.session.presenciaConfirmada = true;
-      ctx.session.step = 'AWAITING_PAYMENT_METHOD';
-      await ctx.reply('Confirmado, gracias. Seguimos con el pago.');
-      await this.proceedWithPayment(ctx);
-      return;
-    }
     await this.recordDraftConversation(
       ctx,
       'cliente',
@@ -4878,7 +4822,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             try {
               let threadId: number | undefined = undefined;
               try {
-                const topic = await ctx.telegram.createForumTopic(
+                const topic = await this.bot.telegram.createForumTopic(
                   jefeUser.grupoTelegramId,
                   `👤 Cliente: ${clientName}`,
                 );
@@ -4900,7 +4844,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 sendOpts.message_thread_id = threadId;
               }
 
-              await ctx.telegram.sendMessage(
+              await this.bot.telegram.sendMessage(
                 jefeUser.grupoTelegramId,
                 detailsMsg,
                 sendOpts,
@@ -4910,7 +4854,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               if (threadId) {
                 locOpts.message_thread_id = threadId;
               }
-              await ctx.telegram.sendLocation(
+              await this.bot.telegram.sendLocation(
                 jefeUser.grupoTelegramId,
                 parseFloat(lat),
                 parseFloat(lng),
@@ -4927,7 +4871,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
           if (!sentEnc && jefeUser.telegramChatId) {
             try {
-              await ctx.telegram.sendMessage(
+              await this.bot.telegram.sendMessage(
                 jefeUser.telegramChatId,
                 detailsMsg,
                 {
@@ -4935,7 +4879,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                   ...inlineKeyboard,
                 },
               );
-              await ctx.telegram.sendLocation(
+              await this.bot.telegram.sendLocation(
                 jefeUser.telegramChatId,
                 parseFloat(lat),
                 parseFloat(lng),
@@ -5140,7 +5084,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           try {
             let threadId: number | undefined = undefined;
             try {
-              const topic = await ctx.telegram.createForumTopic(
+              const topic = await this.bot.telegram.createForumTopic(
                 jefeUser.grupoTelegramId,
                 `👤 Cliente: ${clientName}`,
               );
@@ -5171,7 +5115,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               sendOpts.message_thread_id = threadId;
             }
 
-            await ctx.telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               jefeUser.grupoTelegramId,
               detailsMsg,
               sendOpts,
@@ -5181,7 +5125,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             if (threadId) {
               locOpts.message_thread_id = threadId;
             }
-            await ctx.telegram.sendLocation(
+            await this.bot.telegram.sendLocation(
               jefeUser.grupoTelegramId,
               parseFloat(lat),
               parseFloat(lng),
@@ -5204,7 +5148,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               nuevoServicio,
               jefeUser.telegramChatId,
             );
-            await ctx.telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               jefeUser.telegramChatId,
               detailsMsg,
               {
@@ -5212,7 +5156,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 ...inlineKeyboard,
               },
             );
-            await ctx.telegram.sendLocation(
+            await this.bot.telegram.sendLocation(
               jefeUser.telegramChatId,
               parseFloat(lat),
               parseFloat(lng),
@@ -5927,7 +5871,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             'cliente',
             text,
           );
-          await ctx.telegram.sendMessage(
+          await this.bot.telegram.sendMessage(
             groupRequest.boss.grupoTelegramId,
             text,
             {
@@ -5956,7 +5900,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           ctx.session?.bossThreadId
         ) {
           await this.recordDraftConversation(ctx, 'cliente', text);
-          await ctx.telegram.sendMessage(ctx.session.bossGroupId, text, {
+          await this.bot.telegram.sendMessage(ctx.session.bossGroupId, text, {
             message_thread_id: Number(ctx.session.bossThreadId),
           });
           return;
@@ -5986,7 +5930,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             this.logger.log(
               `Creando tema de foro para cliente: ${clientName} en grupo: ${grupoTelegramId}`,
             );
-            const topic = await ctx.telegram.createForumTopic(
+            const topic = await this.bot.telegram.createForumTopic(
               grupoTelegramId,
               `👤 Cliente: ${clientName}`,
             );
@@ -6022,7 +5966,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                   .oneTime(),
               );
             }
-            await ctx.telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               grupoTelegramId,
               detailsMsg,
               extraOptions,
@@ -6030,7 +5974,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           }
 
           try {
-            await ctx.telegram.sendMessage(grupoTelegramId, text, {
+            await this.bot.telegram.sendMessage(grupoTelegramId, text, {
               message_thread_id: parseInt(activeService.telegramThreadId),
             });
           } catch (sendErr: any) {
@@ -6047,7 +5991,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 activeService.cliente?.nombreTelegram ||
                 ctx.from?.first_name ||
                 'Cliente';
-              const topic = await ctx.telegram.createForumTopic(
+              const topic = await this.bot.telegram.createForumTopic(
                 grupoTelegramId,
                 `👤 Cliente: ${clientName}`,
               );
@@ -6082,14 +6026,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                     .oneTime(),
                 );
               }
-              await ctx.telegram.sendMessage(
+              await this.bot.telegram.sendMessage(
                 grupoTelegramId,
                 detailsMsg,
                 extraOptions,
               );
 
               // Intentar enviar el mensaje original del cliente nuevamente en el nuevo hilo
-              await ctx.telegram.sendMessage(grupoTelegramId, text, {
+              await this.bot.telegram.sendMessage(grupoTelegramId, text, {
                 message_thread_id: topic.message_thread_id,
               });
             } else {
@@ -6498,7 +6442,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const viajeIda = servicio.viajes.find((v) => v.tipo === 'ida');
     if (viajeIda && viajeIda.chofer?.usuario?.telegramChatId) {
       try {
-        await ctx.telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           viajeIda.chofer.usuario.telegramChatId,
           `⏳ *Aviso de Demora:* La empleada *${servicio.empleada.nombreArtistico}* ha solicitado una prórroga de 10 minutos (Prórroga ${servicio.prorrogasUsadas} de 3). El tiempo de espera se ha extendido.`,
           { parse_mode: 'Markdown' },
@@ -6593,7 +6537,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       if (bossGroupId && !request.telegramThreadId) {
         const clientName =
           client.nombreTelegram || ctx.from?.first_name || 'Cliente';
-        const topic = await ctx.telegram.createForumTopic(
+        const topic = await this.bot.telegram.createForumTopic(
           bossGroupId,
           `Grupo: ${clientName}`,
         );
@@ -6601,7 +6545,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           request.id,
           topic.message_thread_id.toString(),
         );
-        await ctx.telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           bossGroupId,
           `Solicitud de servicio grupal\nCliente: ${clientName}\nLa IA fue desactivada. Organiza participantes, ubicación, horas, pago y transporte desde el panel del jefe.`,
           { message_thread_id: topic.message_thread_id },
@@ -6617,7 +6561,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         });
         if (history.length) {
           await this.sendTranscript(
-            ctx,
             bossGroupId,
             buildConversationTranscript(history),
             topic.message_thread_id,
@@ -6764,7 +6707,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * del cliente provoque un fallo de envío (y con ello pérdida de historial).
    */
   private async sendTranscript(
-    ctx: BotContext,
     chatId: string,
     transcript: string,
     threadId?: number,
@@ -6775,7 +6717,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     let allSent = true;
     for (const part of parts) {
       try {
-        await ctx.telegram.sendMessage(chatId, part, options);
+        // Siempre va al jefe, asi que sale por el bot central.
+        await this.bot.telegram.sendMessage(chatId, part, options);
       } catch (err) {
         allSent = false;
         this.logger.error(
@@ -6785,7 +6728,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         if (threadId) {
           // Reintento sin hilo para no perder el historial por un tema borrado.
           try {
-            await ctx.telegram.sendMessage(chatId, part);
+            await this.bot.telegram.sendMessage(chatId, part);
             allSent = true;
           } catch (retryErr) {
             this.logger.error(
@@ -6818,7 +6761,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     );
 
     const transcript = buildConversationTranscript(messages);
-    await this.sendTranscript(ctx, groupId, transcript, threadId);
+    await this.sendTranscript(groupId, transcript, threadId);
   }
 
   /** Un cliente hablando con dos modelos tiene dos buffers, no uno. */
@@ -7572,7 +7515,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     if (!threadId) {
       try {
-        const topic = await ctx.telegram.createForumTopic(
+        const topic = await this.bot.telegram.createForumTopic(
           grupoTelegramId,
           `👤 Cliente: ${clientName}`,
         );
@@ -7593,7 +7536,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         });
         if (messages.length > 0) {
           await this.sendTranscript(
-            ctx,
             grupoTelegramId,
             buildConversationTranscript(messages),
             threadId,
@@ -7626,7 +7568,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ]);
 
       try {
-        await ctx.telegram.sendMessage(grupoTelegramId, alertMsg, {
+        await this.bot.telegram.sendMessage(grupoTelegramId, alertMsg, {
           message_thread_id: threadId,
           parse_mode: 'Markdown',
           ...keyboard,
