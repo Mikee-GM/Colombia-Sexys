@@ -10,6 +10,19 @@ import { Usuarios } from '../users/entities/user.entity';
 const TTL_MINUTES = 5;
 
 /**
+ * Puertos que los navegadores se niegan a abrir por estar reservados a otros
+ * protocolos. Es la lista que comparten Chrome y Firefox.
+ */
+const PUERTOS_BLOQUEADOS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79,
+  87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137,
+  139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532,
+  540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723,
+  2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669,
+  6679, 6697, 10080,
+]);
+
+/**
  * Rutas a las que se permite redirigir tras canjear el pase. Solo destinos
  * internos: con la sesion recien abierta, un salto a un sitio ajeno seria un
  * regalo para quien pudiera influir en el destino.
@@ -161,7 +174,40 @@ export class PanelAccessService {
     }
 
     const limpio = configurado.trim().replace(/\/+$/, '');
-    return /^https?:\/\//i.test(limpio) ? limpio : `https://${limpio}`;
+    const url = /^https?:\/\//i.test(limpio) ? limpio : `https://${limpio}`;
+    this.avisarSiElPuertoEstaBloqueado(url);
+    return url;
+  }
+
+  /**
+   * Avisa si el origen usa un puerto que los navegadores se niegan a abrir.
+   *
+   * Chrome y Firefox tienen una lista de puertos reservados a otros protocolos
+   * y rechazan la peticion antes de hacerla, con un "no tienes permisos para
+   * usar el puerto de red restringido" que no menciona ni el puerto ni la
+   * configuracion. Desde el backend el enlace se ve perfectamente formado, asi
+   * que sin este aviso el fallo solo se manifiesta en el navegador de quien
+   * abre el portal y no deja rastro en ningun log.
+   */
+  private avisarSiElPuertoEstaBloqueado(url: string): void {
+    let puerto: string;
+    try {
+      puerto = new URL(url).port;
+    } catch {
+      this.logger.error(
+        `El origen del panel no es una URL valida: "${url}". Revisa PANEL_BASE_URL o WEB_URL.`,
+      );
+      return;
+    }
+    if (!puerto) return;
+
+    if (PUERTOS_BLOQUEADOS.has(Number(puerto))) {
+      this.logger.error(
+        `El origen del panel usa el puerto ${puerto}, que los navegadores bloquean: ` +
+          'el portal fallara con "puerto de red restringido" sin llegar al servidor. ' +
+          'Sirve el panel en otro puerto (o detras de 443) y actualiza PANEL_BASE_URL o WEB_URL.',
+      );
+    }
   }
 
   /**
