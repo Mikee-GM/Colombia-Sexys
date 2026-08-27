@@ -14,9 +14,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * cada registro y lleva el porcentaje y el umbral a una tabla de una sola fila,
  * editable desde la pantalla de liquidacion.
  */
-export class CardExtraCommissionSettings1793500000000
-  implements MigrationInterface
-{
+export class CardExtraCommissionSettings1793500000000 implements MigrationInterface {
   name = 'CardExtraCommissionSettings1793500000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {

@@ -2893,7 +2893,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           `agregar_extra_list:${actualizado.id}`,
         ),
       ],
-      ...(await this.botonesDelPortal(user.id, ctx.from?.id.toString() ?? null)),
+      ...(await this.botonesDelPortal(
+        user.id,
+        ctx.from?.id.toString() ?? null,
+      )),
     ];
 
     const desglose = extras.length

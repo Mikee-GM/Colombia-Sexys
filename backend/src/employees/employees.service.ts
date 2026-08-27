@@ -868,7 +868,9 @@ export class EmployeesService {
     const weeklyContent =
       await this.weeklyContentService.getWeeklyStatusForEmployee(empleada.id);
     const weeklyContentStatus =
-      weeklyContent.estado === 'sin_solicitar' ? 'al_dia' : weeklyContent.estado;
+      weeklyContent.estado === 'sin_solicitar'
+        ? 'al_dia'
+        : weeklyContent.estado;
     const pendingWeeklyPhotosCount = weeklyContent.fotosPendientesDeRevision;
 
     // 1. Leaderboard / Ranking

@@ -17,9 +17,17 @@ describe('WeeklyContentScheduler', () => {
   };
   const telegramService = { sendMessage: jest.fn() };
   const panelAccessService = { issueLink: jest.fn() };
-  const scheduleRepo = { find: jest.fn(), findOne: jest.fn(), save: jest.fn(), create: jest.fn() };
+  const scheduleRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    save: jest.fn(),
+    create: jest.fn(),
+  };
   const empleadasRepo = { find: jest.fn() };
-  const conductReportRepo = { save: jest.fn(), create: jest.fn((valor) => valor) };
+  const conductReportRepo = {
+    save: jest.fn(),
+    create: jest.fn((valor) => valor),
+  };
   const dataSource = { query: jest.fn() };
 
   const scheduler = new WeeklyContentScheduler(
