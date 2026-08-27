@@ -22,7 +22,6 @@ import { Choferes } from '../drivers/entities/driver.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { ServicesService } from '../services/services.service';
-import { TelegramService } from './telegram.service';
 import { TelegramAuthUpdate } from './telegram-auth.update';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { ExtrasCatalogo } from '../catalog-extras/entities/catalog-extra.entity';
@@ -700,8 +699,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly jwtService: JwtService,
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
-    @Inject(forwardRef(() => TelegramService))
-    private readonly telegramService: TelegramService,
     @Inject(forwardRef(() => TelegramAuthUpdate))
     private readonly telegramAuthUpdate: TelegramAuthUpdate,
     @Inject(forwardRef(() => LoyaltyService))
@@ -4902,15 +4899,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         // 2. SAVE FINAL CON TODOS LOS CAMBIOS ACUMULADOS
         await this.serviciosRepository.save(nuevoServicioEnc);
 
-        // Notify jefe of new chained service
-        try {
-          await this.telegramService.notifyJefesNewService(nuevoServicioEnc.id);
-        } catch (err) {
-          this.logger.error(
-            'Error notificando jefe sobre cita encadenada:',
-            err,
-          );
-        }
+        // Sin aviso extra: al jefe ya se le mando arriba la ficha de la cita
+        // encadenada con sus botones de autorizar.
 
         return;
       }
@@ -5140,22 +5130,22 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         where: { id: nuevoServicio.id },
         relations: { cliente: true, empleada: true },
       });
+      /*
+       * Solo el evento en vivo para el panel. El aviso por Telegram ya salio
+       * unas lineas mas arriba, con la ficha completa del servicio y sus
+       * botones: llamar aqui ademas a `notifyJefesNewService` le dejaba al jefe
+       * dos mensajes seguidos para autorizar el mismo servicio, y desde
+       * cualquiera de los dos se aceptaba o rechazaba.
+       *
+       * Ese metodo se queda para los servicios que nacen fuera de este flujo
+       * --los que crea el panel via `ServicesService.create`--, donde es el
+       * unico aviso que recibe el jefe.
+       */
       if (serviceWithRelations) {
         this.realtimeEventsService.emitToBoss(serviceWithRelations.jefeId, {
           type: 'service_requested',
           data: serviceWithRelations,
         });
-
-        try {
-          await this.telegramService.notifyJefesNewService(
-            serviceWithRelations.id,
-          );
-        } catch (err) {
-          this.logger.error(
-            'Error al enviar notificaciones de Telegram para el nuevo servicio:',
-            err,
-          );
-        }
       }
 
       const formatoMoneda = new Intl.NumberFormat(APP_LOCALE, {
