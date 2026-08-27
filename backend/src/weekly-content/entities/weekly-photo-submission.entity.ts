@@ -64,6 +64,19 @@ export class WeeklyPhotoSubmission {
   })
   revisadoPorUserId: string | null;
 
+  /**
+   * Por qué se rechazó la foto. Solo lo llevan las rechazadas: una aprobación
+   * lo deja en null para que una foto revisada dos veces no arrastre el motivo
+   * de la decisión anterior.
+   */
+  @Column('text', { name: 'motivo_rechazo', nullable: true })
+  @ApiProperty({
+    description: 'Motivo del rechazo, visible para la empleada en su portal',
+    nullable: true,
+    example: 'La foto está movida y se ve a otra persona al fondo.',
+  })
+  motivoRechazo: string | null;
+
   @Column('timestamp with time zone', {
     name: 'revisado_at',
     nullable: true,

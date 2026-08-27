@@ -23,6 +23,8 @@ export type PhotoSubmission = {
   semanaInicio: string;
   revisadoPorUserId: string | null;
   revisadoAt: string | null;
+  /** Solo lo llevan las rechazadas. La modelo lo ve en su portal. */
+  motivoRechazo: string | null;
   createdAt: string;
   empleada?: {
     id: string;
@@ -37,10 +39,18 @@ export async function getPhotoSubmissions(estado?: SubmissionStatus) {
   return apiFetch<PhotoSubmission[]>(`/weekly-content/submissions${query}`);
 }
 
-export async function reviewPhotoSubmission(id: string, action: ReviewAction) {
+/**
+ * Resuelve una foto de la cola. Al rechazar admite un motivo, que se guarda
+ * con la revision y le llega a la modelo por Telegram y en su portal.
+ */
+export async function reviewPhotoSubmission(
+  id: string,
+  action: ReviewAction,
+  motivo?: string,
+) {
   const result = await apiFetch<PhotoSubmission>(
     `/weekly-content/submissions/${id}/review`,
-    { method: "POST", body: JSON.stringify({ action }) },
+    { method: "POST", body: JSON.stringify({ action, motivo }) },
   );
   revalidatePath("/admin/fotos");
   return result;

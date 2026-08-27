@@ -23,6 +23,7 @@ import {
   removeEmployeeBotAction,
   type EmployeeBot,
 } from "@/lib/actions/employee-bots";
+import PromptDialog from "../ui/PromptDialog";
 import InputField from "../ui/InputField";
 import TextareaField from "../ui/TextareaField";
 import SelectField from "../ui/SelectField";
@@ -206,6 +207,8 @@ export default function ModelModal({
   // Estado para Contenido Semanal
   const [weeklySubmissions, setWeeklySubmissions] = useState<any[]>([]);
   const [loadingWeekly, setLoadingWeekly] = useState(false);
+  /** Id del envio en espera de que se escriba por que se rechaza. */
+  const [porRechazar, setPorRechazar] = useState<string | null>(null);
 
   // Estado para Fotos Exclusivas
   const [privatePhotos, setPrivatePhotos] = useState<{ id: string; url: string; orden: number }[]>([]);
@@ -250,14 +253,18 @@ export default function ModelModal({
   const handleReviewSubmission = async (
     submissionId: string,
     action: "aprobar_publica" | "aprobar_privada" | "rechazar",
+    motivo?: string,
   ) => {
     try {
-      await reviewWeeklySubmissionAction(submissionId, action);
+      await reviewWeeklySubmissionAction(submissionId, action, motivo);
       const actionLabels = {
         aprobar_publica: "Foto aprobada y agregada al catálogo público.",
         aprobar_privada: "Foto aprobada como exclusiva para Telegram.",
-        rechazar: "Foto rechazada.",
+        rechazar: motivo
+          ? "Foto rechazada y motivo enviado a la modelo."
+          : "Foto rechazada.",
       };
+      setPorRechazar(null);
       showNotification(actionLabels[action], "success");
       await fetchWeeklySubmissions();
     } catch (err: any) {
@@ -657,15 +664,22 @@ export default function ModelModal({
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleReviewSubmission(sub.id, "rechazar")}
+                            onClick={() => setPorRechazar(sub.id)}
                             className="w-full bg-red-950/40 hover:bg-red-900/60 text-red-400 font-bold text-[10px] uppercase tracking-wider py-1.5 rounded transition-colors"
                           >
                             🔴 Rechazar
                           </button>
                         </div>
                       ) : (
-                        <div className="text-[11px] text-zinc-400 font-semibold italic">
-                          Resuelta como: {sub.estado.replaceAll("_", " ")}
+                        <div className="space-y-1.5">
+                          <div className="text-[11px] text-zinc-400 font-semibold italic">
+                            Resuelta como: {sub.estado.replaceAll("_", " ")}
+                          </div>
+                          {sub.motivoRechazo ? (
+                            <p className="rounded border border-red-500/20 bg-red-500/[0.07] px-2 py-1.5 text-[10px] leading-relaxed text-red-300">
+                              {sub.motivoRechazo}
+                            </p>
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -673,6 +687,32 @@ export default function ModelModal({
                 ))}
               </div>
             )}
+
+            {/*
+              Se pide el motivo al rechazar, sin exigirlo: la modelo lo ve en su
+              portal y le llega por Telegram, pero un rechazo sin explicar sigue
+              siendo mejor que una cola parada.
+            */}
+            <PromptDialog
+              isOpen={porRechazar !== null}
+              title="Rechazar la foto"
+              description="Explica que hay que corregir. El motivo le aparece a la modelo en su portal y le llega por Telegram con un acceso para subir otra. Puedes dejarlo vacio si prefieres no dar detalle."
+              placeholder="Por ejemplo: la foto esta movida y se ve a otra persona al fondo."
+              labelConfirm="Rechazar y avisar"
+              variant="red"
+              minLength={0}
+              maxLength={300}
+              onConfirm={(motivo) => {
+                if (porRechazar) {
+                  void handleReviewSubmission(
+                    porRechazar,
+                    "rechazar",
+                    motivo || undefined,
+                  );
+                }
+              }}
+              onCancel={() => setPorRechazar(null)}
+            />
 
             <div className="flex justify-end pt-4 border-t border-zinc-800">
               <button

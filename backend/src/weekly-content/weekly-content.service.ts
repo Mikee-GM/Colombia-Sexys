@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -18,13 +19,34 @@ import {
   UploadService,
   type UploadedFilePayload,
 } from '../upload/upload.service';
+import { TelegramService } from '../telegram/telegram.service';
+import { botonesDePortal } from '../telegram/telegram-portal-buttons';
+import { PanelAccessService } from '../auth/panel-access.service';
 import { APP_TIME_ZONE } from '../common/locale';
 
 /** Tope por envio. Evita que un descuido cargue la galeria entera del telefono. */
 const MAX_PHOTOS_POR_ENVIO = 12;
 
+/** Destino del pase que acompaña al aviso: el portal, ya en sus fotos. */
+const PORTAL_FOTOS_PATH = '/empleada/portal?seccion=fotos';
+
+/**
+ * Quita del texto los caracteres con los que Telegram marca formato.
+ *
+ * El motivo del rechazo lo escribe una persona y viaja dentro de un mensaje en
+ * Markdown: un asterisco o un corchete sueltos dejan el marcado sin cerrar y
+ * Telegram responde 400 sin entregar nada, asi que el aviso se perdia entero
+ * por un caracter. El Markdown antiguo no admite escapado fiable, de modo que
+ * se retiran; ninguno hace falta para explicar que corregir en una foto.
+ */
+function sinMarcasMarkdown(texto: string): string {
+  return texto.replace(/[*_`[\]]/g, '');
+}
+
 @Injectable()
 export class WeeklyContentService {
+  private readonly logger = new Logger(WeeklyContentService.name);
+
   constructor(
     @InjectRepository(WeeklyPhotoSubmission)
     private readonly submissionRepo: Repository<WeeklyPhotoSubmission>,
@@ -37,6 +59,13 @@ export class WeeklyContentService {
     @InjectRepository(EmpleadaFotosExclusivas)
     private readonly fotosExclusivasRepo: Repository<EmpleadaFotosExclusivas>,
     private readonly uploadService: UploadService,
+    /*
+     * Los dos ultimos entran por el aviso de rechazo: el motivo tiene que
+     * llegarle a la modelo por Telegram, con el pase que le abre el portal en
+     * sus fotos para que pueda reemplazarla sin buscar el enlace.
+     */
+    private readonly telegramService: TelegramService,
+    private readonly panelAccessService: PanelAccessService,
   ) {}
 
   /**
@@ -317,16 +346,23 @@ export class WeeklyContentService {
   }
 
   /**
-   * Validar una foto semanal: Aprobar (Pública o Privada) o Rechazar
+   * Validar una foto semanal: Aprobar (Pública o Privada) o Rechazar.
+   *
+   * El rechazo admite un motivo: se guarda para que la modelo lo vea en su
+   * portal y se le manda por Telegram. Sin el, "No aprobada" no le decia que
+   * corregir y volvia a mandar la misma clase de foto.
    */
   async reviewSubmission(
     submissionId: string,
     action: 'aprobar_publica' | 'aprobar_privada' | 'rechazar',
     reviewerUser: Usuarios,
+    motivo?: string,
   ): Promise<WeeklyPhotoSubmission> {
     const submission = await this.submissionRepo.findOne({
       where: { id: submissionId },
-      relations: { empleada: true },
+      // El usuario de la empleada entra por el aviso de rechazo: es quien
+      // tiene el chat de Telegram al que se manda el motivo.
+      relations: { empleada: { usuario: true } },
     });
 
     if (!submission) {
@@ -335,6 +371,9 @@ export class WeeklyContentService {
 
     submission.revisadoPorUserId = reviewerUser.id;
     submission.revisadoAt = new Date();
+    // Se limpia siempre: si una foto rechazada se acaba aprobando, el motivo
+    // anterior no debe quedarse colgando en el portal.
+    submission.motivoRechazo = null;
 
     if (action === 'aprobar_publica') {
       submission.estado = 'aprobada_publica';
@@ -370,11 +409,75 @@ export class WeeklyContentService {
       await this.fotosExclusivasRepo.save(nuevaFotoPrivada);
     } else if (action === 'rechazar') {
       submission.estado = 'rechazada';
+      submission.motivoRechazo = motivo?.trim() || null;
     } else {
       throw new BadRequestException('Acción no válida.');
     }
 
-    return await this.submissionRepo.save(submission);
+    const guardada = await this.submissionRepo.save(submission);
+
+    if (action === 'rechazar') {
+      await this.avisarRechazo(submission);
+    }
+
+    return guardada;
+  }
+
+  /**
+   * Avisa por Telegram de una foto rechazada.
+   *
+   * El aviso sale aunque no haya motivo: enterarse de que hay que reenviarla
+   * ya es la mitad del recado, y esperar a que la modelo entre al portal por su
+   * cuenta significaba, en la practica, que se enteraba dias despues.
+   *
+   * Nada de esto puede tumbar la revision: la decision ya esta guardada cuando
+   * se llama, asi que un fallo de Telegram se registra y se sigue.
+   */
+  private async avisarRechazo(
+    submission: WeeklyPhotoSubmission,
+  ): Promise<void> {
+    const usuario = submission.empleada?.usuario;
+    if (!usuario?.telegramChatId) return;
+
+    const nombre = submission.empleada?.nombreArtistico ?? '';
+    const texto = [
+      '*Una de tus fotos no fue aprobada*',
+      '',
+      nombre ? `Hola ${sinMarcasMarkdown(nombre)}.` : 'Hola.',
+      submission.motivoRechazo
+        ? `Motivo: ${sinMarcasMarkdown(submission.motivoRechazo)}`
+        : 'Administración no aprobó una de las fotos que enviaste esta semana.',
+      '',
+      'Puedes subir otra desde tu portal para reemplazarla.',
+    ].join('\n');
+
+    let botones: ReturnType<typeof botonesDePortal> | undefined;
+    try {
+      const { url } = await this.panelAccessService.issueLink(
+        usuario.id,
+        usuario.telegramChatId,
+        PORTAL_FOTOS_PATH,
+      );
+      botones = botonesDePortal(url, 'Subir otra foto');
+    } catch (error) {
+      // Sin boton se sigue: quedarse sin aviso es peor que quedarse sin atajo.
+      this.logger.warn(
+        `No se pudo adjuntar el acceso al portal para ${submission.empleadaId}:`,
+        error,
+      );
+    }
+
+    await this.telegramService
+      .sendMessage(usuario.telegramChatId, texto, submission.empleadaId, {
+        parseMode: 'Markdown',
+        buttons: botones,
+      })
+      .catch((fallo) =>
+        this.logger.warn(
+          `No se pudo avisar del rechazo a ${submission.empleadaId}:`,
+          fallo,
+        ),
+      );
   }
 
   /**

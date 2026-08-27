@@ -355,6 +355,15 @@ export default function SubirFotosSemanales({
                   {ESTADO_ENVIO[envio.estado].etiqueta}
                 </span>
 
+                {/* El motivo del rechazo, pegado a la foto que lo motivo: en
+                    una lista de varias, un aviso suelto arriba no dejaria claro
+                    cual de todas hay que reemplazar. */}
+                {envio.estado === "rechazada" && envio.motivoRechazo ? (
+                  <p className="rounded-md border border-red-500/20 bg-red-500/[0.07] px-2 py-1.5 text-[10px] leading-relaxed text-red-200">
+                    {envio.motivoRechazo}
+                  </p>
+                ) : null}
+
                 <p className="text-[10px] text-gray-500">
                   {fechaCorta(envio.createdAt)}
                 </p>

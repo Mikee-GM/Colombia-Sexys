@@ -693,6 +693,8 @@ export type WeeklyPhotoSubmissionItem = {
   estado: "pendiente" | "aprobada_publica" | "aprobada_privada" | "rechazada";
   createdAt: string;
   revisadoAt: string | null;
+  /** Por que no se aprobo. Solo lo llevan las rechazadas, y no siempre. */
+  motivoRechazo: string | null;
 };
 
 export type EmployeePortalData = {

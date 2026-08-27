@@ -321,15 +321,22 @@ export async function getWeeklySubmissionsAction(
   }
 }
 
+/**
+ * Igual que la cola de /admin/fotos, pero desde la ficha de la modelo. El
+ * motivo del rechazo se acepta aqui tambien: rechazar desde un sitio con
+ * explicacion y desde el otro sin ella dejaria a la modelo sin saber por que
+ * segun donde estuviera mirando quien revisa.
+ */
 export async function reviewWeeklySubmissionAction(
   submissionId: string,
   action: "aprobar_publica" | "aprobar_privada" | "rechazar",
+  motivo?: string,
 ): Promise<any> {
   const data = await apiFetch<any>(
     `/weekly-content/submissions/${submissionId}/review`,
     {
       method: "POST",
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ action, motivo }),
       authenticated: true,
     },
   );

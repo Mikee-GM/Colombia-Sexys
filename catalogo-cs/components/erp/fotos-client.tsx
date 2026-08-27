@@ -26,7 +26,11 @@ import {
   type SubmissionStatus,
 } from "@/app/admin/fotos/actions";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import PromptDialog from "@/components/ui/PromptDialog";
 import { formatDateTime } from "@/lib/calculations";
+
+/** Mismo tope que valida el backend en ReviewSubmissionDto. */
+const MOTIVO_MAX = 300;
 
 const ESTADO_TONE: Record<SubmissionStatus, BadgeTone> = {
   pendiente: "amber",
@@ -58,6 +62,8 @@ export default function FotosClient({
   const [borradas, setBorradas] = useState<Set<string>>(new Set());
   /** Envio en espera de confirmacion de borrado. */
   const [porBorrar, setPorBorrar] = useState<PhotoSubmission | null>(null);
+  /** Envio en espera de que el revisor escriba por que lo rechaza. */
+  const [porRechazar, setPorRechazar] = useState<PhotoSubmission | null>(null);
 
   const pendientes = useMemo(
     () =>
@@ -110,20 +116,27 @@ export default function FotosClient({
     });
   };
 
-  const revisar = (submission: PhotoSubmission, action: ReviewAction) => {
+  const revisar = (
+    submission: PhotoSubmission,
+    action: ReviewAction,
+    motivo?: string,
+  ) => {
     if (pending) return;
 
     startTransition(async () => {
       try {
-        await reviewPhotoSubmission(submission.id, action);
+        await reviewPhotoSubmission(submission.id, action, motivo);
         setResueltas((prev) => new Set(prev).add(submission.id));
+        setPorRechazar(null);
 
         const mensaje =
           action === "aprobar_publica"
             ? "Foto aprobada como publica"
             : action === "aprobar_privada"
               ? "Foto aprobada como exclusiva"
-              : "Foto rechazada";
+              : motivo
+                ? "Foto rechazada y motivo enviado a la modelo"
+                : "Foto rechazada";
         toast.success(mensaje);
       } catch (error) {
         toast.error(
@@ -155,6 +168,27 @@ export default function FotosClient({
           />
         )}
       </AnimatePresence>
+
+      {/*
+        El motivo se pide siempre al rechazar, pero no se exige (minLength 0):
+        la modelo agradece saber que corregir, y a la vez una cola parada
+        porque el revisor no sabe como redactarlo es peor que un rechazo seco.
+      */}
+      <PromptDialog
+        isOpen={porRechazar !== null}
+        title={`Rechazar la foto de "${porRechazar ? nombreDe(porRechazar) : ""}"`}
+        description="Explica que hay que corregir. El motivo le aparece en su portal y le llega por Telegram con un acceso para subir otra. Puedes dejarlo vacio si prefieres no dar detalle."
+        placeholder="Por ejemplo: la foto esta movida y se ve a otra persona al fondo."
+        labelConfirm="Rechazar y avisar"
+        variant="red"
+        minLength={0}
+        maxLength={MOTIVO_MAX}
+        isLoading={pending}
+        onConfirm={(motivo) => {
+          if (porRechazar) revisar(porRechazar, "rechazar", motivo || undefined);
+        }}
+        onCancel={() => setPorRechazar(null)}
+      />
 
       <ErpPageHeader
         title="Fotos y Contenido"
@@ -263,7 +297,7 @@ export default function FotosClient({
                   <button
                     type="button"
                     disabled={pending}
-                    onClick={() => revisar(submission, "rechazar")}
+                    onClick={() => setPorRechazar(submission)}
                     className="col-span-2 flex min-w-0 items-center justify-center gap-1 rounded-[9px] border border-red-400/25 bg-red-400/[0.08] px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-red-400 transition-colors hover:bg-red-400/20 disabled:opacity-50"
                   >
                     <X className="h-3 w-3 shrink-0" />
@@ -320,6 +354,14 @@ export default function FotosClient({
                     <StatusBadge tone={ESTADO_TONE[submission.estado]}>
                       {ESTADO_LABEL[submission.estado]}
                     </StatusBadge>
+
+                    {/* El motivo, junto al resultado: es la respuesta a "por
+                        que la rechazaron" cuando la modelo pregunta. */}
+                    {submission.motivoRechazo ? (
+                      <p className="mt-1 max-w-xs text-[11px] leading-relaxed text-zinc-500">
+                        {submission.motivoRechazo}
+                      </p>
+                    ) : null}
                   </Td>
                   <Td className="text-zinc-500">
                     {submission.revisadoAt

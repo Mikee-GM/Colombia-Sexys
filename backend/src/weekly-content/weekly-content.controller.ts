@@ -15,8 +15,20 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+
+/**
+ * Tope del motivo de rechazo. Da para explicar qué corregir sin que el aviso
+ * de Telegram se convierta en un muro de texto.
+ */
+const MOTIVO_RECHAZO_MAX = 300;
 
 export class ReviewSubmissionDto {
   @ApiProperty({
@@ -26,6 +38,21 @@ export class ReviewSubmissionDto {
   @IsNotEmpty()
   @IsEnum(['aprobar_publica', 'aprobar_privada', 'rechazar'])
   action: 'aprobar_publica' | 'aprobar_privada' | 'rechazar';
+
+  /**
+   * Motivo del rechazo. Se ignora al aprobar, y es opcional al rechazar: se
+   * prefiere un rechazo sin explicar a que la cola se atasque porque el
+   * revisor no encuentra como redactarlo.
+   */
+  @ApiPropertyOptional({
+    description: 'Por qué se rechaza la foto. Le llega a la empleada.',
+    maxLength: MOTIVO_RECHAZO_MAX,
+    example: 'La foto está movida y se ve a otra persona al fondo.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(MOTIVO_RECHAZO_MAX)
+  motivo?: string;
 }
 
 @Controller('weekly-content')
@@ -79,7 +106,12 @@ export class WeeklyContentController {
     @Body() dto: ReviewSubmissionDto,
     @Req() req: any,
   ) {
-    return this.weeklyContentService.reviewSubmission(id, dto.action, req.user);
+    return this.weeklyContentService.reviewSubmission(
+      id,
+      dto.action,
+      req.user,
+      dto.motivo,
+    );
   }
 
   // Borrado de una foto ya revisada: la baja del catalogo o de exclusivas y
