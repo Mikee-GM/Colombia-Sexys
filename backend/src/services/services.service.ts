@@ -11,7 +11,14 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThanOrEqual, Not, Repository } from 'typeorm';
+import {
+  In,
+  IsNull,
+  LessThanOrEqual,
+  Not,
+  Repository,
+  SelectQueryBuilder,
+} from 'typeorm';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { Servicios } from './entities/service.entity';
@@ -599,6 +606,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       status?: string;
       cursor?: string;
       limit?: string | number;
+      employeeId?: string;
+      from?: string;
+      to?: string;
     },
   ): Promise<{ items: EvidenceItem[]; nextCursor: string | null }> {
     const kind =
@@ -611,7 +621,36 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ? Math.min(100, Math.max(1, requestedLimit))
       : 50;
     const cursor = this.decodeEvidenceCursor(query.cursor);
+    const employeeId = query.employeeId?.trim() || undefined;
+    const desde = this.parseEvidenceDate(query.from);
+    // El limite superior se toma inclusivo: quien pide un corte hasta el
+    // domingo espera que entre lo de ese domingo, no lo anterior a su medianoche.
+    const hasta = this.parseEvidenceDate(query.to, true);
     const results: EvidenceItem[] = [];
+
+    /**
+     * Acota una consulta de evidencias a una empleada y a un periodo.
+     *
+     * La empleada puede figurar como titular del servicio o como participante
+     * de uno grupal: filtrar solo por el titular dejaba fuera sus servicios en
+     * grupo, que son justo los que mas comprobantes acumulan.
+     */
+    const acotar = (
+      builder: SelectQueryBuilder<any>,
+      campoFecha: string,
+    ): void => {
+      if (employeeId) {
+        builder.andWhere(
+          `(service.empleadaId = :employeeId OR EXISTS (
+              SELECT 1 FROM service_participants sp
+               WHERE sp.service_id = service.id AND sp.employee_id = :employeeId
+            ))`,
+          { employeeId },
+        );
+      }
+      if (desde) builder.andWhere(`${campoFecha} >= :desde`, { desde });
+      if (hasta) builder.andWhere(`${campoFecha} <= :hasta`, { hasta });
+    };
 
     if (!kind || kind === 'transferencia') {
       const receipts = this.paymentReceiptValidationsRepository
@@ -628,6 +667,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
       if (status)
         receipts.andWhere('UPPER(receipt.estado) = :status', { status });
+      acotar(receipts, 'receipt.createdAt');
       if (cursor) {
         receipts.andWhere(
           '(receipt.createdAt < :cursorAt OR (receipt.createdAt = :cursorAt AND receipt.id < :cursorId))',
@@ -665,6 +705,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         .leftJoin('service.empleada', 'employee')
         .where('trip.uberScreenshotUrl IS NOT NULL')
         .andWhere('trip.uberScreenshotUploadedAt IS NOT NULL');
+      acotar(trips, 'trip.uberScreenshotUploadedAt');
       if (actor.rol === 'jefe') {
         trips.andWhere(
           '(service.jefeId = :actorId OR employee.jefeId = :actorId OR employee.jefeSecundarioId = :actorId)',
@@ -710,6 +751,34 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           ? Buffer.from(`${last.createdAt}|${last.id}`).toString('base64url')
           : null,
     };
+  }
+
+  /**
+   * Fecha de un filtro de evidencias.
+   *
+   * Acepta `YYYY-MM-DD` --lo que manda el corte semanal-- y cualquier fecha
+   * completa. Los dias sueltos se anclan en UTC, igual que hace el propio corte
+   * con su periodo (`getOperationalWeek`): sin la `Z` los interpretaria la zona
+   * del proceso y las evidencias se saldrian del rango del corte al que
+   * acompañan segun donde estuviera desplegado.
+   *
+   * Una cadena que no se entienda se ignora en vez de reventar la consulta: un
+   * filtro mal escrito debe devolver de mas, nunca un error.
+   */
+  private parseEvidenceDate(
+    value?: string,
+    finDelDia = false,
+  ): Date | undefined {
+    const texto = value?.trim();
+    if (!texto) return undefined;
+
+    const soloFecha = /^\d{4}-\d{2}-\d{2}$/.test(texto);
+    const fecha = new Date(
+      soloFecha
+        ? `${texto}T${finDelDia ? '23:59:59.999' : '00:00:00.000'}Z`
+        : texto,
+    );
+    return Number.isNaN(fecha.getTime()) ? undefined : fecha;
   }
 
   private decodeEvidenceCursor(

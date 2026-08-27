@@ -109,6 +109,12 @@ export class ServicesController {
     });
   }
 
+  /**
+   * Evidencias almacenadas: comprobantes de transferencia y capturas de Uber.
+   *
+   * Los filtros por empleada y por fechas los usa el corte semanal, que
+   * necesita solo las transferencias de esa empleada dentro del periodo.
+   */
   @Get('evidence')
   findEvidence(
     @Req() req: any,
@@ -116,12 +122,18 @@ export class ServicesController {
     @Query('status') status?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Query('employeeId') employeeId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     return this.servicesService.findEvidence(req.user, {
       kind,
       status,
       cursor,
       limit,
+      employeeId,
+      from,
+      to,
     });
   }
 

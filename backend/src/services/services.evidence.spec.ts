@@ -3,6 +3,8 @@ import { ServicesService } from './services.service';
 
 describe('ServicesService evidence listing', () => {
   const clauses: string[] = [];
+  /** Parametros de cada andWhere, para comprobar los limites del periodo. */
+  const params: Record<string, unknown> = {};
   const rows = [
     {
       id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
@@ -29,8 +31,9 @@ describe('ServicesService evidence listing', () => {
     leftJoinAndSelect: jest.fn(() => queryBuilder),
     leftJoin: jest.fn(() => queryBuilder),
     where: jest.fn(() => queryBuilder),
-    andWhere: jest.fn((clause: string) => {
+    andWhere: jest.fn((clause: string, valores?: Record<string, unknown>) => {
       clauses.push(clause);
+      Object.assign(params, valores ?? {});
       return queryBuilder;
     }),
     orderBy: jest.fn(() => queryBuilder),
@@ -46,6 +49,7 @@ describe('ServicesService evidence listing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clauses.length = 0;
+    for (const clave of Object.keys(params)) delete params[clave];
   });
 
   it('limita al jefe a evidencias de servicios asignados y devuelve cursor', async () => {
@@ -66,6 +70,49 @@ describe('ServicesService evidence listing', () => {
       }),
     );
     expect(result.nextCursor).toEqual(expect.any(String));
+  });
+
+  /**
+   * El corte de una empleada pide sus comprobantes con estos filtros. Si el de
+   * empleada mirara solo al titular del servicio, los servicios en grupo --los
+   * que mas comprobantes acumulan-- se quedarian fuera de su corte.
+   */
+  it('acota por empleada contando tambien los servicios en grupo', async () => {
+    await service.findEvidence(
+      { id: 'admin', rol: 'admin' },
+      { kind: 'transferencia', employeeId: 'emp-1' },
+    );
+
+    const porEmpleada = clauses.find((clause) =>
+      clause.includes('service.empleadaId = :employeeId'),
+    );
+    expect(porEmpleada).toBeDefined();
+    expect(porEmpleada).toContain('service_participants');
+    expect(params.employeeId).toBe('emp-1');
+  });
+
+  it('toma el periodo en UTC y con el ultimo dia completo', async () => {
+    await service.findEvidence(
+      { id: 'admin', rol: 'admin' },
+      { kind: 'transferencia', from: '2026-08-17', to: '2026-08-23' },
+    );
+
+    expect((params.desde as Date).toISOString()).toBe(
+      '2026-08-17T00:00:00.000Z',
+    );
+    // Inclusivo: un comprobante de la noche del ultimo dia pertenece al corte.
+    expect((params.hasta as Date).toISOString()).toBe(
+      '2026-08-23T23:59:59.999Z',
+    );
+  });
+
+  it('ignora un periodo ilegible en vez de reventar la consulta', async () => {
+    await service.findEvidence(
+      { id: 'admin', rol: 'admin' },
+      { kind: 'transferencia', from: 'la semana pasada' },
+    );
+
+    expect(clauses.some((clause) => clause.includes('>= :desde'))).toBe(false);
   });
 
   it('rechaza cursores alterados', async () => {

@@ -28,6 +28,7 @@ import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { Service, Trip } from "@/lib/types";
 import { cancellationReasonLabel } from "@/lib/cancellation-reasons";
+import ComprobantesTransferencia from "@/components/erp/comprobantes-transferencia";
 
 /**
  * Ficha completa de un servicio.
@@ -85,6 +86,21 @@ export default function ServicioDetalle({ service }: { service: Service }) {
   const pagos = service.pagos ?? [];
   const participantes = service.participantes ?? [];
   const comprobantes = service.receiptValidations ?? [];
+  /*
+   * Solo los que tienen imagen: un comprobante sin captura --los que la IA
+   * descarto por no serlo-- dejaria un hueco roto en la galeria.
+   */
+  const comprobantesConFoto = comprobantes
+    .filter((comprobante) => Boolean(comprobante.imageUrl))
+    .map((comprobante) => ({
+      id: comprobante.id,
+      url: comprobante.imageUrl as string,
+      estado: comprobante.estado,
+      monto: comprobante.monto,
+      createdAt: comprobante.createdAt,
+      clienteTelegram: comprobante.clienteTelegram,
+      observaciones: comprobante.observaciones,
+    }));
 
   const totalFinal = num(service.totalFinal);
   const pagado = num(service.totalPaid);
@@ -492,6 +508,19 @@ export default function ServicioDetalle({ service }: { service: Service }) {
               </div>
             )}
           </Panel>
+
+          {/*
+            Las capturas, aparte de la lista de arriba: la fila dice que hay un
+            comprobante y en que estado quedo, pero quien revisa un cobro
+            necesita ver la transferencia, y hasta ahora tenia que buscarla en
+            la pantalla de Evidencias.
+          */}
+          {comprobantesConFoto.length > 0 ? (
+            <ComprobantesTransferencia
+              comprobantes={comprobantesConFoto}
+              subtitle="capturas recibidas para este servicio"
+            />
+          ) : null}
 
           <Panel title="Linea de tiempo" subtitle="eventos del servicio" flush>
             {linea.length === 0 ? (

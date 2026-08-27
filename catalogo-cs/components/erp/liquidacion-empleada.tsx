@@ -18,6 +18,8 @@ import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { LiquidationReport } from "@/components/liquidations/types";
 import ComisionExtrasTarjeta from "@/components/liquidations/comision-extras-tarjeta";
+import ComprobantesTransferencia from "@/components/erp/comprobantes-transferencia";
+import type { EvidenceItem } from "@/lib/types";
 
 /**
  * Detalle del corte de una empleada en una semana.
@@ -45,15 +47,29 @@ export default function LiquidacionEmpleada({
   startDate,
   endDate,
   puedeEditarComision = false,
+  comprobantes = [],
 }: {
   report: LiquidationReport;
   startDate: string;
   endDate: string;
   /** Solo admin puede cambiar la regla de comision de extras con tarjeta. */
   puedeEditarComision?: boolean;
+  /** Comprobantes de transferencia de sus servicios en el periodo. */
+  comprobantes?: EvidenceItem[];
 }) {
   const { weeklySettlement: corte, finalCut: cut } = report;
   const registros = report.officeRecords ?? [];
+
+  const capturas = comprobantes.map((evidencia) => ({
+    id: evidencia.id,
+    url: evidencia.url,
+    estado: evidencia.status,
+    monto: evidencia.amount,
+    createdAt: evidencia.createdAt,
+    servicioId: evidencia.serviceId,
+    clienteTelegram: evidencia.clientName,
+    observaciones: evidencia.observations,
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -256,6 +272,18 @@ export default function LiquidacionEmpleada({
           ) : null}
         </ErpTable>
       </Panel>
+
+      {/*
+        Las capturas de los cobros del periodo, debajo de la tabla que las
+        contabiliza: cuadrar una transferencia obligaba a salir a Evidencias y
+        emparejarla a mano por fecha y monto.
+      */}
+      <ComprobantesTransferencia
+        comprobantes={capturas}
+        subtitle={`transferencias de sus servicios del ${startDate} al ${endDate}`}
+        mostrarServicio
+        vacio="No se recibieron comprobantes de transferencia en este periodo."
+      />
 
       {report.discrepancy?.exists ? (
         <Panel

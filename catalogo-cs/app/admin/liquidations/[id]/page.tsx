@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { optionalSource } from "@/lib/optional-source";
 import { getLiquidationReport } from "../actions";
+import { getEmployeeTransferReceipts } from "@/lib/actions/evidence";
 import { getOperationalWeek } from "@/lib/week-range";
 import LiquidacionEmpleada from "@/components/erp/liquidacion-empleada";
 
@@ -33,11 +34,22 @@ export default async function LiquidacionEmpleadaPage({
    * llegar al login: sin distinguirlas, la empleada correcta se veia como si
    * no existiera.
    */
-  const report = await optionalSource(
-    getLiquidationReport(startDate, endDate, id),
-    null,
-    "el corte de la empleada",
-  );
+  const [report, comprobantes] = await Promise.all([
+    optionalSource(
+      getLiquidationReport(startDate, endDate, id),
+      null,
+      "el corte de la empleada",
+    ),
+    /*
+     * Las capturas son un apoyo del corte, no el corte: si el listado de
+     * evidencias falla, la pagina tiene que seguir mostrando las cifras.
+     */
+    optionalSource(
+      getEmployeeTransferReceipts(id, startDate, endDate),
+      { items: [], nextCursor: null },
+      "los comprobantes de la empleada",
+    ),
+  ]);
   if (!report) notFound();
 
   return (
@@ -46,6 +58,7 @@ export default async function LiquidacionEmpleadaPage({
       startDate={startDate}
       endDate={endDate}
       puedeEditarComision={user.rol === "admin"}
+      comprobantes={comprobantes.items}
     />
   );
 }
