@@ -4110,6 +4110,57 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     await ctx.editMessageText('Reporte cancelado.');
   }
 
+  /**
+   * Mueve el pin de un cliente que comparte su ubicacion en vivo, sin contestarle.
+   *
+   * Solo toca lo que todavia no esta cerrado: la solicitud de grupo que aun no
+   * tiene servicio, y la sesion de una contratacion en curso que ya recibio su
+   * primer pin. Un servicio ya creado no se reescribe: su direccion ya viajo al
+   * chofer y a la empleada, y cambiarla por detras los mandaria a otro sitio sin
+   * que nadie se entere.
+   *
+   * Tampoco se recalcula el cargo de transporte. Lo fija el primer pin, que es
+   * el que el cliente vio cotizado; moverlo en silencio mientras el camina le
+   * cambiaria el precio ya acordado.
+   */
+  private async refrescarUbicacionEnVivoDelCliente(
+    ctx: BotContext,
+    telegramId: string,
+    lat: number,
+    lng: number,
+  ): Promise<void> {
+    try {
+      if (ctx.session?.step === 'GROUP_WITH_BOSS') {
+        const groupRequest =
+          await this.groupServicesService.findActiveRequestByClientTelegram(
+            telegramId,
+          );
+        if (groupRequest && !groupRequest.serviceId) {
+          await this.groupServicesService.setLocationFromClient(
+            groupRequest.id,
+            lat,
+            lng,
+          );
+          return;
+        }
+      }
+
+      // Solo si ya habia un pin: el primero --el que no llega editado-- es el
+      // que abre el flujo, y sin el no hay contratacion que refrescar.
+      if (ctx.session?.locationLat && ctx.session?.locationLng) {
+        ctx.session.locationLat = lat.toString();
+        ctx.session.locationLng = lng.toString();
+        await this.persistSession(ctx);
+      }
+    } catch (error) {
+      // Un refresco perdido no es nada: detras viene otro en unos segundos.
+      this.logger.warn(
+        `No se pudo refrescar la ubicacion en vivo de ${telegramId}:`,
+        error,
+      );
+    }
+  }
+
   @On(['location', 'venue', 'edited_message'])
   async onLocation(
     @Ctx() ctx: BotContext,
@@ -4356,6 +4407,31 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }
     } else {
       this.logger.log(`No system user found for telegramChatId=${telegramId}`);
+    }
+
+    /*
+     * De aqui para abajo empieza el flujo del cliente, y este manejador tambien
+     * recibe los `edited_message` con los que Telegram refresca una ubicacion
+     * en vivo: llegan cada pocos segundos mientras dura el envio.
+     *
+     * Las ramas de chofer y de empleada ya los distinguian, pero la del cliente
+     * no, asi que cada refresco le volvia a contestar --el acuse, el desglose
+     * del precio o el "inicia la contratacion"-- y encima lo apuntaba en el
+     * historial de la conversacion. Un solo envio en vivo dejaba al bot
+     * repitiendose durante minutos.
+     *
+     * El refresco si sigue sirviendo para mover el pin, asi que se atiende en
+     * silencio: la ubicacion que acabe usando el servicio es la ultima que
+     * mando, pero el bot solo responde a la primera.
+     */
+    if (isEdited) {
+      await this.refrescarUbicacionEnVivoDelCliente(
+        ctx,
+        telegramId,
+        parsedLat,
+        parsedLng,
+      );
+      return;
     }
 
     if (

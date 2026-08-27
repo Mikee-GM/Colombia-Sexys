@@ -118,3 +118,124 @@ describe('Llegada del pin de ubicación', () => {
     expect(history[0].role).toBe('user');
   });
 });
+
+/**
+ * Telegram refresca una ubicacion en vivo mandando `edited_message` cada pocos
+ * segundos mientras dura el envio, y todos caen en el mismo manejador que el
+ * pin normal. Las ramas de chofer y de empleada ya los distinguian; la del
+ * cliente no, asi que cada refresco le volvia a contestar y el bot se quedaba
+ * repitiendose durante minutos.
+ */
+describe('Refrescos de una ubicación en vivo del cliente', () => {
+  const COORDENADAS = { latitude: 19.4326, longitude: -99.1332 };
+
+  function nuevaInstanciaDeCliente() {
+    const instancia = Object.create(TelegramBookingUpdate.prototype) as any;
+    instancia.userLocationCache = new Map();
+    // Un cliente no es usuario del sistema: no es chofer ni empleada.
+    instancia.usuariosRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    instancia.logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    instancia.groupServicesService = {
+      findActiveRequestByClientTelegram: jest.fn().mockResolvedValue(null),
+      setLocationFromClient: jest.fn(),
+    };
+    instancia.persistSession = jest.fn();
+    return instancia;
+  }
+
+  const contexto = (
+    session: Record<string, unknown>,
+    { editado }: { editado: boolean },
+  ) => {
+    const mensaje = { location: COORDENADAS };
+    return {
+      from: { id: 77 },
+      chat: { type: 'private' },
+      session,
+      message: editado ? undefined : mensaje,
+      editedMessage: editado ? mensaje : undefined,
+      update: editado ? { edited_message: mensaje } : {},
+      reply: jest.fn(),
+    };
+  };
+
+  it('no le contesta al cliente en cada refresco', async () => {
+    const instancia = nuevaInstanciaDeCliente();
+    const ctx = contexto(
+      {
+        empleadaId: 'emp-1',
+        step: 'CHAT_CON_EMPLEADA',
+        locationLat: '19.0000',
+        locationLng: '-99.0000',
+      },
+      { editado: true },
+    );
+
+    await instancia.onLocation(ctx);
+
+    expect(ctx.reply).not.toHaveBeenCalled();
+    // El pin si se mueve: el servicio debe salir con la ultima posicion.
+    expect(ctx.session.locationLat).toBe('19.4326');
+    expect(ctx.session.locationLng).toBe('-99.1332');
+    expect(instancia.persistSession).toHaveBeenCalled();
+  });
+
+  it('tampoco regaña al que todavía no tiene una contratación abierta', async () => {
+    // Este era el peor caso: sin contratacion, cada refresco disparaba el
+    // "inicia la contratacion desde el catalogo".
+    const instancia = nuevaInstanciaDeCliente();
+    const ctx = contexto({}, { editado: true });
+
+    await instancia.onLocation(ctx);
+
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
+
+  it('mueve el pin de una solicitud de grupo sin contestar', async () => {
+    const instancia = nuevaInstanciaDeCliente();
+    instancia.groupServicesService.findActiveRequestByClientTelegram.mockResolvedValue(
+      { id: 'req-1', serviceId: null },
+    );
+    const ctx = contexto({ step: 'GROUP_WITH_BOSS' }, { editado: true });
+
+    await instancia.onLocation(ctx);
+
+    expect(
+      instancia.groupServicesService.setLocationFromClient,
+    ).toHaveBeenCalledWith(
+      'req-1',
+      COORDENADAS.latitude,
+      COORDENADAS.longitude,
+    );
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
+
+  it('no reescribe la ubicación de un servicio ya creado', async () => {
+    // Su direccion ya viajo al chofer y a la empleada: cambiarla por detras los
+    // mandaria a otro sitio sin que nadie se entere.
+    const instancia = nuevaInstanciaDeCliente();
+    instancia.groupServicesService.findActiveRequestByClientTelegram.mockResolvedValue(
+      { id: 'req-1', serviceId: 'srv-1' },
+    );
+    const ctx = contexto({ step: 'GROUP_WITH_BOSS' }, { editado: true });
+
+    await instancia.onLocation(ctx);
+
+    expect(
+      instancia.groupServicesService.setLocationFromClient,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('sigue respondiendo al primer pin, que no llega editado', async () => {
+    const instancia = nuevaInstanciaDeCliente();
+    const ctx = contexto({}, { editado: false });
+
+    await instancia.onLocation(ctx);
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.stringContaining('inicia la contratación'),
+    );
+  });
+});
