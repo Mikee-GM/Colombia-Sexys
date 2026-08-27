@@ -1070,36 +1070,55 @@ export class TelegramAuthUpdate {
         return;
       }
 
-      // Obtener la foto con mayor resolución (último elemento del arreglo)
-      const bestPhoto = photos[photos.length - 1];
-      const fileId = bestPhoto.file_id;
-
-      try {
-        const fileLink = await ctx.telegram.getFileLink(fileId);
-        const uploadResult = await this.uploadService.uploadEvidenceFromUrl({
-          sourceUrl: fileLink.href,
-          folder: 'transferencias', // o carpeta de contenido
-          scopeId: empleada.id,
-        });
-
-        await this.weeklyContentService.recordTelegramPhotoSubmission(
-          empleada.id,
-          uploadResult.url,
-        );
-
-        await ctx.reply(
-          `📸 *¡Foto recibida con éxito!*\n\n` +
-            `Tu foto ha sido enviada al panel administrativo para ser validada e incorporada a tu catálogo. ¡Gracias por mantener tu contenido actualizado! ✨`,
-          { parse_mode: 'Markdown' },
-        );
-      } catch (err) {
-        this.logger.error('Error al procesar foto semanal de empleada:', err);
-        await ctx.reply(
-          `⚠️ Ocurrió un inconveniente al guardar tu foto. Por favor intenta enviarla de nuevo.`,
-        );
-      }
+      /*
+       * Las fotos semanales ya no entran por aqui.
+       *
+       * Mandarlas al chat era un buzon ciego: la modelo no podia ver cuales
+       * habia enviado ni corregirse, y cualquier foto suelta de la conversacion
+       * acababa en la cola de revision aunque no fuera contenido semanal. Ahora
+       * se suben desde el portal, donde ve su envio y su estado.
+       *
+       * En lugar de tragarse la foto en silencio se le explica y se le da el
+       * atajo, porque la costumbre de mandarlas por aqui tardara en irse.
+       */
+      await this.derivarFotosAlPortal(ctx, user.id, empleada.nombreArtistico);
     } else {
       await next();
+    }
+  }
+
+  /**
+   * Responde a una foto suelta con el pase que abre el portal en su seccion.
+   *
+   * Si el pase falla se responde igual, sin boton: dejar el mensaje sin
+   * contestar haria pensar a la modelo que su foto entro.
+   */
+  private async derivarFotosAlPortal(
+    ctx: Context,
+    usuarioId: string,
+    nombre: string,
+  ): Promise<void> {
+    const texto = [
+      '*Tus fotos ahora se suben desde el portal*',
+      '',
+      `Hola ${nombre}. Ya no hace falta mandarlas por este chat.`,
+      'Desde el portal puedes subir varias de una vez, ver cuales enviaste',
+      'esta semana y en que quedo la revision de cada una.',
+    ].join('\n');
+
+    try {
+      const { url } = await this.panelAccessService.issueLink(
+        usuarioId,
+        ctx.from?.id.toString() ?? null,
+        '/empleada/portal?seccion=fotos',
+      );
+      await ctx.reply(texto, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(botonesDePortal(url, 'Subir mis fotos')),
+      });
+    } catch (error) {
+      this.logger.error('No se pudo emitir el pase para subir fotos:', error);
+      await ctx.reply(texto, { parse_mode: 'Markdown' });
     }
   }
 }

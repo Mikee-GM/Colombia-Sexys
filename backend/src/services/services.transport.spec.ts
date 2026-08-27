@@ -66,6 +66,15 @@ describe('ServicesService transport settlement', () => {
       botForEmployeeOrCentral: jest.fn(() => bot),
       central: bot,
     } as any,
+    // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
+    {} as any,
+    {} as any,
+    {} as any,
+    // catalogo de extras, extras cobrados y participantes: solo los usa
+    // agregar un extra. Ninguna de las dos cosas se ejercita aqui.
+    {} as any,
+    {} as any,
+    {} as any,
   );
 
   beforeEach(() => jest.clearAllMocks());

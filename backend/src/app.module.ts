@@ -35,6 +35,7 @@ import { ChallengesModule } from './challenges/challenges.module';
 import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
 import { ClientAlertsModule } from './client-alerts/client-alerts.module';
 import { ServiceExtensionsModule } from './service-extensions/service-extensions.module';
+import { UserPreferencesModule } from './user-preferences/user-preferences.module';
 
 @Module({
   imports: [
@@ -162,6 +163,7 @@ import { ServiceExtensionsModule } from './service-extensions/service-extensions
     DriverShiftsModule,
     ClientAlertsModule,
     ServiceExtensionsModule,
+    UserPreferencesModule,
   ],
   controllers: [AppController],
   providers: [

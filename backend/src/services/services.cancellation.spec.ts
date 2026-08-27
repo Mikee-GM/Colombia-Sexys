@@ -48,6 +48,15 @@ describe('ServicesService cancel', () => {
     {} as any,
     {} as any,
     { botForEmployeeOrCentral: jest.fn(() => bot), central: bot } as any,
+    // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
+    {} as any,
+    {} as any,
+    {} as any,
+    // catalogo de extras, extras cobrados y participantes: solo los usa
+    // agregar un extra. Ninguna de las dos cosas se ejercita aqui.
+    {} as any,
+    {} as any,
+    {} as any,
   );
 
   const actor = { id: 'user-1', rol: 'admin' } as any;
@@ -236,6 +245,15 @@ describe('ServicesService settleCancelledTripCost', () => {
     {} as any,
     {} as any,
     { botForEmployeeOrCentral: jest.fn(() => bot), central: bot } as any,
+    // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
+    {} as any,
+    {} as any,
+    {} as any,
+    // catalogo de extras, extras cobrados y participantes: solo los usa
+    // agregar un extra. Ninguna de las dos cosas se ejercita aqui.
+    {} as any,
+    {} as any,
+    {} as any,
   );
 
   function viajePendiente(overrides: Record<string, unknown> = {}) {

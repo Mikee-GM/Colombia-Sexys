@@ -72,6 +72,21 @@ export class WeeklyContentSchedule {
   })
   recordatorioAt: Date | null;
 
+  /**
+   * Avisos enviados dentro de este ciclo.
+   *
+   * Se cuenta por semana y no de forma acumulada entre semanas: el contador
+   * arranca de cero cada viernes con la nueva solicitud. Es lo que se le
+   * muestra a la modelo en su portal y lo que dispara la multa al alcanzar el
+   * maximo configurado.
+   */
+  @Column('integer', { name: 'recordatorios_enviados', default: 0 })
+  @ApiProperty({
+    description: 'Recordatorios enviados en este ciclo semanal',
+    example: 2,
+  })
+  recordatoriosEnviados: number;
+
   @Column('timestamp with time zone', {
     name: 'falta_at',
     nullable: true,
@@ -81,6 +96,23 @@ export class WeeklyContentSchedule {
     nullable: true,
   })
   faltaAt: Date | null;
+
+  @Column('timestamp with time zone', {
+    name: 'multa_aplicada_at',
+    nullable: true,
+  })
+  @ApiProperty({
+    description: 'Fecha en la que se cargo la multa automatica al corte',
+    nullable: true,
+  })
+  multaAplicadaAt: Date | null;
+
+  /** Registro de corte que materializa la multa; permite rastrearla y anularla. */
+  @Column('uuid', {
+    name: 'multa_liquidation_record_id',
+    nullable: true,
+  })
+  multaLiquidationRecordId: string | null;
 
   @Column('timestamp with time zone', {
     name: 'entregado_at',

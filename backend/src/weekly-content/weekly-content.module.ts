@@ -11,6 +11,7 @@ import { EmpleadaFotosExclusivas } from '../employee-photos/entities/employee-pr
 import { ConductReport } from '../discipline/entities/conduct-report.entity';
 import { TelegramModule } from '../telegram/telegram.module';
 import { UploadModule } from '../upload/upload.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -24,6 +25,8 @@ import { UploadModule } from '../upload/upload.module';
     ]),
     forwardRef(() => TelegramModule),
     UploadModule,
+    // Por PanelAccessService: los avisos de fotos llevan un pase al portal.
+    forwardRef(() => AuthModule),
   ],
   controllers: [WeeklyContentController],
   providers: [WeeklyContentService, WeeklyContentScheduler],

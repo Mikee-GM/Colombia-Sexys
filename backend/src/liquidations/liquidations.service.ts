@@ -16,7 +16,14 @@ import { LiquidationAudit } from './entities/liquidation-audit.entity';
 import { LiquidationDebt } from './entities/liquidation-debt.entity';
 import { LiquidationPayment } from './entities/liquidation-payment.entity';
 import { LiquidationRecord } from './entities/liquidation-record.entity';
-import { buildCutReport, calculateCut } from './liquidation-calculator';
+import {
+  buildCutReport,
+  calculateCut,
+  DEFAULT_CARD_EXTRA_COMMISSION,
+  type CardExtraCommissionPolicy,
+} from './liquidation-calculator';
+import { LiquidationSetting } from './entities/liquidation-setting.entity';
+import { UpdateLiquidationSettingsDto } from './dto/liquidation-settings.dto';
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 import {
   EmployeeCashPayment,
@@ -36,7 +43,69 @@ export class LiquidationsService {
     private readonly cashObligations: Repository<EmployeeCashObligation>,
     @InjectRepository(EmployeeWeeklySettlement)
     private readonly weeklySettlements: Repository<EmployeeWeeklySettlement>,
+    @InjectRepository(LiquidationSetting)
+    private readonly settings: Repository<LiquidationSetting>,
   ) {}
+
+  /**
+   * Politica vigente de comision sobre extras con tarjeta.
+   *
+   * Si la fila no existe todavia --una base migrada a medias, o un entorno de
+   * pruebas-- se devuelven los valores por defecto en vez de fallar: un corte
+   * tiene que poder calcularse siempre.
+   */
+  async getSettings(): Promise<LiquidationSetting> {
+    const existing = await this.settings.findOneBy({ id: 1 });
+    if (existing) return existing;
+
+    return this.settings.create({
+      id: 1,
+      cardExtraCommissionPercentage: DEFAULT_CARD_EXTRA_COMMISSION.percentage,
+      cardExtraCommissionThreshold: DEFAULT_CARD_EXTRA_COMMISSION.threshold,
+      updatedByUserId: null,
+      updatedAt: new Date(),
+    });
+  }
+
+  private async commissionPolicy(): Promise<CardExtraCommissionPolicy> {
+    const settings = await this.getSettings();
+    return {
+      percentage: Number(settings.cardExtraCommissionPercentage),
+      threshold: Number(settings.cardExtraCommissionThreshold),
+    };
+  }
+
+  /**
+   * Cambia la politica de comision. Solo admin: mueve el dinero de todos los
+   * cortes abiertos a la vez.
+   *
+   * Los cortes ya confirmados no se recalculan: su neto quedo congelado en
+   * `employee_weekly_settlements` cuando se confirmaron.
+   */
+  async updateSettings(dto: UpdateLiquidationSettingsDto, actor: Usuarios) {
+    if (actor.rol !== 'admin') {
+      throw new ForbiddenException(
+        'Solo un administrador puede cambiar los parámetros del corte',
+      );
+    }
+
+    const current = await this.getSettings();
+    const updated = await this.settings.save(
+      this.settings.merge(current, {
+        id: 1,
+        ...(dto.cardExtraCommissionPercentage !== undefined
+          ? { cardExtraCommissionPercentage: dto.cardExtraCommissionPercentage }
+          : {}),
+        ...(dto.cardExtraCommissionThreshold !== undefined
+          ? { cardExtraCommissionThreshold: dto.cardExtraCommissionThreshold }
+          : {}),
+        updatedByUserId: actor.id,
+        updatedAt: new Date(),
+      }),
+    );
+
+    return updated;
+  }
 
   private validatePeriod(query: LiquidationPeriodQueryDto) {
     if (query.startDate >= query.endDate) {
@@ -108,7 +177,8 @@ export class LiquidationsService {
     }
     const employee = await this.assertEmployeeAccess(query.employeeId, actor);
     const records = await this.getRecords(query, actor);
-    const report = buildCutReport(records);
+    const commission = await this.commissionPolicy();
+    const report = buildCutReport(records, commission);
     const weekStart = query.startDate.toISOString().slice(0, 10);
     const existing = await this.weeklySettlements.findOneBy({
       employeeId: employee.id,
@@ -145,6 +215,12 @@ export class LiquidationsService {
       employee: { id: employee.id, name: employee.nombreArtistico },
       period: { startDate: query.startDate, endDate: query.endDate },
       ...report,
+      // Viaja con el reporte para que la pantalla pueda explicar de donde sale
+      // "Extras calculados" y dejar editar la regla ahi mismo.
+      commissionSettings: {
+        cardExtraCommissionPercentage: commission.percentage,
+        cardExtraCommissionThreshold: commission.threshold,
+      },
       weeklySettlement: {
         status: existing ? 'confirmed' : 'preview',
         grossEmployeePay,
@@ -216,9 +292,11 @@ export class LiquidationsService {
       recordsByEmployee.set(record.employeeId, bucket);
     }
 
+    const commission = await this.commissionPolicy();
+
     return [...recordsByEmployee.entries()]
       .map(([employeeId, employeeRecords]) => {
-        const cut = calculateCut(employeeRecords);
+        const cut = calculateCut(employeeRecords, commission);
         const existing = settlementByEmployee.get(employeeId);
         const cashOutstanding = cashByEmployee.get(employeeId) ?? 0;
 
@@ -268,7 +346,10 @@ export class LiquidationsService {
     this.validatePeriod(query);
     await this.assertEmployeeAccess(query.employeeId, actor);
     const records = await this.getRecords(query, actor);
-    const grossEmployeePay = calculateCut(records).employeeGrossPay;
+    const grossEmployeePay = calculateCut(
+      records,
+      await this.commissionPolicy(),
+    ).employeeGrossPay;
     const weekStart = query.startDate.toISOString().slice(0, 10);
     const weekEnd = query.endDate.toISOString().slice(0, 10);
     return this.dataSource.transaction(async (manager) => {

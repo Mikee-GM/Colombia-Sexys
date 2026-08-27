@@ -20,6 +20,7 @@ export type GodEyeOverview = {
     clientsTotal: number;
     pendingOffers: number;
     revenueToday: number;
+    revenueWeek: number;
   };
   pendingReports: Array<{
     id: string;

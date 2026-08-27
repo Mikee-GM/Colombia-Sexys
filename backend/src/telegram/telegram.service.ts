@@ -6,7 +6,20 @@ import { Repository } from 'typeorm';
 import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { JwtService } from '@nestjs/jwt';
+import type { InlineKeyboardButton } from 'telegraf/types';
 import { TelegramBotRegistryService } from './telegram-bot-registry.service';
+
+/**
+ * Extras de un envio programatico.
+ *
+ * Nacen de tener que colgar el boton del portal de los avisos que ya se
+ * mandaban: sin esto, cada llamador tendria que alcanzar el bot por su cuenta
+ * y se perderia el enrutado por bot dedicado de cada modelo.
+ */
+export type SendMessageOptions = {
+  parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML';
+  buttons?: InlineKeyboardButton[][];
+};
 
 @Injectable()
 export class TelegramService {
@@ -47,17 +60,24 @@ export class TelegramService {
     telegramId: string,
     message: string,
     employeeId?: string | null,
+    options?: SendMessageOptions,
   ): Promise<void> {
     const bot = employeeId
       ? this.botRegistry.botForEmployeeOrCentral(employeeId)
       : this.bot;
-    await bot.telegram.sendMessage(telegramId, message);
+    await bot.telegram.sendMessage(telegramId, message, {
+      ...(options?.parseMode ? { parse_mode: options.parseMode } : {}),
+      ...(options?.buttons?.length
+        ? Markup.inlineKeyboard(options.buttons)
+        : {}),
+    });
   }
 
   /**
    * Notifica a todos los Jefes y Admins de un nuevo servicio creado.
    */
   async notifyJefesNewService(serviceId: string): Promise<void> {
-    // Las notificaciones para jefes e independientes ahora se manejan exclusivamente a través de los temas (forum topics) en sus grupos de Telegram
+    // Las notificaciones al jefe se manejan exclusivamente a través de los
+    // temas (forum topics) de su grupo de Telegram.
   }
 }

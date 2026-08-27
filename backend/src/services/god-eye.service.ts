@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { APP_TIME_ZONE } from '../common/locale';
 
 /** Respuesta cacheada del resumen del panel. */
 type OverviewPayload = {
@@ -25,6 +26,7 @@ type OverviewMetricsRow = {
   clients_total: number;
   pending_offers: number;
   revenue_today: string | number;
+  revenue_week: string | number;
 };
 
 @Injectable()
@@ -40,7 +42,7 @@ export class GodEyeService {
   constructor(private readonly dataSource: DataSource) {}
 
   /**
-   * Las quince metricas del panel salen de una sola consulta con subconsultas
+   * Las dieciseis metricas del panel salen de una sola consulta con subconsultas
    * escalares, en vez de doce viajes independientes a Postgres. Sumando las dos
    * listas, cada carga pasa de catorce consultas a tres. El pool tiene veinte
    * conexiones: con la version anterior, tres administradores refrescando a la
@@ -79,6 +81,7 @@ export class GodEyeService {
         clientsTotal: metricsRow.clients_total ?? 0,
         pendingOffers: metricsRow.pending_offers ?? 0,
         revenueToday: Number(metricsRow.revenue_today ?? 0),
+        revenueWeek: Number(metricsRow.revenue_week ?? 0),
       },
       activeServices: activeServicesList,
       pendingReports: pendingReportsList,
@@ -91,7 +94,7 @@ export class GodEyeService {
     return value;
   }
 
-  /** Los quince contadores del panel en una sola pasada. */
+  /** Los dieciseis contadores del panel en una sola pasada. */
   private async queryOverviewMetrics(): Promise<OverviewMetricsRow> {
     const [row]: OverviewMetricsRow[] = await this.dataSource.query(`
       SELECT
@@ -118,7 +121,13 @@ export class GodEyeService {
         (SELECT COUNT(*)::int FROM group_service_requests
           WHERE status IN ('esperando_jefe', 'seleccionando', 'reservada', 'esperando_pago')) AS pending_offers,
         (SELECT COALESCE(SUM(total_final), 0)::numeric FROM servicios
-          WHERE estado = 'finalizado' AND hora_fin_servicio >= date_trunc('day', now())) AS revenue_today
+          WHERE estado = 'finalizado'
+            AND hora_fin_servicio AT TIME ZONE '${APP_TIME_ZONE}'
+                >= date_trunc('day', now() AT TIME ZONE '${APP_TIME_ZONE}')) AS revenue_today,
+        (SELECT COALESCE(SUM(total_final), 0)::numeric FROM servicios
+          WHERE estado = 'finalizado'
+            AND hora_fin_servicio AT TIME ZONE '${APP_TIME_ZONE}'
+                >= date_trunc('week', now() AT TIME ZONE '${APP_TIME_ZONE}')) AS revenue_week
     `);
     return row ?? ({} as OverviewMetricsRow);
   }

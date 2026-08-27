@@ -423,6 +423,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         employeeUberReimbursement: 0,
         employeeCashDue: 0,
         electronicExtraAmount: 0,
+        cardExtraAmount: 0,
         transportExcess: 0,
         place: `Multa: ${dto.reason.trim()}`,
         hasOutboundDriver: false,

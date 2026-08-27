@@ -287,6 +287,23 @@ export class EmployeesService {
     return withScore.map((entry) => entry.employee);
   }
 
+  /**
+   * Perfil de una modelo a partir del id de su usuario.
+   *
+   * Lo usan las rutas del portal, donde lo que llega del pase o del token es el
+   * usuario y no la empleada. Se queda en lo minimo --sin fotos, sin extras, sin
+   * score-- porque quien lo llama solo necesita el id para seguir.
+   */
+  async findByUserId(usuarioId: string): Promise<Empleadas> {
+    const empleada = await this.empleadasRepository.findOne({
+      where: { usuarioId },
+    });
+    if (!empleada) {
+      throw new NotFoundException('Perfil de empleada no encontrado');
+    }
+    return empleada;
+  }
+
   async findOne(id: string): Promise<Empleadas> {
     const empleada = await this.empleadasRepository.findOne({
       where: { id },
@@ -821,12 +838,17 @@ export class EmployeesService {
     }
 
     const [withTrust] = await this.attachTrustScores([empleada]);
-    const weeklyStatuses =
-      await this.weeklyContentService.getWeeklyStatusForEmployees();
-    const pendingCounts =
-      await this.weeklyContentService.getPendingCountByEmployee();
-    const weeklyContentStatus = weeklyStatuses[empleada.id] || 'al_dia';
-    const pendingWeeklyPhotosCount = pendingCounts[empleada.id] || 0;
+    /*
+     * El detalle del ciclo --recordatorios gastados, cuantos quedan y si ya
+     * cayo la multa-- se resuelve por empleada. La version por lotes solo
+     * devuelve la etiqueta, y el portal necesita poder decirle por que esta
+     * atrasada y que le va a pasar.
+     */
+    const weeklyContent =
+      await this.weeklyContentService.getWeeklyStatusForEmployee(empleada.id);
+    const weeklyContentStatus =
+      weeklyContent.estado === 'sin_solicitar' ? 'al_dia' : weeklyContent.estado;
+    const pendingWeeklyPhotosCount = weeklyContent.fotosPendientesDeRevision;
 
     // 1. Leaderboard / Ranking
     const allModels = await this.empleadasRepository.find({
@@ -1056,6 +1078,7 @@ export class EmployeesService {
         gananciaEstimada: estimatedNet,
         transporte: activeTrip
           ? {
+              id: activeTrip.id,
               tipo: activeTrip.tipo,
               proveedor: activeTrip.proveedorTransporte,
               estado: activeTrip.estado,
@@ -1131,6 +1154,7 @@ export class EmployeesService {
           (empleada.disponible ? 'disponible' : 'inactiva'),
         weeklyContentStatus,
         pendingWeeklyPhotosCount,
+        weeklyContent,
         publicPhotosCount: publicPhotos.length,
         privatePhotosCount: privatePhotos.length,
         publicPhotos,

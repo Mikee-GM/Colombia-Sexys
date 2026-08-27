@@ -21,6 +21,7 @@ import { CreateLiquidationRecordDto } from './dto/create-liquidation-record.dto'
 import { CreateDebtDto, CreateDebtPaymentDto } from './dto/debt.dto';
 import { LiquidationPeriodQueryDto } from './dto/liquidation-query.dto';
 import { UpdateLiquidationRecordDto } from './dto/update-liquidation-record.dto';
+import { UpdateLiquidationSettingsDto } from './dto/liquidation-settings.dto';
 import { LiquidationsService } from './liquidations.service';
 
 @ApiTags('liquidations')
@@ -30,6 +31,26 @@ import { LiquidationsService } from './liquidations.service';
 @Roles('admin', 'jefe', 'empleada')
 export class LiquidationsController {
   constructor(private readonly service: LiquidationsService) {}
+
+  /*
+   * Parametros del corte. La lectura la necesita cualquiera que abra una
+   * liquidacion, para poder explicar de donde sale "Extras calculados"; la
+   * escritura queda en admin porque cambia el reparto de todos los cortes
+   * abiertos a la vez.
+   */
+  @Get('settings')
+  getSettings() {
+    return this.service.getSettings();
+  }
+
+  @Patch('settings')
+  @Roles('admin')
+  updateSettings(
+    @Body() dto: UpdateLiquidationSettingsDto,
+    @GetUser() actor: Usuarios,
+  ) {
+    return this.service.updateSettings(dto, actor);
+  }
 
   @Get('records')
   @Roles('admin', 'jefe')

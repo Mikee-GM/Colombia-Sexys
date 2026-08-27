@@ -1,6 +1,26 @@
 import { fromCents, toCents } from '../common/money';
 import { LiquidationRecord } from './entities/liquidation-record.entity';
 
+/**
+ * Politica de comision sobre extras con tarjeta.
+ *
+ * Estos dos numeros estaban incrustados aqui. Ahora llegan desde
+ * `liquidation_settings` para que administracion los cambie desde la pantalla
+ * del corte, y los valores por defecto son los que tenia el codigo, de modo que
+ * un calculo sin configuracion da exactamente el resultado de antes.
+ */
+export interface CardExtraCommissionPolicy {
+  /** Porcentaje que retiene la empresa. 15 significa que la empleada cobra el 85%. */
+  percentage: number;
+  /** Importe minimo del extra para que la comision aplique. */
+  threshold: number;
+}
+
+export const DEFAULT_CARD_EXTRA_COMMISSION: CardExtraCommissionPolicy = {
+  percentage: 15,
+  threshold: 1000,
+};
+
 export interface CutResult {
   salesTotal: number;
   finesTotal: number;
@@ -26,6 +46,10 @@ export interface CutResult {
   netTransportBalance: number;
   transferTotal: number;
   companyTransportExpenses: number;
+  /** Extras cobrados con tarjeta, antes de aplicarles la comision. */
+  cardExtrasTotal: number;
+  /** Lo que la comision de tarjeta le resto a la empleada en el periodo. */
+  cardExtraCommission: number;
 }
 
 /*
@@ -35,7 +59,15 @@ export interface CutResult {
  * semana. `toCents` entra, `fromCents` sale, y entre medias solo hay enteros.
  */
 
-export function calculateCut(records: LiquidationRecord[]): CutResult {
+export function calculateCut(
+  records: LiquidationRecord[],
+  commission: CardExtraCommissionPolicy = DEFAULT_CARD_EXTRA_COMMISSION,
+): CutResult {
+  const thresholdCents = toCents(commission.threshold);
+  // La comision se guarda como porcentaje; lo que se multiplica es lo que queda.
+  const employeeShareOfCardExtras =
+    1 - Math.min(100, Math.max(0, commission.percentage)) / 100;
+
   let salesTotal = 0;
   let finesTotal = 0;
   let cashTotal = 0;
@@ -53,6 +85,8 @@ export function calculateCut(records: LiquidationRecord[]): CutResult {
   let employeeCashDue = 0;
   let employeeShareTotal = 0;
   let transferTotal = 0;
+  let cardExtrasTotal = 0;
+  let cardExtraCommission = 0;
 
   for (const record of records) {
     if (record.isFine) {
@@ -96,8 +130,27 @@ export function calculateCut(records: LiquidationRecord[]): CutResult {
 
     const extra = toCents(record.electronicExtraAmount ?? record.extraAmount);
     rawExtrasTotal += extra;
-    // El umbral son 1000 unidades, que en centavos son 100_000.
-    calculatedExtras += extra >= 100_000 ? Math.round(extra * 0.85) : extra;
+
+    /*
+     * Solo la tarjeta paga comision, y solo a partir del umbral. Antes la
+     * condicion era "no es efectivo", que castigaba igual a la transferencia
+     * pese a no costarle nada a la empresa.
+     *
+     * `cardExtra` se acota a `extra` porque los dos importes se guardan por
+     * separado en el registro: si alguno llegara descuadrado, la parte con
+     * comision nunca puede exceder el total de extras de ese servicio.
+     */
+    const cardExtra = Math.min(extra, toCents(record.cardExtraAmount));
+    const uncommissionedExtra = extra - cardExtra;
+    cardExtrasTotal += cardExtra;
+
+    if (cardExtra >= thresholdCents && cardExtra > 0) {
+      const employeeKeeps = Math.round(cardExtra * employeeShareOfCardExtras);
+      cardExtraCommission += cardExtra - employeeKeeps;
+      calculatedExtras += employeeKeeps + uncommissionedExtra;
+    } else {
+      calculatedExtras += extra;
+    }
 
     if (record.paymentMethod === 'efectivo') cashTotal += serviceTotal;
     if (record.paymentMethod === 'transferencia') transferTotal += serviceTotal;
@@ -158,18 +211,23 @@ export function calculateCut(records: LiquidationRecord[]): CutResult {
     netTransportBalance: fromCents(netTransportBalance),
     transferTotal: fromCents(transferTotal),
     companyTransportExpenses: fromCents(companyTransportExpenses),
+    cardExtrasTotal: fromCents(cardExtrasTotal),
+    cardExtraCommission: fromCents(cardExtraCommission),
   };
 }
 
-export function buildCutReport(records: LiquidationRecord[]) {
+export function buildCutReport(
+  records: LiquidationRecord[],
+  commission: CardExtraCommissionPolicy = DEFAULT_CARD_EXTRA_COMMISSION,
+) {
   const officeRecords = records.filter((record) =>
     ['admin', 'jefe'].includes(record.sourceRole),
   );
   const employeeRecords = records.filter(
     (record) => record.sourceRole === 'empleada',
   );
-  const officeCut = calculateCut(officeRecords);
-  const employeeCut = calculateCut(employeeRecords);
+  const officeCut = calculateCut(officeRecords, commission);
+  const employeeCut = calculateCut(employeeRecords, commission);
 
   return {
     officeCut,

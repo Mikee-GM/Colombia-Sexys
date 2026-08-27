@@ -61,6 +61,28 @@ describe('PanelAccessService', () => {
       expect(tokens.save.mock.calls[0][0].redirectPath).toBeNull();
     });
 
+    it('admite una seccion en la cadena de consulta', async () => {
+      // El aviso de fotos aterriza directamente donde se suben.
+      await service.issueLink('emp-1', '555', '/empleada/portal?seccion=fotos');
+
+      expect(tokens.save.mock.calls[0][0].redirectPath).toBe(
+        '/empleada/portal?seccion=fotos',
+      );
+    });
+
+    it('descarta destinos protocolo-relativos y con esquema en la consulta', async () => {
+      // `//host` sale del sitio sin llevar esquema delante.
+      for (const destino of [
+        '//sitio-ajeno.com',
+        '/empleada/portal?next=https://sitio-ajeno.com',
+        '/empleada/portal?a=b#//sitio-ajeno.com',
+      ]) {
+        tokens.save.mockClear();
+        await service.issueLink('emp-1', '555', destino);
+        expect(tokens.save.mock.calls[0][0].redirectPath).toBeNull();
+      }
+    });
+
     it('no emite pases para un usuario inactivo', async () => {
       usuarios.findOne.mockResolvedValue({ id: 'jefe-1', activo: false });
 

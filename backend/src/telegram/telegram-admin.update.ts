@@ -78,7 +78,7 @@ export class TelegramAdminUpdate {
     const serviceId = match[1];
     const accept = match[2] === '1';
 
-    // Obtener información del servicio para validar si es una empleada independiente autorizándose a sí misma
+    // El servicio se carga para pintar el resumen y decidir la botonera.
     const servicio = await this.serviciosRepository.findOne({
       where: { id: serviceId },
       relations: { empleada: true, cliente: true },
@@ -554,7 +554,7 @@ export class TelegramAdminUpdate {
     const accept = match[2] === '1';
     const transportType = match[3] === 'same' ? 'chofer' : match[3] || 'chofer';
 
-    // Obtener información del servicio para validar si es una empleada independiente autorizándose a sí misma
+    // El servicio se carga para pintar el resumen y decidir la botonera.
     const servicio = await this.serviciosRepository.findOne({
       where: { id: serviceId },
       relations: { empleada: true, cliente: true },

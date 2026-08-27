@@ -11,6 +11,7 @@ function record(overrides: Partial<LiquidationRecord> = {}) {
     companyPercentage: 40,
     extraAmount: 0,
     electronicExtraAmount: 0,
+    cardExtraAmount: 0,
     promotion: false,
     membershipAmount: 0,
     companyTransportExpense: 0,
@@ -93,13 +94,79 @@ describe('liquidation calculator', () => {
     expect(result.transportTotal).toBe(120);
   });
 
-  it('aplica 85 por ciento a extras desde mil', () => {
+  it('aplica 85 por ciento a extras con tarjeta desde mil', () => {
     const result = calculateCut([
-      record({ extraAmount: 1000, electronicExtraAmount: 1000 }),
+      record({
+        extraAmount: 1000,
+        electronicExtraAmount: 1000,
+        cardExtraAmount: 1000,
+      }),
     ]);
 
     expect(result.calculatedExtras).toBe(850);
+    expect(result.cardExtrasTotal).toBe(1000);
+    expect(result.cardExtraCommission).toBe(150);
     expect(result.result).toBe(-2350);
+  });
+
+  it('no cobra comisión sobre extras pagados por transferencia', () => {
+    // La transferencia no le cuesta nada a la empresa: antes pagaba comisión
+    // igual que la tarjeta solo por no ser efectivo.
+    const result = calculateCut([
+      record({
+        extraAmount: 1000,
+        electronicExtraAmount: 1000,
+        cardExtraAmount: 0,
+      }),
+    ]);
+
+    expect(result.calculatedExtras).toBe(1000);
+    expect(result.cardExtraCommission).toBe(0);
+  });
+
+  it('cobra comisión solo sobre la parte con tarjeta de un mismo servicio', () => {
+    const result = calculateCut([
+      record({
+        extraAmount: 1800,
+        electronicExtraAmount: 1800,
+        cardExtraAmount: 1200,
+      }),
+    ]);
+
+    // 1200 con tarjeta alcanzan el umbral y dejan 1020; los 600 restantes,
+    // cobrados por transferencia, van íntegros.
+    expect(result.calculatedExtras).toBe(1620);
+    expect(result.cardExtraCommission).toBe(180);
+  });
+
+  it('no cobra comisión por debajo del umbral', () => {
+    const result = calculateCut([
+      record({
+        extraAmount: 999,
+        electronicExtraAmount: 999,
+        cardExtraAmount: 999,
+      }),
+    ]);
+
+    expect(result.calculatedExtras).toBe(999);
+    expect(result.cardExtraCommission).toBe(0);
+  });
+
+  it('respeta el porcentaje y el umbral configurados', () => {
+    const registros = [
+      record({
+        extraAmount: 800,
+        electronicExtraAmount: 800,
+        cardExtraAmount: 800,
+      }),
+    ];
+
+    // Con el umbral por defecto de 1000 este extra no paga nada.
+    expect(calculateCut(registros).calculatedExtras).toBe(800);
+
+    const result = calculateCut(registros, { percentage: 20, threshold: 500 });
+    expect(result.calculatedExtras).toBe(640);
+    expect(result.cardExtraCommission).toBe(160);
   });
 
   it('usa únicamente el corte de oficina sin generar discrepancia', () => {

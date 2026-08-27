@@ -8,6 +8,7 @@ import type {
   DebtWithEmployee,
   DriverLiquidationDriver,
   DriverLiquidationReport,
+  LiquidationCommissionSettings,
   LiquidationDebt,
   LiquidationEmployee,
   LiquidationRecord,
@@ -63,6 +64,25 @@ export async function confirmWeeklySettlement(
   });
   revalidatePath("/admin/liquidations");
   return result;
+}
+
+/**
+ * Cambia la politica de comision sobre extras con tarjeta.
+ *
+ * Se revalidan las dos rutas porque el cambio mueve el neto de todos los
+ * cortes abiertos, no solo el de la empleada que se estaba mirando. Los cortes
+ * ya confirmados no se recalculan: su neto quedo congelado al confirmarlos.
+ */
+export async function updateLiquidationSettings(
+  data: Partial<LiquidationCommissionSettings>,
+) {
+  const settings = await apiFetch<LiquidationCommissionSettings>(
+    "/liquidations/settings",
+    { method: "PATCH", body: JSON.stringify(data) },
+  );
+  revalidatePath("/admin/liquidations");
+  revalidatePath("/admin/liquidations/[id]", "page");
+  return settings;
 }
 
 export async function createLiquidationRecord(data: LiquidationRecordInput) {

@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
-import { getEmployeePortalData } from "@/lib/actions/employee-portal";
+import {
+  getEmployeePortalData,
+  getMyWeeklyPhotos,
+} from "@/lib/actions/employee-portal";
 import EmployeePortalView from "@/components/empleada/EmployeePortalView";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyWorkShift } from "@/lib/actions/work-shift";
@@ -11,11 +14,15 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; seccion?: string }>;
 }
 
+/** Pestañas a las que puede apuntar un enlace. Nada mas abre el portal por defecto. */
+const SECCIONES = ["resumen", "ranking", "servicios", "reputacion", "fotos"] as const;
+type Seccion = (typeof SECCIONES)[number];
+
 export default async function EmployeePortalPage({ searchParams }: PageProps) {
-  const { token } = await searchParams;
+  const { token, seccion } = await searchParams;
   const result = await getEmployeePortalData(token);
 
   /*
@@ -44,11 +51,25 @@ export default async function EmployeePortalPage({ searchParams }: PageProps) {
     );
   }
 
+  /*
+   * Las fotos de la semana se resuelven aqui y no en el cliente para que la
+   * pestaña no aparezca vacia un instante cuando se entra directamente a ella
+   * desde el boton de Telegram. Si la fuente falla se entra igual: el
+   * componente sabe recargarlas por su cuenta.
+   */
+  const fotosSemanales = await getMyWeeklyPhotos(token);
+
+  const seccionInicial: Seccion = SECCIONES.includes(seccion as Seccion)
+    ? (seccion as Seccion)
+    : "resumen";
+
   return (
     <EmployeePortalView
       initialData={result.data}
       token={token}
       workShift={workShift}
+      weeklyPhotos={fotosSemanales.envios ?? []}
+      seccionInicial={seccionInicial}
     />
   );
 }

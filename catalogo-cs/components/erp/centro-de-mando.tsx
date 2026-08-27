@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
+  CalendarRange,
   Car,
   CreditCard,
   FileCheck,
@@ -21,6 +22,7 @@ import {
 } from "@/components/erp/primitives";
 import type { GodEyeOverview } from "@/lib/actions/god-eye";
 import type { OffDutyPerson } from "@/lib/actions/work-shift";
+import type { BloqueTablero } from "@/components/erp/tablero-personalizable";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
@@ -47,6 +49,31 @@ const PRIORIDAD_TONE: Record<string, BadgeTone> = {
   normal: "zinc",
 };
 
+/**
+ * Dias corridos de la semana en curso, contando el de hoy.
+ *
+ * Se usa para el promedio diario del facturado semanal: dividir siempre entre
+ * siete haria parecer que un lunes por la tarde la operacion va siete veces
+ * peor de lo que va. La semana empieza en lunes, igual que el corte.
+ */
+function diasTranscurridosDeLaSemana() {
+  const nombre = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    weekday: "short",
+  }).format(new Date());
+
+  const posicion: Record<string, number> = {
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+    Sun: 7,
+  };
+  return posicion[nombre] ?? 1;
+}
+
 function hora(iso: string | null) {
   if (!iso) return null;
   try {
@@ -60,14 +87,21 @@ function hora(iso: string | null) {
   }
 }
 
-export default function CentroDeMando({
+/**
+ * Bloques del Centro de Mando.
+ *
+ * Devuelve las piezas sueltas en vez de una pantalla ya montada porque el
+ * administrador reordena y oculta cada una por su cuenta; el ensamblado lo hace
+ * `TableroPersonalizable` desde la pagina.
+ */
+export function bloquesDeCentroDeMando({
   overview,
   offDuty = [],
 }: {
   overview: GodEyeOverview;
   /** Personal que cerro su jornada, de cualquier rol. */
   offDuty?: OffDutyPerson[];
-}) {
+}): { kpis: BloqueTablero[]; paneles: BloqueTablero[] } {
   const { metrics, activeServices, pendingReports } = overview;
 
   const enCurso = activeServices.filter((s) => s.estado === "en_curso");
@@ -133,9 +167,11 @@ export default function CentroDeMando({
     },
   ].filter((alerta) => alerta.cantidad > 0);
 
-  return (
-    <div className="flex flex-col gap-6">
-      <KpiGrid columns={5}>
+  const kpis: BloqueTablero[] = [
+    {
+      id: "kpi-facturado-hoy",
+      titulo: "Facturado hoy",
+      contenido: (
         <KpiCard
           label="Facturado hoy"
           icon={CreditCard}
@@ -144,6 +180,36 @@ export default function CentroDeMando({
             metrics.activeServices === 1 ? "servicio activo" : "servicios activos"
           }`}
         />
+      ),
+    },
+    {
+      /*
+        La semana corre de lunes a domingo en hora de Ciudad de Mexico, igual
+        que el corte: el backend la calcula con date_trunc sobre esa zona, no
+        sobre UTC, para que un servicio de la noche del domingo no se cuente en
+        la semana siguiente.
+      */
+      id: "kpi-facturado-semana",
+      titulo: "Facturado en la semana",
+      contenido: (
+        <KpiCard
+          label="Facturado en la semana"
+          icon={CalendarRange}
+          value={formatCurrency(metrics.revenueWeek)}
+          footnote={
+            metrics.revenueWeek > 0
+              ? `Promedio diario: ${formatCurrency(
+                  metrics.revenueWeek / diasTranscurridosDeLaSemana(),
+                )}`
+              : "Sin facturacion en la semana"
+          }
+        />
+      ),
+    },
+    {
+      id: "kpi-efectivo-calle",
+      titulo: "Efectivo en calle",
+      contenido: (
         <KpiCard
           label="Efectivo en calle"
           icon={Wallet}
@@ -156,12 +222,24 @@ export default function CentroDeMando({
             )
           }
         />
+      ),
+    },
+    {
+      id: "kpi-modelos",
+      titulo: "Modelos disponibles",
+      contenido: (
         <KpiCard
           label="Modelos disponibles"
           icon={Users}
           value={`${metrics.employeesAvailable} / ${metrics.employeesTotal}`}
           footnote={`${metrics.employeesBusy} en servicio`}
         />
+      ),
+    },
+    {
+      id: "kpi-choferes",
+      titulo: "Choferes activos",
+      contenido: (
         <KpiCard
           label="Choferes activos"
           icon={Car}
@@ -172,6 +250,12 @@ export default function CentroDeMando({
               : "ofertas sin aceptar"
           }`}
         />
+      ),
+    },
+    {
+      id: "kpi-sanciones",
+      titulo: "Sanciones vigentes",
+      contenido: (
         <KpiCard
           label="Sanciones vigentes"
           icon={Scale}
@@ -184,9 +268,15 @@ export default function CentroDeMando({
             )
           }
         />
-      </KpiGrid>
+      ),
+    },
+  ];
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+  const paneles: BloqueTablero[] = [
+    {
+      id: "operacion-en-vivo",
+      titulo: "Operacion en vivo",
+      contenido: (
         <Panel
           title="Operacion en vivo"
           subtitle={`${activeServices.length} ${
@@ -261,7 +351,12 @@ export default function CentroDeMando({
             </div>
           )}
         </Panel>
-
+      ),
+    },
+    {
+      id: "alertas-sistema",
+      titulo: "Alertas del sistema",
+      contenido: (
         <Panel
           title="Alertas del sistema"
           subtitle="Requieren decision administrativa"
@@ -311,11 +406,18 @@ export default function CentroDeMando({
             </div>
           )}
         </Panel>
-      </div>
-
-      {pendingReports.length > 0 ? (
-        <Panel
-          title="Reportes por atender"
+      ),
+    },
+    // Solo aparece cuando hay algo que atender: un panel vacio en el tablero
+    // ocupa el mismo espacio que uno lleno y no dice nada.
+    ...(pendingReports.length > 0
+      ? [
+          {
+            id: "reportes-por-atender",
+            titulo: "Reportes por atender",
+            contenido: (
+              <Panel
+                title="Reportes por atender"
           subtitle="reportes_conducta sin resolver"
           flush
           action={
@@ -355,15 +457,29 @@ export default function CentroDeMando({
               </div>
             ))}
           </div>
-        </Panel>
-      ) : null}
+              </Panel>
+            ),
+          },
+        ]
+      : []),
+  ];
 
-      <div className="flex items-center gap-2 border-t border-zinc-800 pt-6">
-        <Activity className="h-4 w-4 text-[#8B7635]" />
-        <h2 className="font-heading text-base font-semibold tracking-[0.04em] text-zinc-200">
-          Tablero detallado
-        </h2>
-      </div>
+  return { kpis, paneles };
+}
+
+/**
+ * Separador del tablero detallado.
+ *
+ * Es un bloque mas para que se pueda ocultar junto con lo que encabeza, en vez
+ * de quedar flotando sobre una seccion que el administrador quito.
+ */
+export function SeparadorTableroDetallado() {
+  return (
+    <div className="flex items-center gap-2 border-t border-zinc-800 pt-6">
+      <Activity className="h-4 w-4 text-[#8B7635]" />
+      <h2 className="font-heading text-base font-semibold tracking-[0.04em] text-zinc-200">
+        Tablero detallado
+      </h2>
     </div>
   );
 }

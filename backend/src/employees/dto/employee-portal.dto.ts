@@ -45,6 +45,8 @@ export interface EmployeePortalActiveService {
   horaFinEstimada?: string | null;
   gananciaEstimada: number;
   transporte?: {
+    /** Id del viaje: es lo que el portal necesita para marcar el avance. */
+    id: string;
     tipo: string;
     proveedor: string;
     estado: string;
@@ -85,6 +87,25 @@ export interface EmployeePortalCashDelivery {
   obligations: EmployeePortalCashObligationItem[];
 }
 
+/**
+ * Estado del ciclo de fotos de la semana tal y como lo ve la modelo.
+ *
+ * `weeklyContentStatus` se queda en la etiqueta; esto es lo que permite al
+ * portal decirle cuantos avisos lleva, cuantos le quedan y cuanto le costaria
+ * dejar pasar el ultimo.
+ */
+export interface EmployeePortalWeeklyContent {
+  semanaInicio: string;
+  estado: 'al_dia' | 'atrasado' | 'pendiente_revision' | 'sin_solicitar';
+  recordatoriosEnviados: number;
+  maxRecordatorios: number;
+  recordatoriosRestantes: number;
+  entregoEstaSemana: boolean;
+  fotosPendientesDeRevision: number;
+  multaAplicadaAt: string | null;
+  importeMulta: number;
+}
+
 export interface EmployeePortalData {
   profile: {
     id: string;
@@ -96,6 +117,7 @@ export interface EmployeePortalData {
     availabilityStatus: string;
     weeklyContentStatus: string;
     pendingWeeklyPhotosCount: number;
+    weeklyContent: EmployeePortalWeeklyContent;
     publicPhotosCount: number;
     privatePhotosCount: number;
     publicPhotos: string[];

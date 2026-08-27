@@ -1,8 +1,34 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { getApiBaseUrl } from "@/lib/api-server";
 import { getBackendCookieHeader } from "@/lib/auth";
-import type { EmployeePortalData } from "@/lib/types";
+import type {
+  EmployeePortalData,
+  EmployeeWeeklyContent,
+  WeeklyPhotoSubmissionItem,
+} from "@/lib/types";
+
+/**
+ * Cabeceras del portal.
+ *
+ * El portal se abre de dos maneras: con la sesion normal, y con un token que
+ * llega en el enlace del bot. Las dos tienen que viajar en cada peticion
+ * porque no sabemos cual de las dos trae quien esta mirando.
+ */
+async function portalHeaders(token?: string) {
+  const cookie = await getBackendCookieHeader();
+  const headers: Record<string, string> = {};
+  if (cookie) headers["Cookie"] = cookie;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
+function portalUrl(path: string, token?: string) {
+  const url = new URL(`${getApiBaseUrl()}${path}`);
+  if (token) url.searchParams.set("token", token);
+  return url.toString();
+}
 
 export async function getEmployeePortalData(
   token?: string,
@@ -46,5 +72,260 @@ export async function getEmployeePortalData(
       success: false,
       error: error.message || "Error de conexión con el servidor",
     };
+  }
+}
+
+/**
+ * Fotos de la semana en curso con su estado de revision.
+ *
+ * Va aparte de `getEmployeePortalData` porque cambia cada vez que sube algo, y
+ * refrescar el portal entero para ver una miniatura nueva seria recalcular
+ * ranking, ganancias y reputacion sin motivo.
+ */
+export async function getMyWeeklyPhotos(token?: string): Promise<{
+  success: boolean;
+  estado?: EmployeeWeeklyContent;
+  envios?: WeeklyPhotoSubmissionItem[];
+  error?: string;
+}> {
+  try {
+    const response = await fetch(
+      portalUrl("/employee-portal/weekly-photos", token),
+      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+    );
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudieron cargar tus fotos de la semana",
+      };
+    }
+
+    return { success: true, ...(await response.json()) };
+  } catch (error) {
+    console.error("Error al obtener las fotos semanales:", error);
+    return { success: false, error: "Error de conexion con el servidor" };
+  }
+}
+
+/**
+ * Sube las fotos semanales desde el portal.
+ *
+ * Recibe el FormData tal cual lo arma el navegador y lo reenvia sin tocarlo:
+ * fijar `Content-Type` a mano rompe el `boundary` que fetch genera solo, y el
+ * backend rechazaria el multipart entero.
+ */
+export async function uploadMyWeeklyPhotos(
+  formData: FormData,
+  token?: string,
+): Promise<{
+  success: boolean;
+  subidas?: number;
+  estado?: EmployeeWeeklyContent;
+  error?: string;
+}> {
+  const fotos = formData.getAll("fotos");
+  if (fotos.length === 0) {
+    return { success: false, error: "Selecciona al menos una foto." };
+  }
+
+  try {
+    const response = await fetch(
+      portalUrl("/employee-portal/weekly-photos", token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: await portalHeaders(token),
+        body: formData,
+      },
+    );
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const mensaje = Array.isArray(err.message)
+        ? err.message.join(". ")
+        : err.message;
+      return { success: false, error: mensaje || "No se pudieron subir las fotos" };
+    }
+
+    revalidatePath("/empleada/portal");
+    return { success: true, ...(await response.json()) };
+  } catch (error) {
+    console.error("Error al subir fotos semanales:", error);
+    return { success: false, error: "Error de conexion con el servidor" };
+  }
+}
+
+/**
+ * Marca el avance del viaje de la empleada.
+ *
+ * Son las dos acciones del ciclo del servicio que hasta ahora solo existian en
+ * Telegram y que mas prisa tienen: el cliente esta esperando y encontrar el
+ * mensaje correcto en el chat cuesta.
+ */
+export async function updateMyTripStatus(
+  tripId: string,
+  estado: "en_camino" | "llegue",
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/trips/${tripId}/status`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          ...(await portalHeaders(token)),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ estado }),
+      },
+    );
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo registrar el avance del viaje",
+      };
+    }
+
+    revalidatePath("/empleada/portal");
+    return { success: true };
+  } catch (error) {
+    console.error("Error al actualizar el viaje:", error);
+    return { success: false, error: "Error de conexion con el servidor" };
+  }
+}
+
+/**
+ * Cierra el servicio en curso desde el portal.
+ *
+ * Detras corre el mismo `finishByEmployee` que el boton del chat, asi que las
+ * dos vias dejan el servicio, la liquidacion y la disponibilidad exactamente
+ * igual.
+ */
+export async function finishMyService(
+  servicioId: string,
+  token?: string,
+): Promise<{
+  success: boolean;
+  resumen?: {
+    duracion: string;
+    horasFacturadas: number | null;
+    totalACobrar: number;
+    metodoPago: string;
+    clienteNombre: string | null;
+    tieneServicioSiguiente: boolean;
+  };
+  error?: string;
+}> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/services/${servicioId}/finish`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: await portalHeaders(token),
+      },
+    );
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo finalizar el servicio",
+      };
+    }
+
+    revalidatePath("/empleada/portal");
+    return { success: true, resumen: await response.json() };
+  } catch (error) {
+    console.error("Error al finalizar el servicio:", error);
+    return { success: false, error: "Error de conexion con el servidor" };
+  }
+}
+
+export type ExtraDisponible = { id: string; nombre: string; precio: number };
+
+/** Extras que la modelo puede cobrarle al cliente en el servicio en curso. */
+export async function getAvailableExtras(
+  servicioId: string,
+  token?: string,
+): Promise<{ success: boolean; extras?: ExtraDisponible[]; error?: string }> {
+  try {
+    const response = await fetch(
+      portalUrl(
+        `/employee-portal/services/${servicioId}/available-extras`,
+        token,
+      ),
+      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+    );
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudieron cargar tus extras",
+      };
+    }
+
+    return { success: true, extras: await response.json() };
+  } catch (error) {
+    console.error("Error al cargar los extras:", error);
+    return { success: false, error: "Error de conexion con el servidor" };
+  }
+}
+
+/**
+ * Agrega un extra al servicio en curso.
+ *
+ * En el chat esto son tres mensajes encadenados porque no cabe un formulario;
+ * aqui la modelo elige extra y metodo de pago a la vez y va en una peticion.
+ */
+export async function addServiceExtra(
+  servicioId: string,
+  extraCatalogoId: string,
+  metodoPago: "tarjeta" | "transferencia" | "efectivo",
+  token?: string,
+): Promise<{
+  success: boolean;
+  totalExtras?: number;
+  totalServicio?: number;
+  error?: string;
+}> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/services/${servicioId}/extras`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          ...(await portalHeaders(token)),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ extraCatalogoId, metodoPago }),
+      },
+    );
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const mensaje = Array.isArray(err.message)
+        ? err.message.join(". ")
+        : err.message;
+      return { success: false, error: mensaje || "No se pudo agregar el extra" };
+    }
+
+    revalidatePath("/empleada/portal");
+    const datos = await response.json();
+    return {
+      success: true,
+      totalExtras: datos.totalExtras,
+      totalServicio: datos.totalServicio,
+    };
+  } catch (error) {
+    console.error("Error al agregar el extra:", error);
+    return { success: false, error: "Error de conexion con el servidor" };
   }
 }

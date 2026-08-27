@@ -17,6 +17,7 @@ import {
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { LiquidationReport } from "@/components/liquidations/types";
+import ComisionExtrasTarjeta from "@/components/liquidations/comision-extras-tarjeta";
 
 /**
  * Detalle del corte de una empleada en una semana.
@@ -43,10 +44,13 @@ export default function LiquidacionEmpleada({
   report,
   startDate,
   endDate,
+  puedeEditarComision = false,
 }: {
   report: LiquidationReport;
   startDate: string;
   endDate: string;
+  /** Solo admin puede cambiar la regla de comision de extras con tarjeta. */
+  puedeEditarComision?: boolean;
 }) {
   const { weeklySettlement: corte, finalCut: cut } = report;
   const registros = report.officeRecords ?? [];
@@ -122,6 +126,10 @@ export default function LiquidacionEmpleada({
             <Fila
               label="Extras calculados"
               value={formatCurrency(cut.calculatedExtras)}
+            />
+            <ComisionExtrasTarjeta
+              settings={report.commissionSettings}
+              editable={puedeEditarComision}
             />
             <Fila
               label="Membresias"

@@ -62,6 +62,13 @@ export class CreateLiquidationRecordDto {
   @Min(0)
   extraAmount?: number;
 
+  /** De los extras, lo cobrado con tarjeta: la unica parte que paga comision. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  cardExtraAmount?: number;
+
   @IsOptional()
   @IsBoolean()
   promotion?: boolean;

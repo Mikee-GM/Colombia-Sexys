@@ -2,9 +2,11 @@ import {
   buildConversationTranscript,
   detectGroupServiceIntent,
   detectOpenEndedDuration,
-  roundOpenEndedHours,
   splitForTelegram,
 } from './telegram-booking.update';
+// El redondeo de las horas abiertas se mudo a services: lo comparten el chat y
+// el portal, que ahora tambien cierra servicios.
+import { roundOpenEndedHours } from '../services/service-duration';
 
 describe('Duración indefinida', () => {
   it.each([

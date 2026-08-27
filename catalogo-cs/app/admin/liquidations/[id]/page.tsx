@@ -45,6 +45,7 @@ export default async function LiquidacionEmpleadaPage({
       report={report}
       startDate={startDate}
       endDate={endDate}
+      puedeEditarComision={user.rol === "admin"}
     />
   );
 }

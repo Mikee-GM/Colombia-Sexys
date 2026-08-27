@@ -7,21 +7,38 @@ import { formatCurrency as formatCurrencyCOP } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
+import type { WeeklyPhotoSubmissionItem } from "@/lib/types";
+import SubirFotosSemanales, {
+  AvisoFotosSemanales,
+} from "@/components/empleada/FotosSemanales";
+import AccionesDelViaje from "@/components/empleada/AccionesDelViaje";
+import FinalizarServicio from "@/components/empleada/FinalizarServicio";
+import AgregarExtra from "@/components/empleada/AgregarExtra";
 
 interface EmployeePortalViewProps {
   initialData: EmployeePortalData;
   token?: string;
   /** Nulo cuando se entra con un enlace antiguo, sin sesion. */
   workShift?: WorkShiftStatus | null;
+  /** Fotos de la semana ya resueltas en el servidor, para no parpadear. */
+  weeklyPhotos?: WeeklyPhotoSubmissionItem[];
+  /**
+   * Pestaña inicial. El boton de Telegram trae `?seccion=fotos` para aterrizar
+   * directamente donde se suben, que es el motivo por el que se mando el aviso.
+   */
+  seccionInicial?: TabType;
 }
 
 type TabType = "resumen" | "ranking" | "servicios" | "reputacion" | "fotos";
 
 export default function EmployeePortalView({
   initialData,
+  token,
   workShift,
+  weeklyPhotos = [],
+  seccionInicial = "resumen",
 }: EmployeePortalViewProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("resumen");
+  const [activeTab, setActiveTab] = useState<TabType>(seccionInicial);
   const data = initialData;
 
   useEffect(() => {
@@ -189,6 +206,31 @@ export default function EmployeePortalView({
                     </div>
                   )}
                 </div>
+
+                {/*
+                  Marcar el avance sin salir del portal. Los botones del chat
+                  siguen valiendo: esto es una segunda via, no un reemplazo.
+                */}
+                {data.activeService.transporte && (
+                  <AccionesDelViaje
+                    transporte={data.activeService.transporte}
+                    token={token}
+                  />
+                )}
+
+                {/* Extras y cierre: solo sobre un servicio ya arrancado. */}
+                {data.activeService.estado === "en_curso" && (
+                  <>
+                    <AgregarExtra
+                      servicioId={data.activeService.id}
+                      token={token}
+                    />
+                    <FinalizarServicio
+                      servicioId={data.activeService.id}
+                      token={token}
+                    />
+                  </>
+                )}
               </div>
             )}
 
@@ -454,9 +496,16 @@ export default function EmployeePortalView({
                         : "⚠️ Fotos Atrasadas"}
                   </span>
                 </div>
-                <p className="text-xs text-gray-400 leading-relaxed">
-                  Recuerda enviar tus fotos semanales cada viernes por Telegram para mantener tu perfil activo en el catálogo y tu puntuación de confiabilidad al 100%.
-                </p>
+                {/*
+                  El aviso reemplaza al texto fijo que estaba aqui: decia que
+                  las fotos se mandaban por Telegram, que ya no es cierto, y no
+                  distinguia entre estar al dia y llevar dos recordatorios
+                  encima.
+                */}
+                <AvisoFotosSemanales
+                  estado={data.profile.weeklyContent}
+                  onIrAFotos={() => setActiveTab("fotos")}
+                />
                 <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-gray-400">
                   <span>Confiabilidad (Trust Score):</span>
                   <span className="font-semibold text-emerald-400">
@@ -757,6 +806,13 @@ export default function EmployeePortalView({
         {/* ================= TAB 5: MIS FOTOS ================= */}
         {activeTab === "fotos" && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Contenido de la semana: aviso, subida y lo ya enviado. */}
+            <SubirFotosSemanales
+              estadoInicial={data.profile.weeklyContent}
+              enviosIniciales={weeklyPhotos}
+              token={token}
+            />
+
             {/* Galería Pública */}
             <div className="bg-[#141721] p-5 rounded-xl border border-white/5 space-y-4">
               <div className="flex items-center justify-between">
@@ -836,7 +892,7 @@ export default function EmployeePortalView({
 
       {/* FOOTER */}
       <footer className="mt-auto border-t border-white/5 py-4 text-center text-[11px] text-gray-500">
-        Colombia Sexys VIP • Portal de Empleada en Modo Solo Lectura
+        Colombia Sexys VIP • Portal de Empleada
       </footer>
     </div>
   );

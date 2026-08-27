@@ -101,6 +101,7 @@ export class OfficeLiquidationSyncService {
       employeeUberReimbursement: 0,
       employeeCashDue: 0,
       electronicExtraAmount: 0,
+      cardExtraAmount: 0,
       transportExcess: 0,
       promotion: false,
       membershipAmount: 0,
@@ -205,6 +206,10 @@ export class OfficeLiquidationSyncService {
       const electronicParticipantExtras = participantExtras
         .filter((extra) => extra.metodoPago !== 'efectivo')
         .reduce((sum, extra) => sum + Number(extra.precioCobrado), 0);
+      // Aparte de lo electronico: solo la tarjeta paga comision en el corte.
+      const cardParticipantExtras = participantExtras
+        .filter((extra) => extra.metodoPago === 'tarjeta')
+        .reduce((sum, extra) => sum + Number(extra.precioCobrado), 0);
       const base = Number(participant.confirmedSubtotal);
       return {
         serviceId: service.id,
@@ -223,6 +228,7 @@ export class OfficeLiquidationSyncService {
         employeeUberReimbursement: responsible ? employeeUberReimbursement : 0,
         employeeCashDue: responsible ? employeeCashDue : 0,
         electronicExtraAmount: electronicParticipantExtras,
+        cardExtraAmount: cardParticipantExtras,
         transportExcess: 0,
         promotion: false,
         membershipAmount: 0,

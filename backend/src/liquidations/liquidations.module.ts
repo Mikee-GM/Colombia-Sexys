@@ -16,6 +16,7 @@ import {
   EmployeeCashPaymentAllocation,
 } from '../transport-operations/entities/employee-cash-payment.entity';
 import { EmployeeWeeklySettlement } from './entities/employee-weekly-settlement.entity';
+import { LiquidationSetting } from './entities/liquidation-setting.entity';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { EmployeeWeeklySettlement } from './entities/employee-weekly-settlement.
       EmployeeCashPayment,
       EmployeeCashPaymentAllocation,
       EmployeeWeeklySettlement,
+      LiquidationSetting,
       Servicios,
     ]),
   ],

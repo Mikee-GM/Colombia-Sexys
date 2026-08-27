@@ -13,8 +13,14 @@ const TTL_MINUTES = 5;
  * Rutas a las que se permite redirigir tras canjear el pase. Solo destinos
  * internos: con la sesion recien abierta, un salto a un sitio ajeno seria un
  * regalo para quien pudiera influir en el destino.
+ *
+ * Se admite una cadena de consulta sencilla para poder aterrizar en una seccion
+ * concreta --las fotos de la semana, un servicio en curso-- sin inventar una
+ * ruta por pestaña. El alfabeto es deliberadamente estrecho: sin `/`, sin `:`
+ * y sin `.`, no hay forma de colar un `//host` ni un esquema y salir del sitio.
  */
-const ALLOWED_REDIRECT = /^\/(admin|jefe|empleada|chofer)(\/[\w\-/]*)?$/;
+const ALLOWED_REDIRECT =
+  /^\/(admin|jefe|empleada|chofer)(\/[\w\-/]*)?(\?[\w\-=&]*)?$/;
 
 /**
  * Huella del pase. SHA-256 y no bcrypt porque el canje busca por indice, y con

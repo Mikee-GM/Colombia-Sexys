@@ -14,8 +14,14 @@ import { Empleadas } from '../employees/entities/employee.entity';
 import { EmpleadaFotos } from '../employee-photos/entities/employee-photo.entity';
 import { EmpleadaFotosExclusivas } from '../employee-photos/entities/employee-private-photo.entity';
 import { Usuarios } from '../users/entities/user.entity';
-import { UploadService } from '../upload/upload.service';
+import {
+  UploadService,
+  type UploadedFilePayload,
+} from '../upload/upload.service';
 import { APP_TIME_ZONE } from '../common/locale';
+
+/** Tope por envio. Evita que un descuido cargue la galeria entera del telefono. */
+const MAX_PHOTOS_POR_ENVIO = 12;
 
 @Injectable()
 export class WeeklyContentService {
@@ -117,9 +123,108 @@ export class WeeklyContentService {
   }
 
   /**
-   * Registrar una nueva foto subida por una modelo vía Telegram
+   * Estado del contenido semanal de una sola modelo, con el detalle que
+   * necesita su portal: cuantos recordatorios lleva, cuantos le quedan y si ya
+   * se le aplico la multa.
+   *
+   * `getWeeklyStatusForEmployees` resuelve el estado de todas a la vez para el
+   * ERP, pero se queda en la etiqueta; aqui hace falta el porque.
    */
-  async recordTelegramPhotoSubmission(
+  async getWeeklyStatusForEmployee(empleadaId: string): Promise<{
+    semanaInicio: string;
+    estado: 'al_dia' | 'atrasado' | 'pendiente_revision' | 'sin_solicitar';
+    recordatoriosEnviados: number;
+    maxRecordatorios: number;
+    /** Avisos que quedan antes de que se aplique la multa. */
+    recordatoriosRestantes: number;
+    entregoEstaSemana: boolean;
+    fotosPendientesDeRevision: number;
+    multaAplicadaAt: string | null;
+    importeMulta: number;
+  }> {
+    const semanaInicio = this.getCurrentCycleFriday();
+    const { maxRecordatorios, importeMulta } = await this.getFinePolicy();
+
+    const [schedule, fotosPendientes] = await Promise.all([
+      this.scheduleRepo.findOne({ where: { empleadaId, semanaInicio } }),
+      this.submissionRepo.count({
+        where: { empleadaId, semanaInicio, estado: 'pendiente' },
+      }),
+    ]);
+
+    const recordatoriosEnviados = schedule?.recordatoriosEnviados ?? 0;
+    const entregoEstaSemana =
+      schedule?.estado === 'entregado' || fotosPendientes > 0;
+
+    let estado: 'al_dia' | 'atrasado' | 'pendiente_revision' | 'sin_solicitar';
+    if (!schedule) {
+      estado = 'sin_solicitar';
+    } else if (fotosPendientes > 0) {
+      estado = 'pendiente_revision';
+    } else if (schedule.estado === 'entregado') {
+      estado = 'al_dia';
+    } else {
+      estado = 'atrasado';
+    }
+
+    return {
+      semanaInicio,
+      estado,
+      recordatoriosEnviados,
+      maxRecordatorios,
+      recordatoriosRestantes: Math.max(
+        0,
+        maxRecordatorios - recordatoriosEnviados,
+      ),
+      entregoEstaSemana,
+      fotosPendientesDeRevision: fotosPendientes,
+      multaAplicadaAt: schedule?.multaAplicadaAt
+        ? schedule.multaAplicadaAt.toISOString()
+        : null,
+      importeMulta,
+    };
+  }
+
+  /**
+   * Politica de multa vigente.
+   *
+   * Se lee con SQL crudo en vez de inyectar `LiquidationsService` porque el
+   * modulo de liquidaciones ya depende de este por otro lado y la inyeccion
+   * cerraria el ciclo. Si la fila no existe se usan los valores por defecto:
+   * el ciclo semanal no puede quedarse parado por una tabla sin migrar.
+   */
+  async getFinePolicy(): Promise<{
+    maxRecordatorios: number;
+    importeMulta: number;
+  }> {
+    try {
+      const [row]: Array<{
+        weekly_content_max_reminders: number;
+        weekly_content_fine_amount: string | number;
+      }> = await this.scheduleRepo.query(
+        `SELECT weekly_content_max_reminders, weekly_content_fine_amount
+           FROM liquidation_settings WHERE id = 1`,
+      );
+      if (row) {
+        return {
+          maxRecordatorios: Number(row.weekly_content_max_reminders) || 3,
+          importeMulta: Number(row.weekly_content_fine_amount) || 0,
+        };
+      }
+    } catch {
+      // Tabla aun sin migrar: se sigue con los valores por defecto.
+    }
+    return { maxRecordatorios: 3, importeMulta: 300 };
+  }
+
+  /**
+   * Registrar una foto semanal subida por la modelo.
+   *
+   * El origen ya no cambia nada: antes solo entraban por Telegram y ahora la
+   * via oficial es el portal, pero el registro y el cierre del ciclo son los
+   * mismos.
+   */
+  async recordPhotoSubmission(
     empleadaId: string,
     url: string,
   ): Promise<WeeklyPhotoSubmission> {
@@ -154,6 +259,61 @@ export class WeeklyContentService {
     }
 
     return saved;
+  }
+
+  /**
+   * Subida de fotos semanales desde el portal de la modelo.
+   *
+   * Es la via oficial desde que se retiro la de Telegram: alli las fotos
+   * llegaban al chat sin que la modelo pudiera ver cuales habia mandado ni
+   * corregirse, y cualquier foto suelta en la conversacion entraba a la cola de
+   * revision aunque no fuera contenido semanal.
+   *
+   * Se aceptan varias en una sola peticion porque nadie manda una sola foto, y
+   * cada archivo pasa por la misma validacion de imagen que el resto del panel.
+   */
+  async submitPortalPhotos(
+    empleadaId: string,
+    files: UploadedFilePayload[],
+  ): Promise<{ subidas: WeeklyPhotoSubmission[]; semanaInicio: string }> {
+    if (!files?.length) {
+      throw new BadRequestException('No se recibió ninguna foto.');
+    }
+    if (files.length > MAX_PHOTOS_POR_ENVIO) {
+      throw new BadRequestException(
+        `Puedes subir hasta ${MAX_PHOTOS_POR_ENVIO} fotos por envío.`,
+      );
+    }
+
+    const empleada = await this.empleadasRepo.findOne({
+      where: { id: empleadaId },
+    });
+    if (!empleada) {
+      throw new NotFoundException('Perfil de empleada no encontrado.');
+    }
+
+    const subidas: WeeklyPhotoSubmission[] = [];
+    for (const file of files) {
+      const { url } = await this.uploadService.uploadFile(file);
+      subidas.push(await this.recordPhotoSubmission(empleadaId, url));
+    }
+
+    return { subidas, semanaInicio: this.getCurrentCycleFriday() };
+  }
+
+  /**
+   * Fotos que la modelo mando esta semana, con su estado de revision.
+   *
+   * El portal las muestra para que sepa que llego y en que quedo: sin esto la
+   * subida era un buzon ciego.
+   */
+  async getCurrentCycleSubmissions(
+    empleadaId: string,
+  ): Promise<WeeklyPhotoSubmission[]> {
+    return this.submissionRepo.find({
+      where: { empleadaId, semanaInicio: this.getCurrentCycleFriday() },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   /**

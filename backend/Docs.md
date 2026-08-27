@@ -1,30 +1,54 @@
-- Pasos para crear una empleada \*
-  1- Crear la empleada desde el endpoint de employees POST (El usuario se creara automaticamente con el rol de empleada) IMPORTANTE especificar el tipo de empleada: 'independiente' o 'agencia'
+# Alta y operación de una empleada
 
-2- Generar un codigo de un solo uso con el endpoint de la API (POST /api/users/id/telegram-otp)
+Todas las empleadas son de agencia: siempre hay un jefe (o un administrador)
+que autoriza sus servicios. No existen las empleadas independientes, y una
+empleada nunca acepta ni rechaza su propio servicio ni recibe directamente la
+solicitud del cliente.
 
-3- La empleada debera buscar en su telegram el bot (@pasteles_bot), iniciarlo, y escribir en el chat /vincular XXXXXX, donde las X representan el codigo generado anteriormente
+## Alta
 
-4- A partir de aqui se divide en dos caminos para la empleada
+1. Crear la empleada desde `POST /api/v1/employees`. El usuario se crea
+   automáticamente con el rol `empleada`.
 
-- Para la empleada de agencia, el camino llega hasta aqui, el bot le enviara notificaciones de cuando es que
-  tiene una nueva cita, ya que el jefe es el que se encargara de aceptar o rechazar sus servicios.
+2. Asignarle un jefe (`jefeId`) y, si se quiere un relevo, un jefe secundario
+   (`jefeSecundarioId`). Si el jefe principal está inactivo, no disponible o
+   cerró su jornada, el servicio pasa al secundario; si tampoco hay, cae en
+   cualquier jefe o administrador activo y disponible.
 
-  Se le notificara si un chofer ya va en camino a su ubicacion o si ya llego.
+3. Generar un código de un solo uso con `POST /api/v1/users/:id/telegram-otp`.
 
-  Finalmente se le dara la opcion de finalizar un servicio en todo momento, por si el cliente decide terminarlo antes. O si el tiempo ya esta a punto de cumplirse, 15 minutos antes de dicho caso se le notificara a la empleada, ademas de preguntarle si es que el cliente desea extender el tiempo del servicio.
+4. La empleada busca el bot en su Telegram, lo inicia y escribe
+   `/vincular XXXXXX` con el código generado.
 
-  Una vez finalizado el servicio, el bot le buscara un chofer para que pueda volver a su departamento o a su siguiente servicio.
+Con eso queda operativa. El comando `/vincular_grupo` no es para ella: sirve
+para que un jefe o un administrador enlace su propio grupo de Telegram, que es
+donde se abre un tema por cada cliente.
 
-- Para la empleada independiente hay un paso mas para la correcta configuracion:
-  - Debera crear un nuevo grupo y activar la opcion de temas en su configuracion
-  - Debera anadir al bot a dicho grupo y ascenderlo a administrador
-  - Debera escribir en el chat del grupo el comando /vincular_grupo
+## Qué recibe la empleada
 
-- Con esos pasos ya estaria completa la configuracion de la empleada independiente.
+El bot le avisa de cada cita nueva. Es su jefe quien acepta o rechaza el
+servicio, así que a ella le llega ya resuelto.
 
-- Cuando un cliente quiera contratar sus servicios, le llegara directamente a ella la peticion del servicio, con opciones de rechazar o aceptar la solicitud.
+Durante el servicio recibe:
 
-- Dichas notificaciones le llegaran en un subgrupo dentro del grupo que ella creo con el bot, para mantener ordenadas las peticiones de cada cliente.
+- Aviso de que un chofer va en camino a su ubicación, y de que ya llegó.
+- La opción de marcar que va en camino y que ya llegó.
+- La opción de agregar extras y de finalizar el servicio en cualquier momento,
+  por si el cliente decide terminarlo antes.
+- Quince minutos antes de que se cumpla el tiempo, la pregunta de si el cliente
+  quiere extender el servicio. Si responde que no, su jefe recibe en ese
+  momento los botones para ir cuadrando el viaje de regreso.
 
-- Ademas, en cada hilo la empleada podra hablar directamente con el cliente intercambiando mensajes
+Al finalizar, se le busca un chofer para volver a su departamento o para ir a
+su siguiente servicio.
+
+## Portal web
+
+Todo lo anterior también se hace desde su portal (`/empleada/portal`), sin
+depender de encontrar el mensaje correcto en el chat: marcar que va en camino y
+que llegó, agregar extras, finalizar el servicio y subir sus fotos semanales.
+Los avisos de Telegram llevan un botón que abre el portal en la sección
+correspondiente.
+
+Las fotos semanales solo se suben por el portal. Si manda una foto por el chat,
+el bot se lo explica y le da el acceso directo.

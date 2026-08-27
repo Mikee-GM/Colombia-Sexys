@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
   Inject,
   forwardRef,
   OnModuleInit,
@@ -38,6 +39,12 @@ import { UploadService } from '../upload/upload.service';
 import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
 import { describeError } from '../common/errors/error-message';
+import { Clientes } from '../clients/entities/client.entity';
+import { ExtrasCatalogo } from '../catalog-extras/entities/catalog-extra.entity';
+import { ExtrasServicio } from '../service-extras/entities/service-extra.entity';
+import { ServiceParticipant } from '../group-services/entities/service-participant.entity';
+import { TelegramSession } from '../telegram/entities/telegram-session.entity';
+import { formatServiceDuration, roundOpenEndedHours } from './service-duration';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 
 /**
@@ -86,6 +93,38 @@ export type EvidenceItem = {
   observations?: string | null;
 };
 
+/**
+ * Lo que devuelve el cierre de un servicio por la empleada.
+ *
+ * Lleva ya resuelto lo que cada canal necesita para redactar su resumen --la
+ * duracion en texto y las horas cobradas de un servicio abierto-- para que ni
+ * el chat ni el portal tengan que volver a calcularlo por su cuenta y acaben
+ * discrepando.
+ */
+export interface FinishByEmployeeResult {
+  servicio: Servicios;
+  clienteNombre: string | null;
+  clienteChatId: string | null;
+  duracionFormatted: string;
+  /** Horas cobradas si la duracion era abierta; null si estaba pactada. */
+  horasFacturadas: number | null;
+  /** Enlaza con otro servicio ya agendado: no hay regreso que cuadrar. */
+  hasSuccessor: boolean;
+}
+
+/** Lo que devuelve agregar un extra: el servicio ya recalculado y su desglose. */
+export interface AddServiceExtraResult {
+  servicio: Servicios;
+  extraAgregado: ExtrasCatalogo;
+  extras: Array<{
+    id: string;
+    nombre: string;
+    precioCobrado: number;
+    metodoPago: string;
+  }>;
+  totalExtras: number;
+}
+
 @Injectable()
 export class ServicesService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ServicesService.name);
@@ -127,6 +166,26 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly disciplineService: DisciplineService,
     private readonly uploadService: UploadService,
     private readonly botRegistry: TelegramBotRegistryService,
+    /*
+     * Los tres ultimos entran para el cierre de un servicio por la empleada:
+     * liberarla del catalogo, avisar a quien la estaba esperando y dejar el
+     * registro de la cuenta final. Van al final del constructor a proposito,
+     * para no correr las posiciones de los que ya estaban.
+     */
+    @InjectRepository(Empleadas)
+    private readonly empleadasRepository: Repository<Empleadas>,
+    @InjectRepository(Clientes)
+    private readonly clientesRepository: Repository<Clientes>,
+    @InjectRepository(TelegramSession)
+    private readonly telegramSessionRepository: Repository<TelegramSession>,
+    // Los extras de un servicio en curso: el catalogo de la modelo, lo ya
+    // cobrado y, en un grupal, a que participante se le imputa.
+    @InjectRepository(ExtrasCatalogo)
+    private readonly extrasCatalogoRepository: Repository<ExtrasCatalogo>,
+    @InjectRepository(ExtrasServicio)
+    private readonly extrasServicioRepository: Repository<ExtrasServicio>,
+    @InjectRepository(ServiceParticipant)
+    private readonly serviceParticipantsRepository: Repository<ServiceParticipant>,
   ) {}
 
   /**
@@ -2368,6 +2427,446 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Quien puede tocar los extras de un servicio, y con que catalogo.
+   *
+   * En un servicio individual es la empleada asignada y su propio catalogo. En
+   * uno grupal cada participante agrega los suyos, asi que hay que resolver
+   * primero cual de ellas esta pidiendo, y el extra tiene que salir del
+   * catalogo de esa misma persona: si no, una participante podria cobrarle al
+   * cliente un extra de otra.
+   *
+   * Se resuelve por id de usuario y no por chat de Telegram --como hace
+   * `GroupServicesService.participantAccess`-- porque el portal no tiene chat.
+   */
+  private async resolveExtrasActor(
+    servicio: Servicios,
+    actorUserId: string,
+  ): Promise<{ employeeId: string; participantId: string | null }> {
+    if (servicio.serviceType === 'grupal') {
+      const participant = await this.serviceParticipantsRepository.findOne({
+        where: {
+          serviceId: servicio.id,
+          status: In(['activa', 'reservada', 'pendiente_pago']),
+          employee: { usuario: { id: actorUserId } },
+        },
+        relations: { employee: { usuario: true } },
+      });
+      if (!participant) {
+        throw new ForbiddenException('No participas en este servicio');
+      }
+      return {
+        employeeId: participant.employeeId,
+        participantId: participant.id,
+      };
+    }
+
+    if (servicio.empleada?.usuarioId !== actorUserId) {
+      throw new ForbiddenException('No puedes modificar este servicio');
+    }
+    return { employeeId: servicio.empleadaId, participantId: null };
+  }
+
+  /**
+   * Catalogo de extras que la empleada puede agregar a un servicio en curso.
+   *
+   * Lo necesita cualquier canal que ofrezca la lista: el chat la pintaba con
+   * una consulta propia y el portal habria acabado con otra, con el riesgo de
+   * que una de las dos olvidara filtrar por `activo` o por participante.
+   */
+  async listAvailableExtras(
+    servicioId: string,
+    actorUserId: string,
+  ): Promise<ExtrasCatalogo[]> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: { empleada: { usuario: true } },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (servicio.estado !== 'en_curso') {
+      throw new ConflictException('Este servicio ya no está activo');
+    }
+
+    const { employeeId } = await this.resolveExtrasActor(servicio, actorUserId);
+
+    return this.extrasCatalogoRepository.find({
+      where: { empleadaId: employeeId, activo: true },
+      order: { nombre: 'ASC' },
+    });
+  }
+
+  /**
+   * Agrega un extra a un servicio en curso.
+   *
+   * Estaba repartido en los tres pasos del menu de Telegram --elegir extra,
+   * elegir metodo de pago, guardar-- con las mismas cuatro comprobaciones
+   * copiadas en cada uno y el estado a medias viviendo en la sesion del chat.
+   * Aqui es una sola operacion: el paso a paso es cosa de la interfaz, no del
+   * negocio, y el portal no tiene sesion de Telegram donde guardar nada.
+   *
+   * El total del servicio no se toca desde aqui: lo recalcula un trigger de la
+   * base al insertar el extra, y por eso el servicio se relee al final.
+   */
+  async addServiceExtra(input: {
+    servicioId: string;
+    extraCatalogoId: string;
+    metodoPago: 'tarjeta' | 'transferencia' | 'efectivo';
+    actorUserId: string;
+  }): Promise<AddServiceExtraResult> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: input.servicioId },
+      relations: { empleada: { usuario: true } },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (servicio.estado !== 'en_curso') {
+      throw new ConflictException('Este servicio ya no está activo');
+    }
+
+    const { employeeId, participantId } = await this.resolveExtrasActor(
+      servicio,
+      input.actorUserId,
+    );
+
+    const extra = await this.extrasCatalogoRepository.findOne({
+      where: { id: input.extraCatalogoId },
+    });
+    if (!extra) throw new NotFoundException('Extra no encontrado');
+    if (extra.empleadaId !== employeeId) {
+      throw new ForbiddenException('Ese extra no pertenece a tu catálogo');
+    }
+    if (!extra.activo) {
+      throw new ConflictException('Ese extra ya no está disponible');
+    }
+
+    const actor = await this.usuariosRepository.findOneBy({
+      id: input.actorUserId,
+    });
+    if (!actor) throw new ForbiddenException('Usuario no autorizado');
+
+    await this.extrasServicioRepository.save(
+      this.extrasServicioRepository.create({
+        servicioId: servicio.id,
+        extraCatalogoId: extra.id,
+        participantId,
+        precioCobrado: extra.precio,
+        metodoPago: input.metodoPago,
+        registradoPor: actor,
+      }),
+    );
+
+    // Se relee porque el total del servicio lo recalcula un trigger al insertar.
+    const actualizado =
+      (await this.serviciosRepository.findOne({
+        where: { id: servicio.id },
+        relations: {
+          cliente: true,
+          empleada: true,
+          extrasServicios: { extraCatalogo: true },
+        },
+      })) ?? servicio;
+
+    const extras = actualizado.extrasServicios ?? [];
+
+    return {
+      servicio: actualizado,
+      extraAgregado: extra,
+      extras: extras.map((item) => ({
+        id: item.id,
+        nombre: item.extraCatalogo?.nombre ?? 'Extra',
+        precioCobrado: Number(item.precioCobrado),
+        metodoPago: item.metodoPago,
+      })),
+      totalExtras: extras.reduce(
+        (suma, item) => suma + Number(item.precioCobrado),
+        0,
+      ),
+    };
+  }
+
+  /**
+   * Cierra un servicio individual a peticion de la empleada asignada.
+   *
+   * Vivia dentro del handler `conf_fin_serv` de Telegram, que era el unico sitio
+   * desde el que se podia finalizar. Al abrirse el portal de la modelo hacian
+   * falta las dos vias, y duplicar doscientas lineas de cierre --duracion,
+   * redondeo de las horas abiertas, liquidacion, servicio encadenado,
+   * disponibilidad-- habria garantizado que una de las dos se quedara atras.
+   *
+   * Aqui queda todo lo que cambia el estado del negocio y todo lo que hay que
+   * avisar, pase por donde pase el cierre. Fuera queda solo la presentacion: el
+   * resumen que ve la modelo y sus botones los arma cada canal a su manera, con
+   * lo que devuelve este metodo.
+   *
+   * Los servicios grupales no entran: los cierra la responsable a traves de
+   * `GroupServicesService.finishByResponsible`, que reparte entre participantes.
+   */
+  async finishByEmployee(
+    servicioId: string,
+    actorUserId: string,
+  ): Promise<FinishByEmployeeResult> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: {
+        cliente: true,
+        empleada: { usuario: true, jefe: true },
+        jefe: true,
+      },
+    });
+
+    if (!servicio) {
+      throw new NotFoundException('Servicio no encontrado');
+    }
+    if (servicio.serviceType === 'grupal') {
+      throw new ConflictException(
+        'Un servicio grupal lo cierra la responsable desde su flujo de grupo',
+      );
+    }
+    if (servicio.empleada?.usuarioId !== actorUserId) {
+      throw new ForbiddenException('No puedes finalizar este servicio');
+    }
+    if (servicio.estado !== 'en_curso') {
+      throw new ConflictException('Este servicio ya no está activo');
+    }
+
+    const fin = new Date();
+    servicio.estado = 'finalizado';
+    servicio.horaFinServicio = fin;
+
+    const transcurridoMs = servicio.horaInicioServicio
+      ? fin.getTime() - new Date(servicio.horaInicioServicio).getTime()
+      : 0;
+
+    // Sin hora de inicio no hay nada que medir: se respeta lo pactado.
+    const duracionFormatted = servicio.horaInicioServicio
+      ? formatServiceDuration(transcurridoMs)
+      : `${servicio.duracionPactadaHoras} horas`;
+    servicio.duracionFinalHoras = servicio.horaInicioServicio
+      ? Number((transcurridoMs / 3_600_000).toFixed(2))
+      : Number(servicio.duracionPactadaHoras);
+
+    /*
+     * Duracion abierta: las horas facturables se fijan ahora, redondeando hacia
+     * arriba a partir de los 15 minutos. Al escribir `duracionPactadaHoras` el
+     * trigger de la base recalcula los totales, asi que el importe no se toca
+     * desde aqui.
+     */
+    let horasFacturadas: number | null = null;
+    if (servicio.duracionIndefinida) {
+      horasFacturadas = roundOpenEndedHours(transcurridoMs);
+      servicio.duracionPactadaHoras = horasFacturadas;
+      servicio.duracionFinalHoras = horasFacturadas;
+    }
+
+    servicio.estadoLiquidacion = 'transporte_pendiente';
+    servicio.recordatoriosRegreso = 0;
+    servicio.proximoRecordatorioRegresoAt = new Date(Date.now() + 5 * 60_000);
+    await this.serviciosRepository.save(servicio);
+
+    const successor = await this.activateScheduledSuccessor(servicio.id);
+    if (successor.hasSuccessor) {
+      // Encadena con otro servicio: no hay regreso que cuadrar ni corte abierto.
+      servicio.estadoLiquidacion = 'cerrada';
+      servicio.proximoRecordatorioRegresoAt = null;
+      await this.serviciosRepository.save(servicio);
+    }
+
+    this.realtimeEventsService.emitToJefes({
+      type: 'employee_availability_updated',
+      empleadaId: servicio.empleadaId,
+      completedServiceId: servicio.id,
+      hasScheduledSuccessor: successor.hasSuccessor,
+    });
+
+    // Se relee porque los totales los recalcula un trigger, no este proceso.
+    const servicioConTotal =
+      (await this.serviciosRepository.findOne({
+        where: { id: servicio.id },
+      })) ?? servicio;
+
+    if (servicio.empleadaId && !successor.hasSuccessor) {
+      try {
+        await this.empleadasRepository.update(servicio.empleadaId, {
+          disponible: true,
+        });
+      } catch (error) {
+        this.logger.error(
+          `No se pudo liberar a la empleada ${servicio.empleadaId}:`,
+          error,
+        );
+      }
+      await this.notifyClientsWaitingForEmployee(servicio.empleadaId);
+    }
+
+    if (horasFacturadas) {
+      await this.requestOpenEndedFinalPayment(
+        servicioConTotal,
+        servicio.cliente?.telegramChatId ?? null,
+        horasFacturadas,
+        duracionFormatted,
+      );
+    }
+
+    if (!successor.hasSuccessor) {
+      try {
+        await this.requestReturnTransport(servicio.id);
+      } catch (error) {
+        this.logger.error(
+          `No se pudo solicitar el transporte de regreso del servicio ${servicio.id}:`,
+          error,
+        );
+      }
+    }
+
+    return {
+      servicio: servicioConTotal,
+      clienteNombre: servicio.cliente?.nombreTelegram ?? null,
+      clienteChatId: servicio.cliente?.telegramChatId ?? null,
+      duracionFormatted,
+      horasFacturadas,
+      hasSuccessor: successor.hasSuccessor,
+    };
+  }
+
+  /**
+   * Avisa a los clientes que decidieron esperar a esta modelo.
+   *
+   * Estaba en el handler de Telegram y por eso solo corria cuando el servicio se
+   * cerraba desde el chat: al finalizar desde el portal, quien estaba esperando
+   * no se enteraba nunca de que ya habia quedado libre.
+   */
+  private async notifyClientsWaitingForEmployee(
+    empleadaId: string,
+  ): Promise<void> {
+    let sessions: TelegramSession[];
+    try {
+      sessions = await this.telegramSessionRepository.find();
+    } catch (error) {
+      this.logger.error(
+        'No se pudieron revisar las sesiones en espera de la empleada:',
+        error,
+      );
+      return;
+    }
+
+    const waiting = sessions.filter(
+      (item) => item.data?.esperandoEmpleadaId === empleadaId,
+    );
+    if (!waiting.length) return;
+
+    const empleada = await this.empleadasRepository.findOne({
+      where: { id: empleadaId },
+    });
+    const nombre = empleada?.nombreArtistico || 'ella';
+
+    for (const item of waiting) {
+      const clientTelegramId = item.key.split(':')[0];
+      if (!clientTelegramId) continue;
+
+      const mensaje = `¡Ya quedé libre mi amor! Aquí sigo, dime cómo la armamos 😘`;
+      try {
+        /*
+         * Sale por el bot dedicado de la modelo si lo tiene: el cliente venia
+         * hablando con ella y una respuesta desde el bot central romperia la
+         * conversacion en la que estaba.
+         */
+        await this.botRegistry
+          .botForEmployeeOrCentral(empleadaId)
+          .telegram.sendMessage(clientTelegramId, mensaje);
+
+        item.data.esperandoEmpleadaId = undefined;
+        item.data.selectedEmployeeBusy = false;
+        item.data.waitingForBusyChoice = false;
+        await this.telegramSessionRepository.save(item);
+
+        const client = await this.clientesRepository.findOne({
+          where: { telegramChatId: clientTelegramId },
+        });
+        if (client && item.data.bookingSessionId) {
+          await this.conversationsRepository.save(
+            this.conversationsRepository.create({
+              clienteId: client.id,
+              servicioId: null,
+              bookingSessionId: item.data.bookingSessionId,
+              emisor: 'ia',
+              mensaje,
+              iaActiva: true,
+            }),
+          );
+        }
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo avisar al cliente ${clientTelegramId} que ${nombre} quedó libre:`,
+          error,
+        );
+      }
+    }
+  }
+
+  /**
+   * Cierra el cobro de un servicio de duracion abierta.
+   *
+   * Le pasa al cliente el total ya con las horas contadas y, si pago por
+   * transferencia, le pide el comprobante en ese momento: en un servicio
+   * abierto no se puede cobrar por adelantado porque el importe no se conoce
+   * hasta que termina.
+   */
+  private async requestOpenEndedFinalPayment(
+    servicio: Servicios,
+    clienteChatId: string | null,
+    horasFacturadas: number,
+    duracionFormatted: string,
+  ): Promise<void> {
+    if (!clienteChatId) return;
+
+    const formatoMoneda = new Intl.NumberFormat(APP_LOCALE, {
+      style: 'currency',
+      currency: 'MXN',
+    });
+    const horasTexto =
+      horasFacturadas === 1 ? '1 hora' : `${horasFacturadas} horas`;
+
+    let mensaje =
+      `*Cuenta final del servicio*\n\n` +
+      `*Tiempo real:* ${duracionFormatted}\n` +
+      `*Horas cobradas:* ${horasTexto} (se redondea hacia arriba a partir de los 15 minutos)\n` +
+      `*Total a pagar:* ${formatoMoneda.format(Number(servicio.totalFinal))}`;
+
+    if (servicio.metodoPago === 'transferencia') {
+      try {
+        const bankDetails = await this.bankTransferDetails();
+        mensaje += `\n\n${bankDetails}\n\nMándame una *FOTO* del comprobante por ese total, porfa 😘`;
+      } catch (error) {
+        this.logger.error(
+          'No se pudieron obtener las cuentas para el cobro final:',
+          error,
+        );
+        mensaje += `\n\nEn un momentico te paso los datos para la transferencia.`;
+      }
+
+      try {
+        await this.serviciosRepository.update(servicio.id, {
+          cobroFinalPendiente: true,
+        });
+      } catch (error) {
+        this.logger.error(
+          'No se pudo marcar el cobro final pendiente del servicio:',
+          error,
+        );
+      }
+    }
+
+    try {
+      await this.botRegistry
+        .botForEmployeeOrCentral(servicio.empleadaId)
+        .telegram.sendMessage(clienteChatId, mensaje, {
+          parse_mode: 'Markdown',
+        });
+      await this.recordAgencyMessage(servicio, mensaje);
+    } catch (error) {
+      this.logger.error('No se pudo enviar la cuenta final al cliente:', error);
+    }
+  }
+
   async requestReturnTransport(servicioId: string): Promise<void> {
     const servicio = await this.serviciosRepository.findOne({
       where: { id: servicioId },
@@ -2395,12 +2894,63 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
   }
 
+  /**
+   * Adelanta al jefe la decision del regreso, en cuanto la empleada dice que no
+   * va a extender el servicio.
+   *
+   * Antes el jefe se enteraba al finalizar: cuando le llegaba la pregunta, la
+   * empleada ya estaba esperando en la puerta y el chofer o el Uber empezaban a
+   * buscarse desde cero. La empleada rechaza la extension quince minutos antes
+   * del final, y ese margen alcanza para tener el regreso cuadrado.
+   *
+   * No se toca `estadoLiquidacion`: el servicio sigue en curso y marcarlo como
+   * transporte pendiente lo sacaria de los activos antes de tiempo. Este aviso
+   * se adelanta al de `requestReturnTransport`, no lo sustituye; los botones
+   * son los mismos, asi que si el jefe resuelve aqui, al finalizar ya no queda
+   * nada que decidir.
+   */
+  async notifyReturnTransportAhead(servicioId: string): Promise<void> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: {
+        jefe: true,
+        empleada: { jefe: true, jefeSecundario: true },
+      },
+    });
+    if (!servicio || servicio.estado !== 'en_curso') return;
+
+    const fin = servicio.horaInicioServicio
+      ? new Date(
+          new Date(servicio.horaInicioServicio).getTime() +
+            Number(servicio.duracionPactadaHoras || 1) * 3_600_000,
+        )
+      : null;
+    const hora = fin
+      ? fin.toLocaleTimeString(APP_LOCALE, {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: APP_TIME_ZONE,
+        })
+      : null;
+
+    const texto =
+      `${servicio.empleada?.nombreArtistico || 'La empleada'} no va a extender el servicio.` +
+      (hora ? ` Termina a las ${hora}.` : '') +
+      `\n\nVe cuadrando su viaje de regreso:`;
+
+    await this.sendReturnTransportPrompt(servicio, false, texto);
+  }
+
   private async sendReturnTransportPrompt(
     servicio: Servicios,
     reminder: boolean,
+    /** Texto propio. Sin el se usa el de un servicio ya finalizado. */
+    customText?: string,
   ): Promise<void> {
     const topic = this.getServiceTopic(servicio);
-    const text = `${reminder ? 'Recordatorio\n\n' : ''}La empleada ${servicio.empleada?.nombreArtistico || ''} finalizó el servicio. ¿Cómo será su viaje de regreso?`;
+    const text =
+      customText ??
+      `${reminder ? 'Recordatorio\n\n' : ''}La empleada ${servicio.empleada?.nombreArtistico || ''} finalizó el servicio. ¿Cómo será su viaje de regreso?`;
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(

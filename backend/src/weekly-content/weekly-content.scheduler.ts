@@ -15,8 +15,13 @@ import { WeeklyContentService } from './weekly-content.service';
 import { WeeklyContentSchedule } from './entities/weekly-content-schedule.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { TelegramService } from '../telegram/telegram.service';
+import { botonesDePortal } from '../telegram/telegram-portal-buttons';
+import { PanelAccessService } from '../auth/panel-access.service';
 import { ConductReport } from '../discipline/entities/conduct-report.entity';
 import { APP_TIME_ZONE } from '../common/locale';
+
+/** Destino del pase: el portal, abierto ya en la seccion de fotos. */
+const PORTAL_FOTOS_PATH = '/empleada/portal?seccion=fotos';
 
 @Injectable()
 export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
@@ -28,6 +33,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly weeklyContentService: WeeklyContentService,
     private readonly telegramService: TelegramService,
+    private readonly panelAccessService: PanelAccessService,
     @InjectRepository(WeeklyContentSchedule)
     private readonly scheduleRepo: Repository<WeeklyContentSchedule>,
     @InjectRepository(Empleadas)
@@ -71,7 +77,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     try {
       // Advisory lock: sin el, dos replicas pedirian las fotos y aplicarian las
-      // faltas del mismo ciclo por duplicado.
+      // multas del mismo ciclo por duplicado.
       await withAdvisoryLock(
         this.dataSource,
         ADVISORY_LOCKS.weeklyContent,
@@ -84,29 +90,43 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Ciclo semanal de contenido.
+   *
+   * Viernes se piden las fotos; sabado, domingo y lunes sale un recordatorio
+   * por dia; al agotarse el ultimo sin fotos se carga la multa. Los avisos se
+   * cuentan dentro de la semana: el contador vuelve a cero con la solicitud del
+   * viernes siguiente.
+   *
+   * Se manda un recordatorio por dia --y no cada N horas-- para que el aviso
+   * caiga siempre a una hora en la que la modelo esta despierta.
+   */
   private async runWeeklyCycle(): Promise<void> {
     const now = new Date();
     const localDate = new Date(
       now.toLocaleString('en-US', { timeZone: APP_TIME_ZONE }),
     );
-    const day = localDate.getDay(); // 0 = dom, 5 = vie, 6 = sab
+    const day = localDate.getDay(); // 0 = dom, 1 = lun, 5 = vie, 6 = sab
     const hour = localDate.getHours();
 
     const currentFriday = this.weeklyContentService.getCurrentCycleFriday();
 
-    // 1. VIERNES (>= 10:00 AM): Crear ciclo y solicitar fotos a todas las empleadas activas
+    // 1. VIERNES (>= 10:00): crear el ciclo y pedir las fotos.
     if (day === 5 && hour >= 10) {
       await this.handleFridayRequests(currentFriday);
     }
 
-    // 2. SÁBADO (>= 10:00 AM, 24h después): Enviar recordatorio a las que no han entregado
-    if ((day === 6 && hour >= 10) || day === 0) {
-      await this.handleSaturdayReminders(currentFriday);
+    // 2. SÁBADO, DOMINGO y LUNES (>= 10:00): un recordatorio por dia mientras
+    //    queden avisos por gastar.
+    if ([6, 0, 1].includes(day) && hour >= 10) {
+      await this.handleReminders(currentFriday);
     }
 
-    // 3. DOMINGO (>= 10:00 AM, 48h después): Aplicar falta a las que no han entregado
-    if (day === 0 && hour >= 10) {
-      await this.handleSundaySanctions(currentFriday);
+    // 3. Agotados los recordatorios, la multa. Se evalua tras los avisos, pero
+    //    solo dispara cuando el contador ya llego al tope, asi que el ultimo
+    //    recordatorio y la multa nunca caen en la misma pasada.
+    if ([0, 1, 2].includes(day) && hour >= 10) {
+      await this.handleExhaustedReminders(currentFriday);
     }
   }
 
@@ -119,69 +139,44 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
     for (const emp of activeEmployees) {
       if (!emp.usuario?.telegramChatId) continue;
 
-      let schedule = await this.scheduleRepo.findOne({
+      const schedule = await this.scheduleRepo.findOne({
         where: { empleadaId: emp.id, semanaInicio },
       });
+      if (schedule) continue;
 
-      if (!schedule) {
-        schedule = this.scheduleRepo.create({
+      await this.scheduleRepo.save(
+        this.scheduleRepo.create({
           empleadaId: emp.id,
           semanaInicio,
           estado: 'solicitado',
           solicitadoAt: new Date(),
-        });
-        await this.scheduleRepo.save(schedule);
+          recordatoriosEnviados: 0,
+        }),
+      );
 
-        try {
-          await this.telegramService.sendMessage(
-            emp.usuario.telegramChatId,
-            `📸 *¡Hola ${emp.nombreArtistico}! Es momento de actualizar tus fotos semanales.*\n\n` +
-              `Por favor envía directamente por este chat tus fotos recientes (de buena calidad y atractivas) para renovar tu catálogo del fin de semana.\n` +
-              `Tienes hasta el sábado para enviarlas. ¡Quedamos atentos a tus fotos! ✨`,
-            emp.id,
-          );
-        } catch (err) {
-          this.logger.warn(
-            `No se pudo enviar solicitud de fotos a ${emp.nombreArtistico}:`,
-            err,
-          );
-        }
-      }
+      await this.enviarAvisoDeFotos(emp.usuario, emp.id, {
+        nombre: emp.nombreArtistico,
+        titulo: 'Toca renovar tus fotos de la semana',
+        cuerpo: [
+          'Sube tus fotos recientes desde tu portal para renovar tu catalogo',
+          'del fin de semana. Ya no hace falta mandarlas por este chat.',
+        ].join('\n'),
+      });
     }
   }
 
-  private async handleSaturdayReminders(semanaInicio: string) {
-    const pendingSchedules = await this.scheduleRepo.find({
-      where: { semanaInicio, estado: 'solicitado' },
-      relations: { empleada: { usuario: true } },
-    });
+  /**
+   * Un recordatorio por dia mientras queden avisos.
+   *
+   * El filtro es el contador y no el estado: `recordatorio_enviado` era un
+   * estado terminal que impedia mandar un segundo aviso. El estado se conserva
+   * porque el resto del sistema lo lee, pero quien decide es el contador.
+   */
+  private async handleReminders(semanaInicio: string) {
+    const { maxRecordatorios } =
+      await this.weeklyContentService.getFinePolicy();
 
-    for (const schedule of pendingSchedules) {
-      if (!schedule.empleada?.usuario?.telegramChatId) continue;
-
-      schedule.estado = 'recordatorio_enviado';
-      schedule.recordatorioAt = new Date();
-      await this.scheduleRepo.save(schedule);
-
-      try {
-        await this.telegramService.sendMessage(
-          schedule.empleada.usuario.telegramChatId,
-          `⚠️ *Recordatorio de Fotos Semanales*\n\n` +
-            `Hola ${schedule.empleada.nombreArtistico}, aún no hemos recibido tus fotos para la renovación de tu catálogo de esta semana.\n` +
-            `Recuerda enviarlas a la brevedad por este chat para evitar incidencias en tu perfil.`,
-          schedule.empleadaId,
-        );
-      } catch (err) {
-        this.logger.warn(
-          `No se pudo enviar recordatorio a ${schedule.empleada.nombreArtistico}:`,
-          err,
-        );
-      }
-    }
-  }
-
-  private async handleSundaySanctions(semanaInicio: string) {
-    const missingSchedules = await this.scheduleRepo.find({
+    const pendientes = await this.scheduleRepo.find({
       where: [
         { semanaInicio, estado: 'solicitado' },
         { semanaInicio, estado: 'recordatorio_enviado' },
@@ -189,41 +184,236 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
       relations: { empleada: { usuario: true } },
     });
 
-    for (const schedule of missingSchedules) {
-      schedule.estado = 'falta_aplicada';
-      schedule.faltaAt = new Date();
+    for (const schedule of pendientes) {
+      const usuario = schedule.empleada?.usuario;
+      if (!usuario?.telegramChatId) continue;
+      if (schedule.recordatoriosEnviados >= maxRecordatorios) continue;
+
+      // Un solo aviso por dia: si el de hoy ya salio, se espera al siguiente.
+      if (this.yaAvisadoHoy(schedule.recordatorioAt)) continue;
+
+      const numero = schedule.recordatoriosEnviados + 1;
+      const restantes = maxRecordatorios - numero;
+
+      schedule.estado = 'recordatorio_enviado';
+      schedule.recordatorioAt = new Date();
+      schedule.recordatoriosEnviados = numero;
       await this.scheduleRepo.save(schedule);
 
-      // Registrar reporte de conducta por incumplimiento
-      const report = this.conductReportRepo.create({
-        direction: 'system_to_employee' as any,
-        reporterType: 'employee',
-        reporterId: schedule.empleadaId,
-        subjectType: 'employee',
-        subjectId: schedule.empleadaId,
-        category: 'incumplimiento',
-        description: `Incumplimiento de entrega de contenido semanal para el ciclo ${semanaInicio}.`,
-        priority: 'alta',
-        status: 'en_revision',
+      await this.enviarAvisoDeFotos(usuario, schedule.empleadaId, {
+        nombre: schedule.empleada.nombreArtistico,
+        titulo: `Recordatorio ${numero} de ${maxRecordatorios}`,
+        cuerpo: [
+          'Todavia no recibimos tus fotos de esta semana.',
+          restantes > 0
+            ? `Te ${restantes === 1 ? 'queda' : 'quedan'} ${restantes} ${
+                restantes === 1 ? 'aviso' : 'avisos'
+              } antes de que se aplique la multa.`
+            : 'Este es el ultimo aviso: si no las subes, se aplicara la multa.',
+        ].join('\n'),
       });
-      await this.conductReportRepo.save(report);
-
-      if (schedule.empleada?.usuario?.telegramChatId) {
-        try {
-          await this.telegramService.sendMessage(
-            schedule.empleada.usuario.telegramChatId,
-            `❌ *Aviso de Incumplimiento*\n\n` +
-              `Hola ${schedule.empleada.nombreArtistico}, ha vencido el plazo límite de 48h para la entrega de tus fotos semanales.\n` +
-              `Se ha registrado una falta por incumplimiento en tu historial disciplinario. Por favor comunícate con tu jefe o administración.`,
-            schedule.empleadaId,
-          );
-        } catch (err) {
-          this.logger.warn(
-            `No se pudo notificar falta a ${schedule.empleada.nombreArtistico}:`,
-            err,
-          );
-        }
-      }
     }
+  }
+
+  /**
+   * Multa a quien agoto sus avisos sin subir nada.
+   *
+   * Sustituye al reporte de conducta que se abria antes y se quedaba esperando
+   * a que alguien lo revisara: la consecuencia ahora es inmediata y visible en
+   * el corte. El reporte se sigue registrando para que quede en el historial
+   * disciplinario, pero ya no es lo unico que pasa.
+   */
+  private async handleExhaustedReminders(semanaInicio: string) {
+    const { maxRecordatorios, importeMulta } =
+      await this.weeklyContentService.getFinePolicy();
+
+    const pendientes = await this.scheduleRepo.find({
+      where: [
+        { semanaInicio, estado: 'solicitado' },
+        { semanaInicio, estado: 'recordatorio_enviado' },
+      ],
+      relations: { empleada: { usuario: true } },
+    });
+
+    for (const schedule of pendientes) {
+      if (schedule.recordatoriosEnviados < maxRecordatorios) continue;
+      if (schedule.multaAplicadaAt) continue;
+
+      const aplicada = new Date();
+      schedule.estado = 'falta_aplicada';
+      schedule.faltaAt = aplicada;
+      schedule.multaAplicadaAt = aplicada;
+      schedule.multaLiquidationRecordId = await this.registrarMulta(
+        schedule.empleadaId,
+        semanaInicio,
+        importeMulta,
+        aplicada,
+      );
+      await this.scheduleRepo.save(schedule);
+
+      const registrada = Boolean(schedule.multaLiquidationRecordId);
+
+      await this.conductReportRepo.save(
+        this.conductReportRepo.create({
+          direction: 'system_to_employee' as any,
+          reporterType: 'employee',
+          reporterId: schedule.empleadaId,
+          subjectType: 'employee',
+          subjectId: schedule.empleadaId,
+          category: 'incumplimiento',
+          description:
+            `Incumplimiento de entrega de contenido semanal para el ciclo ${semanaInicio}. ` +
+            `Se agotaron los ${maxRecordatorios} recordatorios` +
+            (registrada ? ' y se aplico la multa correspondiente.' : '.'),
+          priority: 'alta',
+          status: 'en_revision',
+        }),
+      );
+
+      const usuario = schedule.empleada?.usuario;
+      if (!usuario?.telegramChatId) continue;
+
+      await this.enviarAvisoDeFotos(usuario, schedule.empleadaId, {
+        nombre: schedule.empleada.nombreArtistico,
+        titulo: 'Se aplico una multa por tus fotos semanales',
+        cuerpo: [
+          `Se agotaron los ${maxRecordatorios} recordatorios sin recibir tus fotos.`,
+          registrada
+            ? `Se cargo una multa de $${importeMulta.toFixed(2)} a tu corte de esta semana.`
+            : 'Se registro el incumplimiento en tu historial.',
+          'Todavia puedes subirlas desde tu portal para regularizar tu catalogo.',
+        ].join('\n'),
+      });
+    }
+  }
+
+  /** Si ya se le aviso hoy, en hora de la operacion. */
+  private yaAvisadoHoy(ultimo: Date | null): boolean {
+    if (!ultimo) return false;
+    const dia = (fecha: Date) =>
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: APP_TIME_ZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(fecha);
+    return dia(ultimo) === dia(new Date());
+  }
+
+  /**
+   * Escribe la multa como registro del corte.
+   *
+   * `registered_by_user_id` no admite nulos y detras de una multa automatica no
+   * hay ningun administrador, asi que se firma con el jefe de la modelo, que es
+   * quien responde por ella, y si no tuviera, con cualquier administrador
+   * activo. Sin ninguno de los dos no se registra: es preferible quedarse sin
+   * multa que reventar el ciclo de todas las demas.
+   */
+  private async registrarMulta(
+    empleadaId: string,
+    semanaInicio: string,
+    importe: number,
+    occurredAt: Date,
+  ): Promise<string | null> {
+    if (importe <= 0) return null;
+
+    try {
+      const firmantes: Array<{ id: string; rol: string }> =
+        await this.dataSource.query(
+          `SELECT u.id, u.rol, 0 AS prioridad
+             FROM empleadas e
+             JOIN usuarios u
+               ON u.id = COALESCE(e.jefe_id, e.jefe_secundario_id)
+            WHERE e.id = $1 AND u.activo = true
+            UNION ALL
+           SELECT id, rol, 1 AS prioridad
+             FROM usuarios
+            WHERE rol = 'admin' AND activo = true
+            ORDER BY prioridad
+            LIMIT 1`,
+          [empleadaId],
+        );
+
+      const firmante = firmantes[0];
+      if (!firmante) {
+        this.logger.warn(
+          `Sin jefe ni administrador activo para firmar la multa de ${empleadaId}.`,
+        );
+        return null;
+      }
+
+      const insertadas: Array<{ id: string }> = await this.dataSource.query(
+        `INSERT INTO liquidation_records
+           (employee_id, registered_by_user_id, source_role, occurred_at,
+            service_total, payment_method, cash_amount, card_amounts,
+            company_percentage, is_fine, fine_amount, place)
+         VALUES ($1, $2, $3, $4, 0, 'efectivo', 0, '[]'::jsonb, 0, true, $5, $6)
+         RETURNING id`,
+        [
+          empleadaId,
+          firmante.id,
+          firmante.rol === 'admin' ? 'admin' : 'jefe',
+          occurredAt,
+          importe,
+          `Multa: fotos semanales no entregadas (ciclo ${semanaInicio})`,
+        ],
+      );
+
+      return insertadas[0]?.id ?? null;
+    } catch (error) {
+      this.logger.error(
+        `No se pudo registrar la multa de contenido semanal de ${empleadaId}:`,
+        error,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Manda un aviso de fotos con el boton que abre el portal en su seccion.
+   *
+   * El pase es de un solo uso y de vida corta, igual que el del comando
+   * /portal: el enlace viaja por un chat cuyo historial no controlamos.
+   *
+   * Si el pase no se puede emitir, el aviso sale igual pero sin boton: quedarse
+   * sin recordatorio es peor que quedarse sin atajo.
+   */
+  private async enviarAvisoDeFotos(
+    usuario: { id: string; telegramChatId: string | null },
+    empleadaId: string,
+    mensaje: { nombre: string; titulo: string; cuerpo: string },
+  ): Promise<void> {
+    if (!usuario.telegramChatId) return;
+
+    const texto = [
+      `*${mensaje.titulo}*`,
+      '',
+      `Hola ${mensaje.nombre}.`,
+      mensaje.cuerpo,
+    ].join('\n');
+
+    let botones: ReturnType<typeof botonesDePortal> | undefined;
+    try {
+      const { url } = await this.panelAccessService.issueLink(
+        usuario.id,
+        usuario.telegramChatId,
+        PORTAL_FOTOS_PATH,
+      );
+      botones = botonesDePortal(url, 'Subir mis fotos');
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo adjuntar el acceso al portal para ${mensaje.nombre}:`,
+        error,
+      );
+    }
+
+    await this.telegramService
+      .sendMessage(usuario.telegramChatId, texto, empleadaId, {
+        parseMode: 'Markdown',
+        buttons: botones,
+      })
+      .catch((fallo) =>
+        this.logger.warn(`No se pudo avisar a ${mensaje.nombre}:`, fallo),
+      );
   }
 }

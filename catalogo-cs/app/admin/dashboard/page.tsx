@@ -1,8 +1,13 @@
 import { redirect } from "next/navigation";
 
 import { ErpPageHeader } from "@/components/erp/primitives";
-import CentroDeMando from "@/components/erp/centro-de-mando";
-import SemanaEnCurso from "@/components/erp/semana-en-curso";
+import {
+  bloquesDeCentroDeMando,
+  SeparadorTableroDetallado,
+} from "@/components/erp/centro-de-mando";
+import { bloquesDeSemanaEnCurso } from "@/components/erp/semana-en-curso";
+import TableroPersonalizable from "@/components/erp/tablero-personalizable";
+import { getDashboardLayout } from "@/lib/actions/dashboard-layout";
 import GodEyeDashboard from "@/components/admin/god-eye/GodEyeDashboard";
 import {
   getGodEyeOverviewAction,
@@ -36,6 +41,7 @@ const OVERVIEW_VACIO = {
     clientsTotal: 0,
     pendingOffers: 0,
     revenueToday: 0,
+    revenueWeek: 0,
   },
   activeServices: [],
   pendingReports: [],
@@ -48,7 +54,7 @@ export default async function DashboardPage() {
   const contexto = "el centro de mando";
   const { startDate, endDate } = getOperationalWeek();
 
-  const [overview, actors, appeals, services, summary, offDuty] =
+  const [overview, actors, appeals, services, summary, offDuty, layout] =
     await Promise.all([
     optionalSource(getGodEyeOverviewAction(), OVERVIEW_VACIO, contexto),
     optionalSource(
@@ -60,7 +66,58 @@ export default async function DashboardPage() {
     optionalSource(getServices(), [], contexto),
     optionalSource(getWeeklySummary(startDate, endDate), [], contexto),
     optionalSource(getOffDutyStaff(), [], contexto),
+    // Sin disposicion guardada se usa el orden por defecto, no un tablero vacio.
+    optionalSource(getDashboardLayout(), null, contexto),
     ]);
+
+  const { kpis, paneles } = bloquesDeCentroDeMando({
+    overview,
+    offDuty: offDuty ?? [],
+  });
+
+  const semana = bloquesDeSemanaEnCurso({
+    services: services ?? [],
+    summary: summary ?? [],
+    startDate,
+    endDate,
+  });
+
+  /*
+   * Los indicadores y los paneles van en grupos distintos porque son piezas de
+   * tamaños incompatibles: una tarjeta de KPI intercalada entre dos paneles
+   * anchos queda ridicula. Dentro de cada grupo se reordenan libremente.
+   */
+  const grupos = [
+    {
+      id: "indicadores",
+      gridClassName:
+        "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6",
+      bloques: kpis,
+    },
+    {
+      id: "paneles",
+      gridClassName: "grid grid-cols-1 gap-6 xl:grid-cols-2",
+      bloques: [
+        ...paneles,
+        ...semana,
+        {
+          id: "tablero-detallado",
+          titulo: "Tablero detallado",
+          anchoCompleto: true,
+          contenido: (
+            <div className="flex flex-col gap-6">
+              <SeparadorTableroDetallado />
+              <GodEyeDashboard
+                initialOverview={overview}
+                initialActors={actors}
+                initialAppeals={appeals}
+              />
+            </div>
+          ),
+        },
+      ],
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,21 +126,7 @@ export default async function DashboardPage() {
         description="Estado de la operacion, alertas y accesos a cada modulo"
       />
 
-      {/* Resumen del ERP; debajo queda el tablero detallado que ya existia. */}
-      <CentroDeMando overview={overview} offDuty={offDuty ?? []} />
-
-      <SemanaEnCurso
-        services={services ?? []}
-        summary={summary ?? []}
-        startDate={startDate}
-        endDate={endDate}
-      />
-
-      <GodEyeDashboard
-        initialOverview={overview}
-        initialActors={actors}
-        initialAppeals={appeals}
-      />
+      <TableroPersonalizable grupos={grupos} layoutInicial={layout} />
     </div>
   );
 }

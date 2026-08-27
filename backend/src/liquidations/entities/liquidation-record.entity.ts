@@ -140,6 +140,22 @@ export class LiquidationRecord {
   })
   electronicExtraAmount: number;
 
+  /**
+   * De los extras, lo cobrado con tarjeta.
+   *
+   * Vive aparte de `electronicExtraAmount` --que suma tarjeta y transferencia--
+   * porque solo la tarjeta paga comision: es la unica de las dos que le cuesta
+   * dinero a la empresa. Lo cobrado por transferencia va integro a la empleada.
+   */
+  @Column('numeric', {
+    name: 'card_extra_amount',
+    precision: 12,
+    scale: 2,
+    default: 0,
+    transformer: new ColumnNumericTransformer(),
+  })
+  cardExtraAmount: number;
+
   @Column('numeric', {
     name: 'transport_excess',
     precision: 12,

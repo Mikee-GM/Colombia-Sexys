@@ -22,6 +22,8 @@ export interface LiquidationRecord {
   employeeUberReimbursement: number;
   employeeCashDue: number;
   electronicExtraAmount: number;
+  /** De los extras, lo cobrado con tarjeta: es lo unico que paga comision. */
+  cardExtraAmount: number;
   transportExcess: number;
   place: string | null;
   cancelled: boolean;
@@ -53,6 +55,14 @@ export interface CutResult {
   result: number;
   direction: SettlementDirection;
   count: number;
+  cardExtrasTotal: number;
+  cardExtraCommission: number;
+}
+
+/** Politica de comision vigente, para poder explicarla y editarla en pantalla. */
+export interface LiquidationCommissionSettings {
+  cardExtraCommissionPercentage: number;
+  cardExtraCommissionThreshold: number;
 }
 
 export interface LiquidationReport {
@@ -64,6 +74,7 @@ export interface LiquidationReport {
   officeRecords: LiquidationRecord[];
   employeeRecords: LiquidationRecord[];
   discrepancy: { exists: boolean; difference: number };
+  commissionSettings: LiquidationCommissionSettings;
   weeklySettlement: {
     status: "preview" | "confirmed";
     grossEmployeePay: number;
