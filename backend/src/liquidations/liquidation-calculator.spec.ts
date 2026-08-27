@@ -109,6 +109,35 @@ describe('liquidation calculator', () => {
     expect(result.result).toBe(-2350);
   });
 
+  /*
+   * Lo que se le retiene tiene que poder cuadrarse con lo que se cobro. El
+   * corte mostraba antes solo el numero ya recortado, asi que nadie podia ver
+   * de donde salia la diferencia.
+   */
+  it('deja ver la retencion junto al extra cobrado', () => {
+    const result = calculateCut([
+      record({
+        extraAmount: 5000,
+        electronicExtraAmount: 5000,
+        cardExtraAmount: 5000,
+      }),
+    ]);
+
+    expect(result.rawExtrasTotal).toBe(5000);
+    expect(result.calculatedExtras + result.cardExtraCommission).toBe(
+      result.rawExtrasTotal,
+    );
+  });
+
+  it('no retiene nada de un extra que no se cobro con tarjeta', () => {
+    const result = calculateCut([
+      record({ extraAmount: 5000, electronicExtraAmount: 5000 }),
+    ]);
+
+    expect(result.calculatedExtras).toBe(result.rawExtrasTotal);
+    expect(result.cardExtraCommission).toBe(0);
+  });
+
   it('no cobra comisión sobre extras pagados por transferencia', () => {
     // La transferencia no le cuesta nada a la empresa: antes pagaba comisión
     // igual que la tarjeta solo por no ser efectivo.

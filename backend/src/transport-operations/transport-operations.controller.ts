@@ -23,6 +23,7 @@ import { TransportOperationsService } from './transport-operations.service';
 import {
   CashPaymentDto,
   DriverReportQueryDto,
+  RevertCashPaymentDto,
   SettlementPeriodDto,
 } from './dto/settlement.dto';
 import { SettlementsService } from './settlements.service';
@@ -78,6 +79,24 @@ export class TransportOperationsController {
       dto.note,
       req.user,
     );
+  }
+  /*
+   * Deshacer un abono lo reserva el admin, aunque registrarlo pueda hacerlo el
+   * jefe: revertir mueve un saldo hacia arriba, que es la direccion en la que un
+   * error no se nota hasta el corte.
+   */
+  @Post('cash-payments/:id/revert') @Roles('admin') revertCashPayment(
+    @Param('id') id: string,
+    @Body() dto: RevertCashPaymentDto,
+    @Req() req: any,
+  ) {
+    return this.settlements.revertCashPayment(id, req.user, dto.reason);
+  }
+  @Get('cash-payments') @Roles('admin', 'jefe') cashPaymentsOf(
+    @Query('employeeId') employeeId: string,
+    @Req() req: any,
+  ) {
+    return this.settlements.cashPayments(employeeId, req.user);
   }
   @Post('cash-obligations/:id/close') @Roles('admin', 'jefe') closeCash(
     @Param('id') id: string,

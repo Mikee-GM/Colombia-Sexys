@@ -18,6 +18,19 @@ export class EmployeeCashPayment {
     'physical' | 'weekly_offset';
   @Column('timestamptz', { name: 'created_at', default: () => 'now()' })
   createdAt: Date;
+
+  /*
+   * Un abono revertido se marca, no se borra: la empleada y la oficina revisan
+   * la misma liquidacion, y una fila que desaparece sin rastro deja el saldo
+   * sin explicacion. Al revertirlo se restan sus asignaciones de las
+   * obligaciones, y a partir de ahi la fila solo vive en el historial.
+   */
+  @Column('timestamptz', { name: 'reverted_at', nullable: true })
+  revertedAt: Date | null;
+  @Column('uuid', { name: 'reverted_by_user_id', nullable: true })
+  revertedByUserId: string | null;
+  @Column('varchar', { name: 'reverted_reason', length: 240, nullable: true })
+  revertedReason: string | null;
 }
 
 @Entity('employee_cash_payment_allocations')

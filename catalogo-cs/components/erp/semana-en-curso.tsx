@@ -1,8 +1,10 @@
 import Link from "next/link";
 
+import IngresoPorDiaChart from "@/components/erp/ingreso-por-dia-chart";
+
 import { Panel, StatusBadge } from "@/components/erp/primitives";
 import { formatCurrency } from "@/lib/calculations";
-import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import { APP_TIME_ZONE } from "@/lib/locale";
 import type { Service } from "@/lib/types";
 import type { WeeklySettlementSummary } from "@/components/liquidations/types";
 import type { BloqueTablero } from "@/components/erp/tablero-personalizable";
@@ -83,17 +85,6 @@ function acumularModelo(
   });
 }
 
-/** Cifra compacta para las barras: 4.820k en lugar de 4.820.000. */
-function compacto(valor: number) {
-  if (valor >= 1_000_000) {
-    return `${(valor / 1_000_000).toLocaleString(APP_LOCALE, {
-      maximumFractionDigits: 1,
-    })}M`;
-  }
-  if (valor >= 1_000) return `${Math.round(valor / 1_000)}k`;
-  return String(Math.round(valor));
-}
-
 /**
  * Bloques de la semana en curso.
  *
@@ -138,7 +129,6 @@ export function bloquesDeSemanaEnCurso({
     return { corto, total };
   });
 
-  const mayor = Math.max(...porDia.map((item) => item.total), 0);
   const ingresoSemana = porDia.reduce((suma, item) => suma + item.total, 0);
 
   /*
@@ -240,29 +230,7 @@ export function bloquesDeSemanaEnCurso({
               {formatCurrency(ingresoSemana)}
             </p>
 
-            <div className="mt-2 flex h-[160px] items-end gap-2">
-              {porDia.map((item) => (
-                <div
-                  key={item.corto}
-                  className="flex flex-1 flex-col items-center gap-2"
-                >
-                  <span className="text-[11px] tabular-nums text-zinc-500">
-                    {item.total ? compacto(item.total) : ""}
-                  </span>
-
-                  <div
-                    className="w-full rounded-t-md bg-[#C5A55A]"
-                    style={{
-                      height: mayor
-                        ? `${Math.max(2, (item.total / mayor) * 100)}%`
-                        : "2px",
-                    }}
-                  />
-
-                  <span className="text-[11px] text-zinc-500">{item.corto}</span>
-                </div>
-              ))}
-            </div>
+            <IngresoPorDiaChart datos={porDia} />
           </>
         )}
       </Panel>

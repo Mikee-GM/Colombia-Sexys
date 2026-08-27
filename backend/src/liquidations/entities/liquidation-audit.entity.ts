@@ -8,13 +8,20 @@ export class LiquidationAudit {
   id: string;
 
   @Column('varchar', { name: 'entity_type', length: 30 })
-  entityType: 'record' | 'debt' | 'payment' | 'weekly_settlement';
+  entityType:
+    'record' | 'debt' | 'payment' | 'weekly_settlement' | 'cash_payment';
 
   @Column('uuid', { name: 'entity_id' })
   entityId: string;
 
+  /*
+   * `reverted` es lo que deja constancia de un deshacer. Se distingue de
+   * `deleted` a proposito: borrar es quitar algo que no debia existir, revertir
+   * es anular un movimiento de dinero que si ocurrio y del que hay que poder
+   * explicar despues por que dejo de contar.
+   */
   @Column('varchar', { length: 30 })
-  action: 'created' | 'updated' | 'deleted' | 'confirmed';
+  action: 'created' | 'updated' | 'deleted' | 'confirmed' | 'reverted';
 
   @Column('uuid', { name: 'actor_user_id' })
   actorUserId: string;

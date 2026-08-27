@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { Logger, UnauthorizedException } from '@nestjs/common';
 import { PanelAccessService } from './panel-access.service';
 
 /**
@@ -109,12 +109,52 @@ describe('PanelAccessService', () => {
       expect(result.user.id).toBe('jefe-1');
       expect(result.redirectPath).toBe('/admin/services/abc');
       // El marcado como usado va en el propio UPDATE, no en una lectura previa.
-      expect(tokens.query.mock.calls[0][0]).toContain('SET used_at = now()');
-      expect(tokens.query.mock.calls[0][0]).toContain('used_at IS NULL');
-      expect(tokens.query.mock.calls[0][0]).toContain('expires_at > now()');
+      const [sql, params] = tokens.query.mock.calls[0];
+      expect(sql).toContain('SET used_at = COALESCE(used_at, now())');
+      expect(sql).toContain('expires_at > now()');
+      // El plazo lo pone la base, no el reloj del proceso.
+      expect(sql).toContain('used_at > now() - $2::interval');
+      expect(params[1]).toMatch(/^\d+ seconds$/);
     });
 
-    it('rechaza un pase ya usado o caducado', async () => {
+    /*
+     * El pase se gasta con abrir el enlace, y Telegram lo abre solo al
+     * previsualizarlo: con un unico uso, la apertura de verdad llegaba tarde y
+     * el portal respondia que el enlace ya no valia. La ventana de cortesia la
+     * evalua la propia consulta, asi que aqui se comprueba que la condicion va
+     * escrita y que la fila que devuelve se acepta como cualquier otra.
+     */
+    it('admite el mismo pase dentro de la ventana de cortesia', async () => {
+      tokens.query.mockResolvedValue(
+        filasDeUpdate([
+          { userId: 'jefe-1', chatId: '555', redirectPath: '/admin' },
+        ]),
+      );
+
+      const primero = await service.consume('pase', '555');
+      const segundo = await service.consume('pase', '555');
+
+      expect(primero.user.id).toBe('jefe-1');
+      expect(segundo.user.id).toBe('jefe-1');
+      expect(segundo.redirectPath).toBe('/admin');
+    });
+
+    it('no renueva la ventana en cada reintento: used_at se fija una sola vez', async () => {
+      tokens.query.mockResolvedValue(
+        filasDeUpdate([{ userId: 'jefe-1', chatId: null, redirectPath: null }]),
+      );
+
+      await service.consume('pase');
+
+      // Sin el COALESCE, cada reapertura correria used_at y el pase valdria
+      // mientras alguien lo siguiera abriendo.
+      expect(tokens.query.mock.calls[0][0]).not.toMatch(
+        /SET\s+used_at\s*=\s*now\(\)/,
+      );
+    });
+
+    it('rechaza un pase caducado o con la cortesia ya agotada', async () => {
+      // La base no devuelve fila: ni sin usar, ni dentro del plazo, ni vigente.
       tokens.query.mockResolvedValue(filasDeUpdate([]));
 
       await expect(service.consume('pase', '555')).rejects.toBeInstanceOf(
@@ -240,5 +280,53 @@ describe('PanelAccessService origen del enlace', () => {
     const { url } = await service.issueLink('u-1', null);
 
     expect(url).not.toContain('//acceso');
+  });
+
+  /*
+   * `0.0.0.0` es la direccion con la que un servidor dice "escucho en todas mis
+   * interfaces", y se cuela en la variable del enlace con facilidad porque es
+   * justo lo que se configura para que el proceso acepte conexiones de fuera.
+   * Como destino no vale: el enlace llega al personal y no abre en ningun
+   * navegador. Desde el backend se ve bien formado, asi que si no se avisa aqui
+   * el fallo no deja rastro en ningun log.
+   */
+  it('avisa cuando el origen es una direccion de escucha y no un destino', async () => {
+    const service = build({ WEB_URL: 'http://0.0.0.0:3000' });
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    await service.issueLink('u-1', null);
+
+    expect(error).toHaveBeenCalledTimes(1);
+    const mensaje = error.mock.calls[0][0] as string;
+    expect(mensaje).toContain('0.0.0.0');
+    // El aviso tiene que nombrar la variable que hay que corregir.
+    expect(mensaje).toContain('PANEL_BASE_URL');
+    error.mockRestore();
+  });
+
+  it('tambien avisa con la direccion de escucha de IPv6', async () => {
+    const service = build({ WEB_URL: 'http://[::]:3000' });
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    await service.issueLink('u-1', null);
+
+    expect(error).toHaveBeenCalledTimes(1);
+    error.mockRestore();
+  });
+
+  it('no avisa de un origen publico correcto', async () => {
+    const service = build({ WEB_URL: 'https://rvcs-pruebas.com.mx' });
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    await service.issueLink('u-1', null);
+
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 });

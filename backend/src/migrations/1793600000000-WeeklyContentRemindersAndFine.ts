@@ -12,10 +12,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * fotos, se le carga una multa al corte. El importe vive en
  * `liquidation_settings` porque es un parametro del corte, no del calendario.
  */
-export class WeeklyContentRemindersAndFine1793300000000
+export class WeeklyContentRemindersAndFine1793600000000
   implements MigrationInterface
 {
-  name = 'WeeklyContentRemindersAndFine1793300000000';
+  name = 'WeeklyContentRemindersAndFine1793600000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

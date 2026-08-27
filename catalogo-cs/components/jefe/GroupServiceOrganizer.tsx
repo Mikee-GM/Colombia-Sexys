@@ -1305,7 +1305,7 @@ function ActiveGroupEditor({
                 </div>
               </div>
               <div>
-                <label className="text-zinc-300 font-bold">Cargo manual de transporte ($ COP, si aplica)</label>
+                <label className="text-zinc-300 font-bold">Cargo manual de transporte ($ MXN, si aplica)</label>
                 <input
                   type="number"
                   min="0"

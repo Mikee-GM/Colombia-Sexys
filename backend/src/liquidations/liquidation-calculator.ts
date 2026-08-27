@@ -128,13 +128,36 @@ export function calculateCut(
     promotionTotal += promotion;
     membershipTotal += toCents(record.membershipAmount);
 
+    /*
+     * Los extras son integros de la empleada.
+     *
+     * Antes se le retenia un 15 % a partir de 1000: la casa se quedaba una
+     * parte de algo que es suyo por completo, y como la hoja solo mostraba el
+     * resultado ya recortado, la retencion no aparecia por ningun lado. Ni la
+     * empleada ni la oficina podian ver por que el numero no cuadraba con lo
+     * que se habia cobrado.
+     *
+     * `rawExtrasTotal` y `calculatedExtras` se conservan los dos porque el
+     * corte los usa para cosas distintas —lo cobrado al cliente y lo que se le
+     * paga a ella— aunque ahora valgan lo mismo.
+     */
     const extra = toCents(record.electronicExtraAmount ?? record.extraAmount);
     rawExtrasTotal += extra;
 
     /*
-     * Solo la tarjeta paga comision, y solo a partir del umbral. Antes la
-     * condicion era "no es efectivo", que castigaba igual a la transferencia
-     * pese a no costarle nada a la empresa.
+     * Solo la tarjeta paga comision, y solo a partir del umbral.
+     *
+     * La condicion anterior era "no es efectivo", que retenia igual sobre la
+     * transferencia pese a no costarle nada a la empresa: eso era quedarse con
+     * parte de algo que es integro de la empleada. Ahora la retencion se limita
+     * a lo que si tiene un costo real, y tanto el porcentaje como el umbral
+     * salen de `liquidation_settings`, de modo que la regla se ve y se cambia
+     * desde la pantalla del corte en vez de estar escondida en el codigo.
+     *
+     * `cardExtrasTotal` y `cardExtraCommission` se devuelven aparte para que la
+     * retencion sea visible en la hoja: el problema de la version anterior no
+     * era solo cuanto se retenia, sino que el corte solo mostraba el resultado
+     * ya recortado y nadie podia cuadrar el numero con lo cobrado.
      *
      * `cardExtra` se acota a `extra` porque los dos importes se guardan por
      * separado en el registro: si alguno llegara descuadrado, la parte con

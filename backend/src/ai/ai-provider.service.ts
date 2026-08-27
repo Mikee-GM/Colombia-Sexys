@@ -36,6 +36,41 @@ const MAX_CHAT_TOKENS = 1500;
  */
 const CHAT_TIMEOUT_MS = 60_000;
 
+/**
+ * Reintentos ante un 429 o un 5xx del proveedor.
+ *
+ * Con varios clientes a la vez, un pico de rate limit es lo normal, no una
+ * excepcion: antes cada 429 se propagaba como un fallo definitivo y apagaba la
+ * IA de esa conversacion. Dos reintentos cubren el pico sin alargar de mas la
+ * espera del cliente.
+ */
+const MAX_CHAT_RETRIES = 2;
+
+/** Un `retry_after` mayor que esto no compensa esperarlo con el cliente delante. */
+const MAX_CHAT_RETRY_WAIT_MS = 8_000;
+
+/**
+ * Llamadas simultaneas al modelo.
+ *
+ * Sin tope, cien clientes escribiendo a la vez son cien peticiones en paralelo:
+ * el proveedor responde 429 a casi todas y ninguna se salva. Con una cola, las
+ * primeras pasan y el resto espera su turno unos segundos.
+ */
+const DEFAULT_MAX_CONCURRENT_CALLS = 12;
+
+/**
+ * Tope de espera en la cola. Rebasarlo se trata como un fallo de la IA, que ya
+ * no apaga la conversacion: el cliente recibe una linea en personaje y su
+ * siguiente mensaje lo reintenta.
+ */
+const QUEUE_TIMEOUT_MS = 25_000;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+
 @Injectable()
 export class AiProviderService {
   private readonly logger = new Logger(AiProviderService.name);
@@ -79,6 +114,62 @@ export class AiProviderService {
     );
   }
 
+  private get maxConcurrentCalls(): number {
+    const raw = this.configService.get<string | number>(
+      'AI_MAX_CONCURRENT_CALLS',
+    );
+    const configured = Number(raw);
+    return Number.isFinite(configured) && configured > 0
+      ? configured
+      : DEFAULT_MAX_CONCURRENT_CALLS;
+  }
+
+  /** Llamadas al modelo en vuelo ahora mismo. */
+  private enVuelo = 0;
+  /** Turnos esperando un hueco, en orden de llegada. */
+  private readonly cola: Array<() => void> = [];
+
+  /**
+   * Espera un hueco libre para llamar al modelo.
+   *
+   * Devuelve la funcion con la que se libera el hueco, que hay que invocar
+   * siempre —tambien al fallar—, o lanza si la espera se pasa del tope.
+   */
+  private async tomarTurno(): Promise<() => void> {
+    if (this.enVuelo < this.maxConcurrentCalls) {
+      this.enVuelo += 1;
+      return this.liberarTurno;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const entrada = () => {
+        clearTimeout(temporizador);
+        this.enVuelo += 1;
+        resolve();
+      };
+      const temporizador = setTimeout(() => {
+        const posicion = this.cola.indexOf(entrada);
+        if (posicion >= 0) this.cola.splice(posicion, 1);
+        reject(
+          new Error(
+            `La cola de la IA no dio turno en ${QUEUE_TIMEOUT_MS / 1000} s ` +
+              `(${this.enVuelo} llamadas en vuelo).`,
+          ),
+        );
+      }, QUEUE_TIMEOUT_MS);
+      temporizador.unref?.();
+      this.cola.push(entrada);
+    });
+
+    return this.liberarTurno;
+  }
+
+  private readonly liberarTurno = (): void => {
+    this.enVuelo -= 1;
+    const siguiente = this.cola.shift();
+    siguiente?.();
+  };
+
   async generateChatResponse(
     systemPrompt: string,
     history: { role: string; content: string }[],
@@ -90,6 +181,45 @@ export class AiProviderService {
 
     const messages = [{ role: 'system', content: systemPrompt }, ...history];
 
+    /*
+     * Reintento ante lo que es pasajero. Un 429 o un 5xx con varios clientes a
+     * la vez es lo esperable, no una averia: antes se propagaba tal cual y el
+     * llamador lo trataba como un fallo definitivo de la IA.
+     */
+    for (let intento = 0; ; intento++) {
+      const liberar = await this.tomarTurno();
+      let esperaMs: number;
+      try {
+        return await this.pedirRespuesta(apiKey, messages);
+      } catch (err: unknown) {
+        const reintentable = readRetryDelayMs(err);
+        if (reintentable === null || intento >= MAX_CHAT_RETRIES) throw err;
+        if (reintentable > MAX_CHAT_RETRY_WAIT_MS) {
+          this.logger.warn(
+            `El proveedor pide esperar ${Math.round(reintentable / 1000)} s; ` +
+              'es demasiado con el cliente delante y se abandona la llamada.',
+          );
+          throw err;
+        }
+        esperaMs = reintentable;
+        this.logger.warn(
+          `Llamada a la IA reintentable (intento ${intento + 1}/${MAX_CHAT_RETRIES}), ` +
+            `se repite en ${Math.round(esperaMs / 1000)} s.`,
+        );
+      } finally {
+        // El hueco se suelta ANTES de dormir: quedarselo durante la espera
+        // dejaria la cola parada por una llamada que ni siquiera esta en vuelo.
+        liberar();
+      }
+      await sleep(esperaMs);
+    }
+  }
+
+  /** Una sola llamada al modelo, sin reintentos ni cola. */
+  private async pedirRespuesta(
+    apiKey: string,
+    messages: { role: string; content: string }[],
+  ): Promise<string> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
 
@@ -113,7 +243,15 @@ export class AiProviderService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`xAI API error: ${response.status} - ${errorText}`);
+        // El estado y el `retry-after` viajan en el error para que el bucle de
+        // reintento sepa si esto se puede repetir y cuanto hay que esperar.
+        throw Object.assign(
+          new Error(`xAI API error: ${response.status} - ${errorText}`),
+          {
+            status: response.status,
+            retryAfterSeconds: Number(response.headers.get('retry-after')),
+          },
+        );
       }
 
       const data = await response.json();
@@ -253,4 +391,25 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
       };
     }
   }
+}
+
+/**
+ * Cuanto hay que esperar antes de repetir una llamada, o `null` si el error no
+ * es de los que se arreglan repitiendo.
+ *
+ * Se reintenta el 429 (rate limit) y los 5xx del proveedor. Un 400 o un 401 no:
+ * repetirlos da exactamente el mismo error y solo retrasa el aviso al cliente.
+ */
+function readRetryDelayMs(error: unknown): number | null {
+  const status = (error as { status?: number } | undefined)?.status;
+  if (status !== 429 && !(typeof status === 'number' && status >= 500)) {
+    return null;
+  }
+  const retryAfter = (error as { retryAfterSeconds?: number } | undefined)
+    ?.retryAfterSeconds;
+  if (Number.isFinite(retryAfter) && (retryAfter as number) > 0) {
+    return (retryAfter as number) * 1_000;
+  }
+  // Sin cabecera, un respiro corto que crece con el intento.
+  return status === 429 ? 2_000 : 1_000;
 }

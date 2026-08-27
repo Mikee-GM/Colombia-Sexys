@@ -54,10 +54,20 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    /*
+     * "Dinero" va primero y absorbe lo que antes era "Cartera y Deudas": el
+     * dinero de una persona —lo que se le paga, el efectivo que retiene y lo
+     * que debe— se decidia cruzando tres entradas distintas de este mismo menu,
+     * y ninguna de las tres mostraba las otras dos.
+     *
+     * Las que quedan hacen cosas que la ficha no cubre: capturar registros de
+     * liquidacion, los cortes de choferes (otra poblacion) y las cuentas
+     * bancarias.
+     */
     title: "Finanzas",
     items: [
+      { label: "Dinero del Personal", href: "/admin/dinero", icon: Wallet },
       { label: "Liquidaciones", href: "/admin/liquidations", icon: CreditCard },
-      { label: "Cartera y Deudas", href: "/admin/cartera", icon: Wallet },
       { label: "Cortes de Choferes", href: "/admin/driver-settlements", icon: Car },
       { label: "Cuentas Bancarias", href: "/admin/bank-accounts", icon: Landmark },
     ],

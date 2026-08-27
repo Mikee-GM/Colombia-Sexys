@@ -79,33 +79,55 @@ export function installSendThrottle(
   // Cola: cada envio espera a que el anterior haya cogido su turno.
   let queue: Promise<void> = Promise.resolve();
 
-  const reserve = (chatId: string | undefined): Promise<void> => {
+  const reserve = async (chatId: string | undefined): Promise<void> => {
+    /*
+     * Paso 1: enfriamiento del chat, reservado al instante y esperado FUERA de
+     * la cola global.
+     *
+     * Antes esta espera se hacia dentro de la cola, y como la cola es unica
+     * para todo el bot, un chat en enfriamiento detenia los envios a TODOS los
+     * demas: bloqueo de cabeza de linea. Dos mensajes seguidos al mismo cliente
+     * congelaban un segundo entero la mensajeria del bot, y con varias
+     * conversaciones a la vez el retraso se acumulaba hasta que dejaba de
+     * contestar.
+     *
+     * Al apuntar el turno del chat antes de dormir, dos envios al mismo chat
+     * siguen separados un segundo, pero cada uno espera por su cuenta sin
+     * frenar al resto.
+     */
+    if (chatId) {
+      const ahora = Date.now();
+      const libreEn = Math.max(ahora, chatFreeAt.get(chatId) ?? 0);
+      chatFreeAt.set(chatId, libreEn + PER_CHAT_INTERVAL_MS);
+
+      // La tabla crece con cada destinatario: se poda de los que ya cumplieron.
+      if (chatFreeAt.size > 5_000) {
+        for (const [key, freeAt] of chatFreeAt)
+          if (freeAt <= ahora) chatFreeAt.delete(key);
+      }
+
+      const espera = libreEn - ahora;
+      if (espera > 0) await sleep(espera);
+    }
+
+    /*
+     * Paso 2: limite global del bot. Aqui si hace falta serializar para contar
+     * bien, pero lo unico que se espera es lo que reste de la ventana de un
+     * segundo, nunca el enfriamiento de un chat ajeno.
+     */
     const turn = queue.then(async () => {
       for (;;) {
         const now = Date.now();
         recent = recent.filter((t) => now - t < 1_000);
-
-        const globalWait =
-          recent.length >= GLOBAL_PER_SECOND ? 1_000 - (now - recent[0]) : 0;
-        const chatWait = chatId ? (chatFreeAt.get(chatId) ?? 0) - now : 0;
-        const wait = Math.max(globalWait, chatWait, 0);
-
-        if (wait <= 0) {
+        if (recent.length < GLOBAL_PER_SECOND) {
           recent.push(now);
-          if (chatId) chatFreeAt.set(chatId, now + PER_CHAT_INTERVAL_MS);
-          // La tabla de chats crece con cada destinatario: se poda de los que
-          // ya cumplieron su espera.
-          if (chatFreeAt.size > 5_000) {
-            for (const [key, freeAt] of chatFreeAt)
-              if (freeAt <= now) chatFreeAt.delete(key);
-          }
           return;
         }
-        await sleep(wait);
+        await sleep(1_000 - (now - recent[0]));
       }
     });
     queue = turn.catch(() => undefined);
-    return turn;
+    await turn;
   };
 
   telegram.callApi = async (method, payload, ...rest) => {

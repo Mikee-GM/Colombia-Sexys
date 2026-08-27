@@ -1521,8 +1521,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         { employeeName: next.empleada?.nombreArtistico, eta },
         `Soy el asistente de la agencia. La cita anterior se extendió; la nueva hora aproximada de llegada de ${next.empleada?.nombreArtistico || 'la empleada'} es ${eta}.`,
       );
-      await this.bot.telegram
-        .sendMessage(next.cliente.telegramChatId, message)
+      // Va al cliente, asi que sale por el bot de la modelo como el resto de
+      // los avisos suyos; el central solo sirve de respaldo.
+      await this.botFor(next.empleadaId)
+        .telegram.sendMessage(next.cliente.telegramChatId, message)
         .catch(() => undefined);
       await this.recordAgencyMessage(next, message);
     }
@@ -2737,9 +2739,21 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   private async notifyClientsWaitingForEmployee(
     empleadaId: string,
   ): Promise<void> {
-    let sessions: TelegramSession[];
+    let waiting: TelegramSession[];
     try {
-      sessions = await this.telegramSessionRepository.find();
+      /*
+       * Filtrado en SQL, apoyado en el indice de expresion de la migracion
+       * `IndexTelegramSessionLookups`. Antes se traia la tabla entera para
+       * quedarse con las pocas filas que esperan a esta empleada, y cada fila
+       * carga su historial de conversacion en JSONB: son megabytes por cierre
+       * de servicio.
+       */
+      waiting = await this.telegramSessionRepository
+        .createQueryBuilder('sesion')
+        .where("sesion.data->>'esperandoEmpleadaId' = :empleadaId", {
+          empleadaId,
+        })
+        .getMany();
     } catch (error) {
       this.logger.error(
         'No se pudieron revisar las sesiones en espera de la empleada:',
@@ -2748,9 +2762,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const waiting = sessions.filter(
-      (item) => item.data?.esperandoEmpleadaId === empleadaId,
-    );
     if (!waiting.length) return;
 
     const empleada = await this.empleadasRepository.findOne({

@@ -23,6 +23,8 @@ import { LiquidationPeriodQueryDto } from './dto/liquidation-query.dto';
 import { UpdateLiquidationRecordDto } from './dto/update-liquidation-record.dto';
 import { UpdateLiquidationSettingsDto } from './dto/liquidation-settings.dto';
 import { LiquidationsService } from './liquidations.service';
+import { EmployeeMoneyService } from './employee-money.service';
+import { UndoSettlementDto } from './dto/undo-settlement.dto';
 
 @ApiTags('liquidations')
 @ApiBearerAuth('jwt')
@@ -30,7 +32,37 @@ import { LiquidationsService } from './liquidations.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin', 'jefe', 'empleada')
 export class LiquidationsController {
-  constructor(private readonly service: LiquidationsService) {}
+  constructor(
+    private readonly service: LiquidationsService,
+    private readonly money: EmployeeMoneyService,
+  ) {}
+
+  /**
+   * Listado de personal con su situacion de dinero, para la pantalla unica.
+   *
+   * Es la entrada del panel de dinero: una fila por persona con lo que se le
+   * paga, lo que debe y el saldo resultante, en vez de tener que cruzar a mano
+   * el corte, la cartera y el efectivo de transporte.
+   */
+  @Get('money-overview')
+  @Roles('admin', 'jefe')
+  moneyOverview(
+    @Query() query: LiquidationPeriodQueryDto,
+    @GetUser() actor: Usuarios,
+  ) {
+    return this.money.overview(query, actor);
+  }
+
+  /** Ficha de dinero de una empleada: corte, saldos, historial y rendimiento. */
+  @Get('employees/:employeeId/money')
+  @Roles('admin', 'jefe')
+  employeeMoney(
+    @Param('employeeId', new ParseUUIDPipe()) employeeId: string,
+    @Query() query: LiquidationPeriodQueryDto,
+    @GetUser() actor: Usuarios,
+  ) {
+    return this.money.detail({ ...query, employeeId }, actor);
+  }
 
   /*
    * Parametros del corte. La lectura la necesita cualquiera que abra una
@@ -114,6 +146,15 @@ export class LiquidationsController {
     @GetUser() actor: Usuarios,
   ) {
     return this.service.confirmWeeklySettlement(query, actor);
+  }
+
+  @Post('weekly-settlements/undo')
+  @Roles('admin')
+  undoWeeklySettlement(
+    @Body() dto: UndoSettlementDto,
+    @GetUser() actor: Usuarios,
+  ) {
+    return this.service.undoWeeklySettlement(dto, actor, dto.reason);
   }
 
   // Cartera completa: evita que la vista de deudas pida una peticion por empleada.

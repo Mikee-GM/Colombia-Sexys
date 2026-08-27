@@ -2,6 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
+import { CATALOG_CACHE_TAG } from "@/lib/data/catalog";
 
 export type EmployeeBotStatus =
   | "pendiente"
@@ -22,8 +23,6 @@ export type EmployeeBot = {
   lastError: string | null;
   updatedAt: string | null;
 };
-
-const CATALOG_CACHE_TAG = "catalog";
 
 export async function getEmployeeBotsAction(): Promise<EmployeeBot[]> {
   try {
@@ -48,6 +47,9 @@ export async function setEmployeeBotTokenAction(
     });
     revalidateTag(CATALOG_CACHE_TAG);
     revalidatePath("/admin/modelos");
+    // El catalogo publico vive en la raiz: sin esto el boton de contacto sigue
+    // apuntando al bot anterior hasta que caduque el ISR.
+    revalidatePath("/");
     return { ok: true, bot };
   } catch (error) {
     const message =
@@ -68,6 +70,9 @@ export async function removeEmployeeBotAction(
     });
     revalidateTag(CATALOG_CACHE_TAG);
     revalidatePath("/admin/modelos");
+    // El catalogo publico vive en la raiz: sin esto el boton de contacto sigue
+    // apuntando al bot anterior hasta que caduque el ISR.
+    revalidatePath("/");
     return { ok: true };
   } catch (error) {
     return {

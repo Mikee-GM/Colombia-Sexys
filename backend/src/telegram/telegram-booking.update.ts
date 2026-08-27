@@ -66,7 +66,11 @@ import { ExtensionsService } from '../extensions/extensions.service';
 import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
-import { DedicatedBotContext } from './telegram-bot-registry.service';
+import {
+  DedicatedBotContext,
+  TelegramBotRegistryService,
+} from './telegram-bot-registry.service';
+import { describeError } from '../common/errors/error-message';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
 import type { InlineKeyboardButton } from 'telegraf/types';
@@ -75,6 +79,7 @@ import { botonesDePortal } from './telegram-portal-buttons';
 import { TelegramSession } from './entities/telegram-session.entity';
 import {
   buildSessionKey,
+  parseSessionKey,
   type SessionKeyContext,
 } from './telegram-session.key';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
@@ -85,7 +90,6 @@ interface SessionData {
     | 'AWAITING_LOCATION'
     | 'AWAITING_PAYMENT_METHOD'
     | 'AWAITING_MIXED_TRANSFER_AMOUNT'
-    | 'AWAITING_PRESENCE_CONFIRMATION'
     | 'AWAITING_PAYMENT_RECEIPT'
     | 'AWAITING_FINAL_PAYMENT_RECEIPT'
     | 'AWAITING_RATING_COMMENT'
@@ -135,12 +139,6 @@ interface SessionData {
   esperandoEmpleadaId?: string;
   /** true en cuanto el cliente envía una foto de comprobante de transferencia. */
   comprobanteEnviado?: boolean;
-  /**
-   * El cliente confirmó que ya está instalado en el lugar del servicio. Se pide
-   * antes de cobrar para no mandar a la modelo a un sitio donde el cliente
-   * todavía no llegó.
-   */
-  presenciaConfirmada?: boolean;
   /** Id de la validación del comprobante ya recibido. */
   comprobanteValidationId?: string;
   /** Servicio pendiente de cobro final (duración indefinida por transferencia). */
@@ -168,8 +166,24 @@ interface SessionData {
   appealSubjectId?: string;
   fechaProgramada?: string;
   tipoAgenda?: 'inmediato' | 'programado';
+  /**
+   * El teclado nativo de "compartir ubicacion" sigue puesto y hay que quitarlo.
+   *
+   * Quitarlo exige mandar un mensaje, asi que se marca aqui y viaja pegado a la
+   * siguiente respuesta de verdad. Mandar un mensaje solo para eso obligaba a
+   * inventarse un acuse suelto, que es justo lo que delata al bot.
+   */
+  quitarTecladoPendiente?: boolean;
   humanTakeover?: boolean;
   iaActiva?: boolean;
+  /**
+   * Fallos seguidos de la IA en esta conversacion.
+   *
+   * Un timeout o un 429 sueltos no son motivo para apagar la IA de por vida:
+   * se cuenta, se contesta en personaje y el siguiente mensaje lo vuelve a
+   * intentar. Solo cuando fallan varios seguidos se entrega el chat al jefe.
+   */
+  fallosIaSeguidos?: number;
   bossThreadId?: string;
   bossGroupId?: string;
   trioSelectedEmployeeId?: string;
@@ -611,12 +625,31 @@ export function splitForTelegram(
 @Update()
 export class TelegramBookingUpdate implements BeforeApplicationShutdown {
   private readonly logger = new Logger(TelegramBookingUpdate.name);
+  /**
+   * Fallos seguidos de la IA antes de pasarle el chat al jefe.
+   *
+   * Con uno solo bastaba, y como el traspaso no tiene vuelta atras, un pico de
+   * 429 del proveedor apagaba la IA de forma permanente en todas las
+   * conversaciones que pillara.
+   */
+  private static readonly MAX_FALLOS_IA_SEGUIDOS = 3;
+
+  /**
+   * Margen antes de vaciar el buffer adelantado.
+   *
+   * Solo tiene que dar tiempo a que el manejador en curso termine y el
+   * middleware de sesion guarde: el vaciado arranca releyendo esa fila.
+   */
+  private static readonly BUFFER_NUDGE_DELAY_MS = 1_500;
+
   private readonly clientMessageBuffers = new Map<
     string,
     {
       messages: string[];
       timer: NodeJS.Timeout;
       ctx: BotContext;
+      /** Se guarda para poder reprogramar el vaciado desde otro manejador. */
+      empleada: Empleadas;
     }
   >();
   private readonly userLocationCache = new Map<
@@ -683,6 +716,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
     private readonly panelAccessService: PanelAccessService,
+    private readonly botRegistry: TelegramBotRegistryService,
   ) {
     // TTL / Inactivity Cleanup: run every 5 minutes to clean up users inactive for > 1 hour
     this.locationCleanupInterval = setInterval(() => {
@@ -1144,7 +1178,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       // Texto plano a proposito: por aqui sale lo que redacta la IA y con
       // Markdown un `[texto](url)` generado por el modelo se convertiria en un
       // enlace pinchable, justo lo que el prompt promete no mandar nunca.
-      await ctx.reply(text);
+      //
+      // Si quedaba pendiente retirar el teclado de compartir ubicacion, se
+      // retira con este mismo mensaje en vez de con uno inventado para ello.
+      if (ctx.session?.quitarTecladoPendiente) {
+        ctx.session.quitarTecladoPendiente = false;
+        await ctx.reply(text, Markup.removeKeyboard());
+      } else {
+        await ctx.reply(text);
+      }
     } catch (err) {
       this.logger.error('Error in sendDelayedReply:', err);
       try {
@@ -1316,7 +1358,102 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * Avisa a los clientes que decidieron esperar a una empleada que ya quedó
    * libre y reactiva su conversación.
    */
+  /**
+   * Busca la sesion que cuelga de un tema del grupo del jefe.
+   *
+   * Antes esto se resolvia trayendo la tabla ENTERA de sesiones y filtrando en
+   * memoria, y encima en el camino de cada mensaje que el jefe escribe en un
+   * tema. Con las sesiones viviendo 30 dias y cada fila cargando su historial
+   * de conversacion en JSONB, eso son megabytes por mensaje. La condicion va
+   * ahora en SQL, apoyada en el indice de expresion de la migracion
+   * `IndexTelegramSessionLookups`.
+   */
+  private async findSessionByBossThread(
+    threadId: string | number,
+    chatId?: string,
+  ): Promise<TelegramSession | null> {
+    const query = this.telegramSessionRepository
+      .createQueryBuilder('sesion')
+      .where("sesion.data->>'bossThreadId' = :threadId", {
+        threadId: String(threadId),
+      });
+    if (chatId) {
+      query.andWhere("sesion.data->>'bossGroupId' = :chatId", { chatId });
+    }
+    return query.limit(1).getOne();
+  }
+
+  /** Telegram id del cliente dueño de una sesion, sin confundirlo con la empleada. */
+  private clientTelegramIdOf(session: TelegramSession): string | undefined {
+    return parseSessionKey(session.key)?.fromId;
+  }
+
   /** Empleadas libres ahora mismo, excluyendo opcionalmente a una. */
+  /**
+   * ¿La modelo tiene alguna foto exclusiva?
+   *
+   * El prompt solo necesita el si o el no. Antes se cargaba la empleada entera
+   * con TODA su coleccion de fotos para mirarle la longitud, y eso ocurria en
+   * cada mensaje de cada conversacion.
+   */
+  private async tieneFotosExclusivas(empleadaId: string): Promise<boolean> {
+    const total = await this.empleadasRepository
+      .createQueryBuilder('empleada')
+      .innerJoin('empleada.fotosExclusivas', 'foto')
+      .where('empleada.id = :empleadaId', { empleadaId })
+      .limit(1)
+      .getCount();
+    return total > 0;
+  }
+
+  /**
+   * Version ligera para armar el prompt: solo los campos que el modelo nombra.
+   *
+   * `getAvailableEmployees` arrastra las fotos y el usuario de cada empleada
+   * porque los botones del catalogo los necesitan. En la conversacion con la IA
+   * no se usa ninguno de los dos, y esa consulta corre en cada mensaje.
+   */
+  private async getAvailableEmployeesForPrompt(excludeId?: string): Promise<
+    {
+      id: string;
+      nombre: string;
+      precioBaseHora: number;
+      descripcion: string | null;
+    }[]
+  > {
+    const [employees, busyServices] = await Promise.all([
+      this.empleadasRepository.find({
+        where: {
+          disponible: true,
+          catalogoActivo: true,
+          usuario: { enJornada: true },
+        },
+        order: { nombreArtistico: 'ASC' },
+        select: {
+          id: true,
+          nombreArtistico: true,
+          precioBaseHora: true,
+          descripcion: true,
+        },
+      }),
+      this.serviciosRepository.find({
+        where: { estado: In(['en_curso']) },
+        select: { id: true, empleadaId: true },
+      }),
+    ]);
+    const busyIds = new Set(busyServices.map((s) => s.empleadaId));
+    return employees
+      .filter(
+        (employee) => employee.id !== excludeId && !busyIds.has(employee.id),
+      )
+      .map((employee) => ({
+        id: employee.id,
+        nombre: employee.nombreArtistico,
+        precioBaseHora: Number(employee.precioBaseHora),
+        descripcion: employee.descripcion,
+      }));
+  }
+
   private async getAvailableEmployees(
     excludeId?: string,
   ): Promise<Empleadas[]> {
@@ -1713,16 +1850,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    const [empleadaExtras, presetLocations, busySchedules, transportConfig] =
+    const [empleadaExtras, presetLocations, busySchedules, transportFee] =
       await Promise.all([
         this.extrasCatalogoRepository.find({
           where: { empleadaId: empleada.id, activo: true },
         }),
         this.transportOperations.activeLocations(),
         this.getEmployeeBusySchedules(empleada.id),
-        this.transportOperations
-          .getConfiguration()
-          .catch(() => ({ externalLocationFee: 0 })),
+        this.transportOperations.externalLocationFee().catch(() => 0),
       ]);
 
     const allLinkedIds = Array.from(
@@ -1764,16 +1899,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       (l) => `${l.name}${l.address ? ` (${l.address})` : ''}`,
     );
 
-    const empleadaConFotos = await this.empleadasRepository.findOne({
-      where: { id: empleada.id },
-      relations: { fotosExclusivas: true },
-    });
-    const tieneFotosExclusivas = Boolean(
-      empleadaConFotos?.fotosExclusivas &&
-      empleadaConFotos.fotosExclusivas.length > 0,
-    );
+    const tieneFotosExclusivas = await this.tieneFotosExclusivas(empleada.id);
 
-    const otherAvailable = await this.getAvailableEmployees(empleada.id);
+    const otherAvailable = await this.getAvailableEmployeesForPrompt(
+      empleada.id,
+    );
 
     const promptParams = {
       nombreArtistico: empleada.nombreArtistico,
@@ -1789,23 +1919,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           precioBaseHora: model.precioBaseHora,
         }),
       ),
-      otrasModelosDisponibles: buildModelKeys(
-        otherAvailable.map((employee) => ({
-          id: employee.id,
-          nombre: employee.nombreArtistico,
-          precioBaseHora: Number(employee.precioBaseHora),
-          descripcion: employee.descripcion,
-        })),
-        'C',
-      ).map(({ clave, model }) => ({
-        clave,
-        nombre: model.nombre,
-        precioBaseHora: model.precioBaseHora,
-        descripcion: model.descripcion,
-      })),
-      costoTransporteExterno: Number(
-        (transportConfig as any)?.externalLocationFee ?? 0,
+      otrasModelosDisponibles: buildModelKeys(otherAvailable, 'C').map(
+        ({ clave, model }) => ({
+          clave,
+          nombre: model.nombre,
+          precioBaseHora: model.precioBaseHora,
+          descripcion: model.descripcion,
+        }),
       ),
+      costoTransporteExterno: transportFee,
       ubicacionesPreestablecidas: ubicacionesData,
       fechaHoraActual: new Date().toLocaleString(APP_LOCALE, {
         timeZone: APP_TIME_ZONE,
@@ -1838,7 +1960,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       await this.recordDraftConversation(ctx, 'ia', greeting);
     } catch (err: any) {
       this.logger.error('Error starting LLM chat session:', err);
-      await this.handleAIFailureAndTransferToBoss(ctx, empleada, err);
+      // Que falle el saludo tampoco justifica entregar el chat: se cuenta como
+      // un fallo mas y el siguiente mensaje del cliente lo reintenta.
+      await this.handleAIFailure(ctx, empleada, err);
     }
   }
 
@@ -1902,29 +2026,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ctx,
       clientMessages.locationRequest(),
     );
-  }
-
-  /**
-   * El cliente confirma que ya está en el lugar. Se marca la sesión y se
-   * reanuda el flujo de pago exactamente donde se había pausado, reutilizando
-   * el método de pago que ya había elegido.
-   */
-  @Action('presencia_confirmada')
-  async onPresenceConfirmed(@Ctx() ctx: BotContext) {
-    await ctx.answerCbQuery();
-    const session = ctx.session;
-    if (!session || session.step !== 'AWAITING_PRESENCE_CONFIRMATION') {
-      await ctx.reply('No hay ningún proceso de contratación activo.');
-      return;
-    }
-    session.presenciaConfirmada = true;
-    session.step = 'AWAITING_PAYMENT_METHOD';
-    try {
-      await ctx.editMessageReplyMarkup(undefined);
-    } catch {
-      // El mensaje puede haber sido editado o eliminado; el flujo continua.
-    }
-    await this.proceedWithPayment(ctx);
   }
 
   @Action(/^pago_(efectivo|tarjeta|transferencia|mixto)$/)
@@ -1992,28 +2093,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    // Antes de cobrar hay que saber que el cliente ya está instalado: cobrar y
-    // despachar a la modelo a un lugar donde él todavía no llegó era una de las
-    // fuentes de fricción reportadas.
-    if (!session.presenciaConfirmada) {
-      session.step = 'AWAITING_PRESENCE_CONFIRMATION';
-      await ctx.reply(
-        'Antes de continuar con el pago, necesito confirmar que ya estás instalado en el lugar.\n\nComparte tu *ubicación en tiempo real* (toca el clip, luego Ubicación, y elige "Compartir ubicación en tiempo real") o confirma con el botón.',
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                'Ya estoy instalado',
-                'presencia_confirmada',
-              ),
-            ],
-          ]),
-        },
-      );
-      return;
-    }
-
+    /*
+     * No se le pregunta al cliente si ya esta en el lugar. Se hacia antes de
+     * cobrar, es decir antes de que el jefe hubiera aceptado siquiera el
+     * servicio: a esas alturas la pregunta no tiene sentido y el boton invitaba
+     * a confirmar una presencia que nadie habia pedido todavia.
+     */
     await this.proceedWithPayment(ctx);
   }
 
@@ -2041,8 +2126,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    const metodo = metodoPago as
-      'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
+    const metodo = metodoPago;
     const bankDetails = await this.servicesService.bankTransferDetails();
 
     if (metodo === 'transferencia') {
@@ -2102,13 +2186,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }
     const id = (ctx as any).match[1] as string;
     if (id === 'external') {
-      const configuration = await this.transportOperations.getConfiguration();
       ctx.session.presetLocationId = undefined;
       ctx.session.locationNameSnapshot = undefined;
       ctx.session.locationAddressSnapshot = undefined;
-      ctx.session.customerTransportCharge = Number(
-        configuration.externalLocationFee,
-      );
+      ctx.session.customerTransportCharge =
+        await this.transportOperations.externalLocationFee();
       await this.replyWithLocationKeyboard(
         ctx,
         'Perfecto. En ese caso, mándame el pin del lugar donde quieres que nos encontremos.',
@@ -2297,7 +2379,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     if (bossGroupId && !threadId) {
       try {
-        const topic = await ctx.telegram.createForumTopic(
+        const topic = await this.bot.telegram.createForumTopic(
           bossGroupId,
           `👤 Cliente: ${clientName}`,
         );
@@ -2344,7 +2426,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     let sent = false;
     if (bossGroupId) {
       try {
-        await ctx.telegram.sendMessage(bossGroupId, messageText, {
+        await this.bot.telegram.sendMessage(bossGroupId, messageText, {
           parse_mode: 'Markdown',
           message_thread_id: threadId || undefined,
           ...inlineKeyboard,
@@ -2357,7 +2439,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     if (!sent && bossPrivateId) {
       try {
-        await ctx.telegram.sendMessage(bossPrivateId, messageText, {
+        await this.bot.telegram.sendMessage(bossPrivateId, messageText, {
           parse_mode: 'Markdown',
           ...inlineKeyboard,
         });
@@ -2433,7 +2515,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const trioUserChatId = trioEmployee.usuario?.telegramChatId;
       if (trioUserChatId && trioUserChatId !== '111111111') {
         try {
-          await ctx.telegram.sendMessage(
+          await this.bot.telegram.sendMessage(
             trioUserChatId,
             `🔔 *Aviso de Servicio en Trío*\n\n` +
               `Hola *${trioEmployee.nombreArtistico}*, fuiste confirmada para un servicio en *Trío* junto con *${mainEmployee.nombreArtistico}*.\n` +
@@ -4309,7 +4391,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const bookingAlive = Boolean(ctx.session?.empleadaId);
     const acceptsLocation =
       step === 'AWAITING_LOCATION' ||
-      step === 'AWAITING_PRESENCE_CONFIRMATION' ||
       (bookingAlive &&
         (step === 'CHAT_CON_EMPLEADA' ||
           step === 'AWAITING_DURATION' ||
@@ -4321,15 +4402,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    // Mandar la ubicación estando en el paso de confirmación de presencia vale
-    // como confirmación: es justo lo que se le pidió.
-    if (step === 'AWAITING_PRESENCE_CONFIRMATION' && ctx.session) {
-      ctx.session.presenciaConfirmada = true;
-      ctx.session.step = 'AWAITING_PAYMENT_METHOD';
-      await ctx.reply('Confirmado, gracias. Seguimos con el pago.');
-      await this.proceedWithPayment(ctx);
-      return;
-    }
     await this.recordDraftConversation(
       ctx,
       'cliente',
@@ -4351,11 +4423,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       // si no, aplica la tarifa de ubicación externa.
       if (!selectedLocation && !ctx.session.presetLocationId) {
         try {
-          const [activeLocations, configuration] = await Promise.all([
+          const [activeLocations, externalFee] = await Promise.all([
             this.transportOperations.activeLocations(),
-            this.transportOperations
-              .getConfiguration()
-              .catch(() => ({ externalLocationFee: 0 })),
+            this.transportOperations.externalLocationFee().catch(() => 0),
           ]);
           const nearby = activeLocations.find(
             (location) =>
@@ -4372,9 +4442,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             ctx.session.locationAddressSnapshot = nearby.address;
             ctx.session.customerTransportCharge = 0;
           } else {
-            ctx.session.customerTransportCharge = Number(
-              (configuration as any)?.externalLocationFee ?? 0,
-            );
+            ctx.session.customerTransportCharge = externalFee;
           }
         } catch (feeErr) {
           this.logger.warn(
@@ -4383,6 +4451,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           );
         }
       }
+
+      // El hilo de la conversacion tiene que enterarse del pin: si no, el
+      // modelo —que venia de pedir la ubicacion— la vuelve a pedir en su
+      // siguiente turno aunque la sesion ya la tenga guardada.
+      this.recordLocationInHistory(
+        ctx.session,
+        ctx.session.locationNameSnapshot || notasUbicacion,
+      );
     }
 
     try {
@@ -4400,9 +4476,32 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       // naturalidad. Nada de errores ni de volver a pedir la ubicación.
       if (!duracionPactadaHoras && !ctx.session?.duracionIndefinida) {
         if (ctx.session) ctx.session.step = 'CHAT_CON_EMPLEADA';
+
+        /*
+         * Si el cliente acaba de escribir y su mensaje sigue en el buffer, la
+         * IA esta a punto de contestarle: se adelanta ese vaciado —que ahora ya
+         * sabe que el pin llego— y no se manda ningun acuse. Antes salian los
+         * dos: el acuse al instante y, veinte segundos despues, una respuesta
+         * que volvia a pedir la ubicacion.
+         */
+        if (ctx.session) ctx.session.quitarTecladoPendiente = true;
+        const laIaVaAContestar = this.adelantarBufferDelCliente(
+          telegramId,
+          empleadaId,
+        );
+        await this.persistSession(ctx);
+        if (laIaVaAContestar) return;
+
+        // Sin nada pendiente, el acuse va con la pausa de siempre: instantaneo
+        // se lee como un robot, que es justo lo que el personaje no puede ser.
         const ack = '¡Perfecto mi amor, ya me llegó tu ubicación! 📍';
-        await ctx.reply(ack, Markup.removeKeyboard());
+        await this.sendDelayedReply(ctx, ack);
         await this.recordDraftConversation(ctx, 'ia', ack);
+        if (ctx.session) {
+          const history = trimChatHistory(ctx.session.chatHistory || []);
+          history.push({ role: 'model', parts: [{ text: ack }] });
+          ctx.session.chatHistory = history;
+        }
         await this.persistSession(ctx);
         return;
       }
@@ -4609,7 +4708,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             try {
               let threadId: number | undefined = undefined;
               try {
-                const topic = await ctx.telegram.createForumTopic(
+                const topic = await this.bot.telegram.createForumTopic(
                   jefeUser.grupoTelegramId,
                   `👤 Cliente: ${clientName}`,
                 );
@@ -4631,7 +4730,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 sendOpts.message_thread_id = threadId;
               }
 
-              await ctx.telegram.sendMessage(
+              await this.bot.telegram.sendMessage(
                 jefeUser.grupoTelegramId,
                 detailsMsg,
                 sendOpts,
@@ -4641,7 +4740,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               if (threadId) {
                 locOpts.message_thread_id = threadId;
               }
-              await ctx.telegram.sendLocation(
+              await this.bot.telegram.sendLocation(
                 jefeUser.grupoTelegramId,
                 parseFloat(lat),
                 parseFloat(lng),
@@ -4658,7 +4757,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
           if (!sentEnc && jefeUser.telegramChatId) {
             try {
-              await ctx.telegram.sendMessage(
+              await this.bot.telegram.sendMessage(
                 jefeUser.telegramChatId,
                 detailsMsg,
                 {
@@ -4666,7 +4765,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                   ...inlineKeyboard,
                 },
               );
-              await ctx.telegram.sendLocation(
+              await this.bot.telegram.sendLocation(
                 jefeUser.telegramChatId,
                 parseFloat(lat),
                 parseFloat(lng),
@@ -4871,7 +4970,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           try {
             let threadId: number | undefined = undefined;
             try {
-              const topic = await ctx.telegram.createForumTopic(
+              const topic = await this.bot.telegram.createForumTopic(
                 jefeUser.grupoTelegramId,
                 `👤 Cliente: ${clientName}`,
               );
@@ -4902,7 +5001,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               sendOpts.message_thread_id = threadId;
             }
 
-            await ctx.telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               jefeUser.grupoTelegramId,
               detailsMsg,
               sendOpts,
@@ -4912,7 +5011,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             if (threadId) {
               locOpts.message_thread_id = threadId;
             }
-            await ctx.telegram.sendLocation(
+            await this.bot.telegram.sendLocation(
               jefeUser.grupoTelegramId,
               parseFloat(lat),
               parseFloat(lng),
@@ -4935,7 +5034,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               nuevoServicio,
               jefeUser.telegramChatId,
             );
-            await ctx.telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               jefeUser.telegramChatId,
               detailsMsg,
               {
@@ -4943,7 +5042,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 ...inlineKeyboard,
               },
             );
-            await ctx.telegram.sendLocation(
+            await this.bot.telegram.sendLocation(
               jefeUser.telegramChatId,
               parseFloat(lat),
               parseFloat(lng),
@@ -5581,7 +5680,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             (actor.rol === 'jefe' && service.jefeId === actor.id)) &&
           service.clienteTelegramId
         ) {
-          await ctx.telegram.sendMessage(service.clienteTelegramId, text);
+          // Por el bot de la modelo, no por `ctx.telegram`. El jefe escribe
+          // desde su grupo, que vive en el bot central, pero el cliente solo
+          // ha abierto conversacion con el bot dedicado: enviar por el central
+          // lo rechaza Telegram y la respuesta del jefe se pierde en silencio.
+          await this.botRegistry
+            .botForEmployeeOrCentral(service.empleadaId)
+            .telegram.sendMessage(service.clienteTelegramId, text);
           await this.recordConversation(service, 'jefe', text);
         } else if (
           !service &&
@@ -5590,16 +5695,25 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           (actor.rol === 'admin' || actor.rol === 'jefe')
         ) {
           // Buscar si es un hilo de borrador o takeover de un cliente
-          const sessions = await this.telegramSessionRepository.find();
-          const matched = sessions.find(
-            (s) =>
-              s.data?.bossThreadId === threadId.toString() &&
-              s.data?.bossGroupId === chatId,
-          );
+          const matched = await this.findSessionByBossThread(threadId, chatId);
           if (matched) {
-            const clientTelegramId = matched.key.split(':')[0];
+            /*
+             * La clave se descompone con el mismo formato con el que se armo.
+             * Leer `key.split(':')[0]` daba el id de la EMPLEADA en las
+             * sesiones de un bot dedicado —ahi la clave lleva ese prefijo—, de
+             * modo que el mensaje del jefe salia hacia un destinatario que no
+             * existe y el cliente no recibia nada.
+             */
+            const parsedKey = parseSessionKey(matched.key);
+            const clientTelegramId = parsedKey?.fromId;
             if (clientTelegramId) {
-              await ctx.telegram.sendMessage(clientTelegramId, text);
+              // Y sale por el bot que el cliente si tiene abierto.
+              const empleadaId =
+                (matched.data?.empleadaId as string | undefined) ??
+                parsedKey?.employeeId;
+              await this.botRegistry
+                .botForEmployeeOrCentral(empleadaId)
+                .telegram.sendMessage(clientTelegramId, text);
               const client = await this.clientesRepository.findOne({
                 where: { telegramChatId: clientTelegramId },
               });
@@ -5677,7 +5791,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             'cliente',
             text,
           );
-          await ctx.telegram.sendMessage(
+          await this.bot.telegram.sendMessage(
             groupRequest.boss.grupoTelegramId,
             text,
             {
@@ -5706,7 +5820,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           ctx.session?.bossThreadId
         ) {
           await this.recordDraftConversation(ctx, 'cliente', text);
-          await ctx.telegram.sendMessage(ctx.session.bossGroupId, text, {
+          await this.bot.telegram.sendMessage(ctx.session.bossGroupId, text, {
             message_thread_id: Number(ctx.session.bossThreadId),
           });
           return;
@@ -5736,7 +5850,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             this.logger.log(
               `Creando tema de foro para cliente: ${clientName} en grupo: ${grupoTelegramId}`,
             );
-            const topic = await ctx.telegram.createForumTopic(
+            const topic = await this.bot.telegram.createForumTopic(
               grupoTelegramId,
               `👤 Cliente: ${clientName}`,
             );
@@ -5772,7 +5886,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                   .oneTime(),
               );
             }
-            await ctx.telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               grupoTelegramId,
               detailsMsg,
               extraOptions,
@@ -5780,7 +5894,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           }
 
           try {
-            await ctx.telegram.sendMessage(grupoTelegramId, text, {
+            await this.bot.telegram.sendMessage(grupoTelegramId, text, {
               message_thread_id: parseInt(activeService.telegramThreadId),
             });
           } catch (sendErr: any) {
@@ -5797,7 +5911,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 activeService.cliente?.nombreTelegram ||
                 ctx.from?.first_name ||
                 'Cliente';
-              const topic = await ctx.telegram.createForumTopic(
+              const topic = await this.bot.telegram.createForumTopic(
                 grupoTelegramId,
                 `👤 Cliente: ${clientName}`,
               );
@@ -5832,14 +5946,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                     .oneTime(),
                 );
               }
-              await ctx.telegram.sendMessage(
+              await this.bot.telegram.sendMessage(
                 grupoTelegramId,
                 detailsMsg,
                 extraOptions,
               );
 
               // Intentar enviar el mensaje original del cliente nuevamente en el nuevo hilo
-              await ctx.telegram.sendMessage(grupoTelegramId, text, {
+              await this.bot.telegram.sendMessage(grupoTelegramId, text, {
                 message_thread_id: topic.message_thread_id,
               });
             } else {
@@ -5968,6 +6082,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           messages: [userMessage],
           timer,
           ctx,
+          empleada,
         });
         return;
       }
@@ -6248,7 +6363,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const viajeIda = servicio.viajes.find((v) => v.tipo === 'ida');
     if (viajeIda && viajeIda.chofer?.usuario?.telegramChatId) {
       try {
-        await ctx.telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           viajeIda.chofer.usuario.telegramChatId,
           `⏳ *Aviso de Demora:* La empleada *${servicio.empleada.nombreArtistico}* ha solicitado una prórroga de 10 minutos (Prórroga ${servicio.prorrogasUsadas} de 3). El tiempo de espera se ha extendido.`,
           { parse_mode: 'Markdown' },
@@ -6343,7 +6458,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       if (bossGroupId && !request.telegramThreadId) {
         const clientName =
           client.nombreTelegram || ctx.from?.first_name || 'Cliente';
-        const topic = await ctx.telegram.createForumTopic(
+        const topic = await this.bot.telegram.createForumTopic(
           bossGroupId,
           `Grupo: ${clientName}`,
         );
@@ -6351,7 +6466,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           request.id,
           topic.message_thread_id.toString(),
         );
-        await ctx.telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           bossGroupId,
           `Solicitud de servicio grupal\nCliente: ${clientName}\nLa IA fue desactivada. Organiza participantes, ubicación, horas, pago y transporte desde el panel del jefe.`,
           { message_thread_id: topic.message_thread_id },
@@ -6367,7 +6482,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         });
         if (history.length) {
           await this.sendTranscript(
-            ctx,
             bossGroupId,
             buildConversationTranscript(history),
             topic.message_thread_id,
@@ -6466,7 +6580,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     // La clave se construye igual que en el middleware de sesion. Antes se
     // armaba aqui a mano y sin el prefijo del bot dedicado, asi que en el bot
     // de cada modelo esta escritura iba a una fila que nadie leia.
-    const sessionKey = buildSessionKey(ctx as unknown as SessionKeyContext);
+    const sessionKey = buildSessionKey(ctx);
     if (!sessionKey || !ctx.session) return;
     try {
       await this.telegramSessionRepository.save({
@@ -6489,7 +6603,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * apuntan a `ctx.session` sigan siendo validas.
    */
   private async reloadSession(ctx: BotContext): Promise<void> {
-    const sessionKey = buildSessionKey(ctx as unknown as SessionKeyContext);
+    const sessionKey = buildSessionKey(ctx);
     if (!sessionKey || !ctx.session) return;
     try {
       const row = await this.telegramSessionRepository.findOne({
@@ -6514,7 +6628,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * del cliente provoque un fallo de envío (y con ello pérdida de historial).
    */
   private async sendTranscript(
-    ctx: BotContext,
     chatId: string,
     transcript: string,
     threadId?: number,
@@ -6525,7 +6638,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     let allSent = true;
     for (const part of parts) {
       try {
-        await ctx.telegram.sendMessage(chatId, part, options);
+        // Siempre va al jefe, asi que sale por el bot central.
+        await this.bot.telegram.sendMessage(chatId, part, options);
       } catch (err) {
         allSent = false;
         this.logger.error(
@@ -6535,7 +6649,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         if (threadId) {
           // Reintento sin hilo para no perder el historial por un tema borrado.
           try {
-            await ctx.telegram.sendMessage(chatId, part);
+            await this.bot.telegram.sendMessage(chatId, part);
             allSent = true;
           } catch (retryErr) {
             this.logger.error(
@@ -6568,12 +6682,68 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     );
 
     const transcript = buildConversationTranscript(messages);
-    await this.sendTranscript(ctx, groupId, transcript, threadId);
+    await this.sendTranscript(groupId, transcript, threadId);
   }
 
   /** Un cliente hablando con dos modelos tiene dos buffers, no uno. */
   private messageBufferKey(telegramId: string, empleadaId: string): string {
     return `${empleadaId}:${telegramId}`;
+  }
+
+  /**
+   * Adelanta el vaciado del buffer de mensajes de un cliente.
+   *
+   * El buffer agrupa lo que el cliente escribe durante 20 s antes de pasarselo
+   * a la IA. Cuando en mitad de esa ventana llega algo que NO es texto —el pin
+   * de ubicacion, que tiene su propio manejador y responde al instante—, el
+   * mensaje agrupado se contestaba casi veinte segundos despues y sin enterarse
+   * de lo que habia pasado entre medias. El cliente veia dos respuestas
+   * descoordinadas: una automatica al pin y, un rato despues, la IA
+   * contestandole a lo anterior como si el pin no existiera.
+   *
+   * No se vacia aqui mismo a proposito: este manejador todavia no ha escrito su
+   * sesion, y el vaciado empieza releyendola. Se deja correr un instante para
+   * que el middleware de sesion guarde primero.
+   *
+   * Devuelve `true` si habia algo pendiente, para que quien llama sepa que la
+   * IA va a contestar enseguida y no haga falta un acuse automatico.
+   */
+  private adelantarBufferDelCliente(
+    telegramId: string,
+    empleadaId: string,
+  ): boolean {
+    const bufferKey = this.messageBufferKey(telegramId, empleadaId);
+    const buffer = this.clientMessageBuffers.get(bufferKey);
+    if (!buffer) return false;
+
+    clearTimeout(buffer.timer);
+    buffer.timer = setTimeout(() => {
+      void this.flushClientMessageBuffer(bufferKey, buffer.empleada);
+    }, TelegramBookingUpdate.BUFFER_NUDGE_DELAY_MS);
+    return true;
+  }
+
+  /**
+   * Deja constancia en el historial de que el pin ya llego.
+   *
+   * El prompt lleva la ubicacion confirmada, pero el modelo se guia sobre todo
+   * por el hilo de la conversacion, y ahi el pin no aparecia: como el ultimo
+   * turno suyo habia sido pedirla, volvia a pedirla. Entra como turno del
+   * cliente porque es el quien la mando.
+   */
+  private recordLocationInHistory(
+    session: SessionData,
+    descripcion?: string | null,
+  ): void {
+    const detalle = descripcion
+      ? capClientMessage(stripControlMarkers(descripcion))
+      : '';
+    const texto = detalle
+      ? `Ya te mandé mi ubicación por Telegram: ${detalle}`
+      : 'Ya te mandé mi ubicación por Telegram, te llegó el pin.';
+    const history = trimChatHistory(session.chatHistory || []);
+    history.push({ role: 'user', parts: [{ text: texto }] });
+    session.chatHistory = history;
   }
 
   private async flushClientMessageBuffer(
@@ -6707,16 +6877,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const history = trimChatHistory(session.chatHistory || []);
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      const [empleadaExtras, presetLocations, busySchedules, transportConfig] =
+      const [empleadaExtras, presetLocations, busySchedules, transportFee] =
         await Promise.all([
           this.extrasCatalogoRepository.find({
             where: { empleadaId: empleada.id, activo: true },
           }),
           this.transportOperations.activeLocations(),
           this.getEmployeeBusySchedules(empleada.id),
-          this.transportOperations
-            .getConfiguration()
-            .catch(() => ({ externalLocationFee: 0 })),
+          this.transportOperations.externalLocationFee().catch(() => 0),
         ]);
 
       const allLinkedIds = Array.from(
@@ -6786,22 +6954,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
       // La IA debe conocer al resto de compañeras libres para no negar
       // disponibilidad cuando el cliente pide varias chicas o quiere ver otras.
-      const otherAvailable = await this.getAvailableEmployees(empleada.id);
+      const otherAvailable = await this.getAvailableEmployeesForPrompt(
+        empleada.id,
+      );
 
       // Claves opacas para el prompt y su traduccion de vuelta aqui dentro. El
       // modelo solo puede nombrar a quien esta en estas listas: asi una marca
       // inventada o inyectada no puede alcanzar a una empleada que nunca se le
       // ofrecio al cliente.
       const trioKeys = buildModelKeys(availableTrioModels, 'M');
-      const otherKeys = buildModelKeys(
-        otherAvailable.map((employee) => ({
-          id: employee.id,
-          nombre: employee.nombreArtistico,
-          precioBaseHora: Number(employee.precioBaseHora),
-          descripcion: employee.descripcion,
-        })),
-        'C',
-      );
+      const otherKeys = buildModelKeys(otherAvailable, 'C');
       const offeredModels = new Map<string, { id: string; nombre: string }>();
       for (const { clave, model } of [...trioKeys, ...otherKeys]) {
         offeredModels.set(clave.toLowerCase(), {
@@ -6829,14 +6991,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         descripcion: model.descripcion,
       }));
 
-      const empleadaConFotos = await this.empleadasRepository.findOne({
-        where: { id: empleada.id },
-        relations: { fotosExclusivas: true },
-      });
-      const tieneFotosExclusivas = Boolean(
-        empleadaConFotos?.fotosExclusivas &&
-        empleadaConFotos.fotosExclusivas.length > 0,
-      );
+      const tieneFotosExclusivas = await this.tieneFotosExclusivas(empleada.id);
 
       const generalPrompt = getHireSystemPrompt({
         nombreArtistico: empleada.nombreArtistico,
@@ -6854,9 +7009,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         otrasModelosDisponibles,
         trioConfirmado,
         ubicacionesPreestablecidas: ubicacionesData,
-        costoTransporteExterno: Number(
-          (transportConfig as any)?.externalLocationFee ?? 0,
-        ),
+        costoTransporteExterno: transportFee,
         duracionPactada: session.duracionPactadaHoras,
         duracionIndefinida: session.duracionIndefinida,
         ubicacionConfirmada: this.describeConfirmedLocation(session),
@@ -6885,6 +7038,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           history,
           telegramId,
         );
+        // La IA volvio a contestar: la racha de fallos se cierra aqui.
+        session.fallosIaSeguidos = 0;
 
         if (responseText.includes('[GROUP_INTENT]')) {
           await this.handoffGroupRequest(ctx, empleada.id);
@@ -7252,15 +7407,70 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         await this.recordDraftConversation(ctx, 'ia', cleanText);
       } catch (err: any) {
         this.logger.error('Error in LLM booking chat flow:', err);
-        await this.handleAIFailureAndTransferToBoss(ctx, empleada, err);
+        await this.handleAIFailure(ctx, empleada, err);
       }
     };
 
+    /*
+     * El `catch` que faltaba.
+     *
+     * Solo el tramo de la IA estaba protegido: todo lo anterior —guardar la
+     * conversacion, las consultas del prompt, los guardarrailes— quedaba fuera,
+     * y como esto se invoca con `void` desde un `setTimeout`, cualquier error
+     * ahi era una promesa rechazada sin dueno. El cliente no recibia nada: ni
+     * el mensaje de cortesia ni el traspaso al jefe. Bajo carga, con el pool de
+     * la base saturado, ese era el camino habitual hacia el silencio.
+     */
     try {
       await executeBuffer();
+    } catch (err: unknown) {
+      this.logger.error(
+        `Error inesperado atendiendo el mensaje de ${telegramId}: ${describeError(err)}`,
+      );
+      await this.handleAIFailure(ctx, empleada, err).catch((avisoErr) =>
+        this.logger.error(
+          `Tampoco se pudo avisar al cliente ${telegramId}:`,
+          avisoErr,
+        ),
+      );
     } finally {
       await this.persistSession(ctx);
     }
+  }
+
+  /**
+   * Reacciona a un fallo de la IA sin apagarla a la primera.
+   *
+   * Antes cualquier error —un timeout, un 429 del proveedor, un corte de red—
+   * ponia `humanTakeover` y nada en todo el codigo lo volvia a quitar: esa
+   * conversacion no volvia a tener IA nunca. Ahora los primeros fallos solo se
+   * cuentan y se contestan en personaje, de modo que el siguiente mensaje lo
+   * reintenta; el traspaso al jefe se reserva para una racha que ya no parece
+   * pasajera.
+   */
+  private async handleAIFailure(
+    ctx: BotContext,
+    empleada?: Empleadas | null,
+    error?: unknown,
+  ): Promise<void> {
+    if (!ctx.session) ctx.session = {};
+    const fallos = (ctx.session.fallosIaSeguidos ?? 0) + 1;
+    ctx.session.fallosIaSeguidos = fallos;
+
+    if (fallos < TelegramBookingUpdate.MAX_FALLOS_IA_SEGUIDOS) {
+      this.logger.warn(
+        `Fallo ${fallos}/${TelegramBookingUpdate.MAX_FALLOS_IA_SEGUIDOS} de la IA con ${ctx.from?.id}; ` +
+          `se contesta en personaje y se reintentara en el proximo mensaje: ${describeError(error)}`,
+      );
+      const espera = empleada?.nombreArtistico
+        ? 'Ay mor, dame un segundito que ando terminando algo y ya te contesto bien 😘'
+        : 'Dame un segundito, mor, y ya te sigo 😘';
+      await this.sendDelayedReply(ctx, espera);
+      await this.recordDraftConversation(ctx, 'ia', espera);
+      return;
+    }
+
+    await this.handleAIFailureAndTransferToBoss(ctx, empleada, error);
   }
 
   private async handleAIFailureAndTransferToBoss(
@@ -7278,6 +7488,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     await this.recordDraftConversation(ctx, 'ia', naturalFallback);
 
     if (!ctx.session) ctx.session = {};
+    ctx.session.fallosIaSeguidos = 0;
     ctx.session.iaActiva = false;
     ctx.session.humanTakeover = true;
 
@@ -7322,7 +7533,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     if (!threadId) {
       try {
-        const topic = await ctx.telegram.createForumTopic(
+        const topic = await this.bot.telegram.createForumTopic(
           grupoTelegramId,
           `👤 Cliente: ${clientName}`,
         );
@@ -7343,7 +7554,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         });
         if (messages.length > 0) {
           await this.sendTranscript(
-            ctx,
             grupoTelegramId,
             buildConversationTranscript(messages),
             threadId,
@@ -7376,7 +7586,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ]);
 
       try {
-        await ctx.telegram.sendMessage(grupoTelegramId, alertMsg, {
+        await this.bot.telegram.sendMessage(grupoTelegramId, alertMsg, {
           message_thread_id: threadId,
           parse_mode: 'Markdown',
           ...keyboard,
@@ -7414,17 +7624,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         clientId = activeService.clienteId || 'none';
         empleadaId = activeService.empleadaId || 'none';
       } else {
-        const sessions = await this.telegramSessionRepository.find();
-        const matched = sessions.find(
-          (s) =>
-            s.data?.bossThreadId === threadId.toString() &&
-            s.data?.bossGroupId === chatId,
-        );
+        const matched = await this.findSessionByBossThread(threadId, chatId);
         if (matched) {
-          const clientTelId = matched.key.split(':')[0];
-          const client = await this.clientesRepository.findOne({
-            where: { telegramChatId: clientTelId },
-          });
+          // `key.split(':')[0]` daba el id de la EMPLEADA en las sesiones de un
+          // bot dedicado, asi que el cliente nunca se encontraba.
+          const clientTelId = this.clientTelegramIdOf(matched);
+          const client = clientTelId
+            ? await this.clientesRepository.findOne({
+                where: { telegramChatId: clientTelId },
+              })
+            : null;
           if (client) clientId = client.id;
           if (matched.data?.empleadaId) empleadaId = matched.data.empleadaId;
         }
@@ -7686,12 +7895,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         });
       }
       if (!client && threadId) {
-        const sessions = await this.telegramSessionRepository.find();
-        const matched = sessions.find(
-          (s) => s.data?.bossThreadId === threadId.toString(),
-        );
-        if (matched) {
-          const telId = matched.key.split(':')[0];
+        const matched = await this.findSessionByBossThread(threadId);
+        const telId = matched ? this.clientTelegramIdOf(matched) : undefined;
+        if (telId) {
           client = await this.clientesRepository.findOne({
             where: { telegramChatId: telId },
           });
@@ -7772,9 +7978,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       // Notificar al cliente en privado
       if (client.telegramChatId) {
         const clientMsg = `¡Listo amor! Tu servicio con *${empleada.nombreArtistico}* por ${duracion} hora(s) ha sido confirmado. Ya nos estamos preparando para salir a verte.`;
-        await ctx.telegram.sendMessage(client.telegramChatId, clientMsg, {
-          parse_mode: 'Markdown',
-        });
+        // El comando lo lanza el jefe desde su grupo (bot central), pero este
+        // mensaje va al cliente y tiene que salir por el bot de la modelo.
+        await this.botRegistry
+          .botForEmployeeOrCentral(empleada.id)
+          .telegram.sendMessage(client.telegramChatId, clientMsg, {
+            parse_mode: 'Markdown',
+          });
         await this.recordConversation(newService, 'ia', clientMsg);
       }
     } catch (err: any) {

@@ -19,6 +19,7 @@ describe('ServicesService.finishByEmployee', () => {
   let bot: any;
   let botRegistry: any;
   let telegramSessionRepository: any;
+  let sesionesEnEspera: any[];
   let extrasCatalogoRepository: any;
   let extrasServicioRepository: any;
   let service: ServicesService;
@@ -71,8 +72,19 @@ describe('ServicesService.finishByEmployee', () => {
     realtime = { emitToJefes: jest.fn(), emitToBoss: jest.fn() };
     bot = { telegram: { sendMessage: jest.fn().mockResolvedValue(undefined) } };
     botRegistry = { botForEmployeeOrCentral: jest.fn(() => bot), central: bot };
+    /*
+     * Las sesiones en espera se filtran en SQL, no en memoria, asi que el mock
+     * imita el query builder. Traer la tabla entera cargaba megabytes de
+     * historial JSONB en cada cierre de servicio.
+     */
+    sesionesEnEspera = [];
     telegramSessionRepository = {
-      find: jest.fn().mockResolvedValue([]),
+      createQueryBuilder: jest.fn(() => ({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(sesionesEnEspera),
+      })),
       save: jest.fn(),
     };
     extrasCatalogoRepository = { find: jest.fn(), findOne: jest.fn() };
@@ -223,9 +235,10 @@ describe('ServicesService.finishByEmployee', () => {
 
   it('avisa a los clientes que se quedaron esperando a la modelo', async () => {
     serviciosRepository.findOne.mockResolvedValue(enCurso());
-    telegramSessionRepository.find.mockResolvedValue([
-      { key: '777:abc', data: { esperandoEmpleadaId: EMPLEADA } },
-    ]);
+    sesionesEnEspera.push({
+      key: '777:abc',
+      data: { esperandoEmpleadaId: EMPLEADA },
+    });
 
     await service.finishByEmployee('srv-1', USUARIO);
 

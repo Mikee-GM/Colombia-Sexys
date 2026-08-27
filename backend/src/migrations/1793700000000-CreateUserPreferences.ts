@@ -15,8 +15,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * El valor es `jsonb` sin esquema fijo: cada clave decide su forma, y validarla
  * en la base obligaria a migrar cada vez que una pantalla gana una opcion.
  */
-export class CreateUserPreferences1793400000000 implements MigrationInterface {
-  name = 'CreateUserPreferences1793400000000';
+export class CreateUserPreferences1793700000000 implements MigrationInterface {
+  name = 'CreateUserPreferences1793700000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

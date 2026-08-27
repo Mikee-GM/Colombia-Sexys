@@ -31,6 +31,7 @@ import {
 } from '../transport-operations/entities/employee-cash-payment.entity';
 import { EmployeeWeeklySettlement } from './entities/employee-weekly-settlement.entity';
 import { LiquidationsRepository } from './liquidations.repository';
+import { SettlementsService } from '../transport-operations/settlements.service';
 
 @Injectable()
 export class LiquidationsService {
@@ -45,6 +46,7 @@ export class LiquidationsService {
     private readonly weeklySettlements: Repository<EmployeeWeeklySettlement>,
     @InjectRepository(LiquidationSetting)
     private readonly settings: Repository<LiquidationSetting>,
+    private readonly settlements: SettlementsService,
   ) {}
 
   /**
@@ -430,6 +432,93 @@ export class LiquidationsService {
       );
       return settlement;
     });
+  }
+
+  /**
+   * Deshace la liquidacion semanal ya confirmada de una empleada.
+   *
+   * Confirmar hace dos cosas: guarda la fila del corte y, si habia efectivo sin
+   * entregar, crea un abono con origen `weekly_offset` que lo compensa. Por eso
+   * deshacer tiene que revertir tambien ese abono; si no, el efectivo seguiria
+   * figurando como entregado y el saldo de la empleada quedaria mal en la
+   * direccion mas dificil de notar: a favor de la casa.
+   *
+   * La fila del corte se borra en vez de marcarse porque el indice unico
+   * (empleada, semana) impide volver a confirmar mientras exista. Lo que
+   * conserva la memoria del movimiento es el asiento de auditoria, que guarda
+   * la fila entera en `beforeValue`.
+   */
+  async undoWeeklySettlement(
+    query: LiquidationPeriodQueryDto,
+    actor: Usuarios,
+    reason?: string,
+  ) {
+    if (!query.employeeId)
+      throw new BadRequestException('employeeId es obligatorio');
+    if (actor.rol !== 'admin')
+      throw new ForbiddenException(
+        'Solo un administrador puede deshacer la liquidación semanal',
+      );
+    this.validatePeriod(query);
+    await this.assertEmployeeAccess(query.employeeId, actor);
+    const weekStart = query.startDate.toISOString().slice(0, 10);
+
+    const settlement = await this.weeklySettlements.findOneBy({
+      employeeId: query.employeeId,
+      weekStart,
+    });
+    if (!settlement)
+      throw new NotFoundException('Esa semana no está confirmada');
+
+    /*
+     * Las dos mitades van en la misma transaccion. Si solo cuajara una, el
+     * efectivo quedaria contado como entregado sin corte que lo respalde, o
+     * habria un corte deshecho con el efectivo aun compensado.
+     */
+    await this.dataSource.transaction(async (manager) => {
+      /*
+       * El abono de compensacion se busca por empleada, origen y semana, que es
+       * exactamente como lo escribe `confirmWeeklySettlement`. Puede no existir:
+       * si la empleada no debia efectivo, el corte se confirmo sin crear ninguno.
+       */
+      if (settlement.cashOffset > 0) {
+        const compensacion = await manager
+          .getRepository(EmployeeCashPayment)
+          .findOne({
+            where: {
+              employeeId: query.employeeId!,
+              origin: 'weekly_offset',
+              note: `Compensación del corte ${weekStart}`,
+              revertedAt: IsNull(),
+            },
+            order: { createdAt: 'DESC' },
+          });
+        if (compensacion) {
+          await this.settlements.revertCashPaymentWith(
+            manager,
+            compensacion.id,
+            actor,
+            reason ?? `Se deshizo la liquidación de la semana ${weekStart}`,
+            true,
+          );
+        }
+      }
+
+      await manager
+        .getRepository(EmployeeWeeklySettlement)
+        .delete({ id: settlement.id });
+      await this.auditWithManager(
+        manager,
+        'weekly_settlement',
+        settlement.id,
+        'reverted',
+        actor.id,
+        settlement,
+        null,
+      );
+    });
+
+    return { undone: true, weekStart };
   }
 
   async createRecord(dto: CreateLiquidationRecordDto, actor: Usuarios) {
