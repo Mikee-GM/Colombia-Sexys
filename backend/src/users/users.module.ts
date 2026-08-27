@@ -5,6 +5,7 @@ import { UsersController } from './users.controller';
 import { Usuarios } from './entities/user.entity';
 import { UserSeederService } from './user-seeder.service';
 import { WorkShiftStatusService } from './work-shift-status.service';
+import { WorkShiftResetScheduler } from './work-shift-reset.scheduler';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { TelegramModule } from '../telegram/telegram.module';
 import { RealtimeModule } from '../realtime/realtime.module';
@@ -16,7 +17,12 @@ import { RealtimeModule } from '../realtime/realtime.module';
     RealtimeModule,
   ],
   controllers: [UsersController],
-  providers: [UsersService, UserSeederService, WorkShiftStatusService],
+  providers: [
+    UsersService,
+    UserSeederService,
+    WorkShiftStatusService,
+    WorkShiftResetScheduler,
+  ],
   exports: [UsersService, WorkShiftStatusService],
 })
 export class UsersModule {}

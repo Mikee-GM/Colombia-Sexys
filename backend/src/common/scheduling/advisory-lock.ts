@@ -50,4 +50,5 @@ export const ADVISORY_LOCKS = {
   weeklyContent: 811_003,
   onboardingReminders: 811_004,
   authCleanup: 811_005,
+  workShiftReset: 811_006,
 } as const;

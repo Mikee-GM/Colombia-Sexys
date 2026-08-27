@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
@@ -78,6 +79,8 @@ export interface DriverPortalData {
 
 @Injectable()
 export class DriversService {
+  private readonly logger = new Logger(DriversService.name);
+
   constructor(
     @InjectRepository(Choferes)
     private readonly choferesRepository: Repository<Choferes>,
@@ -226,6 +229,50 @@ export class DriversService {
     return { deleted: true };
   }
 
+  /**
+   * Explica una lista vacia de choferes disponibles.
+   *
+   * El reparto exige seis condiciones a la vez y basta con que falle una para
+   * que no salga nadie. Sin este desglose el sintoma es siempre el mismo -- "no
+   * hay choferes disponibles" -- da igual si el problema es que nadie comparte
+   * ubicacion, que todos cerraron su jornada o que quedaron marcados como
+   * ocupados por viajes que nunca se cerraron.
+   */
+  private async logWhyNoDriversAvailable(): Promise<void> {
+    try {
+      const [conteo]: Array<Record<string, string>> =
+        await this.dataSource.query(
+          `SELECT
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE u.activo)::int AS activos,
+             COUNT(*) FILTER (WHERE u.activo AND u.en_jornada)::int AS en_jornada,
+             COUNT(*) FILTER (WHERE u.activo AND u.en_jornada AND c.disponible)::int AS disponibles,
+             COUNT(*) FILTER (WHERE u.activo AND u.en_jornada AND c.disponible
+                              AND u.telegram_chat_id IS NOT NULL)::int AS con_telegram,
+             COUNT(*) FILTER (WHERE u.activo AND u.en_jornada AND c.disponible
+                              AND u.telegram_chat_id IS NOT NULL
+                              AND c.ubicacion_lat IS NOT NULL
+                              AND c.ubicacion_lng IS NOT NULL)::int AS con_ubicacion
+           FROM choferes c
+           JOIN usuarios u ON u.id = c.usuario_id`,
+        );
+
+      this.logger.warn(
+        'Sin choferes para el reparto. De ' +
+          `${conteo.total} choferes: ${conteo.activos} con cuenta activa, ` +
+          `${conteo.en_jornada} dentro de su jornada, ` +
+          `${conteo.disponibles} no ocupados, ` +
+          `${conteo.con_telegram} con Telegram vinculado, ` +
+          `${conteo.con_ubicacion} con ubicacion registrada. ` +
+          'El primer numero que cae a cero es la causa.',
+      );
+    } catch (error: unknown) {
+      this.logger.warn(
+        `Sin choferes para el reparto y no se pudo diagnosticar por que: ${String(error)}`,
+      );
+    }
+  }
+
   async findAvailableDriversOrderByDistance(
     lat: number,
     lng: number,
@@ -256,6 +303,14 @@ export class DriversService {
       .setParameter('lng', lng)
       .orderBy('distancia', 'ASC')
       .getRawAndEntities();
+
+    if (result.entities.length === 0) {
+      // Un "no hay choferes disponibles" a secas no dice nada: seis condiciones
+      // tienen que cumplirse a la vez y cualquiera de ellas deja la lista
+      // vacia. Se cuenta cuantos choferes falla cada una para poder arreglar la
+      // que toca en vez de adivinar.
+      await this.logWhyNoDriversAvailable();
+    }
 
     return result.entities.map((entity, index) => {
       const raw = result.raw[index];

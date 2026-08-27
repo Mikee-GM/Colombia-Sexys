@@ -854,8 +854,17 @@ export class TelegramAuthUpdate {
     return Markup.keyboard([['👑 Mi Portal']]).resize();
   }
 
+  /**
+   * Menu del chofer.
+   *
+   * El boton del portal faltaba: el manejador de `🚚 Mi Portal` existia desde
+   * el principio, pero como el teclado no lo mostraba, la unica forma de llegar
+   * era teclear `/portal` sabiendo de antemano que existia. La modelo si tenia
+   * el suyo a la vista, y el chofer no.
+   */
   private driverMenu() {
     return Markup.keyboard([
+      ['🚚 Mi Portal'],
       ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
     ]).resize();
   }
