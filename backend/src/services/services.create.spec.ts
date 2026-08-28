@@ -42,15 +42,24 @@ describe('ServicesService.create', () => {
     find: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
+    getRepository: jest.Mock;
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // El bloqueo pesimista de la fila de la empleada, al inicio de reserveNext.
+    const employeeQueryBuilder = {
+      createQueryBuilder: jest.fn().mockReturnThis(),
+      setLock: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getOneOrFail: jest.fn().mockResolvedValue({ id: 'employee' }),
+    };
     manager = {
       findOne: jest.fn().mockResolvedValue(null), // sin servicio en_curso previo
       find: jest.fn().mockResolvedValue([]), // sin solicitudes en competencia
       create: jest.fn((_entity, data) => data),
       save: jest.fn((_entity, data) => Promise.resolve(data)),
+      getRepository: jest.fn().mockReturnValue(employeeQueryBuilder),
     };
     serviciosRepository.manager = {
       transaction: jest.fn((callback: any) => callback(manager)),

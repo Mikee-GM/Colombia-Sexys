@@ -556,6 +556,9 @@ describe('ServicesService transport settlement', () => {
       id: 'employee-user',
       rol: 'empleada',
     });
+    // notifyScheduledServiceStarted vuelve a leer el servicio: sin destino de
+    // chat no manda nada, y no debe interferir con esta prueba.
+    serviciosRepository.findOne.mockResolvedValue(undefined);
 
     await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
 
@@ -586,6 +589,7 @@ describe('ServicesService transport settlement', () => {
       },
       passengers: [],
     });
+    bot.telegram.sendMessage.mockResolvedValue({});
 
     await service.dispatchViaje('trip');
 
@@ -616,6 +620,7 @@ describe('ServicesService transport settlement', () => {
       },
       passengers: [],
     });
+    bot.telegram.sendMessage.mockResolvedValue({});
 
     await service.dispatchViaje('trip');
 
