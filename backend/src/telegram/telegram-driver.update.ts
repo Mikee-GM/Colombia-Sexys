@@ -1359,7 +1359,14 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
         const horaLlegada = new Date();
         trip.servicio.horaLlegadaCasa = horaLlegada;
         serviceUpdateData.horaLlegadaCasa = horaLlegada;
-        serviceUpdateData.estadoLiquidacion = 'cerrada';
+        /*
+         * Si todavia falta el cobro final por transferencia (duracion
+         * abierta), no se puede dar por cerrada la liquidacion: el mismo
+         * criterio que ya usa el camino de Uber en updateUberStatus.
+         */
+        serviceUpdateData.estadoLiquidacion = trip.servicio.cobroFinalPendiente
+          ? 'transporte_pendiente'
+          : 'cerrada';
 
         // Eliminar el tema (hilo) del grupo de Telegram si es viaje de regreso (final del servicio completo)
         const jefeGrupoId =
@@ -1420,6 +1427,21 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           )
           .catch(() => undefined);
       }
+      /*
+       * Con chofer propio nadie mandaba la cuenta definitiva ni la invitacion
+       * a calificar: solo ocurria en las rutas de Uber (cambio de transporte
+       * o confirmacion de tarifa). finishByEmployee ya dejo el servicio en
+       * 'finalizado' antes de que se despachara este viaje de regreso, asi
+       * que el candado de sendFinalReceiptAndAward no bloquea la llamada.
+       */
+      await this.servicesService
+        .sendFinalReceiptAndAward(trip.servicio.id)
+        .catch((error) =>
+          this.logger.error(
+            `No se pudo enviar el recibo final del servicio ${trip.servicio.id}:`,
+            error,
+          ),
+        );
       this.realtimeEventsService.emitToBoss(trip.servicio.jefeId, {
         type: 'trip_status_updated',
         data: {

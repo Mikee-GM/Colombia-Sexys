@@ -51,4 +51,5 @@ export const ADVISORY_LOCKS = {
   onboardingReminders: 811_004,
   authCleanup: 811_005,
   workShiftReset: 811_006,
+  waitTimeoutSweep: 811_007,
 } as const;

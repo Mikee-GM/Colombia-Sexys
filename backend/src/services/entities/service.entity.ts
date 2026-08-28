@@ -323,6 +323,19 @@ export class Servicios {
   @ApiProperty({ description: 'Prorrogas Usadas', example: 1 })
   prorrogasUsadas: number;
 
+  /** Cuando vence el plazo de espera de la empleada. Null si no hay espera activa. */
+  @Column('timestamp with time zone', {
+    name: 'espera_expira_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Espera Expira At',
+    type: String,
+    format: 'date-time',
+    example: '2026-07-09T12:10:00.000Z',
+  })
+  esperaExpiraAt: Date | null;
+
   @Column('enum', {
     name: 'estado',
     enum: ['pendiente', 'agendado', 'en_curso', 'finalizado', 'cancelado'],

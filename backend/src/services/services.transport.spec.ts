@@ -503,4 +503,126 @@ describe('ServicesService transport settlement', () => {
       service.changeTripTransport('trip', 'boss', 'uber'),
     ).rejects.toThrow('el viaje ya tiene un chofer asignado');
   });
+
+  it('corrige la hora de inicio al llegar en Uber aunque el servicio no fuera una cita agendada', async () => {
+    viajesRepository.findOne.mockResolvedValue({
+      id: 'trip',
+      servicioId: 'service',
+      tipo: 'ida',
+      estado: 'en_curso',
+      proveedorTransporte: 'uber',
+      servicio: {
+        id: 'service',
+        jefeId: 'boss',
+        estado: 'en_curso',
+        empleadaId: 'employee',
+        empleada: { usuarioId: 'employee-user', usuario: {} },
+      },
+    });
+    usuariosRepository.findOneBy.mockResolvedValue({
+      id: 'employee-user',
+      rol: 'empleada',
+    });
+
+    await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
+
+    // Solo se corrige la hora real de inicio: como no era una cita agendada,
+    // no se toca el estado ni se avisa de "siguiente servicio iniciado".
+    expect(serviciosRepository.update).toHaveBeenCalledWith('service', {
+      horaInicioServicio: expect.any(Date),
+    });
+    expect(realtime.emitToBoss).not.toHaveBeenCalledWith(
+      'boss',
+      expect.objectContaining({ type: 'scheduled_service_started' }),
+    );
+  });
+
+  it('sigue arrancando la cita agendada al llegar en Uber, con la hora de inicio corregida', async () => {
+    viajesRepository.findOne.mockResolvedValue({
+      id: 'trip',
+      servicioId: 'service',
+      tipo: 'ida',
+      estado: 'en_curso',
+      proveedorTransporte: 'uber',
+      servicio: {
+        id: 'service',
+        jefeId: 'boss',
+        estado: 'agendado',
+        empleadaId: 'employee',
+        empleada: { usuarioId: 'employee-user', usuario: {} },
+      },
+    });
+    usuariosRepository.findOneBy.mockResolvedValue({
+      id: 'employee-user',
+      rol: 'empleada',
+    });
+
+    await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
+
+    expect(serviciosRepository.update).toHaveBeenCalledWith('service', {
+      horaInicioServicio: expect.any(Date),
+      estado: 'en_curso',
+      servicioPrevioId: null,
+      horaInicioEstimada: expect.any(Date),
+    });
+    expect(realtime.emitToBoss).toHaveBeenCalledWith(
+      'boss',
+      expect.objectContaining({ type: 'scheduled_service_started' }),
+    );
+  });
+
+  it('avisa al jefe cuando falta la ubicación de la empleada para despachar el viaje de ida', async () => {
+    viajesRepository.findOne.mockResolvedValue({
+      id: 'trip',
+      tipo: 'ida',
+      estado: 'notificado',
+      choferesNotificados: [],
+      servicio: {
+        id: 'service',
+        jefeId: 'boss',
+        telegramThreadId: '99',
+        jefe: { grupoTelegramId: '-100999' },
+        empleada: { ubicacionLat: null, ubicacionLng: null },
+      },
+      passengers: [],
+    });
+
+    await service.dispatchViaje('trip');
+
+    expect(realtime.emitToBoss).toHaveBeenCalledWith(
+      'boss',
+      expect.objectContaining({ type: 'no_drivers_available' }),
+    );
+    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
+      '-100999',
+      expect.stringContaining('ubicación de la empleada'),
+      expect.objectContaining({ message_thread_id: 99 }),
+    );
+  });
+
+  it('avisa al jefe cuando falta la ubicación del cliente para despachar el viaje de regreso', async () => {
+    viajesRepository.findOne.mockResolvedValue({
+      id: 'trip',
+      tipo: 'regreso',
+      estado: 'notificado',
+      choferesNotificados: [],
+      servicio: {
+        id: 'service',
+        jefeId: 'boss',
+        telegramThreadId: '99',
+        jefe: { grupoTelegramId: '-100999' },
+        ubicacionClienteLat: null,
+        ubicacionClienteLng: null,
+      },
+      passengers: [],
+    });
+
+    await service.dispatchViaje('trip');
+
+    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
+      '-100999',
+      expect.stringContaining('ubicación del cliente'),
+      expect.objectContaining({ message_thread_id: 99 }),
+    );
+  });
 });

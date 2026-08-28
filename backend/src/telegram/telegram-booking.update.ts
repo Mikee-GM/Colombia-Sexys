@@ -5910,7 +5910,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         const activeService = await this.serviciosRepository.findOne({
           where: {
             clienteTelegramId: telegramId,
-            estado: In(['pendiente', 'en_curso']),
+            // 'agendado' entra tambien: una cita programada creada desde el
+            // panel con la IA apagada no debe dejar los mensajes del cliente
+            // sin destino solo porque el servicio aun no arranca.
+            estado: In(['pendiente', 'en_curso', 'agendado']),
           },
           relations: {
             jefe: true,

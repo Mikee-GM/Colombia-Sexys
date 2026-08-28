@@ -446,6 +446,16 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   }
 
   async create(createServiceDto: any): Promise<Servicios> {
+    /*
+     * Un servicio creado desde el panel no viene de una conversacion con la
+     * IA. Sin esto quedaba con el valor por defecto de la columna (activa), y
+     * el puente que reenvia mensajes del cliente al tema del jefe exige que
+     * este apagada: cualquier mensaje que el cliente mandara despues caia en
+     * un pozo sin que nadie se enterara.
+     */
+    if (createServiceDto.iaActiva === undefined) {
+      createServiceDto.iaActiva = false;
+    }
     // Si no tiene jefeId especificado, asignamos el jefe correspondiente a la empleada
     if (createServiceDto.empleadaId && !createServiceDto.jefeId) {
       try {
@@ -1907,6 +1917,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         this.logger.error(
           `[dispatchViaje] Ubicación de empleada faltante para viaje ${viajeId}.`,
         );
+        await this.notifyNoDriversAvailable(
+          viaje,
+          'No tenemos registrada la ubicación de la empleada, así que no podemos buscarle chofer.',
+        );
         return;
       }
       searchLat = employeeLat;
@@ -1918,6 +1932,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ) {
         this.logger.error(
           `[dispatchViaje] Ubicación de cliente faltante para viaje de regreso ${viajeId}.`,
+        );
+        await this.notifyNoDriversAvailable(
+          viaje,
+          'No tenemos registrada la ubicación del cliente, así que no podemos buscarle chofer para el regreso.',
         );
         return;
       }
@@ -2157,7 +2175,18 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private async notifyNoDriversAvailable(viaje: Viajes): Promise<void> {
+  /**
+   * Avisa al jefe que el despacho de un viaje se detuvo, con el motivo exacto.
+   *
+   * Antes solo se usaba cuando de verdad no habia choferes disponibles; ahora
+   * tambien cubre la falta de ubicacion (de la empleada o del cliente), que
+   * antes dejaba el viaje mudo sin avisar a nadie. El texto por defecto
+   * mantiene el mensaje original para no cambiar el caso que ya funcionaba.
+   */
+  private async notifyNoDriversAvailable(
+    viaje: Viajes,
+    motivo: string = `No se encontraron choferes disponibles para el viaje de ${viaje.tipo}.`,
+  ): Promise<void> {
     const event = {
       type: 'no_drivers_available',
       data: {
@@ -2173,7 +2202,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     await this.bot.telegram
       .sendMessage(
         topic.chatId,
-        `⚠️ No se encontraron choferes disponibles para el viaje de ${viaje.tipo}. Puedes cambiar el método de transporte a Uber.`,
+        `⚠️ ${motivo} Puedes cambiar el método de transporte a Uber.`,
         {
           message_thread_id: topic.threadId,
           ...Markup.inlineKeyboard([
@@ -2377,8 +2406,27 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       });
   }
 
+  /**
+   * Arranca el plazo de espera de la empleada, en memoria y respaldado en
+   * base.
+   *
+   * El setTimeout resuelve el caso comun sin depender de un ciclo periodico;
+   * la fecha guardada en `esperaExpiraAt` es la red de seguridad para cuando
+   * el proceso que lo inicio se reinicia o cae, ya que `sweepExpiredWaits` la
+   * usa para encontrar los que quedaron sin cancelar.
+   */
   startWaitTimeout(servicioId: string, durationMs: number = 600000) {
     this.clearWaitTimeout(servicioId);
+
+    const expiraAt = new Date(Date.now() + durationMs);
+    this.serviciosRepository
+      .update(servicioId, { esperaExpiraAt: expiraAt })
+      .catch((err) =>
+        this.logger.error(
+          `No se pudo guardar el plazo de espera del servicio ${servicioId}:`,
+          err,
+        ),
+      );
 
     const timeout = setTimeout(() => {
       void this.handleWaitTimeoutExpired(servicioId).catch((err) => {
@@ -2398,10 +2446,43 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       clearTimeout(existing);
       this.waitTimeouts.delete(servicioId);
     }
+    this.serviciosRepository
+      .update(servicioId, { esperaExpiraAt: null })
+      .catch((err) =>
+        this.logger.error(
+          `No se pudo limpiar el plazo de espera del servicio ${servicioId}:`,
+          err,
+        ),
+      );
+  }
+
+  /**
+   * Respaldo de `startWaitTimeout` para cuando su setTimeout en memoria no
+   * llega a dispararse: un despliegue a mitad de la espera, o una replica
+   * distinta a la que la inicio. Se puede llamar de mas sin riesgo:
+   * `handleWaitTimeoutExpired` revisa el estado actual antes de cancelar
+   * nada.
+   */
+  async sweepExpiredWaits(): Promise<void> {
+    const vencidos = await this.serviciosRepository.find({
+      where: {
+        estado: 'en_curso',
+        esperaExpiraAt: LessThanOrEqual(new Date()),
+      },
+      select: { id: true },
+    });
+    for (const servicio of vencidos) {
+      await this.handleWaitTimeoutExpired(servicio.id).catch((err) =>
+        this.logger.error(
+          `Error en el barrido de esperas vencidas para el servicio ${servicio.id}:`,
+          err,
+        ),
+      );
+    }
   }
 
   async handleWaitTimeoutExpired(servicioId: string): Promise<void> {
-    this.waitTimeouts.delete(servicioId);
+    this.clearWaitTimeout(servicioId);
 
     const servicio = await this.serviciosRepository.findOne({
       where: { id: servicioId },
@@ -4062,18 +4143,32 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               error,
             ),
           );
-      } else if (trip.servicio.estado === 'agendado') {
+      } else {
+        /*
+         * Viaje de ida: la hora real de inicio es cuando la empleada llega,
+         * no cuando el jefe autorizo el servicio. Con chofer propio esto ya
+         * se corrige al llegar (telegram-driver.update.ts); con Uber antes
+         * solo se corregia si el servicio era una cita agendada, dejando el
+         * traslado facturado como tiempo de servicio en los inmediatos.
+         */
+        const eraAgendado = trip.servicio.estado === 'agendado';
         await this.serviciosRepository.update(trip.servicioId, {
-          estado: 'en_curso',
           horaInicioServicio: now,
-          servicioPrevioId: null,
-          horaInicioEstimada: now,
+          ...(eraAgendado
+            ? {
+                estado: 'en_curso',
+                servicioPrevioId: null,
+                horaInicioEstimada: now,
+              }
+            : {}),
         });
-        this.realtimeEventsService.emitToBoss(trip.servicio.jefeId, {
-          type: 'scheduled_service_started',
-          data: { serviceId: trip.servicioId, tripId: trip.id },
-        });
-        await this.notifyScheduledServiceStarted(trip.servicioId);
+        if (eraAgendado) {
+          this.realtimeEventsService.emitToBoss(trip.servicio.jefeId, {
+            type: 'scheduled_service_started',
+            data: { serviceId: trip.servicioId, tripId: trip.id },
+          });
+          await this.notifyScheduledServiceStarted(trip.servicioId);
+        }
       }
     }
 

@@ -18,6 +18,7 @@ import { AiMessageService } from '../ai/ai-message.service';
 import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 import { describeError } from '../common/errors/error-message';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
+import { ServicesService } from './services.service';
 
 @Injectable()
 export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
@@ -34,6 +35,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly aiMessageService: AiMessageService,
     private readonly botRegistry: TelegramBotRegistryService,
     private readonly dataSource: DataSource,
+    private readonly servicesService: ServicesService,
   ) {}
 
   /** La empleada y su cliente hablan por el bot dedicado de ella, si lo tiene. */
@@ -81,6 +83,22 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.warn(
         `Error en el ciclo de citas programadas: ${describeError(error)}`,
+      );
+    }
+    try {
+      /*
+       * Respaldo de startWaitTimeout: cubre el plazo de espera que quedo sin
+       * cancelar porque el proceso que lo inicio se reinicio o cayo antes de
+       * que su propio setTimeout llegara a dispararse.
+       */
+      await withAdvisoryLock(
+        this.dataSource,
+        ADVISORY_LOCKS.waitTimeoutSweep,
+        () => this.servicesService.sweepExpiredWaits(),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Error en el barrido de esperas vencidas: ${describeError(error)}`,
       );
     } finally {
       this.running = false;
