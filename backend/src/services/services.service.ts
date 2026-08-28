@@ -2103,7 +2103,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           `• *Punto de Recogida:* [Ver en Mapa](${mapsUrl})\n` +
           `• *Distancia a ti:* ${distancia.toFixed(2)} km\n` +
           `• *Duración del Servicio:* ${viaje.servicio.duracionPactadaHoras} horas\n` +
-          (viaje.servicio.habitacion ? `• *Habitación/Detalle:* ${viaje.servicio.habitacion}\n` : '') +
+          (viaje.servicio.habitacion
+            ? `• *Habitación/Detalle:* ${viaje.servicio.habitacion}\n`
+            : '') +
           `\n⚠️ Tienes *2 minutos* para aceptar esta oferta antes de que pase al siguiente chofer más cercano.`;
       } else {
         const empDestName = viaje.servicio.empleada.nombreArtistico;
@@ -2112,7 +2114,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           `• *Pasajera (Empleada):* ${empDestName}\n` +
           `• *Punto de Recogida (Cliente):* [Ver en Mapa](${mapsUrl})\n` +
           `• *Distancia a ti:* ${distancia.toFixed(2)} km\n` +
-          (viaje.servicio.habitacion ? `• *Habitación/Detalle:* ${viaje.servicio.habitacion}\n` : '') +
+          (viaje.servicio.habitacion
+            ? `• *Habitación/Detalle:* ${viaje.servicio.habitacion}\n`
+            : '') +
           `\n⚠️ Tienes *2 minutos* para aceptar esta oferta antes de que pase al siguiente chofer más cercano.`;
       }
 

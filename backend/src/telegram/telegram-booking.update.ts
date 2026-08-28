@@ -2733,20 +2733,36 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard([
             [
-              Markup.button.callback('$500', `agregar_extra_amt:${servicioId}:500`),
-              Markup.button.callback('$1000', `agregar_extra_amt:${servicioId}:1000`),
+              Markup.button.callback(
+                '$500',
+                `agregar_extra_amt:${servicioId}:500`,
+              ),
+              Markup.button.callback(
+                '$1000',
+                `agregar_extra_amt:${servicioId}:1000`,
+              ),
             ],
             [
-              Markup.button.callback('$1500', `agregar_extra_amt:${servicioId}:1500`),
-              Markup.button.callback('Otro monto', `agregar_extra_amt:${servicioId}:custom`),
+              Markup.button.callback(
+                '$1500',
+                `agregar_extra_amt:${servicioId}:1500`,
+              ),
+              Markup.button.callback(
+                'Otro monto',
+                `agregar_extra_amt:${servicioId}:custom`,
+              ),
             ],
-            [Markup.button.callback('🔙 Volver', `canc_fin_serv:${servicioId}`)],
+            [
+              Markup.button.callback(
+                '🔙 Volver',
+                `canc_fin_serv:${servicioId}`,
+              ),
+            ],
           ]),
         },
       );
       return;
     }
-
 
     let extras: Awaited<ReturnType<ServicesService['listAvailableExtras']>>;
     try {
@@ -2809,9 +2825,19 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ctx.session.step = 'AWAITING_EXTRA_AMOUNT';
       ctx.session.extraSelection = { servicioId };
       await ctx.answerCbQuery();
-      await ctx.reply('💬 Por favor, ingresa el monto del extra (solo números):', {
-        ...Markup.inlineKeyboard([[Markup.button.callback('❌ Cancelar', `canc_fin_serv:${servicioId}`)]]),
-      });
+      await ctx.reply(
+        '💬 Por favor, ingresa el monto del extra (solo números):',
+        {
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                '❌ Cancelar',
+                `canc_fin_serv:${servicioId}`,
+              ),
+            ],
+          ]),
+        },
+      );
       return;
     }
 
@@ -2833,9 +2859,17 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         ...Markup.inlineKeyboard([
           [
             Markup.button.callback('Tarjeta', `agregar_extra_pay:tarjeta`),
-            Markup.button.callback('Transferencia', `agregar_extra_pay:transferencia`),
+            Markup.button.callback(
+              'Transferencia',
+              `agregar_extra_pay:transferencia`,
+            ),
           ],
-          [Markup.button.callback('Volver', `agregar_extra_list:${servicioId}`)],
+          [
+            Markup.button.callback(
+              'Volver',
+              `agregar_extra_list:${servicioId}`,
+            ),
+          ],
         ]),
       },
     );
@@ -2947,7 +2981,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     let finalExtraId = extraId;
     if (amount !== undefined) {
       if (!user.empleadas) {
-        await ctx.answerCbQuery('Solo las empleadas pueden usar montos personalizados.', { show_alert: true });
+        await ctx.answerCbQuery(
+          'Solo las empleadas pueden usar montos personalizados.',
+          { show_alert: true },
+        );
         return;
       }
       let genericExtra = await this.extrasCatalogoRepository.findOne({
@@ -5551,7 +5588,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const text = ((ctx.message as { text?: string })?.text || '').trim();
       const habitacion = text.toLowerCase() === 'no' ? undefined : text;
       const senderTelegramId = ctx.from?.id.toString();
-      
+
       if (!senderTelegramId) return;
 
       const user = await this.usuariosRepository.findOne({
@@ -5559,26 +5596,33 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       });
 
       if (!user) {
-        await ctx.reply('❌ No tienes permisos o no estás registrado en el sistema.');
+        await ctx.reply(
+          '❌ No tienes permisos o no estás registrado en el sistema.',
+        );
         return;
       }
 
       try {
         await this.servicesService.aceptar(
-          ctx.session.roomServiceId, 
-          user.id, 
-          'chofer', 
-          undefined, 
-          habitacion
+          ctx.session.roomServiceId,
+          user.id,
+          'chofer',
+          undefined,
+          habitacion,
         );
-        
+
         await ctx.reply(
           `🟢 *Servicio Aceptado* por ${user.email} ${habitacion ? `(Habitación: ${habitacion})` : ''}`,
           Markup.removeKeyboard(),
         );
       } catch (err: any) {
-        this.logger.error('Error al aceptar servicio tras ingresar habitación:', err);
-        await ctx.reply(`❌ Error: ${err.message || 'Error al procesar la solicitud.'}`);
+        this.logger.error(
+          'Error al aceptar servicio tras ingresar habitación:',
+          err,
+        );
+        await ctx.reply(
+          `❌ Error: ${err.message || 'Error al procesar la solicitud.'}`,
+        );
       }
 
       ctx.session.step = undefined;
@@ -5590,7 +5634,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const text = ((ctx.message as { text?: string })?.text || '').trim();
       const amount = Number(text);
       if (isNaN(amount) || amount <= 0) {
-        await ctx.reply('Monto inválido. Ingresa solo el número (ejemplo: 2000):');
+        await ctx.reply(
+          'Monto inválido. Ingresa solo el número (ejemplo: 2000):',
+        );
         return;
       }
       const servicioId = ctx.session.extraSelection?.servicioId;
@@ -5601,7 +5647,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }
       ctx.session.step = undefined;
       ctx.session.extraSelection = { servicioId, amount };
-      
+
       await ctx.reply(
         `*Selecciona el método de pago* para el extra de *$${amount}*:\n\n` +
           `Las ganancias de los extras van directamente a ti.`,
@@ -5610,9 +5656,17 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           ...Markup.inlineKeyboard([
             [
               Markup.button.callback('Tarjeta', `agregar_extra_pay:tarjeta`),
-              Markup.button.callback('Transferencia', `agregar_extra_pay:transferencia`),
+              Markup.button.callback(
+                'Transferencia',
+                `agregar_extra_pay:transferencia`,
+              ),
             ],
-            [Markup.button.callback('Volver', `agregar_extra_list:${servicioId}`)],
+            [
+              Markup.button.callback(
+                'Volver',
+                `agregar_extra_list:${servicioId}`,
+              ),
+            ],
           ]),
         },
       );
@@ -5894,10 +5948,12 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             }
             await ctx.reply(
               '🏨 ¿En qué habitación es el servicio? (Responde a este mensaje con el número/detalle, o escribe "No" si es casa).',
-              { 
-                reply_parameters: ctx.message?.message_id ? { message_id: ctx.message.message_id } : undefined,
-                ...Markup.forceReply() 
-              }
+              {
+                reply_parameters: ctx.message?.message_id
+                  ? { message_id: ctx.message.message_id }
+                  : undefined,
+                ...Markup.forceReply(),
+              },
             );
           } else {
             await this.servicesService.rechazar(service.id, user.id);
