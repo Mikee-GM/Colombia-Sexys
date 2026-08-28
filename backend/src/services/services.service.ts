@@ -1141,6 +1141,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     jefeId: string,
     tipoTransporte: 'chofer' | 'uber' = 'chofer',
     bossNotes?: string,
+    habitacion?: string,
   ): Promise<Servicios & { uberLink?: string; viajeId?: string }> {
     const servicio = await this.serviciosRepository.findOne({
       where: { id },
@@ -1186,6 +1187,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     servicio.jefeId = jefeId;
     servicio.notasJefe = bossNotes?.trim() || null;
+    servicio.habitacion = habitacion?.trim() || null;
 
     const isFutureScheduled =
       servicio.tipoAgenda === 'programado' &&
@@ -1209,7 +1211,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           : 'próximamente';
         let msg = isFutureScheduled
           ? `📅 *Cita Programada Confirmada:*\n\nTienes una cita con ${servicio.cliente?.nombreTelegram || 'Cliente'} para el ${fechaStr}.\n• *Duración:* ${servicio.duracionPactadaHoras} horas\n• *Transporte asignado:* ${tipoTransporte.toUpperCase()}`
-          : `📝 Notas del jefe para tu siguiente servicio:\n${servicio.notasJefe}`;
+          : `📝 Notas del jefe para tu siguiente servicio:\n${servicio.notasJefe || 'Sin notas.'}`;
+        if (servicio.habitacion) {
+          msg += `\n• *Habitación:* ${servicio.habitacion}`;
+        }
         if (isFutureScheduled && servicio.notasJefe) {
           msg += `\n• *Notas del jefe:* ${servicio.notasJefe}`;
         }
@@ -1314,6 +1319,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
               `• *Duración:* ${servicio.duracionPactadaHoras} horas\n` +
               `• *Método de Pago:* ${servicio.metodoPago.toUpperCase()}\n\n` +
+              (servicio.habitacion
+                ? `• *Habitación:* ${servicio.habitacion}\n\n`
+                : '') +
               (servicio.notasJefe
                 ? `• *Notas del jefe:* ${servicio.notasJefe}\n\n`
                 : '') +
@@ -2094,16 +2102,18 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           `• *Pasajera (Empleada):* ${viaje.servicio.empleada.nombreArtistico}\n` +
           `• *Punto de Recogida:* [Ver en Mapa](${mapsUrl})\n` +
           `• *Distancia a ti:* ${distancia.toFixed(2)} km\n` +
-          `• *Duración del Servicio:* ${viaje.servicio.duracionPactadaHoras} horas\n\n` +
-          `⚠️ Tienes *2 minutos* para aceptar esta oferta antes de que pase al siguiente chofer más cercano.`;
+          `• *Duración del Servicio:* ${viaje.servicio.duracionPactadaHoras} horas\n` +
+          (viaje.servicio.habitacion ? `• *Habitación/Detalle:* ${viaje.servicio.habitacion}\n` : '') +
+          `\n⚠️ Tienes *2 minutos* para aceptar esta oferta antes de que pase al siguiente chofer más cercano.`;
       } else {
         const empDestName = viaje.servicio.empleada.nombreArtistico;
         messageText =
           `📢 *¡Oferta de Viaje Disponible (Regreso)!* 🚗\n\n` +
           `• *Pasajera (Empleada):* ${empDestName}\n` +
           `• *Punto de Recogida (Cliente):* [Ver en Mapa](${mapsUrl})\n` +
-          `• *Distancia a ti:* ${distancia.toFixed(2)} km\n\n` +
-          `⚠️ Tienes *2 minutos* para aceptar esta oferta antes de que pase al siguiente chofer más cercano.`;
+          `• *Distancia a ti:* ${distancia.toFixed(2)} km\n` +
+          (viaje.servicio.habitacion ? `• *Habitación/Detalle:* ${viaje.servicio.habitacion}\n` : '') +
+          `\n⚠️ Tienes *2 minutos* para aceptar esta oferta antes de que pase al siguiente chofer más cercano.`;
       }
 
       try {
@@ -2754,6 +2764,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     extraCatalogoId: string;
     metodoPago: 'tarjeta' | 'transferencia' | 'efectivo';
     actorUserId: string;
+    precioCobrado?: number;
   }): Promise<AddServiceExtraResult> {
     const servicio = await this.serviciosRepository.findOne({
       where: { id: input.servicioId },
@@ -2790,7 +2801,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         servicioId: servicio.id,
         extraCatalogoId: extra.id,
         participantId,
-        precioCobrado: extra.precio,
+        precioCobrado: input.precioCobrado ?? extra.precio,
         metodoPago: input.metodoPago,
         registradoPor: actor,
       }),

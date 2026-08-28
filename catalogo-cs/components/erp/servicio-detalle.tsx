@@ -570,9 +570,19 @@ export default function ServicioDetalle({ service }: { service: Service }) {
             )}
           </Panel>
 
-          {service.notas || service.notasJefe ? (
-            <Panel title="Notas" subtitle="del cliente y del jefe">
+          {service.notas || service.notasJefe || service.habitacion ? (
+            <Panel title="Notas y Ubicación" subtitle="del cliente y del jefe">
               <div className="flex flex-col gap-3">
+                {service.habitacion ? (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B7635]">
+                      Habitación / Referencia
+                    </span>
+                    <p className="text-[13px] leading-relaxed text-zinc-400">
+                      {service.habitacion}
+                    </p>
+                  </div>
+                ) : null}
                 {service.notas ? (
                   <div className="flex flex-col gap-1">
                     <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B7635]">

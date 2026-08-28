@@ -131,6 +131,7 @@ export type Service = {
   actualTransportCost?: number;
   presetLocationId?: string | null;
   locationNameSnapshot?: string | null;
+  habitacion?: string | null;
   locationAddressSnapshot?: string | null;
   horaInicioServicio: string | null;
   horaFinServicio: string | null;

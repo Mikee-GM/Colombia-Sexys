@@ -230,6 +230,14 @@ export class Servicios {
   locationNameSnapshot: string | null;
 
   @Column('varchar', {
+    name: 'habitacion',
+    length: 50,
+    nullable: true,
+  })
+  @ApiPropertyOptional({ description: 'Habitación o detalle de la ubicación' })
+  habitacion: string | null;
+
+  @Column('varchar', {
     name: 'location_address_snapshot',
     length: 240,
     nullable: true,
