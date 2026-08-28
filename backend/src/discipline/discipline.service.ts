@@ -985,6 +985,44 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Multa automatica a un chofer por rechazar ofertas seguidas.
+   *
+   * No pasa por `createSanction` porque aquella exige un admin que la firme, y
+   * esta la levanta el sistema. Comparte todo lo demas: la misma tabla de
+   * sanciones, el mismo tipo `fine` y el mismo evento en tiempo real, de modo
+   * que aparece en el panel junto a las demas y el admin puede revocarla.
+   *
+   * No suspende: rechazar no es una falta grave, y dejar sin trabajar a un
+   * chofer agrava el problema que se quiere evitar, que es quedarse sin quien
+   * cubra los viajes.
+   */
+  async applyDriverRejectionFine(
+    driverId: string,
+    rechazosSeguidos: number,
+    amount: number,
+  ) {
+    const sanction = await this.sanctions.save(
+      this.sanctions.create({
+        subjectType: 'driver',
+        subjectId: driverId,
+        type: 'fine',
+        fineAmount: amount,
+        reason: `Multa automática por rechazar ${rechazosSeguidos} ofertas de viaje seguidas.`,
+        startsAt: new Date(),
+        endsAt: null,
+      }),
+    );
+    this.realtime.emitToJefes({
+      type: 'discipline.sanction.applied',
+      sanctionId: sanction.id,
+      subjectType: 'driver',
+      subjectId: driverId,
+      automatic: true,
+    });
+    return sanction;
+  }
+
   private async applyAutomaticSuspension(
     subjectType: 'employee' | 'driver',
     subjectId: string,

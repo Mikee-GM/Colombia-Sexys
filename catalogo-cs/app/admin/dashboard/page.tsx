@@ -6,9 +6,15 @@ import {
   SeparadorTableroDetallado,
 } from "@/components/erp/centro-de-mando";
 import { bloquesDeSemanaEnCurso } from "@/components/erp/semana-en-curso";
-import TableroPersonalizable from "@/components/erp/tablero-personalizable";
+import TableroPersonalizable, {
+  type BloqueTablero,
+} from "@/components/erp/tablero-personalizable";
+import LiveMapDynamic from "@/components/dashboard/LiveMapDynamic";
+import { getEmployees } from "@/lib/data/employees";
+import { getDrivers } from "@/lib/data/drivers";
 import { getDashboardLayout } from "@/lib/actions/dashboard-layout";
 import GodEyeDashboard from "@/components/admin/god-eye/GodEyeDashboard";
+import AvisosDeChoferes from "@/components/admin/AvisosDeChoferes";
 import {
   getGodEyeOverviewAction,
   getGodEyeActorsAction,
@@ -54,8 +60,17 @@ export default async function DashboardPage() {
   const contexto = "el centro de mando";
   const { startDate, endDate } = getOperationalWeek();
 
-  const [overview, actors, appeals, services, summary, offDuty, layout] =
-    await Promise.all([
+  const [
+    overview,
+    actors,
+    appeals,
+    services,
+    summary,
+    offDuty,
+    layout,
+    mapEmployees,
+    mapDrivers,
+  ] = await Promise.all([
     optionalSource(getGodEyeOverviewAction(), OVERVIEW_VACIO, contexto),
     optionalSource(
       getGodEyeActorsAction(),
@@ -68,7 +83,11 @@ export default async function DashboardPage() {
     optionalSource(getOffDutyStaff(), [], contexto),
     // Sin disposicion guardada se usa el orden por defecto, no un tablero vacio.
     optionalSource(getDashboardLayout(), null, contexto),
-    ]);
+    // Mismos datos que ya usa /admin/map: el mapa del centro de mando es el
+    // mismo componente, solo que integrado como bloque reordenable.
+    optionalSource(getEmployees(), [], contexto),
+    optionalSource(getDrivers(), [], contexto),
+  ]);
 
   const { kpis, paneles } = bloquesDeCentroDeMando({
     overview,
@@ -101,6 +120,14 @@ export default async function DashboardPage() {
         ...paneles,
         ...semana,
         {
+          id: "mapa-en-vivo",
+          titulo: "Mapa en tiempo real",
+          anchoCompleto: true,
+          contenido: (
+            <LiveMapDynamic employees={mapEmployees} drivers={mapDrivers} />
+          ),
+        } satisfies BloqueTablero,
+        {
           id: "tablero-detallado",
           titulo: "Tablero detallado",
           anchoCompleto: true,
@@ -127,6 +154,9 @@ export default async function DashboardPage() {
       />
 
       <TableroPersonalizable grupos={grupos} layoutInicial={layout} />
+
+      {/* No pinta nada: escucha los rechazos de ofertas y levanta el aviso. */}
+      <AvisosDeChoferes />
     </div>
   );
 }

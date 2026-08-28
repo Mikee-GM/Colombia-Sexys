@@ -83,6 +83,15 @@ const DISPATCHED_TRIP_STATES = ['aceptado', 'en_camino', 'llegado', 'en_curso'];
 /** Cuanto vive una oferta de viaje enviada a un chofer. */
 const DISPATCH_OFFER_TTL_MS = 120_000;
 
+/**
+ * Ofertas rechazadas seguidas antes de multar, y el monto.
+ *
+ * Tres es el limite que pidio la operacion: una o dos son circunstanciales
+ * (esta comiendo, le queda lejos), tres seguidas ya es un patron.
+ */
+const DRIVER_REJECTION_LIMIT = 3;
+const DRIVER_REJECTION_FINE = 100;
+
 const SERVICES_DEFAULT_PAGE_SIZE = 200;
 const SERVICES_MAX_PAGE_SIZE = 500;
 
@@ -2283,8 +2292,89 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       viaje.ofertaExpiraEn = null;
       await this.viajesRepository.save(viaje);
 
+      // El conteo va aparte y aislado: avisar al chofer o multarlo no puede
+      // retrasar ni impedir que la oferta salga al siguiente.
+      await this.registrarRechazoDeChofer(choferId, driverChatId).catch(
+        (err) => {
+          this.logger.error(
+            `Error registrando el rechazo del chofer ${choferId}:`,
+            err,
+          );
+        },
+      );
+
       await this.dispatchViaje(viajeId);
     }
+  }
+
+  /**
+   * Lleva la cuenta de ofertas rechazadas seguidas por un chofer.
+   *
+   * Rechazar una oferta suelta es normal: puede estar comiendo o quedarle
+   * lejos. Tres seguidas ya no es circunstancial, y hasta ahora no dejaba
+   * rastro: el viaje pasaba al siguiente chofer y nadie se enteraba de que uno
+   * estaba rechazando todo.
+   *
+   * Al chofer se le avisa desde el primer rechazo con la cuenta que lleva, para
+   * que la multa no le caiga por sorpresa. Al llegar al tope se aplica y el
+   * contador vuelve a cero, de modo que la siguiente exige otra racha completa
+   * en vez de multar en cada rechazo posterior.
+   */
+  private async registrarRechazoDeChofer(
+    choferId: string,
+    driverChatId?: string | null,
+  ): Promise<void> {
+    const choferes = this.serviciosRepository.manager.getRepository(Choferes);
+    const chofer = await choferes.findOne({ where: { id: choferId } });
+    if (!chofer) return;
+
+    const seguidos = (chofer.rechazosConsecutivos ?? 0) + 1;
+    const alcanzaElTope = seguidos >= DRIVER_REJECTION_LIMIT;
+
+    await choferes.update(choferId, {
+      rechazosConsecutivos: alcanzaElTope ? 0 : seguidos,
+      ultimoRechazoAt: new Date(),
+    });
+
+    if (alcanzaElTope) {
+      await this.disciplineService.applyDriverRejectionFine(
+        choferId,
+        seguidos,
+        DRIVER_REJECTION_FINE,
+      );
+    }
+
+    /*
+     * El panel se entera de CADA rechazo, no solo del tercero: ver la racha
+     * subir es lo que permite hablar con el chofer antes de que llegue la
+     * multa.
+     */
+    this.realtimeEventsService.emitToJefes({
+      type: 'driver.offer.rejected',
+      choferId,
+      choferNombre: chofer.nombre,
+      rechazosSeguidos: seguidos,
+      limite: DRIVER_REJECTION_LIMIT,
+      multaAplicada: alcanzaElTope,
+      montoMulta: alcanzaElTope ? DRIVER_REJECTION_FINE : null,
+    });
+
+    if (!driverChatId) return;
+    const aviso = alcanzaElTope
+      ? `Rechazaste ${seguidos} ofertas de viaje seguidas.\n\n` +
+        `Se aplicó una multa de $${DRIVER_REJECTION_FINE.toLocaleString('es-MX')}. ` +
+        `El contador vuelve a cero. Si tienes un motivo, háblalo con administración.`
+      : `Rechazaste esta oferta. Llevas ${seguidos} de ${DRIVER_REJECTION_LIMIT} seguidas.\n\n` +
+        `Al llegar a ${DRIVER_REJECTION_LIMIT} se aplica una multa de $${DRIVER_REJECTION_FINE.toLocaleString('es-MX')}. ` +
+        `Aceptar un viaje pone el contador en cero.`;
+    await this.bot.telegram
+      .sendMessage(driverChatId, aviso)
+      .catch((err: unknown) => {
+        this.logger.error(
+          `No se pudo avisar al chofer ${choferId} de su racha de rechazos:`,
+          err,
+        );
+      });
   }
 
   startWaitTimeout(servicioId: string, durationMs: number = 600000) {

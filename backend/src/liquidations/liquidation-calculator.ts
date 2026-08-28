@@ -239,6 +239,70 @@ export function calculateCut(
   };
 }
 
+export interface ServiceDiscrepancy {
+  serviceId: string;
+  /** Total que registro la oficina para este servicio; null si nunca lo registro. */
+  officeTotal: number | null;
+  /** Total que registro la empleada; null si nunca lo registro. */
+  employeeTotal: number | null;
+  /** officeTotal - employeeTotal, tratando el lado ausente como 0. */
+  difference: number;
+}
+
+/**
+ * Compara, servicio por servicio, lo que registro la oficina contra lo que
+ * registro la empleada. Solo entran los registros que SI tienen `serviceId`:
+ * multas, adelantos u otros movimientos sueltos no tienen con que emparejarse
+ * del otro lado, y compararlos produciria discrepancias falsas por diseño (la
+ * oficina registra multas que la empleada nunca veria motivo de registrar, y
+ * viceversa).
+ *
+ * Solo se devuelven los servicios que NO cuadran -- ausentes de un lado, o con
+ * un monto distinto -- porque es lo unico que hace falta revisar. Si las dos
+ * partes coinciden en todo, la lista sale vacia.
+ */
+function buildServiceDiscrepancies(
+  officeRecords: LiquidationRecord[],
+  employeeRecords: LiquidationRecord[],
+): ServiceDiscrepancy[] {
+  const porServicio = new Map<
+    string,
+    { office?: LiquidationRecord; employee?: LiquidationRecord }
+  >();
+
+  for (const record of officeRecords) {
+    if (!record.serviceId) continue;
+    const entry = porServicio.get(record.serviceId) ?? {};
+    entry.office = record;
+    porServicio.set(record.serviceId, entry);
+  }
+  for (const record of employeeRecords) {
+    if (!record.serviceId) continue;
+    const entry = porServicio.get(record.serviceId) ?? {};
+    entry.employee = record;
+    porServicio.set(record.serviceId, entry);
+  }
+
+  const discrepancias: ServiceDiscrepancy[] = [];
+  for (const [serviceId, { office, employee }] of porServicio) {
+    const officeCents = office ? toCents(office.serviceTotal) : null;
+    const employeeCents = employee ? toCents(employee.serviceTotal) : null;
+    if (officeCents === employeeCents) continue; // ambos null o iguales: cuadra
+
+    discrepancias.push({
+      serviceId,
+      officeTotal: office ? fromCents(officeCents!) : null,
+      employeeTotal: employee ? fromCents(employeeCents!) : null,
+      difference: fromCents((officeCents ?? 0) - (employeeCents ?? 0)),
+    });
+  }
+
+  // Las diferencias mas grandes primero: son las que mas urge revisar.
+  return discrepancias.sort(
+    (a, b) => Math.abs(b.difference) - Math.abs(a.difference),
+  );
+}
+
 export function buildCutReport(
   records: LiquidationRecord[],
   commission: CardExtraCommissionPolicy = DEFAULT_CARD_EXTRA_COMMISSION,
@@ -251,6 +315,14 @@ export function buildCutReport(
   );
   const officeCut = calculateCut(officeRecords, commission);
   const employeeCut = calculateCut(employeeRecords, commission);
+  const serviceDiscrepancies = buildServiceDiscrepancies(
+    officeRecords,
+    employeeRecords,
+  );
+  const differenceCents = serviceDiscrepancies.reduce(
+    (sum, row) => sum + toCents(row.difference),
+    0,
+  );
 
   return {
     officeCut,
@@ -258,6 +330,10 @@ export function buildCutReport(
     finalCut: officeCut,
     officeRecords,
     employeeRecords,
-    discrepancy: { exists: false, difference: 0 },
+    serviceDiscrepancies,
+    discrepancy: {
+      exists: serviceDiscrepancies.length > 0,
+      difference: fromCents(differenceCents),
+    },
   };
 }

@@ -207,6 +207,64 @@ describe('liquidation calculator', () => {
     expect(report.officeCut.finesTotal).toBe(200);
     expect(report.employeeCut.finesTotal).toBe(0);
     expect(report.discrepancy).toEqual({ exists: false, difference: 0 });
+    // Sin serviceId de ningun lado, no hay con que emparejar: no es que
+    // "coincida", es que no hay nada que comparar.
+    expect(report.serviceDiscrepancies).toEqual([]);
+  });
+
+  it('detecta un servicio con montos distintos entre oficina y empleada', () => {
+    const report = buildCutReport([
+      record({
+        sourceRole: 'admin',
+        serviceId: 'srv-1',
+        serviceTotal: 2500,
+      }),
+      record({
+        sourceRole: 'empleada',
+        serviceId: 'srv-1',
+        serviceTotal: 2000,
+      }),
+    ]);
+
+    expect(report.discrepancy).toEqual({ exists: true, difference: 500 });
+    expect(report.serviceDiscrepancies).toEqual([
+      {
+        serviceId: 'srv-1',
+        officeTotal: 2500,
+        employeeTotal: 2000,
+        difference: 500,
+      },
+    ]);
+  });
+
+  it('detecta un servicio que solo registro un lado', () => {
+    const report = buildCutReport([
+      record({ sourceRole: 'admin', serviceId: 'srv-2', serviceTotal: 1800 }),
+    ]);
+
+    expect(report.discrepancy).toEqual({ exists: true, difference: 1800 });
+    expect(report.serviceDiscrepancies).toEqual([
+      {
+        serviceId: 'srv-2',
+        officeTotal: 1800,
+        employeeTotal: null,
+        difference: 1800,
+      },
+    ]);
+  });
+
+  it('no marca discrepancia cuando ambos lados registran el mismo total', () => {
+    const report = buildCutReport([
+      record({ sourceRole: 'admin', serviceId: 'srv-3', serviceTotal: 3200 }),
+      record({
+        sourceRole: 'empleada',
+        serviceId: 'srv-3',
+        serviceTotal: 3200,
+      }),
+    ]);
+
+    expect(report.discrepancy).toEqual({ exists: false, difference: 0 });
+    expect(report.serviceDiscrepancies).toEqual([]);
   });
 
   it('calcula correctamente los nuevos campos detallados de liquidación', () => {

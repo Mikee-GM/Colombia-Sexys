@@ -65,6 +65,14 @@ export interface LiquidationCommissionSettings {
   cardExtraCommissionThreshold: number;
 }
 
+/** Un servicio cuyo total no coincide (o solo se registro de un lado) entre lo que reporto la oficina y lo que reporto la empleada. */
+export interface ServiceDiscrepancy {
+  serviceId: string;
+  officeTotal: number | null;
+  employeeTotal: number | null;
+  difference: number;
+}
+
 export interface LiquidationReport {
   employee: { id: string; name: string };
   period: { startDate: string; endDate: string };
@@ -74,6 +82,7 @@ export interface LiquidationReport {
   officeRecords: LiquidationRecord[];
   employeeRecords: LiquidationRecord[];
   discrepancy: { exists: boolean; difference: number };
+  serviceDiscrepancies: ServiceDiscrepancy[];
   commissionSettings: LiquidationCommissionSettings;
   weeklySettlement: {
     status: "preview" | "confirmed";

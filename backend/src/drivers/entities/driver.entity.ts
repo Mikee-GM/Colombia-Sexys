@@ -49,6 +49,25 @@ export class Choferes {
   @ApiProperty({ description: 'Disponible', example: true })
   disponible: boolean;
 
+  /**
+   * Ofertas rechazadas seguidas. Aceptar una vuelve a poner el contador en
+   * cero: lo que se vigila es la racha actual, no el total historico.
+   */
+  @Column('integer', { name: 'rechazos_consecutivos', default: 0 })
+  @ApiProperty({ description: 'Ofertas rechazadas seguidas', example: 0 })
+  rechazosConsecutivos: number;
+
+  @Column('timestamp with time zone', {
+    name: 'ultimo_rechazo_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Cuando rechazo una oferta por ultima vez',
+    type: String,
+    format: 'date-time',
+  })
+  ultimoRechazoAt: Date | null;
+
   @Column('numeric', {
     name: 'ubicacion_lat',
     nullable: true,

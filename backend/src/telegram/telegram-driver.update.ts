@@ -349,7 +349,13 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
         .execute();
 
       if (updateResult.affected === 1) {
-        await manager.update(Choferes, chofer.id, { disponible: false });
+        await manager.update(Choferes, chofer.id, {
+          disponible: false,
+          // Aceptar borra la racha: el contador mide rechazos SEGUIDOS, y sin
+          // este reinicio tres rechazos sueltos repartidos en semanas acabarian
+          // multando igual que tres seguidos.
+          rechazosConsecutivos: 0,
+        });
         return true;
       }
       return false;

@@ -3954,6 +3954,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       });
       servicio.calificacion = rating;
       await this.serviciosRepository.save(servicio);
+      /*
+       * El flujo del servicio termina aqui: calificar con 3 estrellas o mas es
+       * el caso normal, y hasta ahora esta rama era la UNICA que no limpiaba
+       * la sesion (la de calificacion baja si lo hacia, mas abajo). El cliente
+       * se quedaba con el contexto de la reserva vieja (empleada, ubicacion,
+       * paso) colgado para su siguiente mensaje, en vez de empezar de cero.
+       */
+      ctx.session = {};
       await ctx.editMessageText(
         `Muchas gracias por calificar con ${stars} el servicio de nuestra empleada. ¡Agradecemos tu preferencia!`,
         Markup.inlineKeyboard([
@@ -6627,10 +6635,34 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           request.id,
           topic.message_thread_id.toString(),
         );
+
+        /*
+         * Pase de un solo uso al panel, igual que el que ya recibe la
+         * empleada o el chofer. Sin esto, el jefe tenia que entrar por su
+         * cuenta y buscar la pestana de grupos a mano; con el aterriza
+         * directo en ella, lo que agiliza el registro justo cuando el
+         * cliente ya esta esperando del otro lado.
+         */
+        const botonesMensaje = request.boss
+          ? await this.panelAccessService
+              .issueLink(request.boss.id, bossGroupId, '/jefe?tab=grupos')
+              .then(({ url }) => botonesDePortal(url, 'Organizar en el panel'))
+              .catch((err: unknown) => {
+                this.logger.error(
+                  'No se pudo emitir el pase de panel para el servicio grupal:',
+                  err,
+                );
+                return undefined;
+              })
+          : undefined;
+
         await this.bot.telegram.sendMessage(
           bossGroupId,
           `Solicitud de servicio grupal\nCliente: ${clientName}\nLa IA fue desactivada. Organiza participantes, ubicación, horas, pago y transporte desde el panel del jefe.`,
-          { message_thread_id: topic.message_thread_id },
+          {
+            message_thread_id: topic.message_thread_id,
+            ...(botonesMensaje ? Markup.inlineKeyboard(botonesMensaje) : {}),
+          },
         );
         const history = await this.conversationsRepository.find({
           where: [

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
@@ -61,6 +62,7 @@ type Actor = Pick<Usuarios, 'id' | 'rol'>;
 
 @Injectable()
 export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(GroupServicesService.name);
   private static readonly HOLD_MS = 30 * 60 * 1000;
   private cleanupTimer?: NodeJS.Timeout;
 
@@ -448,6 +450,31 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           keyboard,
         );
       }
+
+      /*
+       * El cliente elegia entre varias chicas viendo solo la portada de cada
+       * una. El resto de sus fotos publicas ya se cargan (`empleadaFotos` en
+       * `availableEmployees`) pero nunca se enviaban; se mandan aparte, en un
+       * album, para no competir con el boton de Seleccionar de la portada.
+       */
+      const otrasFotos = (employee.empleadaFotos ?? [])
+        .filter((foto) => foto.url && foto.url !== employee.fotoPerfilUrl)
+        .slice(0, 9); // limite de Telegram por sendMediaGroup
+      if (otrasFotos.length > 0) {
+        await clientBot.telegram
+          .sendMediaGroup(
+            fullRequest.client.telegramChatId,
+            otrasFotos.map((foto) => ({
+              type: 'photo' as const,
+              media: foto.url,
+            })),
+          )
+          .catch((error: unknown) => {
+            this.logger.warn(
+              `No se pudo enviar el album de fotos de ${employee.nombreArtistico}: ${String(error)}`,
+            );
+          });
+      }
     }
     await clientBot.telegram.sendMessage(
       fullRequest.client.telegramChatId,
@@ -671,20 +698,35 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       )
         throw new ConflictException('La solicitud ya no admite selecciones');
 
+      /*
+       * Sin join en la consulta bloqueada: PostgreSQL no permite FOR UPDATE en
+       * el lado nulo de un outer join, y `leftJoinAndSelect('employee.usuario')`
+       * generaba exactamente eso. Reventaba con "FOR UPDATE cannot be applied
+       * to nullable side of an outer join" cada vez que un cliente confirmaba
+       * su selección de un servicio grupal. El mismo remedio ya se aplicó antes
+       * en `services.service.ts` para un caso identico.
+       */
       const employees = await manager
         .getRepository(Empleadas)
         .createQueryBuilder('employee')
-        .leftJoinAndSelect('employee.usuario', 'user')
         .setLock('pessimistic_write')
         .where('employee.id IN (:...employeeIds)', { employeeIds })
         .getMany();
       if (employees.length !== employeeIds.length)
         throw new BadRequestException('Una o más empleadas no existen');
+
+      const usuarios = await manager.find(Usuarios, {
+        where: { id: In(employees.map((employee) => employee.usuarioId)) },
+      });
+      const usuarioPorId = new Map(
+        usuarios.map((usuario) => [usuario.id, usuario]),
+      );
       for (const employee of employees) {
+        const usuario = usuarioPorId.get(employee.usuarioId);
         if (
           !employee.disponible ||
           !employee.catalogoActivo ||
-          !employee.usuario?.activo
+          !usuario?.activo
         ) {
           throw new ConflictException(
             `${employee.nombreArtistico} ya no está disponible`,
@@ -1221,18 +1263,23 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           throw new ConflictException(
             'Resuelve el saldo pendiente antes de otro cambio',
           );
+        // Mismo remedio que en reserveSelections: sin join en la consulta
+        // bloqueada, porque PostgreSQL no permite FOR UPDATE en el lado nulo
+        // de un outer join.
         const employee = await manager
           .getRepository(Empleadas)
           .createQueryBuilder('employee')
-          .leftJoinAndSelect('employee.usuario', 'user')
           .setLock('pessimistic_write')
           .where('employee.id = :employeeId', { employeeId: dto.employeeId })
           .getOne();
+        const usuario = employee
+          ? await manager.findOneBy(Usuarios, { id: employee.usuarioId })
+          : null;
         if (
           !employee ||
           !employee.disponible ||
           !employee.catalogoActivo ||
-          !employee.usuario?.activo
+          !usuario?.activo
         )
           throw new ConflictException('La empleada no está disponible');
         await this.assertEmployeeFree(manager, employee.id, null, serviceId);

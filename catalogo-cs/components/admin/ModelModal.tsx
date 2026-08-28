@@ -73,6 +73,9 @@ const KISSING_PREVIEW: Record<ReturnType<typeof previewKissingPolicy>, string> =
   sin_dato: "que eso se ve en persona (la descripcion no lo dice)",
 };
 
+/** Antes era 5, fijo. Sin tope tecnico real del lado del backend o de R2. */
+const MAX_FOTOS_GALERIA = 20;
+
 const PREDEFINED_EXTRAS = [
   { nombre: "Oral natural", precio: 500 },
   { nombre: "Oral natural terminado en cara", precio: 1000 },
@@ -340,8 +343,11 @@ export default function ModelModal({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    if (galleryItems.length + files.length > 5) {
-      showNotification("No puedes subir mas de 5 fotos a la galeria", "error");
+    if (galleryItems.length + files.length > MAX_FOTOS_GALERIA) {
+      showNotification(
+        `No puedes subir mas de ${MAX_FOTOS_GALERIA} fotos a la galeria`,
+        "error",
+      );
       return;
     }
 
@@ -1228,13 +1234,13 @@ export default function ModelModal({
                 </div>
               </div>
 
-              {/* Galeria (Max 5) */}
+              {/* Galeria */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-[10px] font-bold tracking-widest text-[#C5A55A] uppercase">
-                    Galeria ({galleryItems.length}/5)
+                    Galeria ({galleryItems.length}/{MAX_FOTOS_GALERIA})
                   </label>
-                  {galleryItems.length < 5 && (
+                  {galleryItems.length < MAX_FOTOS_GALERIA && (
                     <div className="relative overflow-hidden">
                       <button type="button" className="text-[10px] text-white hover:text-[#C5A55A] font-bold uppercase tracking-wider transition-colors disabled:opacity-50">
                         + Anadir Fotos
@@ -1243,7 +1249,7 @@ export default function ModelModal({
                         type="file"
                         accept="image/*"
                         multiple
-                        disabled={saving || galleryItems.length >= 5}
+                        disabled={saving || galleryItems.length >= MAX_FOTOS_GALERIA}
                         onChange={handleUploadGaleria}
                         className="absolute inset-0 opacity-0 cursor-pointer"
                       />

@@ -117,9 +117,53 @@ export async function middleware(request: NextRequest) {
   const isJefeRoute = pathname.startsWith("/jefe");
 
   if (isAdminRoute || isJefeRoute) {
-    // A) La pagina de login siempre se sirve.
+    /*
+     * A) La ruta exacta de login.
+     *
+     * Antes se servia siempre, sin mirar la sesion: quien entraba con una
+     * cookie de acceso perfectamente valida (por ejemplo, el boton "atras" del
+     * navegador, o un enlace guardado a "/admin") veia el formulario de login
+     * en vez de terminar en su panel. El unico redirect que lo sacaba de ahi
+     * vivia del lado del cliente (LoginForm intentando refrescar la sesion), y
+     * dependia de que ese JavaScript llegara a correr.
+     *
+     * Se resuelve la sesion aqui mismo, con el mismo mecanismo de renovacion
+     * que usan las rutas protegidas, y si hay un rol valido se manda derecho a
+     * su panel. Si no hay sesion, sigue sirviendose el login como siempre.
+     */
     if (pathname === "/admin") {
-      return NextResponse.next();
+      let renovadas: ParsedCookie[] | null = null;
+      if (!request.cookies.has(ACCESS_COOKIE)) {
+        renovadas = await renovarSesion(request);
+        if (renovadas) {
+          for (const { name, value } of renovadas) {
+            request.cookies.set(name, value);
+          }
+        }
+      }
+
+      const rol = await rolDeLaSesion(cabeceraDeCookies(request));
+      if (!rol) {
+        if (!renovadas) return NextResponse.next();
+        // La renovacion pudo dejar cookies nuevas aunque el rol no se haya
+        // podido confirmar (backend inestable); se guardan igual en vez de
+        // desperdiciarlas y forzar otra renovacion en la siguiente visita.
+        const sinRol = NextResponse.next({
+          request: { headers: request.headers },
+        });
+        for (const { name, value, options } of renovadas) {
+          sinRol.cookies.set(name, value, options);
+        }
+        return sinRol;
+      }
+
+      const destino = redirectFromRequest(request, inicioParaRol(rol));
+      if (renovadas) {
+        for (const { name, value, options } of renovadas) {
+          destino.cookies.set(name, value, options);
+        }
+      }
+      return destino;
     }
 
     // B) Rutas protegidas de /admin/* y /jefe/*.

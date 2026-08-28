@@ -6,7 +6,6 @@ import { Award, Banknote, Ban, Camera, Car, Check, CircleDollarSign, Clock3, Ext
 import { toast } from "sonner";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
-import { getPrivatePhotosAction, addPrivatePhotoAction, deletePrivatePhotoAction } from "@/lib/actions/modelos";
 import { uploadImagesAction } from "@/lib/actions/upload";
 import { formatCurrency } from "@/lib/calculations";
 import EvaluationHistorySheet from "@/components/admin/evaluations/evaluation-history-sheet";
@@ -39,7 +38,7 @@ import UberScreenshotUploader from "@/components/jefe/uber-screenshot-uploader";
 import type { GroupServiceRequest } from "@/lib/types";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
-export default function TeamOperations({ initialEmployees, initialServices, initialCashSummary, initialGroupRequests }: { initialEmployees: Employee[]; initialServices: Service[]; initialCashSummary: CashObligationSummary; initialGroupRequests: GroupServiceRequest[] }) {
+export default function TeamOperations({ initialEmployees, initialServices, initialCashSummary, initialGroupRequests, tabInicial }: { initialEmployees: Employee[]; initialServices: Service[]; initialCashSummary: CashObligationSummary; initialGroupRequests: GroupServiceRequest[]; tabInicial?: "grupos" }) {
   const [employees, setEmployees] = useState(initialEmployees);
   const [services, setServices] = useState(initialServices);
   const [groupRequests, setGroupRequests] = useState(
@@ -49,7 +48,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   );
   const [query, setQuery] = useState("");
   const [historyEmployeeId, setHistoryEmployeeId] = useState("all");
-  const [tab, setTab] = useState<"equipo" | "grupos" | "activos" | "historial" | "efectivo">("equipo");
+  const [tab, setTab] = useState<"equipo" | "grupos" | "activos" | "historial" | "efectivo">(tabInicial ?? "equipo");
   const [cashSummary, setCashSummary] = useState(initialCashSummary);
   const [chatService, setChatService] = useState<Service | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);

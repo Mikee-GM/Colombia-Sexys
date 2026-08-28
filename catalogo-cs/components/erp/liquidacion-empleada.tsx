@@ -19,6 +19,7 @@ import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { LiquidationReport } from "@/components/liquidations/types";
 import ComisionExtrasTarjeta from "@/components/liquidations/comision-extras-tarjeta";
 import ComprobantesTransferencia from "@/components/erp/comprobantes-transferencia";
+import ConciliacionOficinaEmpleada from "@/components/erp/conciliacion-oficina-empleada";
 import type { EvidenceItem } from "@/lib/types";
 
 /**
@@ -285,18 +286,7 @@ export default function LiquidacionEmpleada({
         vacio="No se recibieron comprobantes de transferencia en este periodo."
       />
 
-      {report.discrepancy?.exists ? (
-        <Panel
-          title="Discrepancia entre cortes"
-          subtitle="lo registrado por la oficina no coincide con lo de la empleada"
-        >
-          <p className="text-[13px] leading-relaxed text-amber-400">
-            Diferencia de {formatCurrency(report.discrepancy.difference)} entre
-            el corte de oficina y el de la empleada. Conviene revisar los
-            registros antes de confirmar la semana.
-          </p>
-        </Panel>
-      ) : null}
+      <ConciliacionOficinaEmpleada report={report} />
     </div>
   );
 }
