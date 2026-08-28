@@ -30,7 +30,6 @@ import { UploadService } from '../upload/upload.service';
 import { WeeklyContentService } from '../weekly-content/weekly-content.service';
 import { CandidateScreeningService } from '../candidate-screening/candidate-screening.service';
 import { DisciplineService } from '../discipline/discipline.service';
-import { DedicatedBotContext } from './telegram-bot-registry.service';
 import { hashLinkCode } from './telegram-link-code';
 import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
@@ -118,18 +117,6 @@ export class TelegramAuthUpdate {
       await this.telegramBookingUpdate.startHireSession(
         ctx,
         startPayload.employeeId,
-      );
-      return;
-    }
-
-    // En el bot dedicado de una modelo no hace falta venir del catálogo: el
-    // propio chat ya dice con quién quiere hablar el cliente.
-    const dedicatedEmployeeId = (ctx as DedicatedBotContext)
-      .dedicatedBotEmployeeId;
-    if (dedicatedEmployeeId && !user && client) {
-      await this.telegramBookingUpdate.startHireSession(
-        ctx,
-        dedicatedEmployeeId,
       );
       return;
     }

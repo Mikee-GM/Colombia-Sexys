@@ -65,22 +65,15 @@ import { ExtensionsService } from '../extensions/extensions.service';
 import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
-import {
-  DedicatedBotContext,
-  TelegramBotRegistryService,
-} from './telegram-bot-registry.service';
 import { describeError } from '../common/errors/error-message';
+import { TelegramCallbackGuard } from './telegram-callback-guard';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
 import type { InlineKeyboardButton } from 'telegraf/types';
 import { PanelAccessService } from '../auth/panel-access.service';
 import { botonesDePortal } from './telegram-portal-buttons';
 import { TelegramSession } from './entities/telegram-session.entity';
-import {
-  buildSessionKey,
-  parseSessionKey,
-  type SessionKeyContext,
-} from './telegram-session.key';
+import { buildSessionKey, parseSessionKey } from './telegram-session.key';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 
 interface SessionData {
@@ -731,7 +724,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
     private readonly panelAccessService: PanelAccessService,
-    private readonly botRegistry: TelegramBotRegistryService,
+    private readonly callbackGuard: TelegramCallbackGuard,
   ) {
     // TTL / Inactivity Cleanup: run every 5 minutes to clean up users inactive for > 1 hour
     this.locationCleanupInterval = setInterval(() => {
@@ -1510,33 +1503,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
      */
     intro?: string,
   ): Promise<void> {
-    /*
-     * En el bot propio de una modelo no se ofrecen otras.
-     *
-     * Cada modelo tiene su bot, y un bot solo puede escribirle a quien lo haya
-     * iniciado: los botones llevarian a una conversacion que el cliente no ha
-     * abierto y los mensajes se perderian en silencio. Ademas, contestar por
-     * otra chica desde el chat de esta se lee como una suplantacion.
-     */
-    const dedicatedEmployeeId = (ctx as DedicatedBotContext)
-      .dedicatedBotEmployeeId;
-    if (dedicatedEmployeeId) {
-      const web = (process.env.WEB_URL || process.env.PANEL_BASE_URL || '')
-        .trim()
-        .replace(/\/+$/, '');
-      const destino = web
-        ? /^https?:\/\//i.test(web)
-          ? web
-          : `https://${web}`
-        : null;
-
-      const dondeVerlas = destino
-        ? `Puedes ver a las demas chicas disponibles aqui: ${destino}`
-        : 'Puedes escribirnos mas tarde o buscar a otra chica en nuestro catalogo.';
-      await ctx.reply(intro ? `${intro}\n\n${dondeVerlas}` : dondeVerlas);
-      return;
-    }
-
     const available = await this.getAvailableEmployees();
     if (!available.length) {
       const sinDisponibles =
@@ -2481,6 +2447,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
   @Action(/^trio_boss:(confirm|reject|change):([^:]+):(.+)$/)
   async onBossTrioAction(@Ctx() ctx: BotContext) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     await ctx.answerCbQuery();
     const match = (ctx as any).match;
     const action = match[1] as 'confirm' | 'reject' | 'change';
@@ -2845,6 +2812,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
   @Action(/^agregar_extra_pay:(.+)$/)
   async onAgregarExtraPay(@Ctx() ctx: BotContext) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const match = (ctx as any).match;
     if (!match) return;
     const metodoPago = match[1] as 'tarjeta' | 'transferencia' | 'efectivo';
@@ -3651,6 +3619,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
   @Action(/^conf_fin_serv:(.+)$/)
   async onConfFinalizarServicio(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
 
@@ -3728,7 +3697,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     try {
       cierre = await this.servicesService.finishByEmployee(
         servicio.id,
-        servicio.empleada!.usuarioId,
+        servicio.empleada.usuarioId,
       );
     } catch (error: any) {
       await ctx.answerCbQuery(
@@ -3787,7 +3756,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           ),
         ],
         ...(await this.botonesDelPortal(
-          servicio.empleada!.usuarioId,
+          servicio.empleada.usuarioId,
           telegramId,
         )),
       ]),
@@ -5255,6 +5224,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
   @Action(/^receipt_autorizar:([0-9a-f-]{36}):(0|1)$/)
   async onReceiptAutorizar(@Ctx() ctx: BotContext) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
 
@@ -5360,54 +5330,58 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
   }
 
   @Action(/^extender_servicio:(.+):(.+)$/)
-  async onExtenderServicio(@Ctx() ctx: Context) {
+  async onExtenderServicio(@Ctx() ctx: BotContext) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const match = (ctx as any).match;
     if (!match) return;
     const servicioId = match[1];
     const horasAExtender = parseInt(match[2], 10);
 
-    const servicio = await this.serviciosRepository.findOne({
-      where: { id: servicioId },
-      relations: { empleada: { usuario: true } },
-    });
-
-    if (!servicio) {
-      await ctx.answerCbQuery('❌ Servicio no encontrado.');
+    const telegramId = ctx.from?.id.toString();
+    const user = telegramId
+      ? await this.usuariosRepository.findOne({
+          where: { telegramChatId: telegramId, rol: 'empleada' },
+        })
+      : null;
+    if (!user) {
+      this.callbackGuard.liberar(ctx);
+      await ctx.answerCbQuery(
+        'Solo la empleada del servicio puede extenderlo.',
+        {
+          show_alert: true,
+        },
+      );
       return;
     }
 
-    if (servicio.estado !== 'en_curso') {
-      await ctx.answerCbQuery('⚠️ El servicio ya no está activo.');
+    let servicio: Servicios;
+    try {
+      servicio = await this.servicesService.extendByEmployee(
+        servicioId,
+        user.id,
+        horasAExtender,
+      );
+    } catch (error: any) {
+      this.callbackGuard.liberar(ctx);
+      await ctx.answerCbQuery(
+        error?.message || 'No se pudo extender el servicio.',
+        { show_alert: true },
+      );
       return;
     }
 
-    // Actualizar duracion pactada
-    const nuevaDuracion = servicio.duracionPactadaHoras + horasAExtender;
-    servicio.duracionPactadaHoras = nuevaDuracion;
-    // Resetear flag para que pueda volver a notificar 15 minutos antes de la nueva hora
-    servicio.notificacionExtensionEnviada = false;
-
-    await this.serviciosRepository.save(servicio);
-    await this.servicesService.recalculateScheduledSuccessor(servicio.id);
-    this.realtimeEventsService.emitToJefes({
-      type: 'employee_availability_updated',
-      empleadaId: servicio.empleadaId,
-      activeServiceId: servicio.id,
-    });
-    await ctx.answerCbQuery('✅ Servicio extendido con éxito.');
-
-    // Volver a cargar para ver los totales actualizados por los triggers de Postgres
-    const servicioActualizado = await this.serviciosRepository.findOne({
-      where: { id: servicioId },
-    });
-
-    const total = servicioActualizado?.totalFinal || servicio.totalFinal;
+    await ctx.answerCbQuery('Servicio extendido con éxito.');
 
     try {
       await ctx.editMessageText(
-        `✅ *Servicio Extendido* ➕${horasAExtender}h\n\n` +
-          `• Nueva Duración Pactada: *${nuevaDuracion} horas*\n` +
-          `• Nuevo Total Estimado: *$${total}*\n\n` +
+        `✅ *Servicio Extendido* ➕${horasAExtender}h
+
+` +
+          `• Nueva Duración Pactada: *${servicio.duracionPactadaHoras} horas*
+` +
+          `• Nuevo Total Estimado: *$${servicio.totalFinal}*
+
+` +
           `El cambio ha sido registrado automáticamente en el sistema.`,
         { parse_mode: 'Markdown' },
       );
@@ -5418,6 +5392,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
   @Action(/^no_extender_servicio:(.+)$/)
   async onNoExtenderServicio(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     await ctx.answerCbQuery();
     const servicioId = (ctx as any).match?.[1] as string | undefined;
 
@@ -5787,13 +5762,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             (actor.rol === 'jefe' && service.jefeId === actor.id)) &&
           service.clienteTelegramId
         ) {
-          // Por el bot de la modelo, no por `ctx.telegram`. El jefe escribe
-          // desde su grupo, que vive en el bot central, pero el cliente solo
-          // ha abierto conversacion con el bot dedicado: enviar por el central
-          // lo rechaza Telegram y la respuesta del jefe se pierde en silencio.
-          await this.botRegistry
-            .botForEmployeeOrCentral(service.empleadaId)
-            .telegram.sendMessage(service.clienteTelegramId, text);
+          await this.bot.telegram.sendMessage(service.clienteTelegramId, text);
           await this.recordConversation(service, 'jefe', text);
         } else if (
           !service &&
@@ -5814,13 +5783,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             const parsedKey = parseSessionKey(matched.key);
             const clientTelegramId = parsedKey?.fromId;
             if (clientTelegramId) {
-              // Y sale por el bot que el cliente si tiene abierto.
-              const empleadaId =
-                (matched.data?.empleadaId as string | undefined) ??
-                parsedKey?.employeeId;
-              await this.botRegistry
-                .botForEmployeeOrCentral(empleadaId)
-                .telegram.sendMessage(clientTelegramId, text);
+              await this.bot.telegram.sendMessage(clientTelegramId, text);
               const client = await this.clientesRepository.findOne({
                 where: { telegramChatId: clientTelegramId },
               });
@@ -6091,29 +6054,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    // En el bot dedicado de una modelo, un cliente que escribe directo (sin
-    // /start ni pasar por el catálogo) sí debe ser atendido: el chat ya
-    // identifica a la modelo. Antes este `return` lo dejaba en visto.
-    const dedicatedEmployeeId = (ctx as DedicatedBotContext)
-      .dedicatedBotEmployeeId;
-    const dedicatedSenderId = ctx.from?.id.toString();
-    if (!ctx.session && dedicatedEmployeeId && dedicatedSenderId) {
+    // Un cliente que escribe directo, sin /start ni venir del catálogo, no
+    // puede quedarse en visto: se le da la bienvenida y se le muestra quién
+    // está disponible para que elija, en vez de ignorarlo.
+    const senderId = ctx.from?.id.toString();
+    if (!ctx.session && senderId) {
       const staff = await this.usuariosRepository.findOneBy({
-        telegramChatId: dedicatedSenderId,
-      });
-      if (!staff) {
-        await this.startHireSession(ctx, dedicatedEmployeeId);
-        return;
-      }
-    }
-
-    // Bot central: un cliente que escribe directo, sin /start ni venir del
-    // catálogo, tampoco puede quedarse en visto. Como aquí no hay una modelo
-    // implícita, se le da la bienvenida y se le muestra quién está disponible
-    // para que elija, en vez de ignorarlo.
-    if (!ctx.session && !dedicatedEmployeeId && dedicatedSenderId) {
-      const staff = await this.usuariosRepository.findOneBy({
-        telegramChatId: dedicatedSenderId,
+        telegramChatId: senderId,
       });
       if (!staff) {
         await this.replyWithAvailableEmployees(ctx);
@@ -8174,13 +8121,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       // Notificar al cliente en privado
       if (client.telegramChatId) {
         const clientMsg = `¡Listo amor! Tu servicio con *${empleada.nombreArtistico}* por ${duracion} hora(s) ha sido confirmado. Ya nos estamos preparando para salir a verte.`;
-        // El comando lo lanza el jefe desde su grupo (bot central), pero este
-        // mensaje va al cliente y tiene que salir por el bot de la modelo.
-        await this.botRegistry
-          .botForEmployeeOrCentral(empleada.id)
-          .telegram.sendMessage(client.telegramChatId, clientMsg, {
-            parse_mode: 'Markdown',
-          });
+        await this.bot.telegram.sendMessage(client.telegramChatId, clientMsg, {
+          parse_mode: 'Markdown',
+        });
         await this.recordConversation(newService, 'ia', clientMsg);
       }
     } catch (err: any) {

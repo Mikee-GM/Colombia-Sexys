@@ -7,6 +7,7 @@ import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { ServicesService } from '../services/services.service';
 import type { TelegramSessionData } from './telegram-booking.update';
+import { TelegramCallbackGuard } from './telegram-callback-guard';
 
 /** El jefe tambien tiene sesion de Telegram; aqui solo interesa una clave. */
 type BossContext = Context & { session?: TelegramSessionData };
@@ -22,6 +23,7 @@ export class TelegramAdminUpdate {
     private readonly serviciosRepository: Repository<Servicios>,
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
+    private readonly callbackGuard: TelegramCallbackGuard,
   ) {}
 
   /**
@@ -226,6 +228,7 @@ export class TelegramAdminUpdate {
 
   @Action(/^accept_with_notes:(.+):(chofer|uber|same)$/)
   async onAcceptWithNotes(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const actor = await this.getActor(ctx);
     if (!actor) return;
     const match = (ctx as any).match;
@@ -290,6 +293,7 @@ export class TelegramAdminUpdate {
 
   @Action(/^regreso_transporte:(.+):(interno|uber)$/)
   async onReturnTransport(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const actor = await this.getActor(ctx);
     if (!actor)
       return ctx.answerCbQuery('Usuario no autorizado', { show_alert: true });
@@ -346,6 +350,7 @@ export class TelegramAdminUpdate {
 
   @Action(/^cambiar_transporte:(.+):(interno|uber)$/)
   async onChangeTripTransport(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const actor = await this.getActor(ctx);
     if (!actor) {
       await ctx.answerCbQuery('Usuario no autorizado', { show_alert: true });
@@ -434,6 +439,7 @@ export class TelegramAdminUpdate {
 
   @Action(/^uber_fare_confirm:(.+)$/)
   async onUberFareConfirm(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const actor = await this.getActor(ctx);
     const session = (ctx as any).session;
     if (!actor || !session?.pendingUberFare) {
@@ -534,6 +540,7 @@ export class TelegramAdminUpdate {
 
   @Action(/^conf_ja:(.+):([01])(?::(chofer|uber|same))?$/)
   async onConfJefeAutorizar(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
 
@@ -664,6 +671,7 @@ export class TelegramAdminUpdate {
 
   @Action(/^sched_trans:(.+):(chofer|uber)$/)
   async onScheduledTransportChoice(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
 
@@ -767,8 +775,29 @@ export class TelegramAdminUpdate {
 
   // --- FLUJO DE EDICIÓN DE SERVICIO PENDIENTE DESDE TELEGRAM ---
 
+  /**
+   * Quien pulsa tiene que ser jefe o admin.
+   *
+   * Los botones de edicion viven en el grupo del jefe, pero cualquiera que
+   * este en ese grupo --y las empleadas lo estan en algunos-- podia pulsarlos:
+   * eran los unicos manejadores de servicio sin comprobar el rol, y desde ahi
+   * se cambiaban las horas y el metodo de pago de un servicio ajeno.
+   */
+  private async esOficina(ctx: Context): Promise<boolean> {
+    const actor = await this.getActor(ctx);
+    if (actor && (actor.rol === 'jefe' || actor.rol === 'admin')) return true;
+    await ctx.answerCbQuery(
+      'No tienes permisos para modificar este servicio.',
+      {
+        show_alert: true,
+      },
+    );
+    return false;
+  }
+
   @Action(/^jefe_editar_srv:(.+)$/)
   async onJefeEditarSrv(@Ctx() ctx: Context) {
+    if (!(await this.esOficina(ctx))) return;
     const match = (ctx as any).match;
     const serviceId = match[1];
 
@@ -829,6 +858,7 @@ export class TelegramAdminUpdate {
 
   @Action(/^srv_edit_dur:(.+):(-1|1)$/)
   async onSrvEditDur(@Ctx() ctx: Context) {
+    if (!(await this.esOficina(ctx))) return;
     const match = (ctx as any).match;
     const serviceId = match[1];
     const change = parseInt(match[2], 10);
@@ -859,6 +889,7 @@ export class TelegramAdminUpdate {
 
   @Action(/^srv_edit_pay:(.+):(efectivo|tarjeta|transferencia|mixto)$/)
   async onSrvEditPay(@Ctx() ctx: Context) {
+    if (!(await this.esOficina(ctx))) return;
     const match = (ctx as any).match;
     const serviceId = match[1];
     const newPay = match[2] as

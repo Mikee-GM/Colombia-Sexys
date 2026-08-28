@@ -67,13 +67,6 @@ import { UserPreferencesModule } from './user-preferences/user-preferences.modul
         AUTH_COOKIE_SAME_SITE: Joi.string().valid('lax', 'none').default('lax'),
         TELEGRAM_BOT_TOKEN: Joi.string().required(),
         TELEGRAM_PROVIDER_TOKEN: Joi.string().allow('').optional(),
-        // Opcional a propósito: sin ella el sistema arranca igual y sigue
-        // funcionando con el bot central. Solo hace falta para poder vincular
-        // bots dedicados a las modelos.
-        TELEGRAM_TOKEN_ENCRYPTION_KEY: Joi.string()
-          .min(32)
-          .allow('')
-          .optional(),
         TELEGRAM_WEBHOOK_BASE_URL: Joi.string().uri().allow('').optional(),
         // Cuantas instancias del backend se arrancan. Solo se usa para impedir
         // una combinacion que rompe el bot en silencio: con long polling, dos

@@ -167,10 +167,11 @@ propia. Sin él, dos réplicas duplican cada mensaje.
 
 ### Telegram
 
-`nestjs-telegraf`. Hay un **bot central** (`TELEGRAM_BOT_TOKEN`: choferes,
-jefes, admin, onboarding de candidatas) y **bots dedicados por modelo**, cuyos
-tokens se guardan cifrados con `TELEGRAM_TOKEN_ENCRYPTION_KEY` y se gestionan en
-`telegram-bot-registry.service.ts`.
+`nestjs-telegraf`. Hay **un solo bot** (`TELEGRAM_BOT_TOKEN`) para todos:
+clientes, empleadas, choferes, jefes, admin y onboarding de candidatas. Hubo una
+etapa con un bot dedicado por modelo; se eliminó, y `telegram-session.key.ts`
+todavía entiende las claves de sesión de entonces porque las filas viven 30
+días. No vuelvas a introducir enrutado por bot: `@InjectBot()` es el único bot.
 
 Con `TELEGRAM_WEBHOOK_BASE_URL` definida se usan webhooks; vacía, long polling.
 Con `APP_INSTANCE_COUNT > 1` el long polling rompe en silencio (Telegram

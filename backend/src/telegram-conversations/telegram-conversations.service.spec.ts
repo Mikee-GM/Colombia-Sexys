@@ -10,14 +10,11 @@ describe('TelegramConversationsService', () => {
   const services = { findOne: jest.fn() };
   const bot = { telegram: { sendMessage: jest.fn() } };
   const realtime = { emitToBoss: jest.fn(), emitToBosses: jest.fn() };
-  // Sin bot dedicado, el registro devuelve el bot central: el mismo mock.
-  const botRegistry = { botForEmployeeOrCentral: jest.fn(() => bot) };
   const subject = new TelegramConversationsService(
     conversations as any,
     services as any,
     bot as any,
     realtime as any,
-    botRegistry as any,
   );
 
   beforeEach(() => jest.clearAllMocks());

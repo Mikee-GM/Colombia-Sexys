@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  EntityManager,
   In,
   IsNull,
   LessThanOrEqual,
@@ -43,7 +44,7 @@ import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entit
 import { SaveBankAccountDto } from './dto/bank-account.dto';
 import { CancelServiceDto } from './dto/cancel-service.dto';
 import { UploadService } from '../upload/upload.service';
-import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
+import { parseSessionKey } from '../telegram/telegram-session.key';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
 import { describeError } from '../common/errors/error-message';
 import { Clientes } from '../clients/entities/client.entity';
@@ -181,7 +182,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly disciplineService: DisciplineService,
     private readonly uploadService: UploadService,
-    private readonly botRegistry: TelegramBotRegistryService,
     /*
      * Los tres ultimos entran para el cierre de un servicio por la empleada:
      * liberarla del catalogo, avisar a quien la estaba esperando y dejar el
@@ -203,16 +203,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(ServiceParticipant)
     private readonly serviceParticipantsRepository: Repository<ServiceParticipant>,
   ) {}
-
-  /**
-   * Bot por el que hay que hablarle al cliente y a la empleada de un servicio.
-   * Cada modelo tiene su propio bot y un bot solo puede escribirle a quien lo
-   * haya iniciado, así que el central solo sirve de respaldo mientras la modelo
-   * no tenga el suyo cargado. Los grupos, choferes y jefes siguen en el central.
-   */
-  private botFor(employeeId?: string | null): Telegraf<Context> {
-    return this.botRegistry.botForEmployeeOrCentral(employeeId);
-  }
 
   private estimatedEnd(service: Servicios): Date | null {
     return estimateServiceEnd(
@@ -418,6 +408,35 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         `No se pudo avisar de solicitudes en competencia para la empleada ${servicio.empleadaId}: ${describeError(error)}`,
       );
     }
+  }
+
+  /**
+   * Mueve un servicio de un estado a otro, y solo si sigue en el de partida.
+   *
+   * Es la unica forma segura de resolver un boton que se pulsa dos veces. La
+   * comprobacion `if (servicio.estado !== 'pendiente')` que hay antes de cada
+   * accion se hace sobre una fila leida hace un instante: dos pulsaciones
+   * --del mismo jefe impaciente o de dos jefes a la vez-- la superan las dos y
+   * el servicio se acepta por duplicado, con dos viajes y dos avisos.
+   *
+   * Aqui la condicion viaja dentro del propio UPDATE, asi que Postgres decide:
+   * la primera actualiza una fila, la segunda ninguna. Devuelve si esta llamada
+   * fue la que gano.
+   */
+  private async transicionarEstado(
+    servicioId: string,
+    desde: Servicios['estado'],
+    hasta: Servicios['estado'],
+    camposExtra: Partial<Servicios> = {},
+    manager: EntityManager = this.serviciosRepository.manager,
+  ): Promise<boolean> {
+    const resultado = await manager
+      .createQueryBuilder()
+      .update(Servicios)
+      .set({ estado: hasta, ...camposExtra })
+      .where('id = :servicioId AND estado = :desde', { servicioId, desde })
+      .execute();
+    return (resultado.affected ?? 0) > 0;
   }
 
   private getServiceTopic(servicio: Servicios) {
@@ -1077,10 +1096,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             ? 'Qué pena contigo, al final no voy a poder ir, discúlpame de verdad'
             : 'Qué pena contigo, esta vez no voy a poder ir',
         );
-        await this.botFor(service.empleadaId).telegram.sendMessage(
-          chatId,
-          mensaje,
-        );
+        await this.bot.telegram.sendMessage(chatId, mensaje);
       } catch (err) {
         this.logger.error(
           'Error al notificar al cliente de la cancelación:',
@@ -1095,7 +1111,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           where: { id: service.empleada?.usuarioId },
         });
         if (empleadaUser?.telegramChatId) {
-          await this.botFor(service.empleadaId).telegram.sendMessage(
+          await this.bot.telegram.sendMessage(
             empleadaUser.telegramChatId,
             'El servicio fue cancelado desde la oficina. Ya no tienes que asistir y quedas libre para el siguiente.',
           );
@@ -1193,9 +1209,23 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       new Date(servicio.fechaProgramada).getTime() > Date.now() + 45 * 60_000;
 
     if (servicio.servicioPrevioId || isFutureScheduled) {
+      const gano = await this.transicionarEstado(
+        servicio.id,
+        'pendiente',
+        'agendado',
+        {
+          jefeId,
+          notasJefe: servicio.notasJefe,
+          transporteAgendado: tipoTransporte,
+        },
+      );
+      if (!gano) {
+        throw new ConflictException(
+          'El servicio ya no está pendiente de aprobación',
+        );
+      }
       servicio.estado = 'agendado';
       servicio.transporteAgendado = tipoTransporte;
-      await this.serviciosRepository.save(servicio);
       this.realtimeEventsService.emitToBoss(servicio.jefeId, {
         type: 'service_scheduled',
         data: servicio,
@@ -1214,13 +1244,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           msg += `\n• *Notas del jefe:* ${servicio.notasJefe}`;
         }
         try {
-          await this.botFor(servicio.empleadaId).telegram.sendMessage(
-            employeeChatId,
-            msg,
-            {
-              parse_mode: 'Markdown',
-            },
-          );
+          await this.bot.telegram.sendMessage(employeeChatId, msg, {
+            parse_mode: 'Markdown',
+          });
         } catch (err) {
           this.logger.error('Error notificando empleada cita agendada:', err);
         }
@@ -1228,19 +1254,71 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       return servicio;
     }
 
-    // 1. Actualizar estado del servicio a 'en_curso'
-    servicio.estado = 'en_curso';
     if (!servicio.horaInicioServicio) {
       servicio.horaInicioServicio = new Date();
     }
-    await this.serviciosRepository.save(servicio);
 
-    // Actualizar disponibilidad de la empleada a false (ocupada)
-    if (servicio.empleadaId) {
-      await this.serviciosRepository.manager
-        .getRepository(Empleadas)
-        .update(servicio.empleadaId, { disponible: false });
+    /*
+     * Arrancar el servicio, ocupar a la empleada y descartar que ya estuviera
+     * ocupada, todo bajo el mismo bloqueo de su fila.
+     *
+     * Dos cosas se cruzaban aqui. La primera, el mismo boton pulsado dos
+     * veces: la comprobacion de `pendiente` se hacia sobre una fila leida
+     * antes, asi que los dos toques la superaban y se creaban dos viajes de
+     * ida para el mismo servicio. La segunda, y peor: `reserveNext` permite a
+     * proposito que dos clientes pidan a la vez a una empleada libre --decide
+     * el jefe cual acepta-- pero nada impedia aceptar los dos, y la empleada
+     * acababa con dos servicios en curso a la vez, cada uno con su chofer.
+     *
+     * El bloqueo es el mismo que usa `reserveNext`, asi que una reserva nueva
+     * y una autorizacion no pueden colarse entre la comprobacion y el cambio.
+     */
+    const resultado = await this.serviciosRepository.manager.transaction(
+      async (manager) => {
+        await manager
+          .getRepository(Empleadas)
+          .createQueryBuilder('employee')
+          .setLock('pessimistic_write')
+          .where('employee.id = :id', { id: servicio.empleadaId })
+          .getOneOrFail();
+
+        const yaEnCurso = await manager.findOne(Servicios, {
+          where: { empleadaId: servicio.empleadaId, estado: 'en_curso' },
+          select: { id: true },
+        });
+        if (yaEnCurso) return 'ocupada' as const;
+
+        const cambiado = await this.transicionarEstado(
+          servicio.id,
+          'pendiente',
+          'en_curso',
+          {
+            jefeId,
+            notasJefe: servicio.notasJefe,
+            horaInicioServicio: servicio.horaInicioServicio,
+          },
+          manager,
+        );
+        if (!cambiado) return 'perdido' as const;
+
+        await manager
+          .getRepository(Empleadas)
+          .update(servicio.empleadaId, { disponible: false });
+        return 'aceptado' as const;
+      },
+    );
+
+    if (resultado === 'ocupada') {
+      throw new ConflictException(
+        `${servicio.empleada?.nombreArtistico ?? 'La empleada'} ya está atendiendo otro servicio. Recházalo o espera a que termine.`,
+      );
     }
+    if (resultado === 'perdido') {
+      throw new ConflictException(
+        'El servicio ya no está pendiente de aprobación',
+      );
+    }
+    servicio.estado = 'en_curso';
 
     // 2. Crear viaje (viaje de ida para la empleada) sin chofer asignado inicialmente
     const nuevoViaje = this.viajesRepository.create({
@@ -1306,9 +1384,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             ]);
           }
 
-          const empMsg = await this.botFor(
-            servicio.empleadaId,
-          ).telegram.sendMessage(
+          const empMsg = await this.bot.telegram.sendMessage(
             targetChatId,
             `💼 *¡Servicio en Curso!* 🟢\n\n` +
               `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
@@ -1343,7 +1419,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           { employeeName: servicio.empleada.nombreArtistico },
           'Oyeee, sí puedo ir contigo, nos vemos en un ratico',
         );
-        await this.botFor(servicio.empleadaId).telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           servicio.cliente.telegramChatId,
           clientMessage,
         );
@@ -1375,6 +1451,72 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       uberLink,
       viajeId: viajeGuardado.id,
     };
+  }
+
+  /**
+   * Alarga un servicio en curso a peticion de la empleada asignada.
+   *
+   * Vivia entero en el manejador del boton, sin comprobar quien pulsaba y
+   * sumando las horas sobre el valor leido antes: tres toques seguidos eran
+   * tres horas mas en la cuenta del cliente. La suma va ahora dentro del propio
+   * UPDATE y condicionada a la duracion que se leyo, asi que dos pulsaciones
+   * solo pueden cuajar una vez; la segunda encuentra otra duracion y no toca
+   * nada.
+   */
+  async extendByEmployee(
+    servicioId: string,
+    actorUserId: string,
+    horas: number,
+  ): Promise<Servicios> {
+    if (!Number.isInteger(horas) || horas < 1 || horas > 12) {
+      throw new BadRequestException('La extensión debe ser de 1 a 12 horas');
+    }
+
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: { empleada: { usuario: true } },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (servicio.empleada?.usuarioId !== actorUserId) {
+      throw new ForbiddenException('No puedes extender este servicio');
+    }
+    if (servicio.estado !== 'en_curso') {
+      throw new ConflictException('Este servicio ya no está activo');
+    }
+
+    const duracionPrevia = Number(servicio.duracionPactadaHoras);
+    const resultado = await this.serviciosRepository
+      .createQueryBuilder()
+      .update(Servicios)
+      .set({
+        duracionPactadaHoras: duracionPrevia + horas,
+        // Se reabre el aviso para que vuelva a preguntar 15 minutos antes del
+        // nuevo final.
+        notificacionExtensionEnviada: false,
+      })
+      .where(
+        'id = :servicioId AND estado = :estado AND duracion_pactada_horas = :duracionPrevia',
+        { servicioId, estado: 'en_curso', duracionPrevia },
+      )
+      .execute();
+    if ((resultado.affected ?? 0) === 0) {
+      throw new ConflictException(
+        'La duración del servicio cambió mientras tanto; vuelve a intentarlo',
+      );
+    }
+
+    await this.recalculateScheduledSuccessor(servicioId);
+    this.realtimeEventsService.emitToJefes({
+      type: 'employee_availability_updated',
+      empleadaId: servicio.empleadaId,
+      activeServiceId: servicio.id,
+    });
+
+    // Se relee porque los totales los recalcula un trigger de la base.
+    return (
+      (await this.serviciosRepository.findOne({ where: { id: servicioId } })) ??
+      servicio
+    );
   }
 
   async dispatchScheduledTrip(
@@ -1466,7 +1608,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             Markup.button.callback('Ya llegué', `eu:${viajeGuardado.id}:f`),
           ]);
         }
-        await this.botFor(servicio.empleadaId).telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           empUser.telegramChatId,
           `💼 *¡Servicio en Curso!* 🟢\n\n` +
             `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
@@ -1519,13 +1661,30 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     this.assertActorCanManageService(servicio, user);
 
-    // 1. Actualizar estado del servicio a 'cancelado'
-    servicio.estado = 'cancelado';
+    // 1. Actualizar estado del servicio a 'cancelado', tambien de forma
+    // condicionada: dos toques seguidos en "Rechazar" mandaban dos veces el
+    // aviso al cliente y borraban dos veces el tema del grupo.
     servicio.jefeId = jefeId;
     servicio.motivoCancelacion = 'rechazado_por_jefe';
     servicio.canceladoPorUserId = jefeId;
     servicio.canceladoAt = new Date();
-    await this.serviciosRepository.save(servicio);
+    const gano = await this.transicionarEstado(
+      servicio.id,
+      'pendiente',
+      'cancelado',
+      {
+        jefeId,
+        motivoCancelacion: servicio.motivoCancelacion,
+        canceladoPorUserId: jefeId,
+        canceladoAt: servicio.canceladoAt,
+      },
+    );
+    if (!gano) {
+      throw new ConflictException(
+        'El servicio ya no está pendiente de aprobación',
+      );
+    }
+    servicio.estado = 'cancelado';
 
     // Una reserva rechazada no vuelve disponible a quien aún sigue en servicio.
     const activeService = await this.serviciosRepository.findOne({
@@ -1563,7 +1722,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           { employeeName: servicio.empleada?.nombreArtistico },
           'Qué pena contigo, esta vez no voy a poder ir',
         );
-        await this.botFor(servicio.empleadaId).telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           servicio.clienteTelegramId,
           clientMessage,
         );
@@ -1611,8 +1770,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
       // Va al cliente, asi que sale por el bot de la modelo como el resto de
       // los avisos suyos; el central solo sirve de respaldo.
-      await this.botFor(next.empleadaId)
-        .telegram.sendMessage(next.cliente.telegramChatId, message)
+      await this.bot.telegram
+        .sendMessage(next.cliente.telegramChatId, message)
         .catch(() => undefined);
       await this.recordAgencyMessage(next, message);
     }
@@ -1649,7 +1808,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           { employeeName: next.empleada?.nombreArtistico },
           `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} ya está disponible y se encuentra en la misma ubicación.`,
         );
-        await this.botFor(next.empleadaId).telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           next.cliente.telegramChatId,
           message,
         );
@@ -1689,7 +1848,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         const employeeChatId = next.empleada?.usuario?.telegramChatId;
         if (employeeChatId) {
           if (trip.proveedorTransporte === 'uber') {
-            await this.botFor(next.empleadaId).telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               employeeChatId,
               'Tu siguiente servicio está listo. Tu transporte será en Uber. Usa los botones para confirmar cada etapa de tu trayecto.',
               {
@@ -1705,7 +1864,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               },
             );
           } else {
-            await this.botFor(next.empleadaId).telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               employeeChatId,
               'Tu siguiente servicio está listo. Te notificaremos cuando tu chofer esté en camino.',
             );
@@ -1718,7 +1877,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           { employeeName: next.empleada?.nombreArtistico },
           `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} terminó su servicio anterior y ahora va en camino.`,
         );
-        await this.botFor(next.empleadaId).telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           next.cliente.telegramChatId,
           message,
         );
@@ -1741,7 +1900,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     const chatId = service?.empleada?.usuario?.telegramChatId;
     if (!service || !chatId) return;
-    await this.botFor(service.empleadaId).telegram.sendMessage(
+    await this.bot.telegram.sendMessage(
       chatId,
       `💼 *Siguiente servicio iniciado*\n\n` +
         `• *Cliente:* ${service.cliente?.nombreTelegram || 'Desconocido'}\n` +
@@ -1836,7 +1995,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           const threadId = undefined;
 
           if (targetChatId) {
-            await this.botFor(service.empleadaId).telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               targetChatId,
               `⏳ *Aviso de Finalización* ⏳\n\n` +
                 `Tu servicio está programado para finalizar en aproximadamente 15 minutos.\n\n` +
@@ -2574,7 +2733,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
       if (targetChatId) {
         try {
-          await this.botFor(servicio.empleadaId).telegram.sendMessage(
+          await this.bot.telegram.sendMessage(
             targetChatId,
             `❌ *Servicio Cancelado por Tardanza:*\nSe agotó el tiempo de espera límite y no abordaste el vehículo. El servicio con el cliente ha sido cancelado.`,
             { message_thread_id: threadId, parse_mode: 'Markdown' },
@@ -2590,7 +2749,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     if (servicio.cliente?.telegramChatId) {
       try {
-        await this.botFor(servicio.empleadaId).telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           servicio.cliente.telegramChatId,
           `❌ *Servicio Cancelado:*\nLamentamos informarte que la empleada *${servicio.empleada.nombreArtistico}* no pudo estar disponible a tiempo y el servicio ha sido cancelado.\n\n` +
             `Te recomendamos ver otras opciones de empleadas disponibles ahora mismo:`,
@@ -2639,7 +2798,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
         if (disponibles.length > 0) {
           for (const emp of disponibles) {
-            await this.botFor(servicio.empleadaId).telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               servicio.cliente.telegramChatId,
               `👩‍🍳 *${emp.nombreArtistico}*\n` +
                 `• Tarifa: $${emp.precioBaseHora}/hr\n` +
@@ -2658,7 +2817,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             );
           }
         } else {
-          await this.botFor(servicio.empleadaId).telegram.sendMessage(
+          await this.bot.telegram.sendMessage(
             servicio.cliente.telegramChatId,
             `Lo sentimos, no hay otras empleadas disponibles en este momento. Por favor, intenta de nuevo más tarde.`,
           );
@@ -3010,19 +3169,18 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const nombre = empleada?.nombreArtistico || 'ella';
 
     for (const item of waiting) {
-      const clientTelegramId = item.key.split(':')[0];
+      /*
+       * La clave se descompone con `parseSessionKey`, no a mano. Leer
+       * `key.split(':')[0]` daba el id de la EMPLEADA en las sesiones que
+       * guardo un bot dedicado, asi que el aviso salia hacia un destinatario
+       * inexistente y quien se habia quedado esperando no se enteraba nunca.
+       */
+      const clientTelegramId = parseSessionKey(item.key)?.fromId;
       if (!clientTelegramId) continue;
 
       const mensaje = `¡Ya quedé libre mi amor! Aquí sigo, dime cómo la armamos 😘`;
       try {
-        /*
-         * Sale por el bot dedicado de la modelo si lo tiene: el cliente venia
-         * hablando con ella y una respuesta desde el bot central romperia la
-         * conversacion en la que estaba.
-         */
-        await this.botRegistry
-          .botForEmployeeOrCentral(empleadaId)
-          .telegram.sendMessage(clientTelegramId, mensaje);
+        await this.bot.telegram.sendMessage(clientTelegramId, mensaje);
 
         item.data.esperandoEmpleadaId = undefined;
         item.data.selectedEmployeeBusy = false;
@@ -3107,11 +3265,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      await this.botRegistry
-        .botForEmployeeOrCentral(servicio.empleadaId)
-        .telegram.sendMessage(clienteChatId, mensaje, {
-          parse_mode: 'Markdown',
-        });
+      await this.bot.telegram.sendMessage(clienteChatId, mensaje, {
+        parse_mode: 'Markdown',
+      });
       await this.recordAgencyMessage(servicio, mensaje);
     } catch (error) {
       this.logger.error('No se pudo enviar la cuenta final al cliente:', error);
@@ -3636,14 +3792,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     const chatId = trip.servicio.empleada?.usuario?.telegramChatId;
     if (chatId) {
-      const employeeBot = this.botFor(trip.servicio.empleadaId);
-      // Un `file_id` solo sirve dentro del bot que recibió el archivo. La
-      // captura la sube un jefe o un admin por el bot central, así que si la
-      // empleada tiene bot propio hay que mandarle la copia ya subida a R2 en
-      // vez del `file_id`, que para su bot no existe.
-      const photo =
-        employeeBot === this.botRegistry.central ? fileId : evidence.url;
-      await employeeBot.telegram.sendPhoto(chatId, photo, {
+      // El `file_id` vale porque quien sube la captura y quien la recibe estan
+      // en el mismo bot: un `file_id` solo sirve dentro del bot que recibio el
+      // archivo.
+      await this.bot.telegram.sendPhoto(chatId, fileId, {
         caption: `📱 Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.`,
       });
     }
@@ -3673,9 +3825,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       uberScreenshotUrl: evidence.url,
       uberScreenshotUploadedAt: uploadedAt,
     });
-    const message = await this.botFor(
-      trip.servicio.empleadaId,
-    ).telegram.sendPhoto(
+    const message = await this.bot.telegram.sendPhoto(
       chatId,
       { source: file.buffer, filename: file.originalname },
       {
@@ -3964,7 +4114,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ]);
       try {
         if (servicio.telegramResumenDefinitivoId) {
-          await this.botFor(servicio.empleadaId).telegram.editMessageText(
+          await this.bot.telegram.editMessageText(
             servicio.cliente.telegramChatId,
             Number(servicio.telegramResumenDefinitivoId),
             undefined,
@@ -3972,23 +4122,27 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             { parse_mode: 'Markdown', ...keyboard },
           );
         } else {
-          const message = await this.botFor(
-            servicio.empleadaId,
-          ).telegram.sendMessage(servicio.cliente.telegramChatId, text, {
-            parse_mode: 'Markdown',
-            ...keyboard,
-          });
+          const message = await this.bot.telegram.sendMessage(
+            servicio.cliente.telegramChatId,
+            text,
+            {
+              parse_mode: 'Markdown',
+              ...keyboard,
+            },
+          );
           await this.serviciosRepository.update(servicio.id, {
             telegramResumenDefinitivoId: message.message_id.toString(),
           });
         }
       } catch {
-        const message = await this.botFor(
-          servicio.empleadaId,
-        ).telegram.sendMessage(servicio.cliente.telegramChatId, text, {
-          parse_mode: 'Markdown',
-          ...keyboard,
-        });
+        const message = await this.bot.telegram.sendMessage(
+          servicio.cliente.telegramChatId,
+          text,
+          {
+            parse_mode: 'Markdown',
+            ...keyboard,
+          },
+        );
         await this.serviciosRepository.update(servicio.id, {
           telegramResumenDefinitivoId: message.message_id.toString(),
         });
@@ -4004,7 +4158,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         `• *Total a cobrar: $${Number(servicio.totalFinal).toFixed(2)}*`;
       try {
         if (servicio.telegramEmpleadaMensajeId) {
-          await this.botFor(servicio.empleadaId).telegram.editMessageText(
+          await this.bot.telegram.editMessageText(
             employeeChatId,
             Number(servicio.telegramEmpleadaMensajeId),
             undefined,
@@ -4012,21 +4166,25 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             { parse_mode: 'Markdown' },
           );
         } else {
-          const message = await this.botFor(
-            servicio.empleadaId,
-          ).telegram.sendMessage(employeeChatId, employeeText, {
-            parse_mode: 'Markdown',
-          });
+          const message = await this.bot.telegram.sendMessage(
+            employeeChatId,
+            employeeText,
+            {
+              parse_mode: 'Markdown',
+            },
+          );
           await this.serviciosRepository.update(servicio.id, {
             telegramEmpleadaMensajeId: message.message_id.toString(),
           });
         }
       } catch {
-        const message = await this.botFor(
-          servicio.empleadaId,
-        ).telegram.sendMessage(employeeChatId, employeeText, {
-          parse_mode: 'Markdown',
-        });
+        const message = await this.bot.telegram.sendMessage(
+          employeeChatId,
+          employeeText,
+          {
+            parse_mode: 'Markdown',
+          },
+        );
         await this.serviciosRepository.update(servicio.id, {
           telegramEmpleadaMensajeId: message.message_id.toString(),
         });
@@ -4178,24 +4336,20 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         action === 'uber_arrived'
           ? '📍 Tu Uber ya llegó. Cuando subas, presiona “Ya estoy en el Uber”.'
           : '🚗 Tu Uber va en camino a recogerte.';
-      await this.botFor(trip.servicio.empleadaId).telegram.sendMessage(
-        employeeChatId,
-        message,
-        {
-          ...Markup.inlineKeyboard(
-            action === 'uber_arrived'
-              ? [
-                  [
-                    Markup.button.callback(
-                      '🚗 Ya estoy en el Uber',
-                      `eu:${trip.id}:i`,
-                    ),
-                  ],
-                ]
-              : [],
-          ),
-        },
-      );
+      await this.bot.telegram.sendMessage(employeeChatId, message, {
+        ...Markup.inlineKeyboard(
+          action === 'uber_arrived'
+            ? [
+                [
+                  Markup.button.callback(
+                    '🚗 Ya estoy en el Uber',
+                    `eu:${trip.id}:i`,
+                  ),
+                ],
+              ]
+            : [],
+        ),
+      });
       this.realtimeEventsService.emitToEmployee(trip.servicio.empleadaId, {
         type: action,
         data: { tripId: trip.id, serviceId: trip.servicioId },
@@ -4213,7 +4367,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             ? 'Ya llegué al punto que cuadramos, aquí te espero'
             : 'Ya voy en camino, nos vemos pronto',
         );
-        await this.botFor(trip.servicio.empleadaId).telegram.sendMessage(
+        await this.bot.telegram.sendMessage(
           trip.servicio.cliente.telegramChatId,
           clientMessage,
         );

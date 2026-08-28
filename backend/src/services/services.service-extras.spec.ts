@@ -54,10 +54,10 @@ describe('ServicesService extras de servicio', () => {
     participantsRepository = { findOne: jest.fn() };
 
     service = new ServicesService(
-      serviciosRepository as any,
+      serviciosRepository,
       {} as any,
       {} as any,
-      usuariosRepository as any,
+      usuariosRepository,
       {} as any,
       {} as any,
       {} as any,
@@ -73,10 +73,9 @@ describe('ServicesService extras de servicio', () => {
       {} as any,
       {} as any,
       {} as any,
-      {} as any,
-      extrasCatalogoRepository as any,
-      extrasServicioRepository as any,
-      participantsRepository as any,
+      extrasCatalogoRepository,
+      extrasServicioRepository,
+      participantsRepository,
     );
   });
 

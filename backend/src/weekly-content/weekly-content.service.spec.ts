@@ -78,10 +78,8 @@ describe('WeeklyContentService.reviewSubmission', () => {
     expect(resultado.estado).toBe('rechazada');
     expect(resultado.motivoRechazo).toBe('La foto esta movida.');
 
-    const [chatId, texto, empleadaId] =
-      telegramService.sendMessage.mock.calls[0];
+    const [chatId, texto] = telegramService.sendMessage.mock.calls[0];
     expect(chatId).toBe('555');
-    expect(empleadaId).toBe('emp-1');
     expect(texto).toContain('La foto esta movida.');
   });
 

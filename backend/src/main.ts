@@ -52,8 +52,7 @@ async function bootstrap() {
   // un controlador puede publicar `@Version('2')` y convivir con el anterior.
   //
   // Quedan fuera del prefijo las rutas que consume infraestructura ajena y que
-  // no deben versionarse: las sondas de Docker y el webhook que Telegram tiene
-  // registrado en sus servidores.
+  // no deben versionarse: las sondas de Docker.
   //
   // Ojo: `exclude` solo quita el prefijo `/api`, no la version. Estas rutas
   // ademas llevan `@Version(VERSION_NEUTRAL)` en su handler; sin eso quedarian
@@ -63,7 +62,6 @@ async function bootstrap() {
     exclude: [
       { path: 'health/live', method: RequestMethod.GET },
       { path: 'health/ready', method: RequestMethod.GET },
-      { path: 'telegram/webhook/:recordId', method: RequestMethod.POST },
     ],
   });
   app.enableVersioning({

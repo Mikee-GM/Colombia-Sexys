@@ -47,7 +47,6 @@ describe('ServicesService cancel', () => {
     { get: jest.fn() } as any,
     {} as any,
     {} as any,
-    { botForEmployeeOrCentral: jest.fn(() => bot), central: bot } as any,
     // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
     {} as any,
     {} as any,
@@ -244,7 +243,6 @@ describe('ServicesService settleCancelledTripCost', () => {
     { get: jest.fn() } as any,
     {} as any,
     {} as any,
-    { botForEmployeeOrCentral: jest.fn(() => bot), central: bot } as any,
     // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
     {} as any,
     {} as any,

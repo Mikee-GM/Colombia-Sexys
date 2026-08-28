@@ -16,7 +16,6 @@ import { ServicesService } from '../services/services.service';
 import { TelegramService } from './telegram.service';
 import { Servicios } from '../services/entities/service.entity';
 import { AiMessageService } from '../ai/ai-message.service';
-import { TelegramBotRegistryService } from './telegram-bot-registry.service';
 import { EmployeeReportsService } from '../employee-reports/employee-reports.service';
 import { ReportCategory } from '../employee-reports/entities/employee-report.entity';
 import {
@@ -29,6 +28,7 @@ import { AuthService } from '../auth/auth.service';
 import { PanelAccessService } from '../auth/panel-access.service';
 import { botonesDePortal } from './telegram-portal-buttons';
 import { describeError } from '../common/errors/error-message';
+import { TelegramCallbackGuard } from './telegram-callback-guard';
 
 /**
  * Datos de identidad del chofer, cacheados diez minutos para no consultar la
@@ -75,7 +75,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     private readonly settlementsService: SettlementsService,
     private readonly authService: AuthService,
     private readonly panelAccessService: PanelAccessService,
-    private readonly botRegistry: TelegramBotRegistryService,
+    private readonly callbackGuard: TelegramCallbackGuard,
   ) {
     this.cacheCleanupInterval = setInterval(() => {
       const now = Date.now();
@@ -285,6 +285,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
 
   @Action(/^c_ac_v:(.+):(.+)$/)
   async onConfAceptarViaje(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const clickerTelegramId = ctx.from?.id.toString();
     if (!clickerTelegramId) return;
 
@@ -646,6 +647,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
 
   @Action(/^c_ch_llegado:(.+)$/)
   async onConfChoferLlegado(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
 
@@ -947,6 +949,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
 
   @Action(/^c_ch_recogida:(.+)$/)
   async onConfChoferRecogida(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
 
@@ -1114,15 +1117,10 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           },
           'Ya voy para allá, nos vemos en un ratico',
         );
-        // Al cliente se le habla por el bot de la modelo. Este handler corre
-        // en el bot central —quien pulsa es el chofer—, y el cliente no tiene
-        // conversacion abierta con el central: enviar por ahi no llega.
-        await this.botRegistry
-          .botForEmployeeOrCentral(trip.servicio.empleadaId)
-          .telegram.sendMessage(
-            trip.servicio.cliente.telegramChatId,
-            clientMessage,
-          );
+        await ctx.telegram.sendMessage(
+          trip.servicio.cliente.telegramChatId,
+          clientMessage,
+        );
       } catch (telegramErr) {
         this.logger.error(
           `Error al notificar al cliente sobre viaje en camino (chatId: ${trip.servicio.cliente.telegramChatId}):`,
@@ -1257,6 +1255,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
 
   @Action(/^c_ch_fin:(.+)$/)
   async onConfChoferFinalizoViaje(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
 
@@ -1516,15 +1515,10 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           { employeeName: trip.servicio.empleada.nombreArtistico },
           'Ya llegué al punto que cuadramos, aquí te espero',
         );
-        // Al cliente se le habla por el bot de la modelo. Este handler corre
-        // en el bot central —quien pulsa es el chofer—, y el cliente no tiene
-        // conversacion abierta con el central: enviar por ahi no llega.
-        await this.botRegistry
-          .botForEmployeeOrCentral(trip.servicio.empleadaId)
-          .telegram.sendMessage(
-            trip.servicio.cliente.telegramChatId,
-            clientMessage,
-          );
+        await ctx.telegram.sendMessage(
+          trip.servicio.cliente.telegramChatId,
+          clientMessage,
+        );
       } catch (telegramErr) {
         this.logger.error(
           `Error al notificar al cliente sobre llegada (chatId: ${trip.servicio.cliente.telegramChatId}):`,

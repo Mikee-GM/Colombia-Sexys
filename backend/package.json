@@ -24,7 +24,8 @@
     "migration:run:prod": "node node_modules/typeorm/cli.js migration:run -d dist/data-source.js",
     "migration:revert": "corepack pnpm build && node node_modules/typeorm/cli.js migration:revert -d dist/data-source.js",
     "migration:generate": "corepack pnpm typeorm migration:generate",
-    "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix"
+    "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "bots:despedir": "corepack pnpm build && node dist/scripts/despedir-bots-dedicados.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",

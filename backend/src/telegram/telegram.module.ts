@@ -5,10 +5,7 @@ import { TypeOrmModule, getRepositoryToken } from '@nestjs/typeorm';
 import { Context, session } from 'telegraf';
 import { Repository } from 'typeorm';
 import { TelegramService } from './telegram.service';
-import { TelegramCryptoService } from './telegram-crypto.service';
-import { TelegramBotRegistryService } from './telegram-bot-registry.service';
-import { TelegramBotsController } from './telegram-bots.controller';
-import { EmployeeTelegramBot } from './entities/employee-telegram-bot.entity';
+import { TelegramCallbackGuard } from './telegram-callback-guard';
 import { TelegramAuthUpdate } from './telegram-auth.update';
 import { TelegramBookingUpdate } from './telegram-booking.update';
 import { TelegramDriverUpdate } from './telegram-driver.update';
@@ -66,7 +63,6 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
       ConversacionesTelegram,
       AuthorizedBankAccounts,
       PaymentReceiptValidations,
-      EmployeeTelegramBot,
       TelegramLinkAttempt,
     ]),
     AuthModule,
@@ -94,15 +90,10 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
             'TELEGRAM_BOT_TOKEN is not defined in environment variables',
           );
         }
-        // Cada bot dedicado necesita su propio hilo de conversación: sin este
-        // prefijo, hablar con dos modelas distintas compartiría la misma
-        // sesión. El bot central conserva el formato original de la clave para
-        // no tumbar las conversaciones ya abiertas.
-        //
         // La misma función la usan el cerrojo y la sesión: si divergieran, el
         // cerrojo estaría protegiendo una clave distinta de la que se escribe.
         const getSessionKey = (ctx: Context): string | undefined =>
-          buildSessionKey(ctx as SessionKeyContext);
+          buildSessionKey(ctx);
 
         const store = new TelegramSessionStore(sessionRepository);
 
@@ -128,12 +119,10 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
       inject: [ConfigService, getRepositoryToken(TelegramSession)],
     }),
   ],
-  controllers: [TelegramBotsController],
   providers: [
     TelegramService,
-    TelegramCryptoService,
+    TelegramCallbackGuard,
     TelegramLinkAttemptsService,
-    TelegramBotRegistryService,
     TelegramAuthUpdate,
     TelegramBookingUpdate,
     TelegramDriverUpdate,
@@ -144,11 +133,6 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
     TelegramOnboardingScheduler,
     TelegramSessionMaintenance,
   ],
-  exports: [
-    TelegramService,
-    TelegrafModule,
-    TelegramBookingService,
-    TelegramBotRegistryService,
-  ],
+  exports: [TelegramService, TelegrafModule, TelegramBookingService],
 })
 export class TelegramModule {}

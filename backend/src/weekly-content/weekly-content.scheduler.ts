@@ -154,7 +154,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
         }),
       );
 
-      await this.enviarAvisoDeFotos(emp.usuario, emp.id, {
+      await this.enviarAvisoDeFotos(emp.usuario, {
         nombre: emp.nombreArtistico,
         titulo: 'Toca renovar tus fotos de la semana',
         cuerpo: [
@@ -200,7 +200,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
       schedule.recordatoriosEnviados = numero;
       await this.scheduleRepo.save(schedule);
 
-      await this.enviarAvisoDeFotos(usuario, schedule.empleadaId, {
+      await this.enviarAvisoDeFotos(usuario, {
         nombre: schedule.empleada.nombreArtistico,
         titulo: `Recordatorio ${numero} de ${maxRecordatorios}`,
         cuerpo: [
@@ -273,7 +273,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
       const usuario = schedule.empleada?.usuario;
       if (!usuario?.telegramChatId) continue;
 
-      await this.enviarAvisoDeFotos(usuario, schedule.empleadaId, {
+      await this.enviarAvisoDeFotos(usuario, {
         nombre: schedule.empleada.nombreArtistico,
         titulo: 'Se aplico una multa por tus fotos semanales',
         cuerpo: [
@@ -380,7 +380,6 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
    */
   private async enviarAvisoDeFotos(
     usuario: { id: string; telegramChatId: string | null },
-    empleadaId: string,
     mensaje: { nombre: string; titulo: string; cuerpo: string },
   ): Promise<void> {
     if (!usuario.telegramChatId) return;
@@ -408,7 +407,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
     }
 
     await this.telegramService
-      .sendMessage(usuario.telegramChatId, texto, empleadaId, {
+      .sendMessage(usuario.telegramChatId, texto, {
         parseMode: 'Markdown',
         buttons: botones,
       })

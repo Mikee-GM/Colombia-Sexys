@@ -15,7 +15,6 @@ import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Markup } from 'telegraf';
 import { Servicios } from './entities/service.entity';
 import { AiMessageService } from '../ai/ai-message.service';
-import { TelegramBotRegistryService } from '../telegram/telegram-bot-registry.service';
 import { describeError } from '../common/errors/error-message';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 import { ServicesService } from './services.service';
@@ -33,15 +32,9 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly bot: Telegraf<any>,
     private readonly configService: ConfigService,
     private readonly aiMessageService: AiMessageService,
-    private readonly botRegistry: TelegramBotRegistryService,
     private readonly dataSource: DataSource,
     private readonly servicesService: ServicesService,
   ) {}
-
-  /** La empleada y su cliente hablan por el bot dedicado de ella, si lo tiene. */
-  private botFor(employeeId?: string | null): Telegraf<any> {
-    return this.botRegistry.botForEmployeeOrCentral(employeeId);
-  }
 
   onModuleInit() {
     const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN', '');
@@ -143,7 +136,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
         const empChatId = service.empleada?.usuario?.telegramChatId;
         if (empChatId && empChatId !== '111111111') {
           try {
-            await this.botFor(service.empleadaId).telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               empChatId,
               `⏰ *Recordatorio de Cita Próxima (en 45 min):*\n\n` +
                 `Tu servicio con *${
@@ -218,7 +211,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
               },
               `Hola amor, te confirmo que todo está listo para nuestra cita de las ${horaStr}, ya me estoy preparando.`,
             );
-            await this.botFor(service.empleadaId).telegram.sendMessage(
+            await this.bot.telegram.sendMessage(
               service.cliente.telegramChatId,
               clientMsg,
               { parse_mode: 'Markdown' },

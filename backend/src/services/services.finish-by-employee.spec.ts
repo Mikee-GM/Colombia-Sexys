@@ -17,7 +17,6 @@ describe('ServicesService.finishByEmployee', () => {
   let empleadasRepository: any;
   let realtime: any;
   let bot: any;
-  let botRegistry: any;
   let telegramSessionRepository: any;
   let sesionesEnEspera: any[];
   let extrasCatalogoRepository: any;
@@ -71,7 +70,6 @@ describe('ServicesService.finishByEmployee', () => {
     };
     realtime = { emitToJefes: jest.fn(), emitToBoss: jest.fn() };
     bot = { telegram: { sendMessage: jest.fn().mockResolvedValue(undefined) } };
-    botRegistry = { botForEmployeeOrCentral: jest.fn(() => bot), central: bot };
     /*
      * Las sesiones en espera se filtran en SQL, no en memoria, asi que el mock
      * imita el query builder. Traer la tabla entera cargaba megabytes de
@@ -94,15 +92,15 @@ describe('ServicesService.finishByEmployee', () => {
     };
 
     service = new ServicesService(
-      serviciosRepository as any,
+      serviciosRepository,
       { find: jest.fn().mockResolvedValue([]) } as any,
       {} as any,
       {} as any,
       { save: jest.fn(), create: jest.fn((v) => v) } as any,
       {} as any,
       {} as any,
-      realtime as any,
-      bot as any,
+      realtime,
+      bot,
       {} as any,
       {} as any,
       {} as any,
@@ -110,12 +108,11 @@ describe('ServicesService.finishByEmployee', () => {
       { get: jest.fn() } as any,
       {} as any,
       {} as any,
-      botRegistry as any,
-      empleadasRepository as any,
+      empleadasRepository,
       { findOne: jest.fn().mockResolvedValue(null) } as any,
-      telegramSessionRepository as any,
-      extrasCatalogoRepository as any,
-      extrasServicioRepository as any,
+      telegramSessionRepository,
+      extrasCatalogoRepository,
+      extrasServicioRepository,
       { findOne: jest.fn().mockResolvedValue(null) } as any,
     );
 
@@ -126,7 +123,7 @@ describe('ServicesService.finishByEmployee', () => {
       .mockResolvedValue({ hasSuccessor: false, sameLocation: false });
     pedirRegreso = jest
       .spyOn(service, 'requestReturnTransport')
-      .mockResolvedValue(undefined as never);
+      .mockResolvedValue(undefined);
   });
 
   it('cierra el servicio, libera a la modelo y pide el regreso', async () => {

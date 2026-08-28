@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf, Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -7,14 +8,13 @@ import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { JwtService } from '@nestjs/jwt';
 import type { InlineKeyboardButton } from 'telegraf/types';
-import { TelegramBotRegistryService } from './telegram-bot-registry.service';
+import { installSendThrottle } from './telegram-send-throttle';
 
 /**
  * Extras de un envio programatico.
  *
  * Nacen de tener que colgar el boton del portal de los avisos que ya se
- * mandaban: sin esto, cada llamador tendria que alcanzar el bot por su cuenta
- * y se perderia el enrutado por bot dedicado de cada modelo.
+ * mandaban: sin esto, cada llamador tendria que alcanzar el bot por su cuenta.
  */
 export type SendMessageOptions = {
   parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML';
@@ -22,7 +22,7 @@ export type SendMessageOptions = {
 };
 
 @Injectable()
-export class TelegramService {
+export class TelegramService implements OnModuleInit {
   private readonly logger = new Logger(TelegramService.name);
 
   constructor(
@@ -32,7 +32,7 @@ export class TelegramService {
     @InjectRepository(Servicios)
     private readonly serviciosRepository: Repository<Servicios>,
     private readonly jwtService: JwtService,
-    private readonly botRegistry: TelegramBotRegistryService,
+    private readonly configService: ConfigService,
   ) {
     if (this.bot && typeof this.bot.catch === 'function') {
       this.bot.catch((err: any, ctx: Context) => {
@@ -48,24 +48,53 @@ export class TelegramService {
     }
   }
 
+  onModuleInit(): void {
+    this.assertPollingIsSafe();
+    // Todo lo que sale del sistema pasa por este bot: avisos a jefes, ofertas a
+    // choferes, mensajes a clientes y los barridos periodicos.
+    installSendThrottle(this.bot, 'central');
+  }
+
+  /**
+   * Impide arrancar en la combinación que rompe el bot sin dar la cara.
+   *
+   * Con long polling, dos procesos pidiendo `getUpdates` sobre el mismo token
+   * no se reparten el trabajo: Telegram responde 409 y uno de los dos deja de
+   * recibir mensajes. No es una degradación, es un bot que se calla, y desde
+   * fuera parece que los clientes han dejado de escribir.
+   *
+   * Los ciclos periódicos ya toleran varias réplicas gracias a los advisory
+   * locks, así que el día que se escale, esto es lo que queda por resolver: hay
+   * que pasar a webhook antes. Falla al arrancar en vez de dejarlo pasar.
+   */
+  private assertPollingIsSafe(): void {
+    const instances = Number(
+      this.configService.get<string | number>('APP_INSTANCE_COUNT', 1),
+    );
+    const webhookBaseUrl = this.configService
+      .get<string>('TELEGRAM_WEBHOOK_BASE_URL', '')
+      .trim();
+    if (instances <= 1 || webhookBaseUrl.length > 0) return;
+
+    throw new Error(
+      `APP_INSTANCE_COUNT=${instances} con long polling: Telegram solo admite un proceso ` +
+        'haciendo getUpdates por token, así que las demás réplicas dejarían de recibir ' +
+        'mensajes. Define TELEGRAM_WEBHOOK_BASE_URL (y habilita el bloque de webhook en ' +
+        'nginx) o vuelve a una sola instancia.',
+    );
+  }
+
   /**
    * Envia un mensaje programático a un usuario por su ID de Telegram.
    * @param telegramId El ID de Telegram del usuario (como string bigint).
    * @param message El mensaje a enviar.
-   * @param employeeId Si el destinatario es una empleada, su id: el mensaje
-   *   sale por el bot propio de ella. Sin esto (choferes, jefes, admin) se usa
-   *   el bot central.
    */
   async sendMessage(
     telegramId: string,
     message: string,
-    employeeId?: string | null,
     options?: SendMessageOptions,
   ): Promise<void> {
-    const bot = employeeId
-      ? this.botRegistry.botForEmployeeOrCentral(employeeId)
-      : this.bot;
-    await bot.telegram.sendMessage(telegramId, message, {
+    await this.bot.telegram.sendMessage(telegramId, message, {
       ...(options?.parseMode ? { parse_mode: options.parseMode } : {}),
       ...(options?.buttons?.length
         ? Markup.inlineKeyboard(options.buttons)

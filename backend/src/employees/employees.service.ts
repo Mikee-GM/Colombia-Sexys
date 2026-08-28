@@ -187,8 +187,7 @@ export class EmployeesService {
     });
     const withTrust = await this.attachTrustScores(employees);
     const withAvailability = await this.attachCatalogAvailability(withTrust);
-    const withBots = await this.attachBotUsernames(withAvailability);
-    return await this.attachWeeklyContentMetrics(withBots);
+    return await this.attachWeeklyContentMetrics(withAvailability);
   }
 
   /**
@@ -226,10 +225,8 @@ export class EmployeesService {
       (employee) => !sanctioned.has(employee.id) && employee.usuario?.activo,
     );
     const ranked = await this.rankEmployeesByScore(publicEmployees);
-    const enriched = await this.attachBotUsernames(
-      await this.attachCatalogAvailability(
-        await this.attachTrustScores(ranked),
-      ),
+    const enriched = await this.attachCatalogAvailability(
+      await this.attachTrustScores(ranked),
     );
     return enriched.map((employee) => this.stripUserRelations(employee));
   }
@@ -321,10 +318,8 @@ export class EmployeesService {
       throw new NotFoundException(`Empleada con ID ${id} no encontrado`);
     }
 
-    const [employeeWithAvailability] = await this.attachBotUsernames(
-      await this.attachCatalogAvailability(
-        await this.attachTrustScores([empleada]),
-      ),
+    const [employeeWithAvailability] = await this.attachCatalogAvailability(
+      await this.attachTrustScores([empleada]),
     );
     const [finalEmployee] = await this.attachWeeklyContentMetrics([
       employeeWithAvailability,
@@ -457,59 +452,6 @@ export class EmployeesService {
         !isSanctioned && Boolean(active) && !queuedEmployees.has(employee.id);
       return employee;
     });
-  }
-
-  /**
-   * Stampa el username del bot propio de cada modelo. El catálogo lo usa para
-   * mandar al cliente al bot correcto en vez de al central.
-   *
-   * Solo se enlaza a un bot que este proceso consiguió arrancar (`activo`).
-   *
-   * Se probó lo contrario —enlazar a cualquier bot configurado, arrancado o
-   * no— y sale mucho peor: el enlace abre el chat, porque `t.me` es de
-   * Telegram, pero al otro lado no hay nadie escuchando y el cliente se queda
-   * sin respuesta. Mandarlo al bot central es peor experiencia que hablar con
-   * la modelo, pero le contesta alguien; el silencio es una venta perdida.
-   *
-   * Que un bot caiga a `error` y su enlace vuelva al central es, por tanto, el
-   * comportamiento correcto: la señal de alarma es la fila en `error`, y lo que
-   * hay que arreglar es por qué no arranca, no el enlace.
-   */
-  private async attachBotUsernames(
-    employees: Empleadas[],
-  ): Promise<Empleadas[]> {
-    if (employees.length === 0) return employees;
-    try {
-      const rows: Array<{ employee_id: string; bot_username: string | null }> =
-        await this.dataSource.query(
-          `SELECT employee_id, bot_username
-           FROM employee_telegram_bots
-           WHERE bot_username IS NOT NULL AND status = 'activo'`,
-        );
-      const byEmployee = new Map(
-        rows.map((row) => [row.employee_id, row.bot_username]),
-      );
-      for (const employee of employees) {
-        employee.telegramBotUsername = byEmployee.get(employee.id) ?? null;
-      }
-    } catch (error: unknown) {
-      // Durante el despliegue el backend puede levantar antes de que corra la
-      // migración. El catálogo no debe caerse por eso: sin bots dedicados, los
-      // enlaces apuntan al bot central, que es el comportamiento de siempre.
-      //
-      // Se registra en el log: si esta consulta falla de forma permanente, el
-      // sintoma visible es que TODAS las modelos mandan al bot central, y sin
-      // esta traza no habria forma de distinguirlo de "ningun bot vinculado".
-      this.logger.error(
-        `No se pudieron leer los bots dedicados; el catálogo enlazará al bot central: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      for (const employee of employees) {
-        employee.telegramBotUsername = null;
-      }
-    }
-    return employees;
   }
 
   private async attachTrustScores(

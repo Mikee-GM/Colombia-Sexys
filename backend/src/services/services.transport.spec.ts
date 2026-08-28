@@ -61,11 +61,6 @@ describe('ServicesService transport settlement', () => {
     { get: jest.fn() } as any,
     {} as any,
     uploadService as any,
-    // Sin bot dedicado, el registro cae al central: el mismo mock de siempre.
-    {
-      botForEmployeeOrCentral: jest.fn(() => bot),
-      central: bot,
-    } as any,
     // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
     {} as any,
     {} as any,

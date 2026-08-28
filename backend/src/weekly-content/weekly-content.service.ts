@@ -468,7 +468,7 @@ export class WeeklyContentService {
     }
 
     await this.telegramService
-      .sendMessage(usuario.telegramChatId, texto, submission.empleadaId, {
+      .sendMessage(usuario.telegramChatId, texto, {
         parseMode: 'Markdown',
         buttons: botones,
       })

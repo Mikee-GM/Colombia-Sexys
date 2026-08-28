@@ -30,7 +30,6 @@ describe('ServicesService plazo de espera de la empleada', () => {
     {} as any,
     {} as any,
     {} as any,
-    {} as any,
   );
 
   afterEach(() => {

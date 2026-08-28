@@ -87,10 +87,8 @@ describe('WeeklyContentScheduler', () => {
     expect(schedule.recordatoriosEnviados).toBe(1);
     expect(schedule.estado).toBe('recordatorio_enviado');
 
-    const [chatId, texto, empleadaId, opciones] =
-      telegramService.sendMessage.mock.calls[0];
+    const [chatId, texto, opciones] = telegramService.sendMessage.mock.calls[0];
     expect(chatId).toBe('555');
-    expect(empleadaId).toBe('emp-1');
     expect(texto).toContain('Recordatorio 1 de 3');
     expect(opciones.buttons).toBeDefined();
   });
@@ -180,7 +178,7 @@ describe('WeeklyContentScheduler', () => {
     await enviarRecordatorios();
 
     expect(telegramService.sendMessage).toHaveBeenCalledTimes(1);
-    const [, , , opciones] = telegramService.sendMessage.mock.calls[0];
+    const [, , opciones] = telegramService.sendMessage.mock.calls[0];
     expect(opciones.buttons).toBeUndefined();
   });
 
