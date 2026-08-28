@@ -239,3 +239,106 @@ describe('Refrescos de una ubicación en vivo del cliente', () => {
     );
   });
 });
+
+/**
+ * Tras un rechazo, el hilo del servicio se borra del grupo del jefe, asi que
+ * nadie va a escribirle al cliente. El "en un ratico te respondemos" del final
+ * de `onMessage` lo dejaba esperando una respuesta que no existia.
+ */
+describe('Cliente que escribe después de un servicio rechazado', () => {
+  const RECHAZADO = {
+    id: 'srv-1',
+    estado: 'cancelado',
+    motivoCancelacion: 'rechazado_por_jefe',
+    canceladoAt: new Date(),
+    empleada: { nombreArtistico: 'Valeria' },
+  };
+
+  function nuevaInstancia() {
+    const instancia = Object.create(TelegramBookingUpdate.prototype) as any;
+    instancia.serviciosRepository = { findOne: jest.fn() };
+    instancia.persistSession = jest.fn();
+    instancia.replyWithAvailableEmployees = jest.fn();
+    return instancia;
+  }
+
+  const contexto = (session: Record<string, unknown> = {}) => ({
+    session,
+    reply: jest.fn(),
+  });
+
+  it('le explica que no estuvo disponible y le ofrece a las demás', async () => {
+    const instancia = nuevaInstancia();
+    instancia.serviciosRepository.findOne.mockResolvedValue(RECHAZADO);
+    const ctx = contexto();
+
+    const atendido = await instancia.ofrecerAlternativasTrasRechazo(ctx, '77');
+
+    expect(atendido).toBe(true);
+    const [, intro] = instancia.replyWithAvailableEmployees.mock.calls[0];
+    expect(intro).toContain('Valeria');
+    expect(intro).toMatch(/no pudo tomar el servicio/i);
+    // Queda anotado para no repetirle la explicacion en cada mensaje.
+    expect(ctx.session.rechazoAvisadoServicioId).toBe('srv-1');
+    expect(instancia.persistSession).toHaveBeenCalled();
+  });
+
+  it('no le repite la explicación en el segundo mensaje, pero sí la lista', async () => {
+    const instancia = nuevaInstancia();
+    instancia.serviciosRepository.findOne.mockResolvedValue(RECHAZADO);
+    const ctx = contexto({ rechazoAvisadoServicioId: 'srv-1' });
+
+    const atendido = await instancia.ofrecerAlternativasTrasRechazo(ctx, '77');
+
+    expect(atendido).toBe(true);
+    const [, intro] = instancia.replyWithAvailableEmployees.mock.calls[0];
+    expect(intro).not.toMatch(/no pudo tomar el servicio/i);
+    expect(intro).toMatch(/disponibles/i);
+    expect(instancia.persistSession).not.toHaveBeenCalled();
+  });
+
+  it('no se hace cargo si el último servicio no fue rechazado por el jefe', async () => {
+    // Una cancelacion del propio cliente no se explica con "no estuvo
+    // disponible", asi que el mensaje sigue su curso normal.
+    const instancia = nuevaInstancia();
+    instancia.serviciosRepository.findOne.mockResolvedValue({
+      ...RECHAZADO,
+      motivoCancelacion: 'cancelado_por_cliente',
+    });
+
+    const atendido = await instancia.ofrecerAlternativasTrasRechazo(
+      contexto(),
+      '77',
+    );
+
+    expect(atendido).toBe(false);
+    expect(instancia.replyWithAvailableEmployees).not.toHaveBeenCalled();
+  });
+
+  it('no explica un rechazo viejo', async () => {
+    const instancia = nuevaInstancia();
+    instancia.serviciosRepository.findOne.mockResolvedValue({
+      ...RECHAZADO,
+      canceladoAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+    });
+
+    const atendido = await instancia.ofrecerAlternativasTrasRechazo(
+      contexto(),
+      '77',
+    );
+
+    expect(atendido).toBe(false);
+  });
+
+  it('no se hace cargo de un cliente sin servicios', async () => {
+    const instancia = nuevaInstancia();
+    instancia.serviciosRepository.findOne.mockResolvedValue(null);
+
+    const atendido = await instancia.ofrecerAlternativasTrasRechazo(
+      contexto(),
+      '77',
+    );
+
+    expect(atendido).toBe(false);
+  });
+});

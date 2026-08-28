@@ -176,6 +176,14 @@ interface SessionData {
   humanTakeover?: boolean;
   iaActiva?: boolean;
   /**
+   * Servicio rechazado por el que ya se le explico al cliente que la modelo no
+   * pudo tomarlo.
+   *
+   * Guarda el id para no repetirle la explicacion en cada mensaje: a partir del
+   * segundo basta con volver a ponerle la lista de quien si esta libre.
+   */
+  rechazoAvisadoServicioId?: string;
+  /**
    * Fallos seguidos de la IA en esta conversacion.
    *
    * Un timeout o un 429 sueltos no son motivo para apagar la IA de por vida:
@@ -640,6 +648,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * middleware de sesion guarde: el vaciado arranca releyendo esa fila.
    */
   private static readonly BUFFER_NUDGE_DELAY_MS = 1_500;
+
+  /**
+   * Ventana en la que un mensaje del cliente se lee como respuesta a un
+   * servicio rechazado.
+   *
+   * Cubre de sobra la vuelta del cliente --que suele escribir en cuanto lee el
+   * aviso-- sin llegar a explicar con un rechazo viejo un mensaje que ya no
+   * tiene nada que ver con el.
+   */
+  private static readonly VENTANA_AVISO_RECHAZO_MS = 24 * 60 * 60 * 1000;
 
   private readonly clientMessageBuffers = new Map<
     string,
@@ -1483,7 +1501,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * pasado por el catálogo. Antes estos mensajes se ignoraban por completo y el
    * cliente se perdía; ahora se le saluda y se le muestra con quién puede hablar.
    */
-  private async replyWithAvailableEmployees(ctx: BotContext): Promise<void> {
+  private async replyWithAvailableEmployees(
+    ctx: BotContext,
+    /**
+     * Encabezado propio de quien llama. Sin el se saluda como a quien llega
+     * nuevo, que es lo que necesitaba el unico caso que existia; con el, la
+     * explicacion y la lista van en un solo mensaje en vez de dos seguidos.
+     */
+    intro?: string,
+  ): Promise<void> {
     /*
      * En el bot propio de una modelo no se ofrecen otras.
      *
@@ -1504,24 +1530,28 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           : `https://${web}`
         : null;
 
-      await ctx.reply(
-        destino
-          ? `Puedes ver a las demas chicas disponibles aqui: ${destino}`
-          : 'Puedes escribirnos mas tarde o buscar a otra chica en nuestro catalogo.',
-      );
+      const dondeVerlas = destino
+        ? `Puedes ver a las demas chicas disponibles aqui: ${destino}`
+        : 'Puedes escribirnos mas tarde o buscar a otra chica en nuestro catalogo.';
+      await ctx.reply(intro ? `${intro}\n\n${dondeVerlas}` : dondeVerlas);
       return;
     }
 
     const available = await this.getAvailableEmployees();
     if (!available.length) {
+      const sinDisponibles =
+        'En este momento no hay chicas disponibles, pero si nos cuentas para cuándo la quieres te avisamos apenas se desocupe alguna.';
       await ctx.reply(
-        'Hola, gracias por escribirnos. En este momento no hay chicas disponibles, pero si nos cuentas para cuándo la quieres te avisamos apenas se desocupe alguna.',
+        intro
+          ? `${intro}\n\n${sinDisponibles}`
+          : `Hola, gracias por escribirnos. ${sinDisponibles}`,
       );
       return;
     }
 
     await ctx.reply(
-      'Hola, bienvenido. Estas son las chicas disponibles ahora mismo. Toca a la que te guste para hablar directamente con ella.',
+      intro ??
+        'Hola, bienvenido. Estas son las chicas disponibles ahora mismo. Toca a la que te guste para hablar directamente con ella.',
       Markup.inlineKeyboard(
         available
           .slice(0, 8)
@@ -6365,10 +6395,72 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       await this.clientesRepository.save(client);
     }
 
+    /*
+     * Si su ultimo servicio lo rechazo el jefe, el "en un ratico te
+     * respondemos" era mentira: nadie iba a escribirle. El hilo del servicio se
+     * borra al rechazarlo, asi que el cliente se quedaba esperando una
+     * respuesta que no existia. Se le dice que esa chica no pudo y se le ofrece
+     * a las que si estan libres, que es lo unico que le sirve en ese momento.
+     */
+    if (await this.ofrecerAlternativasTrasRechazo(ctx, telegramId)) return;
+
     await ctx.reply(
       `Hola ${client.nombreTelegram || 'Cliente'}. ` +
         `Ya recibí tu mensaje. En un ratico te respondemos por aquí mismo.`,
     );
+  }
+
+  /**
+   * Contesta al cliente cuyo ultimo servicio rechazo el jefe.
+   *
+   * La explicacion sale una sola vez por servicio; a partir del segundo mensaje
+   * se le vuelve a poner la lista sin repetirle que la rechazaron, que ya lo
+   * sabe. Fuera de la ventana no se dice nada: un rechazo de la semana pasada
+   * no explica un "hola" de hoy.
+   *
+   * Devuelve si se hizo cargo del mensaje.
+   */
+  private async ofrecerAlternativasTrasRechazo(
+    ctx: BotContext,
+    clienteTelegramId: string,
+  ): Promise<boolean> {
+    const ultimo = await this.serviciosRepository.findOne({
+      where: { clienteTelegramId },
+      relations: { empleada: true },
+      order: { createdAt: 'DESC' },
+    });
+
+    // Solo el rechazo del jefe: una cancelacion del propio cliente o de la
+    // agencia por otro motivo no se explica con "no estuvo disponible".
+    if (
+      !ultimo ||
+      ultimo.estado !== 'cancelado' ||
+      ultimo.motivoCancelacion !== 'rechazado_por_jefe' ||
+      !ultimo.canceladoAt
+    ) {
+      return false;
+    }
+
+    const desdeElRechazo = Date.now() - ultimo.canceladoAt.getTime();
+    if (desdeElRechazo > TelegramBookingUpdate.VENTANA_AVISO_RECHAZO_MS) {
+      return false;
+    }
+
+    if (!ctx.session) ctx.session = {};
+    const yaExplicado = ctx.session.rechazoAvisadoServicioId === ultimo.id;
+
+    if (!yaExplicado) {
+      ctx.session.rechazoAvisadoServicioId = ultimo.id;
+      await this.persistSession(ctx);
+    }
+
+    const nombre = ultimo.empleada?.nombreArtistico;
+    const intro = yaExplicado
+      ? 'Estas son las chicas disponibles ahora mismo. Toca a la que te guste para hablar directamente con ella.'
+      : `Qué pena contigo, al final ${nombre || 'la chica que elegiste'} no pudo tomar el servicio. Estas sí están disponibles ahora mismo, toca a la que te guste para hablar directamente con ella.`;
+
+    await this.replyWithAvailableEmployees(ctx, intro);
+    return true;
   }
 
   @Action(/^pedir_prorroga:(.+)$/)
