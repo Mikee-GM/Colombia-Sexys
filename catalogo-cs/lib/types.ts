@@ -872,3 +872,95 @@ export type StaffOnboarding = ApiUser & {
     lastDeliveryError: string | null;
   } | null;
 };
+
+/** Un cliente tal y como lo lista el panel. */
+export interface ClienteResumen {
+  id: string;
+  nombreTelegram: string | null;
+  telegramChatId: string;
+  primerContactoAt: string;
+  createdAt: string;
+}
+
+export interface ClientesPage {
+  items: ClienteResumen[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** Todo lo que sabemos de un cliente, tal y como lo arma el backend. */
+export interface ClientDossier {
+  cliente: {
+    id: string;
+    nombreTelegram: string | null;
+    telegramChatId: string;
+    primerContactoAt: string;
+    createdAt: string;
+    diasDesdePrimerContacto: number;
+  };
+  bloqueo: {
+    bloqueado: boolean;
+    tipo: string | null;
+    motivo: string | null;
+    desde: string | null;
+    hasta: string | null;
+  };
+  resumen: {
+    serviciosTotales: number;
+    finalizados: number;
+    cancelados: number;
+    enCurso: number;
+    gastoTotal: number;
+    ticketPromedio: number;
+    horasTotales: number;
+    primerServicioAt: string | null;
+    ultimoServicioAt: string | null;
+    diasDesdeUltimoServicio: number | null;
+    calificacionPromedioQueDio: number | null;
+    calificacionPromedioQueRecibio: number | null;
+  };
+  porMes: Array<{ mes: string; servicios: number; gasto: number }>;
+  porMetodoPago: Array<{ metodo: string; servicios: number; gasto: number }>;
+  porEmpleada: Array<{
+    empleadaId: string;
+    nombre: string;
+    servicios: number;
+    gasto: number;
+  }>;
+  lealtad: { puntos: number; nivel: string | null } | null;
+  servicios: Array<{
+    id: string;
+    fecha: string | null;
+    estado: string;
+    empleada: string | null;
+    total: number;
+    metodoPago: string;
+    calificacion: number | null;
+    registroManual: boolean;
+  }>;
+  reportesRecibidos: Array<{
+    id: string;
+    categoria: string;
+    descripcion: string;
+    estado: string;
+    outcome: string | null;
+    createdAt: string;
+  }>;
+  sanciones: Array<{
+    id: string;
+    tipo: string;
+    motivo: string;
+    estado: string;
+    startsAt: string;
+    endsAt: string | null;
+  }>;
+  alertas: Array<{
+    id: string;
+    emocion: string;
+    score: number | null;
+    mensaje: string;
+    atendida: boolean;
+    createdAt: string;
+  }>;
+}
