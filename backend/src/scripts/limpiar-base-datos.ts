@@ -138,7 +138,9 @@ async function obtenerTablasExistentes(): Promise<Set<string>> {
 async function contarFilas(tabla: string): Promise<number> {
   try {
     const resultado: Array<{ count: string | number }> =
-      await AppDataSource.query(`SELECT COUNT(*)::int as count FROM "${tabla}"`);
+      await AppDataSource.query(
+        `SELECT COUNT(*)::int as count FROM "${tabla}"`,
+      );
     return Number(resultado[0]?.count ?? 0);
   } catch {
     return 0;
@@ -165,9 +167,15 @@ async function main(): Promise<void> {
   const ejecutar =
     process.argv.includes('--confirmar') || process.argv.includes('--ejecutar');
 
-  console.log('===============================================================');
-  console.log('       LIMPIEZA DE BASE DE DATOS - COLOMBIA SEXYS               ');
-  console.log('===============================================================');
+  console.log(
+    '===============================================================',
+  );
+  console.log(
+    '       LIMPIEZA DE BASE DE DATOS - COLOMBIA SEXYS               ',
+  );
+  console.log(
+    '===============================================================',
+  );
   console.log(
     `Modo: ${ejecutar ? '>>> EJECUCION REAL <<<' : '*** ENSAYO / DRY RUN (Sin cambios) ***'}`,
   );
@@ -179,9 +187,13 @@ async function main(): Promise<void> {
     const tablasEnDb = await obtenerTablasExistentes();
 
     // 1. Diagnóstico de tablas a preservar
-    console.log('---------------------------------------------------------------');
+    console.log(
+      '---------------------------------------------------------------',
+    );
     console.log('1. TABLAS Y ENTIDADES QUE SE PRESERVAN (NO SE TOCAN)');
-    console.log('---------------------------------------------------------------');
+    console.log(
+      '---------------------------------------------------------------',
+    );
     const preservadasConteos: ConteoFila[] = [];
     for (const tabla of TABLAS_PRESERVADAS) {
       if (tablasEnDb.has(tabla)) {
@@ -192,9 +204,13 @@ async function main(): Promise<void> {
     }
 
     // 2. Diagnóstico de tablas a vaciar
-    console.log('\n---------------------------------------------------------------');
+    console.log(
+      '\n---------------------------------------------------------------',
+    );
     console.log('2. TABLAS OPERATIVAS Y DE CLIENTES A VACIAR');
-    console.log('---------------------------------------------------------------');
+    console.log(
+      '---------------------------------------------------------------',
+    );
     const aVaciarExistentes: string[] = [];
     let totalRegistrosABorrar = 0;
 
@@ -228,9 +244,13 @@ async function main(): Promise<void> {
         }
       }
 
-      console.log('\n---------------------------------------------------------------');
+      console.log(
+        '\n---------------------------------------------------------------',
+      );
       console.log('3. SESIONES DE TELEGRAM (telegram_sessions)');
-      console.log('---------------------------------------------------------------');
+      console.log(
+        '---------------------------------------------------------------',
+      );
       console.log(`  Total de sesiones almacenadas      : ${totalSesiones}`);
       console.log(
         `  Sesiones de staff / modelos / grupos: ${sesionesStaff} (SE CONSERVAN)`,
@@ -254,16 +274,22 @@ async function main(): Promise<void> {
       console.log('\n[AVISO] Tablas detectadas no contempladas expresamente:');
       for (const t of tablasNoClasificadas) {
         const c = await contarFilas(t);
-        console.log(`  (?) ${t.padEnd(35)} : ${c} registros (NO se modificará)`);
+        console.log(
+          `  (?) ${t.padEnd(35)} : ${c} registros (NO se modificará)`,
+        );
       }
     }
 
-    console.log('\n===============================================================');
+    console.log(
+      '\n===============================================================',
+    );
     console.log(
       `RESUMEN: ${aVaciarExistentes.length} tablas a vaciar (~${totalRegistrosABorrar} registros), ` +
         `${sesionesClientes} sesiones de clientes a purgar.`,
     );
-    console.log('===============================================================');
+    console.log(
+      '===============================================================',
+    );
 
     if (!ejecutar) {
       console.log('\n[DRY RUN FINALIZADO]');
@@ -287,7 +313,9 @@ async function main(): Promise<void> {
       // 1. Truncate masivo en cascada de todas las tablas operacionales
       if (aVaciarExistentes.length > 0) {
         const tablasSql = aVaciarExistentes.map((t) => `"${t}"`).join(', ');
-        console.log(`- Vaciando ${aVaciarExistentes.length} tablas operativas...`);
+        console.log(
+          `- Vaciando ${aVaciarExistentes.length} tablas operativas...`,
+        );
         await queryRunner.query(
           `TRUNCATE TABLE ${tablasSql} RESTART IDENTITY CASCADE`,
         );
@@ -349,7 +377,9 @@ async function main(): Promise<void> {
         '✓ Modelos, lugares, departamentos, jefes, choferes y cuentas/grupos de Telegram se han conservado intactos.\n',
       );
     } catch (error) {
-      console.error('\n❌ ERROR durante la limpieza. Revirtiendo cambios (ROLLBACK)...');
+      console.error(
+        '\n❌ ERROR durante la limpieza. Revirtiendo cambios (ROLLBACK)...',
+      );
       await queryRunner.rollbackTransaction();
       throw error;
     } finally {
