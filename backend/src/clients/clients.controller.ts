@@ -16,6 +16,7 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { ListClientsDto } from './dto/list-clients.dto';
 import { BlockClientDto, UnblockClientDto } from './dto/block-client.dto';
+import { ClientDossierService } from './client-dossier.service';
 import { Clientes } from './entities/client.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -34,7 +35,22 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin', 'jefe')
 export class ClientsController {
-  constructor(private readonly clientsService: ClientsService) {}
+  constructor(
+    private readonly clientsService: ClientsService,
+    private readonly dossierService: ClientDossierService,
+  ) {}
+
+  /**
+   * Todo lo que sabemos del cliente, en una sola llamada.
+   *
+   * La ficha la abre alguien que esta decidiendo algo --si atenderlo, si
+   * bloquearlo, cuanto vale-- y encadenar seis peticiones desde el navegador
+   * habria hecho que los datos aparecieran a trozos.
+   */
+  @Get(':id/ficha')
+  ficha(@Param('id', ParseUUIDPipe) id: string) {
+    return this.dossierService.build(id);
+  }
 
   @Post()
   @ApiCreateDocs({
