@@ -1450,10 +1450,12 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           tripType: 'regreso',
         },
       });
-      this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
-        type: 'service_fully_completed',
-        data: { serviceId: trip.servicioId, tripId: trip.id },
-      });
+      if (trip.servicio.clienteId) {
+        this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
+          type: 'service_fully_completed',
+          data: { serviceId: trip.servicioId, tripId: trip.id },
+        });
+      }
     }
 
     // Igual que al aceptar: la caché no guarda `disponible`, así que cambiar la

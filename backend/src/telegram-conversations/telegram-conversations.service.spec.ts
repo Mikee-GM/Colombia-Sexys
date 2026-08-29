@@ -46,7 +46,7 @@ describe('TelegramConversationsService', () => {
       ['boss-1', undefined, undefined],
       expect.objectContaining({ type: 'chat_message' }),
     );
-    expect(result.mensaje).toBe('Buenas tardes');
+    expect(result?.mensaje).toBe('Buenas tardes');
   });
 
   it('impide que otro jefe lea la conversación', async () => {

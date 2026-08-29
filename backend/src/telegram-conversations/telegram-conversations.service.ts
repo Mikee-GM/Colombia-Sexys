@@ -135,6 +135,9 @@ export class TelegramConversationsService {
     sender: 'ia' | 'jefe' | 'cliente' | 'empleada',
     message: string,
   ) {
+    // Sin cliente identificado no hay conversacion a la que pertenezca: pasa
+    // en los servicios registrados a posteriori, que ademas no tienen chat.
+    if (!service.clienteId) return null;
     const saved = await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: service.clienteId,

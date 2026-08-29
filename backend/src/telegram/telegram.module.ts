@@ -6,6 +6,9 @@ import { Context, session } from 'telegraf';
 import { Repository } from 'typeorm';
 import { TelegramService } from './telegram.service';
 import { TelegramCallbackGuard } from './telegram-callback-guard';
+import { TelegramManualServiceUpdate } from './telegram-manual-service.update';
+import { TelegramManualServiceWizard } from './telegram-manual-service.wizard';
+import { ManualServicesModule } from '../manual-services/manual-services.module';
 import { TelegramAuthUpdate } from './telegram-auth.update';
 import { TelegramBookingUpdate } from './telegram-booking.update';
 import { TelegramDriverUpdate } from './telegram-driver.update';
@@ -78,6 +81,7 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
     UploadModule,
     forwardRef(() => WeeklyContentModule),
     CandidateScreeningModule,
+    ManualServicesModule,
     TelegrafModule.forRootAsync({
       imports: [ConfigModule, TypeOrmModule.forFeature([TelegramSession])],
       useFactory: (
@@ -122,6 +126,8 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
   providers: [
     TelegramService,
     TelegramCallbackGuard,
+    TelegramManualServiceUpdate,
+    TelegramManualServiceWizard,
     TelegramLinkAttemptsService,
     TelegramAuthUpdate,
     TelegramBookingUpdate,

@@ -60,12 +60,35 @@ export class Servicios {
   })
   empleadaId: string;
 
-  @Column('uuid', { name: 'cliente_id' })
-  @ApiProperty({
+  /**
+   * Admite nulo solo en los servicios registrados a posteriori: uno que
+   * ocurrio fuera del sistema puede no tener un cliente identificado. En el
+   * flujo normal siempre viene, porque el servicio nace de su conversacion.
+   */
+  @Column('uuid', { name: 'cliente_id', nullable: true })
+  @ApiPropertyOptional({
     description: 'Cliente Id',
     example: '00000000-0000-4000-8000-000000000000',
   })
-  clienteId: string;
+  clienteId: string | null;
+
+  /** Nombre que dio la empleada cuando el cliente no esta registrado. */
+  @Column('character varying', {
+    name: 'cliente_nombre_libre',
+    nullable: true,
+    length: 255,
+  })
+  @ApiPropertyOptional({ description: 'Nombre del cliente sin registrar' })
+  clienteNombreLibre: string | null;
+
+  /**
+   * El servicio no lo creo el flujo de reservas: lo registro la empleada a
+   * posteriori y lo autorizo un jefe. Cuenta igual para el corte y para sus
+   * estadisticas, pero conviene poder distinguirlo.
+   */
+  @Column('boolean', { name: 'registro_manual', default: false })
+  @ApiProperty({ description: 'Registrado manualmente', example: false })
+  registroManual: boolean;
 
   @Column('uuid', { name: 'jefe_id' })
   @ApiProperty({
@@ -590,10 +613,11 @@ export class Servicios {
 
   @ManyToOne(() => Clientes, (clientes) => clientes.servicios, {
     onDelete: 'RESTRICT',
+    nullable: true,
   })
   @JoinColumn([{ name: 'cliente_id', referencedColumnName: 'id' }])
-  @ApiProperty({ description: 'Cliente', type: () => Clientes })
-  cliente: Clientes;
+  @ApiPropertyOptional({ description: 'Cliente', type: () => Clientes })
+  cliente: Clientes | null;
 
   @ManyToOne(() => Empleadas, (empleadas) => empleadas.servicios, {
     onDelete: 'RESTRICT',

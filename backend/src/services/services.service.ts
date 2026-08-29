@@ -215,6 +215,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     service: Servicios,
     message: string,
   ): Promise<void> {
+    // Un servicio registrado a mano puede no tener cliente identificado, y sin
+    // el no hay hilo de conversacion al que pertenezca el mensaje.
+    if (!service.clienteId) return;
     await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: service.clienteId,
@@ -1195,10 +1198,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       'employee',
       servicio.empleadaId,
     );
-    await this.disciplineService.assertOperationallyAllowed(
-      'client',
-      servicio.clienteId,
-    );
+    if (servicio.clienteId) {
+      await this.disciplineService.assertOperationallyAllowed(
+        'client',
+        servicio.clienteId,
+      );
+    }
 
     servicio.jefeId = jefeId;
     servicio.notasJefe = bossNotes?.trim() || null;
@@ -4190,15 +4195,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         });
       }
     }
-    this.realtimeEventsService.emitToClient(servicio.clienteId, {
-      type: 'service_total_updated',
-      data: {
-        serviceId: servicio.id,
-        totalBase: servicio.totalBase,
-        totalTransporte: servicio.totalTransporte,
-        totalFinal: servicio.totalFinal,
-      },
-    });
+    if (servicio.clienteId) {
+      this.realtimeEventsService.emitToClient(servicio.clienteId, {
+        type: 'service_total_updated',
+        data: {
+          serviceId: servicio.id,
+          totalBase: servicio.totalBase,
+          totalTransporte: servicio.totalTransporte,
+          totalFinal: servicio.totalFinal,
+        },
+      });
+    }
   }
 
   async updateUberStatus(
@@ -4382,12 +4389,18 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           clientMessage,
         );
       }
-      this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
-        type: event,
-        data: { tripId: trip.id, serviceId: trip.servicioId },
-      });
+      if (trip.servicio.clienteId) {
+        this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
+          type: event,
+          data: { tripId: trip.id, serviceId: trip.servicioId },
+        });
+      }
     }
-    if (action === 'employee_arrived' && trip.tipo === 'regreso') {
+    if (
+      action === 'employee_arrived' &&
+      trip.tipo === 'regreso' &&
+      trip.servicio.clienteId
+    ) {
       // No notificar al cliente que la empleada llegó a su casa en viaje de regreso
       this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
         type: 'service_fully_completed',

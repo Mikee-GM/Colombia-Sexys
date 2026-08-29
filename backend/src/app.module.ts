@@ -19,6 +19,7 @@ import { ExtensionsModule } from './extensions/extensions.module';
 import { TelegramConversationsModule } from './telegram-conversations/telegram-conversations.module';
 import { EmployeePhotosModule } from './employee-photos/employee-photos.module';
 import { AuthModule } from './auth/auth.module';
+import { ManualServicesModule } from './manual-services/manual-services.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ApartmentsModule } from './apartments/apartments.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
@@ -158,6 +159,7 @@ import { UserPreferencesModule } from './user-preferences/user-preferences.modul
     ClientsModule,
     EmployeesModule,
     ServicesModule,
+    ManualServicesModule,
     CatalogExtrasModule,
     ExtensionsModule,
     TelegramConversationsModule,

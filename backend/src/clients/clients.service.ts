@@ -38,8 +38,25 @@ export class ClientsService {
     const offset = Math.max(0, Math.trunc(query.offset ?? 0));
     const search = query.search?.trim();
 
+    /*
+     * Se busca por nombre y tambien por id de Telegram.
+     *
+     * En la practica al cliente se le identifica por ese numero --es lo unico
+     * que aparece en los avisos al jefe y en las fichas de servicio-- y antes
+     * pegarlo en el buscador no devolvia nada: solo se miraba el nombre, que
+     * ademas muchos clientes no tienen puesto.
+     */
+    const where = search
+      ? [
+          { nombreTelegram: ILike(`%${search}%`) },
+          ...(/^\d+$/.test(search)
+            ? [{ telegramChatId: ILike(`%${search}%`) }]
+            : []),
+        ]
+      : undefined;
+
     const [items, total] = await this.clientesRepository.findAndCount({
-      where: search ? { nombreTelegram: ILike(`%${search}%`) } : undefined,
+      where,
       order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,

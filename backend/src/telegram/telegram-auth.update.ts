@@ -837,8 +837,18 @@ export class TelegramAuthUpdate {
     return Markup.keyboard([['Mi Panel']]).resize();
   }
 
+  /**
+   * Menu de la empleada.
+   *
+   * El registro de un servicio hecho fuera del sistema va aqui y no en un
+   * comando suelto: es algo que ella hace en caliente, al terminar, y tener que
+   * acordarse de `/registrar_servicio` significa que no se registra nunca.
+   */
   private employeeMenu() {
-    return Markup.keyboard([['👑 Mi Portal']]).resize();
+    return Markup.keyboard([
+      ['👑 Mi Portal'],
+      ['Registrar servicio pasado'],
+    ]).resize();
   }
 
   /**

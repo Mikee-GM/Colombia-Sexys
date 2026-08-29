@@ -265,12 +265,16 @@ export class LoyaltyService implements OnModuleInit {
     });
   }
 
+  /**
+   * Devuelve `null` cuando no hay a quien abonar: un servicio registrado a
+   * posteriori puede no tener cliente identificado.
+   */
   async awardForFinalizedService(serviceId: string): Promise<{
     duplicate: boolean;
     pointsEarned: number;
     pointsBalance: number;
     tier: LoyaltyTier;
-  }> {
+  } | null> {
     return this.dataSource.transaction(async (manager) => {
       const service = await manager.findOne(Servicios, {
         where: { id: serviceId },
@@ -292,10 +296,11 @@ export class LoyaltyService implements OnModuleInit {
       const existing = await manager.findOne(LoyaltyTransaction, {
         where: { servicioId: serviceId, type: 'earned' },
       });
-      const membership = await this.getOrCreateMembership(
-        service.clienteId,
-        manager,
-      );
+      // Un servicio registrado a mano puede no tener cliente identificado: no
+      // hay a quien abonarle los puntos.
+      const clienteId = service.clienteId;
+      if (!clienteId) return null;
+      const membership = await this.getOrCreateMembership(clienteId, manager);
 
       if (existing) {
         const amount = Number(service.totalFinal ?? 0);
@@ -364,7 +369,7 @@ export class LoyaltyService implements OnModuleInit {
       await manager.save(ClientMembership, membership);
 
       const transaction = manager.create(LoyaltyTransaction, {
-        clienteId: service.clienteId,
+        clienteId,
         servicioId: service.id,
         createdByUserId: null,
         type: 'earned',

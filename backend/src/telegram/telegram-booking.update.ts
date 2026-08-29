@@ -67,6 +67,10 @@ import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
 import { describeError } from '../common/errors/error-message';
 import { TelegramCallbackGuard } from './telegram-callback-guard';
+import {
+  RegistroManualEnCurso,
+  TelegramManualServiceWizard,
+} from './telegram-manual-service.wizard';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
 import type { InlineKeyboardButton } from 'telegraf/types';
@@ -211,6 +215,8 @@ interface SessionData {
     string,
     { notes: string; sameLocation: boolean; startedAt: number }
   >;
+  /** Formulario a medias de un servicio que se registra a posteriori. */
+  registroManual?: RegistroManualEnCurso;
 }
 
 export type { SessionData as TelegramSessionData };
@@ -768,6 +774,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly uploadService: UploadService,
     private readonly panelAccessService: PanelAccessService,
     private readonly callbackGuard: TelegramCallbackGuard,
+    private readonly manualServiceWizard: TelegramManualServiceWizard,
   ) {
     // TTL / Inactivity Cleanup: run every 5 minutes to clean up users inactive for > 1 hour
     this.locationCleanupInterval = setInterval(() => {
@@ -5411,6 +5418,16 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
   @On('text')
   async onMessage(@Ctx() ctx: BotContext) {
+    /*
+     * El formulario de registro manual va primero.
+     *
+     * Se le cede el mensaje explicitamente en vez de darle su propio
+     * `@On('text')`: este manejador atrapa todo el texto que llega al bot, y
+     * cual de los dos corriera antes dependeria del orden en que Nest instancia
+     * los `@Update()`, que no es algo sobre lo que se deba construir nada.
+     */
+    if (await this.manualServiceWizard.manejarTexto(ctx)) return;
+
     if (
       ctx.session?.step === 'AWAITING_EMPLOYEE_DRIVER_RATING_COMMENT' ||
       ctx.session?.step === 'AWAITING_EMPLOYEE_CONDUCT_DESCRIPTION'
@@ -6662,6 +6679,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     sender: 'ia' | 'jefe' | 'cliente' | 'sistema',
     message: string,
   ): Promise<void> {
+    if (!service.clienteId) return;
     const saved = await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: service.clienteId,
