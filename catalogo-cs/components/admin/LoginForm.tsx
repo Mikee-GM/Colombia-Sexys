@@ -3,10 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
 
 import { checkSessionAction, loginAction } from "@/lib/actions/auth";
 import { refreshSession } from "@/lib/client-session";
+
+/** La redireccion de una Server Action viaja como error, con este `digest`. */
+function esNavegacion(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    typeof (error as { digest?: unknown }).digest === "string" &&
+    (error as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+  );
+}
 
 const inputClass =
   "w-full bg-black/40 border border-zinc-800 text-white text-sm font-medium px-4 py-3.5 rounded-lg transition-all duration-300 focus:border-[#C5A55A]/60 focus:bg-black/60 focus:ring-4 focus:ring-[#C5A55A]/10 placeholder:text-zinc-600 focus:outline-none tracking-wide";
@@ -52,15 +61,25 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
     setLoading(true);
 
     try {
+      /*
+       * Si las credenciales valen, esta llamada no devuelve: la propia accion
+       * navega al panel desde el servidor, en la misma respuesta que trae las
+       * cookies de sesion. Solo se llega a la linea de abajo cuando hay algo
+       * que contarle a quien intenta entrar.
+       */
       const res = await loginAction(email, password);
 
       if (!res.success) {
         throw new Error(res.error || "Credenciales incorrectas");
       }
-
-      toast.success("Bienvenido al panel");
-      onSuccess(res.redirectTo || "/admin/dashboard");
     } catch (err: unknown) {
+      /*
+       * La navegacion que hace la accion viaja como una excepcion de control.
+       * Si llega hasta aqui hay que dejarla pasar: tratarla como un fallo
+       * pintaria "No se pudo iniciar sesion" por encima de un inicio de sesion
+       * que si funciono y que esta navegando.
+       */
+      if (esNavegacion(err)) throw err;
       setError(
         err instanceof Error ? err.message : "No se pudo iniciar sesión",
       );

@@ -1,5 +1,7 @@
 "use server";
 
+import { redirect } from "next/navigation";
+
 import { applyBackendSetCookies } from "@/lib/auth-cookies";
 import {
   getBackendCookieHeader,
@@ -9,7 +11,26 @@ import {
 } from "@/lib/auth";
 import { getApiBaseUrl } from "@/lib/api-server";
 
+/**
+ * Inicio de sesion.
+ *
+ * La navegacion al panel la hace el servidor, no el cliente. Antes esto
+ * devolvia la ruta de destino y el formulario la empujaba con `router.push`:
+ * eso pide la sesion recien creada en una navegacion aparte, y basta con que
+ * las cookies de la respuesta de esta accion no esten aplicadas todavia cuando
+ * sale esa peticion para que el middleware no vea la sesion y devuelva al
+ * login. Desde fuera se ve como unas credenciales aceptadas que no llevan a
+ * ningun sitio.
+ *
+ * Con `redirect()` la navegacion forma parte de la misma respuesta que trae las
+ * cookies, asi que no hay ventana entre una cosa y la otra. Ojo al orden: el
+ * redirect va DESPUES de escribirlas, y su excepcion de control no puede caer
+ * en el `catch` de abajo --por eso se relanza-- o se tragaria la navegacion y
+ * pareceria un error de login.
+ */
 export async function loginAction(email: string, password: string) {
+  let destino: string | null = null;
+
   try {
     const response = await fetch(`${getApiBaseUrl()}/auth/login`, {
       method: "POST",
@@ -26,11 +47,7 @@ export async function loginAction(email: string, password: string) {
       return { success: false, error: "Tu cuenta no tiene acceso a este panel" };
     }
     await applyBackendSetCookies(response);
-
-    return {
-      success: true,
-      redirectTo: data.user.rol === "jefe" ? "/jefe" : "/admin/dashboard",
-    };
+    destino = data.user.rol === "jefe" ? "/jefe" : "/admin/dashboard";
   } catch (error: unknown) {
     console.error("loginAction error:", error);
     return {
@@ -41,6 +58,8 @@ export async function loginAction(email: string, password: string) {
           : "Error de conexión con el servidor de autenticación",
     };
   }
+
+  redirect(destino);
 }
 
 export async function logoutAction() {
