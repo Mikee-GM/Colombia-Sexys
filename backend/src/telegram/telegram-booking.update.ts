@@ -75,6 +75,7 @@ import { botonesDePortal } from './telegram-portal-buttons';
 import { TelegramSession } from './entities/telegram-session.entity';
 import { buildSessionKey, parseSessionKey } from './telegram-session.key';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
+import { multiplyMoney, roundMoney, sumMoney } from '../common/money';
 
 interface SessionData {
   step?:
@@ -133,6 +134,15 @@ interface SessionData {
   comprobanteEnviado?: boolean;
   /** Id de la validación del comprobante ya recibido. */
   comprobanteValidationId?: string;
+  /**
+   * Foto que el cliente adelantó antes de que el flujo llegara al pago.
+   *
+   * Se guarda sin analizar --todavía no se sabe cuánto tiene que decir-- y se
+   * valida en cuanto se conoce el monto esperado. Antes esta foto se daba por
+   * comprobante bueno: marcaba la reserva como pagada y forzaba el método a
+   * transferencia, de modo que el comprobante de verdad ya nunca se analizaba.
+   */
+  comprobanteAdelantadoFileId?: string;
   /** Servicio pendiente de cobro final (duración indefinida por transferencia). */
   servicioCobroFinalId?: string;
   groupIntentClarificationPending?: boolean;
@@ -204,6 +214,32 @@ interface SessionData {
 }
 
 export type { SessionData as TelegramSessionData };
+
+/**
+ * Todo lo que la conversacion con el cliente decidio y que hace falta para
+ * crear su servicio.
+ *
+ * `finalizeBooking` lo leia directo de `ctx.session`, y eso funcionaba solo
+ * mientras quien cerraba la reserva era el propio cliente. Cuando un
+ * comprobante pasa a revision manual, la reserva la cierra el JEFE al pulsar
+ * "Aprobar" desde su grupo, con su contexto y su sesion: alli no hay ubicacion
+ * preestablecida, ni cargo de transporte, ni trio, ni cita programada, y el
+ * servicio nacia sin nada de eso --sin cobrarle el transporte que se le habia
+ * cotizado y sin el historial de la conversacion adjunto--.
+ */
+export interface DatosDeReserva {
+  presetLocationId: string | null;
+  locationNameSnapshot: string | null;
+  locationAddressSnapshot: string | null;
+  customerTransportCharge: number;
+  duracionIndefinida: boolean;
+  trioConfirmado: boolean;
+  trioNombre: string | null;
+  trioTarifaCombinada: number | null;
+  tipoAgenda: 'inmediato' | 'programado';
+  fechaProgramada: string | null;
+  bookingSessionId: string | null;
+}
 
 interface BotContext extends Context {
   session?: SessionData;
@@ -652,6 +688,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    */
   private static readonly VENTANA_AVISO_RECHAZO_MS = 24 * 60 * 60 * 1000;
 
+  /**
+   * Cuanto se espera a que termine el analisis de un comprobante antes de
+   * admitir otro. Con margen sobre lo que tarda la vision del proveedor, pero
+   * lejos de dejar la reserva bloqueada para siempre.
+   */
+  private static readonly VENTANA_ANALISIS_COMPROBANTE_MS = 3 * 60 * 1000;
+
   private readonly clientMessageBuffers = new Map<
     string,
     {
@@ -909,6 +952,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }
     if (method === 'transferencia') {
       session.step = 'AWAITING_PAYMENT_RECEIPT';
+      if (await this.aprovecharComprobanteAdelantado(ctx)) return true;
       const bankDetails = await this.servicesService.bankTransferDetails();
       await ctx.reply(
         `*Cuentas disponibles para transferencia*\n\n${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante para verificar el pago.`,
@@ -1675,9 +1719,25 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }
   }
 
-  private async getEmployeeBusySchedules(
-    empleadaId: string,
-  ): Promise<{ inicio: string; fin: string; descripcion?: string }[]> {
+  /**
+   * Franjas en las que la modelo ya esta comprometida.
+   *
+   * Devuelve las horas dos veces a proposito: `inicio` y `fin` en texto, que es
+   * lo que entra en el prompt, y `inicioAt` / `finAt` como fechas de verdad.
+   * Quien filtraba por solapamiento parseaba el texto con `new Date()` --sobre
+   * un "28/08/26, 14:30" en formato local, y sobre un `fin` que solo traia la
+   * hora-- y obtenia siempre una fecha invalida: todas las comparaciones daban
+   * falso y el filtro no descartaba a nadie.
+   */
+  private async getEmployeeBusySchedules(empleadaId: string): Promise<
+    {
+      inicio: string;
+      fin: string;
+      descripcion?: string;
+      inicioAt: Date;
+      finAt: Date;
+    }[]
+  > {
     try {
       const upcomingServices = await this.serviciosRepository.find({
         where: {
@@ -1687,8 +1747,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         order: { fechaProgramada: 'ASC', createdAt: 'ASC' },
       });
 
-      const schedules: { inicio: string; fin: string; descripcion?: string }[] =
-        [];
+      const schedules: Awaited<
+        ReturnType<TelegramBookingUpdate['getEmployeeBusySchedules']>
+      > = [];
       for (const s of upcomingServices) {
         const start =
           s.fechaProgramada ||
@@ -1713,6 +1774,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           }),
           descripcion:
             s.estado === 'en_curso' ? 'En servicio activo' : 'Cita agendada',
+          inicioAt: startDate,
+          finAt: endDate,
         });
       }
       return schedules;
@@ -2124,6 +2187,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     if (metodo === 'transferencia') {
       session.step = 'AWAITING_PAYMENT_RECEIPT';
+      if (await this.aprovecharComprobanteAdelantado(ctx)) return;
       await ctx.reply(
         `${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante de transferencia para verificar el pago.`,
         {
@@ -2305,8 +2369,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       const busy = await this.getEmployeeBusySchedules(emp.id);
       const now = Date.now();
       const hasConflict = busy.some((b) => {
-        const start = new Date(b.inicio).getTime();
-        const end = new Date(b.fin).getTime();
+        const start = b.inicioAt.getTime();
+        const end = b.finAt.getTime();
         return (
           (now >= start && now <= end) ||
           (start > now && start - now < 2 * 3600 * 1000)
@@ -3096,6 +3160,276 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }
   }
 
+  /**
+   * Cuanto tiene que decir el comprobante de una reserva.
+   *
+   * Se calculaba a mano en el unico sitio donde se pedia, con la tarifa base de
+   * la modelo y sin el transporte: en un servicio en trio el cliente podia
+   * transferir la mitad de lo cotizado y el comprobante se aprobaba igual, y
+   * con ubicacion externa se colaba sin el cargo de transporte que el propio
+   * bot le acababa de sumar en el mensaje del precio.
+   *
+   * En pago mixto solo se espera la parte transferida: el resto y el transporte
+   * se pagan en efectivo, y asi se le dijo al cliente.
+   */
+  private montoEsperadoDeTransferencia(
+    session: SessionData,
+    empleada: Empleadas,
+  ): number {
+    if (session.metodoPago === 'mixto' && session.mixedTransferAmount) {
+      return roundMoney(session.mixedTransferAmount);
+    }
+    const tarifaPorHora =
+      session.trioCombinedRatePerHour ?? Number(empleada.precioBaseHora);
+    const horas = session.duracionPactadaHoras ?? 1;
+    return sumMoney([
+      multiplyMoney(tarifaPorHora, horas),
+      session.customerTransportCharge ?? 0,
+    ]);
+  }
+
+  /**
+   * ¿Hay ya un comprobante de esta reserva en manos de alguien?
+   *
+   * Solo cuenta como tal el que se esta analizando ahora mismo, el que espera
+   * revision de un jefe y el aprobado. Un `PROCESANDO` viejo no: significa que
+   * el analisis se quedo a medias --el proceso murio, o la foto se guardo sin
+   * llegar a analizarse-- y tratarlo como "ya lo tengo" dejaba al cliente
+   * atrapado, recibiendo "no hace falta que lo mandes otra vez" ante cada
+   * intento mientras su reserva no avanzaba nunca.
+   */
+  private async comprobanteYaEnRevision(ctx: BotContext): Promise<boolean> {
+    const validationId = ctx.session?.comprobanteValidationId;
+    if (!ctx.session?.comprobanteEnviado || !validationId) return false;
+
+    const pendiente = await this.paymentReceiptValidationsRepository.findOne({
+      where: { id: validationId },
+    });
+    const estado = pendiente?.estado ?? '';
+    const analisisReciente =
+      estado === 'PROCESANDO' &&
+      Date.now() - new Date(pendiente!.createdAt).getTime() <
+        TelegramBookingUpdate.VENTANA_ANALISIS_COMPROBANTE_MS;
+
+    if (
+      pendiente &&
+      (analisisReciente ||
+        estado === 'PENDIENTE_REVISION' ||
+        estado === 'APROBADO')
+    ) {
+      await ctx.reply(
+        'Ya tengo tu comprobante mi amor, lo estoy revisando. No hace falta que lo mandes otra vez 😘',
+      );
+      return true;
+    }
+
+    // Lo que hubiera quedado a medias ya no vale: se admite uno nuevo.
+    ctx.session.comprobanteEnviado = false;
+    ctx.session.comprobanteValidationId = undefined;
+    return false;
+  }
+
+  /**
+   * Aprovecha el comprobante que el cliente ya habia mandado.
+   *
+   * Cuando adelanta la foto antes de que se cierre el precio, se guarda sin
+   * analizar; en cuanto se sabe cuanto tiene que decir, se valida esa misma en
+   * vez de pedirle otra. Pedirsela de nuevo era la forma segura de que se
+   * enfadara: para el ya la habia mandado, y de hecho se la habiamos acusado.
+   *
+   * Devuelve si se hizo cargo del cobro.
+   */
+  private async aprovecharComprobanteAdelantado(
+    ctx: BotContext,
+  ): Promise<boolean> {
+    const fileId = ctx.session?.comprobanteAdelantadoFileId;
+    if (!fileId || !ctx.session) return false;
+    ctx.session.comprobanteAdelantadoFileId = undefined;
+    await this.validarComprobanteDeReserva(ctx, fileId);
+    return true;
+  }
+
+  private async validarComprobanteDeReserva(
+    ctx: BotContext,
+    fileId: string,
+  ): Promise<void> {
+    if (!ctx.session) return;
+    const {
+      locationLat,
+      locationLng,
+      locationNotas,
+      empleadaId,
+      duracionPactadaHoras,
+      metodoPago,
+    } = ctx.session;
+
+    if (
+      !locationLat ||
+      !locationLng ||
+      !empleadaId ||
+      !duracionPactadaHoras ||
+      !metodoPago
+    ) {
+      await ctx.reply('❌ Datos incompletos. Por favor inicia nuevamente.');
+      ctx.session = {};
+      return;
+    }
+
+    const client = await this.clientesRepository.findOne({
+      where: { telegramChatId: ctx.from!.id.toString() },
+    });
+    const empleada = await this.empleadasRepository.findOne({
+      where: { id: empleadaId },
+    });
+    if (!client || !empleada) return;
+
+    const processingMsg = await ctx.reply(
+      '🔍 Verificando comprobante, por favor espera un momento...',
+    );
+
+    // Desde este punto ya tenemos el comprobante: nunca se le vuelve a pedir.
+    ctx.session.comprobanteEnviado = true;
+
+    let validation: PaymentReceiptValidations | undefined;
+    try {
+      const stored = await this.createReceiptEvidence(
+        ctx,
+        fileId,
+        client.nombreTelegram,
+      );
+      validation = stored.validation;
+      ctx.session.comprobanteValidationId = validation.id;
+      const expectedTransferAmount = this.montoEsperadoDeTransferencia(
+        ctx.session,
+        empleada,
+      );
+
+      const analysis = await this.aiMessageService.analyzeReceipt(
+        stored.sourceUrl,
+        expectedTransferAmount,
+      );
+      const accounts = await this.authorizedBankAccountsRepository.find({
+        where: { activa: true },
+      });
+      const receipt = validateReceiptAnalysis(
+        analysis,
+        expectedTransferAmount,
+        accounts,
+      );
+      const telegramId = ctx.from!.id.toString();
+      const jefe = await this.findAssignedJefe(empleada);
+      validation = await this.finishReceiptValidation(
+        validation,
+        analysis,
+        receipt,
+        {
+          jefeId: jefe?.id,
+          draftPayload: receipt.needsManualReview
+            ? {
+                clientId: client.id,
+                empleadaId,
+                duracionPactadaHoras,
+                metodoPago,
+                locationLat,
+                locationLng,
+                locationNotas: locationNotas || null,
+                telegramId,
+                /*
+                 * La reserva viaja completa dentro del borrador. Quien la
+                 * cierra al aprobar es el jefe, desde su chat: si esto no
+                 * estuviera aqui, el servicio nacería sin el transporte
+                 * cotizado, sin la ubicación elegida, sin el trío y sin el
+                 * historial de la conversación.
+                 */
+                reserva: this.datosDeReservaDeSesion(ctx.session),
+              }
+            : null,
+        },
+      );
+
+      await ctx.telegram
+        .deleteMessage(ctx.chat!.id, processingMsg.message_id)
+        .catch(() => {});
+
+      if (receipt.needsManualReview) {
+        await ctx.reply(
+          'Ya me llegó tu comprobante mi amor, lo estoy revisando y te confirmo en un ratico.',
+        );
+        if (jefe) {
+          const caption =
+            `Comprobante en revisión manual\n\n` +
+            `Cliente: ${client.nombreTelegram || 'Desconocido'}\n` +
+            `Monto esperado: $${expectedTransferAmount.toFixed(2)}\n` +
+            `Monto leído: $${receipt.amount != null ? receipt.amount.toFixed(2) : 'N/D'}\n` +
+            `Banco destino: ${validation.bancoDestino || 'N/D'}\n` +
+            `Titular destino: ${validation.titularDestino || 'N/D'}\n` +
+            `Motivo: ${receipt.reason}`;
+          const target = jefe.grupoTelegramId || jefe.telegramChatId;
+          if (target) {
+            await ctx.telegram
+              .sendPhoto(target, validation.telegramFileId || fileId, {
+                caption,
+                ...Markup.inlineKeyboard([
+                  [
+                    Markup.button.callback(
+                      '🟢 Aprobar',
+                      `receipt_autorizar:${validation.id}:1`,
+                    ),
+                    Markup.button.callback(
+                      '🔴 Rechazar',
+                      `receipt_autorizar:${validation.id}:0`,
+                    ),
+                  ],
+                ]),
+              })
+              .catch((err) =>
+                this.logger.error('No se pudo notificar al jefe:', err),
+              );
+          }
+        }
+        return;
+      }
+
+      if (!receipt.valid) {
+        // El comprobante quedó rechazado: se permite reenviarlo.
+        if (ctx.session) {
+          ctx.session.comprobanteEnviado = false;
+          ctx.session.comprobanteValidationId = undefined;
+        }
+        await ctx.reply(
+          `⚠️ Problema con el comprobante:\n\n${receipt.reason || 'El comprobante no parece ser válido.'}\n\nPor favor intenta enviar otro o avísanos si necesitas ayuda.`,
+        );
+        return;
+      }
+
+      await ctx.reply('✅ ¡Comprobante verificado correctamente!');
+
+      await this.finalizeBooking(
+        ctx,
+        client,
+        empleada,
+        duracionPactadaHoras,
+        metodoPago,
+        locationLat,
+        locationLng,
+        locationNotas || null,
+        telegramId,
+        validation.id,
+      );
+    } catch (err) {
+      await this.markReceiptValidationError(validation, err);
+      if (ctx.session) {
+        ctx.session.comprobanteEnviado = false;
+        ctx.session.comprobanteValidationId = undefined;
+      }
+      this.logger.error('Error procesando comprobante:', err);
+      await ctx.reply(
+        'Ocurrió un error verificando el comprobante. Intentaremos revisarlo manualmente.',
+      );
+    }
+    return;
+  }
+
   @On('photo')
   async onPhotoUpload(@Ctx() ctx: BotContext) {
     const senderTelegramId = ctx.from?.id.toString();
@@ -3258,55 +3592,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }
 
     if (ctx.session?.step === 'AWAITING_PAYMENT_RECEIPT') {
-      // El cliente ya mandó un comprobante y está en revisión: nunca se lo
-      // volvemos a pedir ni lo procesamos dos veces.
-      if (ctx.session.comprobanteEnviado) {
-        const pendiente = ctx.session.comprobanteValidationId
-          ? await this.paymentReceiptValidationsRepository.findOne({
-              where: { id: ctx.session.comprobanteValidationId },
-            })
-          : null;
-        if (
-          pendiente &&
-          ['PROCESANDO', 'PENDIENTE_REVISION', 'APROBADO'].includes(
-            pendiente.estado ?? '',
-          )
-        ) {
-          await ctx.reply(
-            'Ya tengo tu comprobante mi amor, lo estoy revisando. No hace falta que lo mandes otra vez 😘',
-          );
-          return;
-        }
-      }
-
-      const {
-        locationLat,
-        locationLng,
-        locationNotas,
-        empleadaId,
-        duracionPactadaHoras,
-        metodoPago,
-      } = ctx.session;
-
-      if (
-        !locationLat ||
-        !locationLng ||
-        !empleadaId ||
-        !duracionPactadaHoras ||
-        !metodoPago
-      ) {
-        await ctx.reply('❌ Datos incompletos. Por favor inicia nuevamente.');
-        ctx.session = {};
-        return;
-      }
-
-      const client = await this.clientesRepository.findOne({
-        where: { telegramChatId: ctx.from!.id.toString() },
-      });
-      const empleada = await this.empleadasRepository.findOne({
-        where: { id: empleadaId },
-      });
-      if (!client || !empleada) return;
+      if (await this.comprobanteYaEnRevision(ctx)) return;
 
       const photos = (ctx.message as any)?.photo as
         Array<{ file_id: string }> | undefined;
@@ -3318,146 +3604,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         return;
       }
 
-      const processingMsg = await ctx.reply(
-        '🔍 Verificando comprobante, por favor espera un momento...',
-      );
-
-      // Desde este punto ya tenemos el comprobante: nunca se le vuelve a pedir.
-      ctx.session.comprobanteEnviado = true;
-
-      let validation: PaymentReceiptValidations | undefined;
-      try {
-        const stored = await this.createReceiptEvidence(
-          ctx,
-          fileId,
-          client.nombreTelegram,
-        );
-        validation = stored.validation;
-        ctx.session.comprobanteValidationId = validation.id;
-        const totalBase =
-          duracionPactadaHoras * Number(empleada.precioBaseHora);
-
-        // Determinar el monto exacto esperado en la transferencia
-        const expectedTransferAmount =
-          metodoPago === 'mixto' && ctx.session.mixedTransferAmount
-            ? ctx.session.mixedTransferAmount
-            : totalBase;
-
-        const analysis = await this.aiMessageService.analyzeReceipt(
-          stored.sourceUrl,
-          expectedTransferAmount,
-        );
-        const accounts = await this.authorizedBankAccountsRepository.find({
-          where: { activa: true },
-        });
-        const receipt = validateReceiptAnalysis(
-          analysis,
-          expectedTransferAmount,
-          accounts,
-        );
-        const telegramId = ctx.from!.id.toString();
-        const jefe = await this.findAssignedJefe(empleada);
-        validation = await this.finishReceiptValidation(
-          validation,
-          analysis,
-          receipt,
-          {
-            jefeId: jefe?.id,
-            draftPayload: receipt.needsManualReview
-              ? {
-                  clientId: client.id,
-                  empleadaId,
-                  duracionPactadaHoras,
-                  metodoPago,
-                  locationLat,
-                  locationLng,
-                  locationNotas: locationNotas || null,
-                  telegramId,
-                }
-              : null,
-          },
-        );
-
-        await ctx.telegram
-          .deleteMessage(ctx.chat!.id, processingMsg.message_id)
-          .catch(() => {});
-
-        if (receipt.needsManualReview) {
-          await ctx.reply(
-            'Ya me llegó tu comprobante mi amor, lo estoy revisando y te confirmo en un ratico.',
-          );
-          if (jefe) {
-            const caption =
-              `Comprobante en revisión manual\n\n` +
-              `Cliente: ${client.nombreTelegram || 'Desconocido'}\n` +
-              `Monto esperado: $${expectedTransferAmount.toFixed(2)}\n` +
-              `Monto leído: $${receipt.amount != null ? receipt.amount.toFixed(2) : 'N/D'}\n` +
-              `Banco destino: ${validation.bancoDestino || 'N/D'}\n` +
-              `Titular destino: ${validation.titularDestino || 'N/D'}\n` +
-              `Motivo: ${receipt.reason}`;
-            const target = jefe.grupoTelegramId || jefe.telegramChatId;
-            if (target) {
-              await ctx.telegram
-                .sendPhoto(target, validation.telegramFileId || fileId, {
-                  caption,
-                  ...Markup.inlineKeyboard([
-                    [
-                      Markup.button.callback(
-                        '🟢 Aprobar',
-                        `receipt_autorizar:${validation.id}:1`,
-                      ),
-                      Markup.button.callback(
-                        '🔴 Rechazar',
-                        `receipt_autorizar:${validation.id}:0`,
-                      ),
-                    ],
-                  ]),
-                })
-                .catch((err) =>
-                  this.logger.error('No se pudo notificar al jefe:', err),
-                );
-            }
-          }
-          return;
-        }
-
-        if (!receipt.valid) {
-          // El comprobante quedó rechazado: se permite reenviarlo.
-          if (ctx.session) {
-            ctx.session.comprobanteEnviado = false;
-            ctx.session.comprobanteValidationId = undefined;
-          }
-          await ctx.reply(
-            `⚠️ Problema con el comprobante:\n\n${receipt.reason || 'El comprobante no parece ser válido.'}\n\nPor favor intenta enviar otro o avísanos si necesitas ayuda.`,
-          );
-          return;
-        }
-
-        await ctx.reply('✅ ¡Comprobante verificado correctamente!');
-
-        await this.finalizeBooking(
-          ctx,
-          client,
-          empleada,
-          duracionPactadaHoras,
-          metodoPago,
-          locationLat,
-          locationLng,
-          locationNotas || null,
-          telegramId,
-          validation.id,
-        );
-      } catch (err) {
-        await this.markReceiptValidationError(validation, err);
-        if (ctx.session) {
-          ctx.session.comprobanteEnviado = false;
-          ctx.session.comprobanteValidationId = undefined;
-        }
-        this.logger.error('Error procesando comprobante:', err);
-        await ctx.reply(
-          'Ocurrió un error verificando el comprobante. Intentaremos revisarlo manualmente.',
-        );
-      }
+      await this.validarComprobanteDeReserva(ctx, fileId);
       return;
     }
 
@@ -3475,14 +3622,20 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         where: { telegramChatId: ctx.from!.id.toString() },
       });
       try {
-        const stored = await this.createReceiptEvidence(
-          ctx,
-          fileId,
-          client?.nombreTelegram,
-        );
-        ctx.session.comprobanteEnviado = true;
-        ctx.session.comprobanteValidationId = stored.validation.id;
-        if (!ctx.session.metodoPago) ctx.session.metodoPago = 'transferencia';
+        // Se sube igualmente como evidencia: si luego hay que revisarla a mano,
+        // la imagen ya esta guardada y no depende de que Telegram conserve el
+        // archivo.
+        await this.createReceiptEvidence(ctx, fileId, client?.nombreTelegram);
+        /*
+         * Se guarda la foto y se recuerda cual era, pero no se da por buena:
+         * el monto que tiene que decir depende de horas, tarifa y transporte,
+         * y a estas alturas de la conversacion puede que no esten cerrados. Se
+         * analiza en cuanto se sepan, en `validarComprobanteDeReserva`.
+         *
+         * Tampoco se toca el metodo de pago: una foto cualquiera --y aqui
+         * llega cualquiera-- no significa que el cliente vaya a transferir.
+         */
+        ctx.session.comprobanteAdelantadoFileId = fileId;
         await this.recordDraftConversation(
           ctx,
           'cliente',
@@ -4688,6 +4841,24 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }
   }
 
+  /** Lo que la sesion del cliente sabe de su propia reserva. */
+  private datosDeReservaDeSesion(session?: SessionData): DatosDeReserva {
+    return {
+      presetLocationId: session?.presetLocationId ?? null,
+      locationNameSnapshot: session?.locationNameSnapshot ?? null,
+      locationAddressSnapshot: session?.locationAddressSnapshot ?? null,
+      customerTransportCharge: Number(session?.customerTransportCharge ?? 0),
+      duracionIndefinida: Boolean(session?.duracionIndefinida),
+      trioConfirmado: session?.trioStatus === 'confirmed',
+      trioNombre: session?.trioSelectedEmployeeName ?? null,
+      trioTarifaCombinada: session?.trioCombinedRatePerHour ?? null,
+      tipoAgenda:
+        session?.tipoAgenda === 'programado' ? 'programado' : 'inmediato',
+      fechaProgramada: session?.fechaProgramada ?? null,
+      bookingSessionId: session?.bookingSessionId ?? null,
+    };
+  }
+
   async finalizeBooking(
     ctx: BotContext,
     client: Clientes,
@@ -4699,8 +4870,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     notasUbicacion: string | null,
     telegramId: string,
     receiptValidationId?: string,
+    /**
+     * Datos de la reserva. Sin ellos se toman de la sesion de `ctx`, que es lo
+     * correcto cuando quien cierra es el cliente; cuando cierra el jefe tras
+     * aprobar un comprobante hay que pasarlos, porque su sesion no es esta.
+     */
+    datosReserva?: DatosDeReserva,
   ): Promise<Servicios | undefined> {
     try {
+      const reserva = datosReserva ?? this.datosDeReservaDeSesion(ctx.session);
       const escapeMd = (text: string): string =>
         text.replace(/\n/g, ' ').replace(/([_*[`])/g, '\\$1');
       const notasUbicacionSafe = notasUbicacion
@@ -4716,215 +4894,20 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         return;
       }
       const jefeId = jefe.id;
-      const isEncadenado = false;
-      const servicioPrevioId: string | undefined = undefined;
-
-      // ─── FLUJO ENCADENADO ───────────────────────────────────────────────────
-      if (isEncadenado) {
-        const nuevoServicioEnc: any = this.serviciosRepository.create({
-          clienteId: client.id,
-          empleadaId: empleada.id,
-          jefeId: jefeId,
-          duracionPactadaHoras: duracionPactadaHoras,
-          metodoPago: metodoPago,
-          ubicacionClienteLat: parseFloat(lat),
-          ubicacionClienteLng: parseFloat(lng),
-          precioBaseHoraPactado: empleada.precioBaseHora,
-          estado: 'cancelado',
-          notas: notasUbicacion,
-          servicioPrevioId: servicioPrevioId || null,
-          clienteTelegramId: telegramId,
-          iaActiva: false,
-          presetLocationId: ctx.session?.presetLocationId ?? null,
-          locationNameSnapshot: ctx.session?.locationNameSnapshot ?? null,
-          locationAddressSnapshot: ctx.session?.locationAddressSnapshot ?? null,
-          customerTransportCharge: ctx.session?.customerTransportCharge ?? 0,
-          totalTransporte: ctx.session?.customerTransportCharge ?? 0,
-        } as any);
-        // 1. SAVE INICIAL (INSERT)
-        await this.serviciosRepository.save(nuevoServicioEnc);
-        if (receiptValidationId) {
-          await this.paymentReceiptValidationsRepository.update(
-            receiptValidationId,
-            { servicioId: nuevoServicioEnc.id },
-          );
-        }
-
-        const jefeUser = await this.usuariosRepository.findOne({
-          where: { id: jefeId },
-        });
-        if (jefeUser) {
-          const clientName =
-            client.nombreTelegram || ctx.from?.first_name || 'Cliente';
-          const duracionTexto =
-            duracionPactadaHoras === 1
-              ? '1 hora'
-              : `${duracionPactadaHoras} horas`;
-
-          const detailsMsg =
-            `📋 *Información del Servicio (Cita Encadenada):*\n\n` +
-            `• *Cliente:* ${clientName} (ID: ${telegramId})\n` +
-            `• *Empleada:* ${empleada.nombreArtistico}\n` +
-            `• *Duración:* ${duracionTexto}\n` +
-            `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
-            `• *Tarifa:* $${empleada.precioBaseHora}/hr\n` +
-            (notasUbicacionSafe
-              ? `• *Ubicación/Notas:* ${notasUbicacionSafe}\n`
-              : '') +
-            `• *Estado:* Pendiente Encadenada`;
-
-          const inlineKeyboard = Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                '🟢 Aceptar',
-                `jefe_autorizar:${nuevoServicioEnc.id}:1`,
-              ),
-              Markup.button.callback(
-                '🔴 Rechazar',
-                `jefe_autorizar:${nuevoServicioEnc.id}:0`,
-              ),
-            ],
-          ]);
-
-          let sentEnc = false;
-          if (jefeUser.grupoTelegramId) {
-            try {
-              let threadId: number | undefined = undefined;
-              try {
-                const topic = await this.bot.telegram.createForumTopic(
-                  jefeUser.grupoTelegramId,
-                  `👤 Cliente: ${clientName}`,
-                );
-                threadId = topic.message_thread_id;
-                nuevoServicioEnc.telegramThreadId = threadId.toString();
-                await this.serviciosRepository.save(nuevoServicioEnc);
-              } catch (topicErr) {
-                this.logger.warn(
-                  'Could not create forum topic for chained service, sending directly to group:',
-                  topicErr,
-                );
-              }
-
-              const sendOpts: any = {
-                parse_mode: 'Markdown',
-                ...inlineKeyboard,
-              };
-              if (threadId) {
-                sendOpts.message_thread_id = threadId;
-              }
-
-              await this.bot.telegram.sendMessage(
-                jefeUser.grupoTelegramId,
-                detailsMsg,
-                sendOpts,
-              );
-
-              const locOpts: any = {};
-              if (threadId) {
-                locOpts.message_thread_id = threadId;
-              }
-              await this.bot.telegram.sendLocation(
-                jefeUser.grupoTelegramId,
-                parseFloat(lat),
-                parseFloat(lng),
-                locOpts,
-              );
-              sentEnc = true;
-            } catch (err) {
-              this.logger.error(
-                'Error al enviar mensaje de cita encadenada al grupo del jefe:',
-                err,
-              );
-            }
-          }
-
-          if (!sentEnc && jefeUser.telegramChatId) {
-            try {
-              await this.bot.telegram.sendMessage(
-                jefeUser.telegramChatId,
-                detailsMsg,
-                {
-                  parse_mode: 'Markdown',
-                  ...inlineKeyboard,
-                },
-              );
-              await this.bot.telegram.sendLocation(
-                jefeUser.telegramChatId,
-                parseFloat(lat),
-                parseFloat(lng),
-              );
-            } catch (privErr) {
-              this.logger.error(
-                'Error al enviar cita encadenada al chat privado del jefe:',
-                privErr,
-              );
-            }
-          }
-        }
-
-        // Calculate estimated start time from the active service
-        let horaEstimadaStr = 'próximamente';
-        if (servicioPrevioId) {
-          const servicioActivo = await this.serviciosRepository.findOne({
-            where: { id: servicioPrevioId },
-          });
-          if (servicioActivo?.horaInicioServicio) {
-            const estimada = new Date(
-              servicioActivo.horaInicioServicio.getTime() +
-                Number(servicioActivo.duracionPactadaHoras) * 60 * 60 * 1000,
-            );
-            // Acumulamos en memoria
-            nuevoServicioEnc.horaInicioEstimada = estimada;
-            horaEstimadaStr = estimada.toLocaleTimeString(APP_LOCALE, {
-              hour: '2-digit',
-              minute: '2-digit',
-            });
-          }
-        }
-
-        ctx.session = {};
-
-        const msgEnc = 'Esta modalidad de reserva ya no está disponible.';
-
-        const msgEnviadoEnc = await ctx.reply(msgEnc, {
-          parse_mode: 'Markdown',
-          ...Markup.removeKeyboard(),
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                '❌ Cancelar esta Reserva',
-                `cancelar_encadenado:${nuevoServicioEnc.id}`,
-              ),
-            ],
-          ]),
-        });
-
-        // Acumulamos en memoria
-        nuevoServicioEnc.telegramClienteMensajeId =
-          msgEnviadoEnc.message_id.toString();
-
-        // 2. SAVE FINAL CON TODOS LOS CAMBIOS ACUMULADOS
-        await this.serviciosRepository.save(nuevoServicioEnc);
-
-        // Sin aviso extra: al jefe ya se le mando arriba la ficha de la cita
-        // encadenada con sus botones de autorizar.
-
-        return;
-      }
 
       // ─── FLUJO NORMAL ────────────────────────────────────────────────────────
-      const isProgramado = ctx.session?.tipoAgenda === 'programado';
-      const fechaProg = ctx.session?.fechaProgramada
-        ? new Date(ctx.session.fechaProgramada)
+      const isProgramado = reserva.tipoAgenda === 'programado';
+      const fechaProg = reserva.fechaProgramada
+        ? new Date(reserva.fechaProgramada)
         : undefined;
 
-      const isTrioConfirmed = ctx.session?.trioStatus === 'confirmed';
-      const isOpenEnded = Boolean(ctx.session?.duracionIndefinida);
+      const isTrioConfirmed = reserva.trioConfirmado;
+      const isOpenEnded = reserva.duracionIndefinida;
       const ratePerHour =
-        ctx.session?.trioCombinedRatePerHour ?? Number(empleada.precioBaseHora);
+        reserva.trioTarifaCombinada ?? Number(empleada.precioBaseHora);
       const trioNote =
-        isTrioConfirmed && ctx.session?.trioSelectedEmployeeName
-          ? `[Servicio en Trío con ${ctx.session.trioSelectedEmployeeName}] `
+        isTrioConfirmed && reserva.trioNombre
+          ? `[Servicio en Trío con ${reserva.trioNombre}] `
           : '';
       const openEndedNote = isOpenEnded
         ? '[Duración INDEFINIDA: las horas se cuentan al finalizar y se redondean hacia arriba desde los 15 min] '
@@ -4938,7 +4921,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         jefeId: jefeId,
         duracionPactadaHoras: isOpenEnded ? 1 : duracionPactadaHoras,
         duracionIndefinida: isOpenEnded,
-        cobroFinalPendiente: isOpenEnded && metodoPago === 'transferencia',
         metodoPago: metodoPago,
         ubicacionClienteLat: parseFloat(lat),
         ubicacionClienteLng: parseFloat(lng),
@@ -4947,11 +4929,11 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         notas: combinedNotes,
         clienteTelegramId: telegramId,
         iaActiva: false,
-        presetLocationId: ctx.session?.presetLocationId ?? null,
-        locationNameSnapshot: ctx.session?.locationNameSnapshot ?? null,
-        locationAddressSnapshot: ctx.session?.locationAddressSnapshot ?? null,
-        customerTransportCharge: ctx.session?.customerTransportCharge ?? 0,
-        totalTransporte: ctx.session?.customerTransportCharge ?? 0,
+        presetLocationId: reserva.presetLocationId,
+        locationNameSnapshot: reserva.locationNameSnapshot,
+        locationAddressSnapshot: reserva.locationAddressSnapshot,
+        customerTransportCharge: reserva.customerTransportCharge,
+        totalTransporte: reserva.customerTransportCharge,
         fechaProgramada: fechaProg,
         tipoAgenda: isProgramado ? 'programado' : 'inmediato',
       });
@@ -4991,7 +4973,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             : '') +
           `• *Duración:* ${duracionTexto}\n` +
           `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
-          `• *Tarifa:* $${ratePerHour}/hr${isTrioConfirmed && ctx.session?.trioSelectedEmployeeName ? ` (Trío con ${ctx.session.trioSelectedEmployeeName})` : ''}\n` +
+          `• *Tarifa:* $${ratePerHour}/hr${isTrioConfirmed && reserva.trioNombre ? ` (Trío con ${reserva.trioNombre})` : ''}\n` +
           (notasUbicacionSafe
             ? `• *Ubicación/Notas:* ${notasUbicacionSafe}\n`
             : '') +
@@ -5063,7 +5045,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             // El historial se manda SIEMPRE, con o sin hilo, para que ningún
             // mensaje del cliente se pierda si falla la creación del tema.
             await this.attachAndReplayDraftConversation(
-              ctx,
+              reserva.bookingSessionId,
               nuevoServicio,
               jefeUser.grupoTelegramId,
               threadId,
@@ -5106,7 +5088,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         if (!sentInGroup && jefeUser.telegramChatId) {
           try {
             await this.attachAndReplayDraftConversation(
-              ctx,
+              reserva.bookingSessionId,
               nuevoServicio,
               jefeUser.telegramChatId,
             );
@@ -5293,6 +5275,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           locationLng: string;
           locationNotas: string | null;
           telegramId: string;
+          reserva?: DatosDeReserva;
         }
       | undefined;
 
@@ -5326,6 +5309,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       draft.locationNotas,
       draft.telegramId,
       validation.id,
+      // Los borradores guardados antes de este cambio no la traen; con los
+      // valores por defecto se comporta como se comportaba entonces.
+      draft.reserva ?? this.datosDeReservaDeSesion(undefined),
     );
   }
 
@@ -6806,13 +6792,20 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     return allSent;
   }
 
+  /**
+   * Engancha al servicio la conversacion previa y se la reenvia al jefe.
+   *
+   * El id de esa conversacion se recibe como argumento en vez de leerse de
+   * `ctx.session`: cuando la reserva la cierra el jefe --al aprobar un
+   * comprobante en revision-- la sesion del contexto es la suya, no la del
+   * cliente, y el historial no se adjuntaba a nada.
+   */
   private async attachAndReplayDraftConversation(
-    ctx: BotContext,
+    bookingSessionId: string | null,
     service: Servicios,
     groupId: string,
     threadId?: number,
   ): Promise<void> {
-    const bookingSessionId = ctx.session?.bookingSessionId;
     if (!bookingSessionId) return;
     const messages = await this.conversationsRepository.find({
       where: { bookingSessionId },

@@ -4266,7 +4266,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       resultingState = 'llegado';
       await this.viajesRepository.update(trip.id, { estado: resultingState });
     } else if (action === 'employee_en_route') {
-      if (trip.estado !== 'aceptado')
+      /*
+       * Tambien desde 'en_camino' y 'llegado'.
+       *
+       * El jefe y la empleada mueven el mismo viaje por dos caminos: el jefe
+       * marca el Uber en camino y luego que llego, la empleada marca que ya
+       * subio. Exigir aqui 'aceptado' hacia que el segundo paso del jefe --el
+       * mismo mensaje que le dice a ella "cuando subas, presiona Ya estoy en
+       * el Uber"-- dejara ese boton inservible: al pulsarlo recibia "El viaje
+       * ya no puede iniciarse".
+       */
+      if (!['aceptado', 'en_camino', 'llegado'].includes(trip.estado))
         throw new ConflictException('El viaje ya no puede iniciarse');
       resultingState = 'en_curso';
       await this.viajesRepository.update(trip.id, {
