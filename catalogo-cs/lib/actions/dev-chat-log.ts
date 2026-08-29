@@ -46,3 +46,32 @@ export async function getFullServiceConversationAction(
 
   return pages.reverse().flat();
 }
+
+/**
+ * Una conversacion que arranco pero nunca llego a convertirse en servicio.
+ * El registro ya se guardaba desde el primer mensaje; lo que faltaba era
+ * poder verlo, porque sin servicio no aparecia en ningun listado.
+ */
+export type UnlinkedSession = {
+  bookingSessionId: string;
+  clienteId: string;
+  clienteNombre: string | null;
+  clienteTelegramId: string;
+  startedAt: string;
+  lastAt: string;
+  messageCount: number;
+};
+
+export async function getUnlinkedSessionsAction(): Promise<UnlinkedSession[]> {
+  return apiFetch<UnlinkedSession[]>(
+    "/telegram-conversations/unlinked-sessions?limit=200",
+  );
+}
+
+export async function getBookingSessionConversationAction(
+  bookingSessionId: string,
+): Promise<ConversationMessage[]> {
+  return apiFetch<ConversationMessage[]>(
+    `/telegram-conversations/session/${bookingSessionId}`,
+  );
+}

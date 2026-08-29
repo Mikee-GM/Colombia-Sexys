@@ -39,6 +39,34 @@ export class TelegramConversationsController {
     );
   }
 
+  /**
+   * Conversaciones que nunca llegaron a convertirse en servicio. Solo admin:
+   * ver estos endpoints en el resto del controller sirve para acordarse de
+   * que aqui no aplica el filtro por jefe de los demas, porque no hay
+   * servicio ni jefe al que atribuirselas.
+   */
+  @Get('unlinked-sessions')
+  listUnlinkedSessions(
+    @Query('limit') limit: string | undefined,
+    @Req() req: any,
+  ) {
+    return this.conversationsService.listUnlinkedSessions(
+      req.user,
+      limit ? Number(limit) : 100,
+    );
+  }
+
+  @Get('session/:bookingSessionId')
+  findByBookingSession(
+    @Param('bookingSessionId') bookingSessionId: string,
+    @Req() req: any,
+  ) {
+    return this.conversationsService.findByBookingSession(
+      bookingSessionId,
+      req.user,
+    );
+  }
+
   @Post('service/:serviceId/messages')
   sendMessage(
     @Param('serviceId') serviceId: string,

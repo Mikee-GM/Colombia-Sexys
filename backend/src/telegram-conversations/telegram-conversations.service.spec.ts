@@ -2,10 +2,23 @@ import { ConflictException } from '@nestjs/common';
 import { TelegramConversationsService } from './telegram-conversations.service';
 
 describe('TelegramConversationsService', () => {
+  const queryBuilder = {
+    innerJoin: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    groupBy: jest.fn().mockReturnThis(),
+    addGroupBy: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    getRawMany: jest.fn(),
+  };
   const conversations = {
     create: jest.fn((value) => value),
     save: jest.fn((value) => Promise.resolve({ id: 'message-1', ...value })),
     find: jest.fn(),
+    createQueryBuilder: jest.fn(() => queryBuilder),
   };
   const services = { findOne: jest.fn() };
   const bot = { telegram: { sendMessage: jest.fn() } };
@@ -64,5 +77,72 @@ describe('TelegramConversationsService', () => {
         50,
       ),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  /*
+   * Estas dos operaciones nuevas leen conversaciones sin servicio: no hay
+   * jefe al que atribuirselas, asi que se reservan a admin en vez de
+   * reutilizar la comprobacion por jefe del resto de la clase.
+   */
+  it('impide que un jefe liste conversaciones sin concretar', async () => {
+    await expect(
+      subject.listUnlinkedSessions({ id: 'boss-1', rol: 'jefe' } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(conversations.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('lista las conversaciones sin concretar para un admin', async () => {
+    queryBuilder.getRawMany.mockResolvedValue([
+      {
+        bookingSessionId: 'booking-1',
+        clienteId: 'client-1',
+        clienteNombre: 'Juan',
+        clienteTelegramId: '999',
+        startedAt: new Date('2026-08-29T10:00:00Z'),
+        lastAt: new Date('2026-08-29T10:05:00Z'),
+        messageCount: '4',
+      },
+    ]);
+
+    const result = await subject.listUnlinkedSessions({
+      id: 'admin-1',
+      rol: 'admin',
+    } as any);
+
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith('c.servicioId IS NULL');
+    expect(result).toEqual([
+      expect.objectContaining({
+        bookingSessionId: 'booking-1',
+        clienteNombre: 'Juan',
+        messageCount: 4,
+      }),
+    ]);
+  });
+
+  it('impide que un jefe lea una conversación sin concretar', async () => {
+    await expect(
+      subject.findByBookingSession('booking-1', {
+        id: 'boss-1',
+        rol: 'jefe',
+      } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('devuelve el historial completo de una conversación sin concretar', async () => {
+    conversations.find.mockResolvedValue([
+      { id: 'm1', mensaje: 'hola' },
+      { id: 'm2', mensaje: 'buenas' },
+    ]);
+
+    const result = await subject.findByBookingSession('booking-1', {
+      id: 'admin-1',
+      rol: 'admin',
+    } as any);
+
+    expect(conversations.find).toHaveBeenCalledWith({
+      where: { bookingSessionId: 'booking-1' },
+      order: { enviadoAt: 'ASC' },
+    });
+    expect(result).toHaveLength(2);
   });
 });
