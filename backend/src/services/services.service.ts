@@ -1223,6 +1223,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         {
           jefeId,
           notasJefe: servicio.notasJefe,
+          // La habitacion viaja dentro del propio UPDATE. Se asignaba solo al
+          // objeto en memoria, y desde que el cambio de estado es una
+          // actualizacion con campos explicitos --y no un `save` del objeto
+          // entero-- eso significaba que no se guardaba: la empleada la veia en
+          // su mensaje, pero la ficha del panel la mostraba vacia.
+          habitacion: servicio.habitacion,
           transporteAgendado: tipoTransporte,
         },
       );
@@ -1305,6 +1311,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           {
             jefeId,
             notasJefe: servicio.notasJefe,
+            habitacion: servicio.habitacion,
             horaInicioServicio: servicio.horaInicioServicio,
           },
           manager,

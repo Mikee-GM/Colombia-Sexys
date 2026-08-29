@@ -177,6 +177,8 @@ interface SessionData {
     participantId?: string;
   };
   roomServiceId?: string;
+  /** Cuando se le pidio la habitacion, para dejar de esperarla algun dia. */
+  roomAskedAt?: number;
   candidateScreeningId?: string;
   appealRatingId?: string;
   appealSubjectType?: 'client' | 'employee' | 'driver';
@@ -652,6 +654,17 @@ export function buildConversationTranscript(
   return `📝 ${title} (${messages.length} mensajes)\n${divider}\n${body}\n${divider}\nFIN DEL HISTORIAL`;
 }
 
+/**
+ * Los dos botones del teclado con el que el jefe autoriza desde el grupo.
+ *
+ * Viven en una constante porque hay que reconocerlos en dos sitios: donde se
+ * pinta el teclado y donde se espera la habitacion, que debe distinguirlos de
+ * un numero de habitacion. Duplicar el literal es como se colo el fallo de que
+ * pulsar "Rechazar" acabara aceptando el servicio.
+ */
+export const BOTON_ACEPTAR_SERVICIO = '🟢 Aceptar Servicio';
+export const BOTON_RECHAZAR_SERVICIO = '🔴 Rechazar Servicio';
+
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 
 /**
@@ -711,6 +724,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
    * lejos de dejar la reserva bloqueada para siempre.
    */
   private static readonly VENTANA_ANALISIS_COMPROBANTE_MS = 3 * 60 * 1000;
+
+  /**
+   * Cuanto se espera la habitacion antes de soltar la sesion del jefe.
+   *
+   * Mientras espera, todo lo que escriba en el tema se lo queda este paso en
+   * vez de llegarle al cliente. Diez minutos es de sobra para contestar un
+   * numero, y limita el dano si se distrae.
+   */
+  private static readonly VENTANA_HABITACION_MS = 10 * 60 * 1000;
 
   private readonly clientMessageBuffers = new Map<
     string,
@@ -5742,48 +5764,113 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
     if (ctx.session?.step === 'AWAITING_ROOM' && ctx.session.roomServiceId) {
       const text = ((ctx.message as { text?: string })?.text || '').trim();
-      const habitacion = text.toLowerCase() === 'no' ? undefined : text;
       const senderTelegramId = ctx.from?.id.toString();
 
       if (!senderTelegramId) return;
 
-      const user = await this.usuariosRepository.findOne({
-        where: { telegramChatId: senderTelegramId },
-      });
-
-      if (!user) {
+      /*
+       * Los botones del teclado no son una habitacion.
+       *
+       * Este paso se tragaba cualquier texto, y el teclado de autorizar sigue
+       * puesto: pulsar "Rechazar Servicio" mientras se esperaba el numero
+       * ACEPTABA el servicio con esa frase dentro, despachaba chofer y avisaba
+       * al cliente. El jefe creia haberlo rechazado. Lo mismo pulsando otra vez
+       * "Aceptar" porque el primer toque parecia no haber hecho nada.
+       */
+      if (text === BOTON_ACEPTAR_SERVICIO) {
         await ctx.reply(
-          '❌ No tienes permisos o no estás registrado en el sistema.',
+          'Ya me diste el visto bueno; solo falta la habitación (o escribe "No" si es a domicilio).',
+        );
+        return;
+      }
+      if (text === BOTON_RECHAZAR_SERVICIO) {
+        // Se suelta el paso y el mensaje sigue su curso hasta el manejador de
+        // autorizacion, que es quien sabe rechazar.
+        ctx.session.step = undefined;
+        ctx.session.roomServiceId = undefined;
+        ctx.session.roomAskedAt = undefined;
+      }
+
+      /*
+       * Salida y caducidad.
+       *
+       * Sin ellas la sesion del jefe quedaba secuestrada: mientras esperaba la
+       * habitacion, todo lo que escribiera en el tema se consumia aqui en vez
+       * de llegarle al cliente, y no habia forma de salir.
+       */
+      const caducado =
+        ctx.session.roomAskedAt !== undefined &&
+        Date.now() - ctx.session.roomAskedAt >
+          TelegramBookingUpdate.VENTANA_HABITACION_MS;
+      if (
+        ctx.session.step === 'AWAITING_ROOM' &&
+        (text.toLowerCase() === 'cancelar' || caducado)
+      ) {
+        const servicioId = ctx.session.roomServiceId;
+        ctx.session.step = undefined;
+        ctx.session.roomServiceId = undefined;
+        ctx.session.roomAskedAt = undefined;
+        await ctx.reply(
+          caducado
+            ? 'Pasó demasiado tiempo, así que dejo de esperar la habitación. El servicio sigue pendiente de autorizar.'
+            : 'Listo, ya no espero la habitación. El servicio sigue pendiente de autorizar.',
+          Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                'Autorizar',
+                `jefe_autorizar:${servicioId}:1`,
+              ),
+              Markup.button.callback(
+                'Rechazar',
+                `jefe_autorizar:${servicioId}:0`,
+              ),
+            ],
+          ]),
         );
         return;
       }
 
-      try {
-        await this.servicesService.aceptar(
-          ctx.session.roomServiceId,
-          user.id,
-          'chofer',
-          undefined,
-          habitacion,
-        );
+      if (ctx.session.step === 'AWAITING_ROOM' && ctx.session.roomServiceId) {
+        const habitacion = text.toLowerCase() === 'no' ? undefined : text;
+        const user = await this.usuariosRepository.findOne({
+          where: { telegramChatId: senderTelegramId },
+        });
 
-        await ctx.reply(
-          `🟢 *Servicio Aceptado* por ${user.email} ${habitacion ? `(Habitación: ${habitacion})` : ''}`,
-          Markup.removeKeyboard(),
-        );
-      } catch (err: any) {
-        this.logger.error(
-          'Error al aceptar servicio tras ingresar habitación:',
-          err,
-        );
-        await ctx.reply(
-          `❌ Error: ${err.message || 'Error al procesar la solicitud.'}`,
-        );
+        if (!user) {
+          await ctx.reply(
+            '❌ No tienes permisos o no estás registrado en el sistema.',
+          );
+          return;
+        }
+
+        try {
+          await this.servicesService.aceptar(
+            ctx.session.roomServiceId,
+            user.id,
+            'chofer',
+            undefined,
+            habitacion,
+          );
+
+          await ctx.reply(
+            `🟢 *Servicio Aceptado* por ${user.email} ${habitacion ? `(Habitación: ${habitacion})` : ''}`,
+            Markup.removeKeyboard(),
+          );
+        } catch (err: any) {
+          this.logger.error(
+            'Error al aceptar servicio tras ingresar habitación:',
+            err,
+          );
+          await ctx.reply(
+            `❌ Error: ${err.message || 'Error al procesar la solicitud.'}`,
+          );
+        }
+
+        ctx.session.step = undefined;
+        ctx.session.roomServiceId = undefined;
+        ctx.session.roomAskedAt = undefined;
+        return;
       }
-
-      ctx.session.step = undefined;
-      ctx.session.roomServiceId = undefined;
-      return;
     }
 
     if (ctx.session?.step === 'AWAITING_EXTRA_AMOUNT') {
@@ -6054,8 +6141,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       (ctx.chat?.type === 'supergroup' || ctx.chat?.type === 'group')
     ) {
       const cleanInput = text.trim();
-      const isAccept = cleanInput === '🟢 Aceptar Servicio';
-      const isReject = cleanInput === '🔴 Rechazar Servicio';
+      const isAccept = cleanInput === BOTON_ACEPTAR_SERVICIO;
+      const isReject = cleanInput === BOTON_RECHAZAR_SERVICIO;
 
       if (isAccept || isReject) {
         try {
@@ -6101,6 +6188,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             if (ctx.session) {
               ctx.session.step = 'AWAITING_ROOM';
               ctx.session.roomServiceId = service.id;
+              ctx.session.roomAskedAt = Date.now();
             }
             await ctx.reply(
               '🏨 ¿En qué habitación es el servicio? (Responde a este mensaje con el número/detalle, o escribe "No" si es casa).',
@@ -6365,7 +6453,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
               Object.assign(
                 extraOptions,
                 Markup.keyboard([
-                  ['🟢 Aceptar Servicio', '🔴 Rechazar Servicio'],
+                  [BOTON_ACEPTAR_SERVICIO, BOTON_RECHAZAR_SERVICIO],
                 ])
                   .resize()
                   .oneTime(),
@@ -6425,7 +6513,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
                 Object.assign(
                   extraOptions,
                   Markup.keyboard([
-                    ['🟢 Aceptar Servicio', '🔴 Rechazar Servicio'],
+                    [BOTON_ACEPTAR_SERVICIO, BOTON_RECHAZAR_SERVICIO],
                   ])
                     .resize()
                     .oneTime(),
