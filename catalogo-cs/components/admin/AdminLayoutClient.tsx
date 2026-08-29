@@ -14,6 +14,7 @@ import EditProfileModal from "@/components/admin/EditProfileModal";
 import {
   Activity,
   BookOpen,
+  Building2,
   Car,
   Clock,
   CreditCard,
@@ -76,6 +77,7 @@ const navGroups: NavGroup[] = [
     title: "Operacion",
     items: [
       { label: "Servicios", href: "/admin/services", icon: Activity },
+      { label: "Departamentos", href: "/admin/departamentos", icon: Building2 },
       { label: "Transporte", href: "/admin/transport", icon: MapPin },
       { label: "Turnos", href: "/admin/turnos", icon: Clock },
       { label: "Mapa", href: "/admin/map", icon: MapIcon },
