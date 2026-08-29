@@ -12,9 +12,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * generico habria ensuciado justo la ficha del cliente y el historial que se
  * consulta para sancionarlo, asi que el nombre suelto va en su propia columna.
  */
-export class AddManualServiceRequests1795000000000
-  implements MigrationInterface
-{
+export class AddManualServiceRequests1795000000000 implements MigrationInterface {
   name = 'AddManualServiceRequests1795000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

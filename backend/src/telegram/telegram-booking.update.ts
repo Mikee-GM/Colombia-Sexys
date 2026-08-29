@@ -101,7 +101,14 @@ interface SessionData {
     | 'AWAITING_CANDIDATE_ANSWER'
     | 'AWAITING_APPEAL_REASON'
     | 'AWAITING_EXTRA_AMOUNT'
-    | 'AWAITING_ROOM';
+    | 'AWAITING_ROOM'
+    | 'BOSS_AWAITING_CLIENT_SEARCH'
+    | 'BOSS_AWAITING_CLIENT_NAME';
+  bossManualService?: {
+    empleadaId?: string;
+    clientId?: string;
+    clienteNombreLibre?: string;
+  };
   empleadaId?: string;
   duracionPactadaHoras?: number;
   /** El cliente pactó un servicio de duración abierta: se cobra al finalizar. */
@@ -5617,6 +5624,122 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
+    if (
+      ctx.session?.step === 'BOSS_AWAITING_CLIENT_SEARCH' &&
+      ctx.session.bossManualService?.empleadaId
+    ) {
+      const empleadaId = ctx.session.bossManualService.empleadaId;
+      const text = ((ctx.message as { text?: string })?.text || '').trim();
+      if (!text) return;
+
+      const emp = await this.empleadasRepository.findOne({
+        where: { id: empleadaId },
+      });
+      if (!emp) {
+        ctx.session.step = undefined;
+        ctx.session.bossManualService = undefined;
+        await ctx.reply('❌ Empleada no encontrada.');
+        return;
+      }
+
+      const search = text;
+      const where = /^\d+$/.test(search)
+        ? [
+            { nombreTelegram: ILike(`%${search}%`) },
+            { telegramChatId: ILike(`%${search}%`) },
+          ]
+        : { nombreTelegram: ILike(`%${search}%`) };
+
+      const encontrados = await this.clientesRepository.find({
+        where,
+        take: 6,
+        order: { createdAt: 'DESC' },
+      });
+
+      if (!encontrados.length) {
+        await ctx.reply(
+          `❌ No se encontró ningún cliente con "${text}".\nPrueba con otro término o selecciona una opción:`,
+          Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                '✏️ Cliente no registrado (nombre libre)',
+                `boss_ms_cli_free:${emp.id}`,
+              ),
+            ],
+            [
+              Markup.button.callback(
+                '👤 Sin cliente (anónimo / opcional)',
+                `boss_ms_cli_set:none:${emp.id}`,
+              ),
+            ],
+            [Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')],
+          ]),
+        );
+        return;
+      }
+
+      const rows: ReturnType<typeof Markup.button.callback>[][] =
+        encontrados.map((c) => [
+          Markup.button.callback(
+            `👤 ${c.nombreTelegram || 'Sin nombre'} (${c.telegramChatId})`,
+            `boss_ms_cli_set:${c.id}:${emp.id}`,
+          ),
+        ]);
+      rows.push([
+        Markup.button.callback(
+          '✏️ Nombre libre (no registrado)',
+          `boss_ms_cli_free:${emp.id}`,
+        ),
+      ]);
+      rows.push([
+        Markup.button.callback(
+          '👤 Sin cliente (anónimo / opcional)',
+          `boss_ms_cli_set:none:${emp.id}`,
+        ),
+      ]);
+      rows.push([Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')]);
+
+      await ctx.reply(
+        `🔍 *Resultados de clientes para:* "${text}"\nElige al cliente para el servicio con *${emp.nombreArtistico}*:`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard(rows),
+        },
+      );
+      return;
+    }
+
+    if (
+      ctx.session?.step === 'BOSS_AWAITING_CLIENT_NAME' &&
+      ctx.session.bossManualService?.empleadaId
+    ) {
+      const empleadaId = ctx.session.bossManualService.empleadaId;
+      const text = ((ctx.message as { text?: string })?.text || '').trim();
+      const nombreLibre = text.slice(0, 120);
+
+      const emp = await this.empleadasRepository.findOne({
+        where: { id: empleadaId },
+      });
+      if (!emp) {
+        ctx.session.step = undefined;
+        ctx.session.bossManualService = undefined;
+        await ctx.reply('❌ Empleada no encontrada.');
+        return;
+      }
+
+      ctx.session.step = undefined;
+      ctx.session.bossManualService.clientId = 'none';
+      ctx.session.bossManualService.clienteNombreLibre = nombreLibre;
+
+      await this.showManualServiceDurationOptions(
+        ctx,
+        'none',
+        emp,
+        nombreLibre,
+      );
+      return;
+    }
+
     if (ctx.session?.step === 'AWAITING_ROOM' && ctx.session.roomServiceId) {
       const text = ((ctx.message as { text?: string })?.text || '').trim();
       const habitacion = text.toLowerCase() === 'no' ? undefined : text;
@@ -8096,33 +8219,80 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     ctx: BotContext,
     clientId: string,
     empleadaId: string,
+    page: number = 0,
   ) {
     if (empleadaId && empleadaId !== 'none') {
       const emp = await this.empleadasRepository.findOne({
         where: { id: empleadaId },
       });
       if (emp) {
-        await this.showManualServiceDurationOptions(ctx, clientId, emp);
+        await this.askManualServiceClient(ctx, emp, clientId);
         return;
       }
     }
 
-    // Mostrar selección de empleada
+    // Mostrar selección de empleada (paginada y sin límite arbitrario de 10)
     const employees = await this.empleadasRepository.find({
       where: { catalogoActivo: true },
       order: { nombreArtistico: 'ASC' },
     });
 
-    const rows = employees
-      .slice(0, 10)
-      .map((emp) => [
-        Markup.button.callback(
-          `🌸 ${emp.nombreArtistico} ($${emp.precioBaseHora}/hr)`,
-          `boss_ms_emp:${clientId}:${emp.id}`,
-        ),
-      ]);
+    if (!employees.length) {
+      const msg = '❌ No hay empleadas activas en el catálogo.';
+      if (ctx.callbackQuery) {
+        await ctx.editMessageText(msg).catch(() => ctx.reply(msg));
+      } else {
+        await ctx.reply(msg);
+      }
+      return;
+    }
 
-    const msgText = '✨ *Paso 1: Selecciona la Empleada para el Servicio*';
+    const PAGE_SIZE = 8;
+    const totalPages = Math.ceil(employees.length / PAGE_SIZE) || 1;
+    const safePage = Math.max(0, Math.min(page, totalPages - 1));
+    const pagedEmployees = employees.slice(
+      safePage * PAGE_SIZE,
+      (safePage + 1) * PAGE_SIZE,
+    );
+
+    const rows: ReturnType<typeof Markup.button.callback>[][] = [];
+    for (let i = 0; i < pagedEmployees.length; i += 2) {
+      const pair = pagedEmployees
+        .slice(i, i + 2)
+        .map((emp) =>
+          Markup.button.callback(
+            `🌸 ${emp.nombreArtistico} ($${emp.precioBaseHora}/h)`,
+            `boss_ms_emp:${clientId}:${emp.id}`,
+          ),
+        );
+      rows.push(pair);
+    }
+
+    const navRow: ReturnType<typeof Markup.button.callback>[] = [];
+    if (safePage > 0) {
+      navRow.push(
+        Markup.button.callback(
+          '◀️ Anterior',
+          `boss_ms_emp_page:${clientId}:${safePage - 1}`,
+        ),
+      );
+    }
+    if (safePage < totalPages - 1) {
+      navRow.push(
+        Markup.button.callback(
+          'Siguiente ▶️',
+          `boss_ms_emp_page:${clientId}:${safePage + 1}`,
+        ),
+      );
+    }
+    if (navRow.length > 0) {
+      rows.push(navRow);
+    }
+    rows.push([Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')]);
+
+    const msgText =
+      `✨ *Paso 1: Selecciona la Empleada para el Servicio*` +
+      (totalPages > 1 ? ` _(Página ${safePage + 1}/${totalPages})_` : '');
     const extra = {
       parse_mode: 'Markdown' as const,
       ...Markup.inlineKeyboard(rows),
@@ -8135,6 +8305,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     } else {
       await ctx.reply(msgText, extra);
     }
+  }
+
+  @Action(/^boss_ms_emp_page:(.+):(\d+)$/)
+  async onBossMsEmpPage(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const clientId = match[1];
+    const page = parseInt(match[2], 10);
+    await this.startManualServiceWizard(ctx, clientId, 'none', page);
   }
 
   @Action(/^boss_ms_emp:(.+):(.+)$/)
@@ -8150,15 +8329,240 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       await ctx.reply('Empleada no encontrada.');
       return;
     }
+    await this.askManualServiceClient(ctx, emp, clientId);
+  }
+
+  /**
+   * Paso 2: Selector de cliente para el jefe.
+   * Permite elegir cliente detectado, buscar cliente por nombre/ID,
+   * ingresar nombre libre o registrarlo como anónimo / sin cliente.
+   */
+  private async askManualServiceClient(
+    ctx: BotContext,
+    emp: Empleadas,
+    clientId: string,
+  ) {
+    let client: Clientes | null = null;
+    if (clientId && clientId !== 'none' && clientId !== 'free') {
+      client = await this.clientesRepository.findOne({
+        where: { id: clientId },
+      });
+    }
+
+    const rate = Number(emp.precioBaseHora) || 1200;
+
+    if (client) {
+      const clientName = client.nombreTelegram || client.telegramChatId;
+      const rows = [
+        [
+          Markup.button.callback(
+            `✅ Usar ${clientName}`,
+            `boss_ms_cli_set:${client.id}:${emp.id}`,
+          ),
+        ],
+        [
+          Markup.button.callback(
+            '🔍 Buscar otro cliente',
+            `boss_ms_cli_search:${emp.id}`,
+          ),
+        ],
+        [
+          Markup.button.callback(
+            '✏️ Nombre libre (no registrado)',
+            `boss_ms_cli_free:${emp.id}`,
+          ),
+        ],
+        [
+          Markup.button.callback(
+            '👤 Sin cliente (anónimo / opcional)',
+            `boss_ms_cli_set:none:${emp.id}`,
+          ),
+        ],
+        [Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')],
+      ];
+
+      const msgText =
+        `🌸 *Empleada:* ${emp.nombreArtistico} ($${rate}/hr)\n` +
+        `👤 *Cliente detectado:* ${clientName}\n\n` +
+        `¿Deseas continuar con este cliente o seleccionar otro?`;
+
+      const extra = {
+        parse_mode: 'Markdown' as const,
+        ...Markup.inlineKeyboard(rows),
+      };
+
+      if (ctx.callbackQuery) {
+        await ctx
+          .editMessageText(msgText, extra)
+          .catch(() => ctx.reply(msgText, extra));
+      } else {
+        await ctx.reply(msgText, extra);
+      }
+      return;
+    }
+
+    const recentClients = await this.clientesRepository.find({
+      order: { createdAt: 'DESC' },
+      take: 4,
+    });
+
+    const rows: ReturnType<typeof Markup.button.callback>[][] = [
+      [
+        Markup.button.callback(
+          '🔍 Buscar por nombre o Telegram ID',
+          `boss_ms_cli_search:${emp.id}`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          '✏️ Cliente no registrado (nombre libre)',
+          `boss_ms_cli_free:${emp.id}`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          '👤 Sin cliente (anónimo / opcional)',
+          `boss_ms_cli_set:none:${emp.id}`,
+        ),
+      ],
+    ];
+
+    if (recentClients.length > 0) {
+      for (const rc of recentClients) {
+        rows.push([
+          Markup.button.callback(
+            `👤 ${rc.nombreTelegram || rc.telegramChatId}`,
+            `boss_ms_cli_set:${rc.id}:${emp.id}`,
+          ),
+        ]);
+      }
+    }
+
+    rows.push([Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')]);
+
+    const msgText =
+      `🌸 *Empleada:* ${emp.nombreArtistico} ($${rate}/hr)\n\n` +
+      `👤 *Paso 2: Selecciona el Cliente para el Servicio:*`;
+
+    const extra = {
+      parse_mode: 'Markdown' as const,
+      ...Markup.inlineKeyboard(rows),
+    };
+
+    if (ctx.callbackQuery) {
+      await ctx
+        .editMessageText(msgText, extra)
+        .catch(() => ctx.reply(msgText, extra));
+    } else {
+      await ctx.reply(msgText, extra);
+    }
+  }
+
+  @Action(/^boss_ms_cli_search:(.+)$/)
+  async onBossMsCliSearch(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const empleadaId = match[1];
+
+    ctx.session ||= {};
+    ctx.session.step = 'BOSS_AWAITING_CLIENT_SEARCH';
+    ctx.session.bossManualService = { empleadaId };
+
+    const msg =
+      '🔍 *Buscar Cliente*\n\n' +
+      'Escribe el nombre de Telegram o el ID numérico del cliente para buscarlo:';
+
+    if (ctx.callbackQuery) {
+      await ctx
+        .editMessageText(msg, { parse_mode: 'Markdown' })
+        .catch(() => ctx.reply(msg, { parse_mode: 'Markdown' }));
+    } else {
+      await ctx.reply(msg, { parse_mode: 'Markdown' });
+    }
+  }
+
+  @Action(/^boss_ms_cli_free:(.+)$/)
+  async onBossMsCliFree(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const empleadaId = match[1];
+
+    ctx.session ||= {};
+    ctx.session.step = 'BOSS_AWAITING_CLIENT_NAME';
+    ctx.session.bossManualService = { empleadaId };
+
+    const msg =
+      '✏️ *Cliente No Registrado*\n\n' +
+      'Escribe el nombre del cliente (como se le conoce):';
+
+    if (ctx.callbackQuery) {
+      await ctx
+        .editMessageText(msg, { parse_mode: 'Markdown' })
+        .catch(() => ctx.reply(msg, { parse_mode: 'Markdown' }));
+    } else {
+      await ctx.reply(msg, { parse_mode: 'Markdown' });
+    }
+  }
+
+  @Action(/^boss_ms_cli_set:(.+):(.+)$/)
+  async onBossMsCliSet(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+    const clientId = match[1];
+    const empleadaId = match[2];
+
+    const emp = await this.empleadasRepository.findOne({
+      where: { id: empleadaId },
+    });
+    if (!emp) {
+      await ctx.reply('Empleada no encontrada.');
+      return;
+    }
+
+    ctx.session ||= {};
+    ctx.session.step = undefined;
+    ctx.session.bossManualService = {
+      ...ctx.session.bossManualService,
+      clientId,
+      empleadaId,
+      clienteNombreLibre: undefined,
+    };
+
     await this.showManualServiceDurationOptions(ctx, clientId, emp);
+  }
+
+  @Action('boss_ms_cancel')
+  async onBossMsCancel(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    if (ctx.session) {
+      ctx.session.step = undefined;
+      ctx.session.bossManualService = undefined;
+    }
+    const msg = '❌ Creación manual de servicio cancelada.';
+    if (ctx.callbackQuery) {
+      await ctx.editMessageText(msg).catch(() => ctx.reply(msg));
+    } else {
+      await ctx.reply(msg);
+    }
   }
 
   private async showManualServiceDurationOptions(
     ctx: BotContext,
     clientId: string,
     emp: Empleadas,
+    clienteNombreLibre?: string,
   ) {
     const rate = Number(emp.precioBaseHora) || 1200;
+    let clientLabel = 'Sin cliente (anónimo)';
+    if (clientId && clientId !== 'none' && clientId !== 'free') {
+      const cl = await this.clientesRepository.findOne({
+        where: { id: clientId },
+      });
+      if (cl) clientLabel = cl.nombreTelegram || cl.telegramChatId;
+    } else if (clienteNombreLibre) {
+      clientLabel = clienteNombreLibre;
+    }
+
     const rows = [
       [
         Markup.button.callback(
@@ -8180,9 +8584,13 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           `boss_ms_dur:${clientId}:${emp.id}:4`,
         ),
       ],
+      [Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')],
     ];
 
-    const msgText = `🌸 *Empleada:* ${emp.nombreArtistico} ($${rate}/hr)\n\n⏱️ *Paso 2: Selecciona la Duración del Servicio:*`;
+    const msgText =
+      `🌸 *Empleada:* ${emp.nombreArtistico} ($${rate}/hr)\n` +
+      `👤 *Cliente:* ${clientLabel}\n\n` +
+      `⏱️ *Paso 3: Selecciona la Duración del Servicio:*`;
     const extra = {
       parse_mode: 'Markdown' as const,
       ...Markup.inlineKeyboard(rows),
@@ -8223,9 +8631,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           `boss_ms_pay:${clientId}:${empleadaId}:${duracion}:tarjeta`,
         ),
       ],
+      [Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')],
     ];
 
-    const msgText = `⏱️ *Duración:* ${duracion} hora(s)\n\n💳 *Paso 3: Selecciona el Método de Pago:*`;
+    const msgText = `⏱️ *Duración:* ${duracion} hora(s)\n\n💳 *Paso 4: Selecciona el Método de Pago:*`;
     const extra = {
       parse_mode: 'Markdown' as const,
       ...Markup.inlineKeyboard(rows),
@@ -8257,8 +8666,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         `boss_ms_loc:${clientId}:${empleadaId}:${duracion}:${metodoPago}:external`,
       ),
     ]);
+    rows.push([Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')]);
 
-    const msgText = `💳 *Pago:* ${metodoPago.toUpperCase()}\n\n🏨 *Paso 4: Selecciona la Ubicación:*`;
+    const msgText = `💳 *Pago:* ${metodoPago.toUpperCase()}\n\n🏨 *Paso 5: Selecciona la Ubicación:*`;
     const extra = {
       parse_mode: 'Markdown' as const,
       ...Markup.inlineKeyboard(rows),
@@ -8291,9 +8701,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           `boss_ms_conf:${clientId}:${empleadaId}:${duracion}:${metodoPago}:${locId}:programado`,
         ),
       ],
+      [Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')],
     ];
 
-    const msgText = `🏨 *Ubicación Seleccionada*\n\n📅 *Paso 5: Selecciona el Tipo de Agenda:*`;
+    const msgText = `🏨 *Ubicación Seleccionada*\n\n📅 *Paso 6: Selecciona el Tipo de Agenda:*`;
     const extra = {
       parse_mode: 'Markdown' as const,
       ...Markup.inlineKeyboard(rows),
@@ -8329,12 +8740,24 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       }
 
       let client: Clientes | null = null;
-      if (clientId && clientId !== 'none') {
+      let clienteNombreLibre: string | undefined = undefined;
+
+      if (clientId && clientId !== 'none' && clientId !== 'free') {
         client = await this.clientesRepository.findOne({
           where: { id: clientId },
         });
       }
-      if (!client && threadId) {
+
+      if (!client) {
+        clienteNombreLibre = ctx.session?.bossManualService?.clienteNombreLibre;
+      }
+
+      if (
+        !client &&
+        !clienteNombreLibre &&
+        threadId &&
+        (clientId === 'none' || !clientId)
+      ) {
         const matched = await this.findSessionByBossThread(threadId);
         const telId = matched ? this.clientTelegramIdOf(matched) : undefined;
         if (telId) {
@@ -8342,18 +8765,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             where: { telegramChatId: telId },
           });
         }
-      }
-
-      if (!client) {
-        const latestClient = await this.clientesRepository.findOne({
-          order: { createdAt: 'DESC' },
-        });
-        client = latestClient;
-      }
-
-      if (!client) {
-        await ctx.reply('❌ No se encontró cliente vinculado a este chat.');
-        return;
       }
 
       let lat = 19.432608;
@@ -8379,7 +8790,8 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
 
       const newService = await this.servicesService.create({
         empleadaId: empleada.id,
-        clienteId: client.id,
+        clienteId: client?.id,
+        clienteNombreLibre: client ? undefined : clienteNombreLibre,
         jefeId: empleada.jefeId || undefined,
         duracionPactadaHoras: duracion,
         metodoPago,
@@ -8390,7 +8802,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         tipoAgenda,
         fechaProgramada: scheduledDate,
         presetLocationId,
-        clienteTelegramId: client.telegramChatId,
+        clienteTelegramId: client?.telegramChatId,
       });
 
       if (threadId) {
@@ -8399,11 +8811,17 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         await this.serviciosRepository.save(newService);
       }
 
+      const clientDisplay =
+        client?.nombreTelegram ||
+        client?.telegramChatId ||
+        clienteNombreLibre ||
+        'Sin cliente (anónimo)';
+
       const totalBase = (Number(empleada.precioBaseHora) || 1200) * duracion;
       const successMsg =
         `✅ *Servicio Creado Exitosamente*\n\n` +
         `• *ID:* #${newService.id.slice(0, 8)}\n` +
-        `• *Cliente:* ${client.nombreTelegram || 'Cliente'}\n` +
+        `• *Cliente:* ${clientDisplay}\n` +
         `• *Empleada:* ${empleada.nombreArtistico}\n` +
         `• *Duración:* ${duracion} hrs\n` +
         `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
@@ -8415,13 +8833,18 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         .editMessageText(successMsg, { parse_mode: 'Markdown' })
         .catch(() => ctx.reply(successMsg, { parse_mode: 'Markdown' }));
 
-      // Notificar al cliente en privado
-      if (client.telegramChatId) {
+      // Notificar al cliente en privado solo si tiene Telegram Chat ID
+      if (client?.telegramChatId) {
         const clientMsg = `¡Listo amor! Tu servicio con *${empleada.nombreArtistico}* por ${duracion} hora(s) ha sido confirmado. Ya nos estamos preparando para salir a verte.`;
         await this.bot.telegram.sendMessage(client.telegramChatId, clientMsg, {
           parse_mode: 'Markdown',
         });
         await this.recordConversation(newService, 'ia', clientMsg);
+      }
+
+      if (ctx.session) {
+        ctx.session.bossManualService = undefined;
+        ctx.session.step = undefined;
       }
     } catch (err: any) {
       this.logger.error('Error creating manual service from Telegram:', err);

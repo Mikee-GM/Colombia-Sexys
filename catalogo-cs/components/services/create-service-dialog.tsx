@@ -45,7 +45,11 @@ export default function CreateServiceDialog({
   const [submitting, setSubmitting] = useState(false);
 
   // Form states
+  const [clientMode, setClientMode] = useState<"registered" | "custom" | "anonymous">(
+    preselectedClientId ? "registered" : "registered",
+  );
   const [selectedClientId, setSelectedClientId] = useState(preselectedClientId || "");
+  const [clientFreeName, setClientFreeName] = useState<string>("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(preselectedEmployeeId || "");
   const [durationHours, setDurationHours] = useState<number>(1);
   /**
@@ -84,8 +88,8 @@ export default function CreateServiceDialog({
           const locationList = Array.isArray(locsRes.data) ? locsRes.data : [];
 
           setClients(clientList);
-          if (!selectedClientId && clientList.length > 0) {
-            setSelectedClientId(preselectedClientId || clientList[0].id);
+          if (preselectedClientId) {
+            setSelectedClientId(preselectedClientId);
           }
 
           setLocations(locationList);
@@ -105,7 +109,7 @@ export default function CreateServiceDialog({
     return () => {
       isMounted = false;
     };
-  }, [open, preselectedClientId, selectedClientId, presetLocationId]);
+  }, [open, preselectedClientId, presetLocationId]);
 
   useEffect(() => {
     if (initialEmployees && initialEmployees.length > 0) {
@@ -140,8 +144,12 @@ export default function CreateServiceDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!selectedClientId) {
-      toast.error("Debes seleccionar un cliente");
+    if (clientMode === "registered" && !selectedClientId) {
+      toast.error("Debes seleccionar un cliente registrado o cambiar la opción");
+      return;
+    }
+    if (clientMode === "custom" && !clientFreeName.trim()) {
+      toast.error("Ingresa el nombre o alias del cliente");
       return;
     }
     if (!selectedEmployeeId) {
@@ -171,10 +179,11 @@ export default function CreateServiceDialog({
 
     setSubmitting(true);
     try {
-      const client = clients.find((c) => c.id === selectedClientId);
+      const client = clientMode === "registered" ? clients.find((c) => c.id === selectedClientId) : undefined;
 
       const payload = {
-        clienteId: selectedClientId,
+        clienteId: clientMode === "registered" ? selectedClientId || undefined : undefined,
+        clienteNombreLibre: clientMode === "custom" ? clientFreeName.trim() : undefined,
         empleadaId: selectedEmployeeId,
         duracionPactadaHoras: durationHours,
         duracionIndefinida: openEnded,
@@ -186,7 +195,7 @@ export default function CreateServiceDialog({
         tipoAgenda: agendaType,
         fechaProgramada: agendaType === "programado" ? new Date(scheduledDateTime).toISOString() : undefined,
         presetLocationId: locationType === "preset" ? presetLocationId : undefined,
-        clienteTelegramId: client?.telegramChatId || undefined,
+        clienteTelegramId: clientMode === "registered" ? client?.telegramChatId || undefined : undefined,
       };
 
       const res = await createManualServiceAction(payload);
@@ -219,24 +228,23 @@ export default function CreateServiceDialog({
                 Crear Servicio Manual
               </h2>
               <p className="text-xs text-zinc-400">
-                Pacta un servicio desde cero para el cliente
+                Registra un servicio nuevo para despacho o agenda
               </p>
             </div>
           </div>
           <button
-            type="button"
             onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors"
+            className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
           {loadingInitial ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-400">
-              <Loader2 size={28} className="animate-spin text-[#C5A55A]" />
+            <div className="py-12 flex flex-col items-center justify-center gap-2 text-zinc-500">
+              <Loader2 size={24} className="animate-spin text-[#C5A55A]" />
               <span className="text-xs">Cargando clientes y ubicaciones...</span>
             </div>
           ) : (
@@ -246,31 +254,90 @@ export default function CreateServiceDialog({
                 <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
                   <User size={14} className="text-[#C5A55A]" /> Cliente
                 </label>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    placeholder="Filtrar por nombre o ID de Telegram..."
-                    value={clientSearch}
-                    onChange={(e) => setClientSearch(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs text-white placeholder:text-zinc-500 focus:border-[#C5A55A] outline-none"
-                  />
-                  <select
-                    value={selectedClientId}
-                    onChange={(e) => setSelectedClientId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:border-[#C5A55A] outline-none"
-                    required
+
+                {/* Modos de cliente: Registrado, Nombre Libre, Anónimo */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setClientMode("registered")}
+                    className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-xl transition-all ${
+                      clientMode === "registered"
+                        ? "bg-[#C5A55A] text-zinc-950 shadow-md shadow-amber-500/20"
+                        : "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                    }`}
                   >
-                    {filteredClients.length === 0 ? (
-                      <option value="">No hay clientes encontrados</option>
-                    ) : (
-                      filteredClients.map((c) => (
+                    Registrado
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClientMode("custom")}
+                    className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-xl transition-all ${
+                      clientMode === "custom"
+                        ? "bg-[#C5A55A] text-zinc-950 shadow-md shadow-amber-500/20"
+                        : "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                    }`}
+                  >
+                    Nombre libre
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClientMode("anonymous")}
+                    className={`flex-1 py-1.5 px-2 text-xs font-bold rounded-xl transition-all ${
+                      clientMode === "anonymous"
+                        ? "bg-[#C5A55A] text-zinc-950 shadow-md shadow-amber-500/20"
+                        : "bg-zinc-900 border border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                    }`}
+                  >
+                    Sin cliente
+                  </button>
+                </div>
+
+                {clientMode === "registered" && (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Filtrar por nombre o ID de Telegram..."
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                      className="w-full px-3.5 py-2 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs text-white placeholder:text-zinc-500 focus:border-[#C5A55A] outline-none"
+                    />
+                    <select
+                      value={selectedClientId}
+                      onChange={(e) => setSelectedClientId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:border-[#C5A55A] outline-none"
+                      required={clientMode === "registered"}
+                    >
+                      <option value="">-- Selecciona un cliente --</option>
+                      {filteredClients.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.nombreTelegram || "Cliente sin nombre"} (Telegram: {c.telegramChatId})
                         </option>
-                      ))
-                    )}
-                  </select>
-                </div>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {clientMode === "custom" && (
+                  <div className="space-y-1">
+                    <input
+                      type="text"
+                      placeholder="Nombre o alias del cliente (ej. Juan Pérez)..."
+                      value={clientFreeName}
+                      onChange={(e) => setClientFreeName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder:text-zinc-500 focus:border-[#C5A55A] outline-none"
+                      required={clientMode === "custom"}
+                    />
+                    <p className="text-[11px] text-zinc-500">
+                      Se guardará con este nombre sin vincular a una cuenta de Telegram.
+                    </p>
+                  </div>
+                )}
+
+                {clientMode === "anonymous" && (
+                  <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs text-zinc-400">
+                    El servicio se creará como anónimo (sin cliente registrado).
+                  </div>
+                )}
               </div>
 
               {/* Empleada */}

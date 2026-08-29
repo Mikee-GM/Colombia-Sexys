@@ -17,10 +17,20 @@ export class CreateServiceDto {
   @IsUUID()
   empleadaId: string;
 
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiPropertyOptional({
+    description:
+      'ID del cliente registrado. Opcional cuando el cliente no está registrado.',
+  })
+  @IsOptional()
   @IsUUID()
-  clienteId: string;
+  clienteId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Nombre libre del cliente cuando no está registrado',
+  })
+  @IsOptional()
+  @IsString()
+  clienteNombreLibre?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

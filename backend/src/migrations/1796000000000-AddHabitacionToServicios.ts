@@ -7,9 +7,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * ubicación cuando la empleada acepta un servicio o cuando se visualiza
  * en el detalle operativo del servicio.
  */
-export class AddHabitacionToServicios1796000000000
-  implements MigrationInterface
-{
+export class AddHabitacionToServicios1796000000000 implements MigrationInterface {
   name = 'AddHabitacionToServicios1796000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
