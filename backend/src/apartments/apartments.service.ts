@@ -33,7 +33,7 @@ export class ApartmentsService {
 
   async findAll(): Promise<Apartments[]> {
     return this.apartmentsRepository.find({
-      relations: ['empleadas'],
+      relations: { empleadas: true },
       order: { createdAt: 'DESC' },
     });
   }
@@ -41,7 +41,7 @@ export class ApartmentsService {
   async findOne(id: string): Promise<Apartments> {
     const apartment = await this.apartmentsRepository.findOne({
       where: { id },
-      relations: ['empleadas'],
+      relations: { empleadas: true },
     });
     if (!apartment) {
       throw new NotFoundException(`Apartment with ID ${id} not found`);
