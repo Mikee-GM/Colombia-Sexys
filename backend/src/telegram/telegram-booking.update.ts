@@ -10,7 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { Update, Ctx, Action, On, Hears, InjectBot } from 'nestjs-telegraf';
 import { Context, Markup, Telegraf } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, ILike } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { Usuarios } from '../users/entities/user.entity';
