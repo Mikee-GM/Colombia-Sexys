@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, Repository } from 'typeorm';
+import { DisciplineService } from '../discipline/discipline.service';
+import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from './entities/client.entity';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -19,6 +21,7 @@ export class ClientsService {
   constructor(
     @InjectRepository(Clientes)
     private readonly clientesRepository: Repository<Clientes>,
+    private readonly discipline: DisciplineService,
   ) {}
 
   async create(createClientDto: CreateClientDto): Promise<Clientes> {
@@ -83,5 +86,34 @@ export class ClientsService {
     await this.findOne(id);
     await this.clientesRepository.delete(id);
     return { deleted: true };
+  }
+
+  /** Sancion activa del cliente, si la tiene. */
+  async estadoDeBloqueo(id: string) {
+    await this.findOne(id);
+    const sancion = await this.discipline.getActiveSanction('client', id);
+    return {
+      bloqueado: Boolean(sancion),
+      tipo: sancion?.type ?? null,
+      motivo: sancion?.reason ?? null,
+      desde: sancion?.startsAt ?? null,
+      hasta: sancion?.endsAt ?? null,
+    };
+  }
+
+  async bloquear(
+    id: string,
+    actor: Usuarios,
+    input: { reason: string; endsAt?: string },
+  ) {
+    await this.findOne(id);
+    await this.discipline.blockClient(id, actor, input);
+    return this.estadoDeBloqueo(id);
+  }
+
+  async desbloquear(id: string, actor: Usuarios, reason: string) {
+    await this.findOne(id);
+    await this.discipline.unblockClient(id, actor, reason);
+    return this.estadoDeBloqueo(id);
   }
 }

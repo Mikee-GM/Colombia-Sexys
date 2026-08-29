@@ -3576,6 +3576,14 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const senderTelegramId = ctx.from?.id.toString();
 
     if (
+      senderTelegramId &&
+      ctx.chat?.type === 'private' &&
+      (await this.clienteBloqueado(senderTelegramId))
+    ) {
+      return;
+    }
+
+    if (
       ctx.session?.step === 'AWAITING_UBER_SCREENSHOT' &&
       ctx.session.uberTripId
     ) {
@@ -5550,6 +5558,44 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       );
   }
 
+  /**
+   * ¿Este chat es de un cliente bloqueado?
+   *
+   * El bloqueo se comprobaba solo al crear el servicio, al final de todo: un
+   * cliente sancionado podia negociar veinte mensajes con la IA, gastar
+   * llamadas al modelo y ocupar a la modelo, y enterarse al intentar cerrar. Se
+   * comprueba ahora en la puerta.
+   *
+   * Y se hace en silencio, sin contestarle: decirle "estas bloqueado" solo
+   * sirve para que discuta, insista o abra otra cuenta. Desde su lado, el chat
+   * simplemente dejo de responder.
+   */
+  private async clienteBloqueado(telegramId: string): Promise<boolean> {
+    try {
+      const cliente = await this.clientesRepository.findOne({
+        where: { telegramChatId: telegramId },
+        select: { id: true },
+      });
+      if (!cliente) return false;
+      const sancion = await this.disciplineService.getActiveSanction(
+        'client',
+        cliente.id,
+      );
+      if (!sancion) return false;
+      this.logger.log(
+        `Mensaje ignorado: el cliente ${telegramId} tiene ${sancion.type} activo.`,
+      );
+      return true;
+    } catch (error) {
+      // Ante un fallo al comprobarlo se atiende con normalidad: dejar mudo al
+      // bot para todo el mundo es peor que atender a un bloqueado de mas.
+      this.logger.warn(
+        `No se pudo comprobar el bloqueo de ${telegramId}: ${describeError(error)}`,
+      );
+      return false;
+    }
+  }
+
   @On('text')
   async onMessage(@Ctx() ctx: BotContext) {
     /*
@@ -5561,6 +5607,15 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
      * los `@Update()`, que no es algo sobre lo que se deba construir nada.
      */
     if (await this.manualServiceWizard.manejarTexto(ctx)) return;
+
+    const remitente = ctx.from?.id?.toString();
+    if (
+      remitente &&
+      ctx.chat?.type === 'private' &&
+      (await this.clienteBloqueado(remitente))
+    ) {
+      return;
+    }
 
     if (ctx.session?.step === 'AWAITING_ROOM' && ctx.session.roomServiceId) {
       const text = ((ctx.message as { text?: string })?.text || '').trim();

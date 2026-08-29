@@ -348,6 +348,71 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
 
   async createSanction(dto: CreateSanctionDto, admin: Actor) {
     this.assertAdmin(admin);
+    return this.persistSanction(dto, admin.id);
+  }
+
+  /**
+   * Bloquea a un cliente, y esto si puede hacerlo un jefe.
+   *
+   * Sancionar a una empleada o a un chofer sigue siendo cosa de
+   * administracion, porque afecta a su sustento. Un cliente es otra cosa: el
+   * jefe es quien lidia con el en el momento en que pasa algo, y hacerle
+   * esperar a que un admin este disponible significa que el cliente sigue
+   * escribiendole a las modelos mientras tanto.
+   */
+  async blockClient(
+    clienteId: string,
+    actor: Actor,
+    input: { reason: string; endsAt?: string; conductReportId?: string },
+  ) {
+    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
+      throw new ForbiddenException(
+        'Solo un jefe o un administrador puede bloquear a un cliente',
+      );
+    }
+    return this.persistSanction(
+      {
+        subjectType: 'client',
+        subjectId: clienteId,
+        // Sin fecha final es un bloqueo definitivo; con ella, una suspension.
+        type: input.endsAt ? 'suspension' : 'permanent_ban',
+        reason: input.reason,
+        endsAt: input.endsAt,
+        conductReportId: input.conductReportId,
+      },
+      actor.id,
+    );
+  }
+
+  /** Levanta todos los bloqueos activos de un cliente. */
+  async unblockClient(clienteId: string, actor: Actor, reason: string) {
+    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
+      throw new ForbiddenException(
+        'Solo un jefe o un administrador puede levantar el bloqueo',
+      );
+    }
+    if (!reason?.trim()) {
+      throw new BadRequestException('Explica por qué se levanta el bloqueo');
+    }
+    const activas = await this.sanctions.find({
+      where: { subjectType: 'client', subjectId: clienteId, status: 'active' },
+    });
+    for (const sancion of activas) {
+      sancion.status = 'revoked';
+      sancion.revokedAt = new Date();
+      sancion.revokedByUserId = actor.id;
+      sancion.revocationReason = reason.trim();
+    }
+    if (activas.length) await this.sanctions.save(activas);
+    this.realtime.emitToJefes({
+      type: 'discipline.client.unblocked',
+      subjectId: clienteId,
+      levantadas: activas.length,
+    });
+    return { levantadas: activas.length };
+  }
+
+  private async persistSanction(dto: CreateSanctionDto, actorId: string) {
     const startsAt = dto.startsAt ? new Date(dto.startsAt) : new Date();
     const endsAt = dto.endsAt ? new Date(dto.endsAt) : null;
     if (dto.type === 'suspension' && (!endsAt || endsAt <= startsAt)) {
@@ -370,7 +435,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         fineAmount: dto.type === 'fine' ? Number(dto.fineAmount) : null,
         reason: dto.reason.trim(),
         conductReportId: dto.conductReportId ?? null,
-        createdByUserId: admin.id,
+        createdByUserId: actorId,
         startsAt,
         endsAt,
       }),
@@ -407,7 +472,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     if (dto.type === 'fine' && dto.subjectType === 'employee') {
       await this.dataSource.getRepository('LiquidationRecord').save({
         employeeId: dto.subjectId,
-        registeredByUserId: admin.id,
+        registeredByUserId: actorId,
         sourceRole: 'admin',
         occurredAt: startsAt,
         serviceTotal: 0,

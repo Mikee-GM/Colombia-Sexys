@@ -5,6 +5,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
+import { Clientes } from '../clients/entities/client.entity';
+import { DisciplineService } from '../discipline/discipline.service';
 import { ServicesService } from '../services/services.service';
 import type { TelegramSessionData } from './telegram-booking.update';
 import { TelegramCallbackGuard } from './telegram-callback-guard';
@@ -24,6 +26,9 @@ export class TelegramAdminUpdate {
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
     private readonly callbackGuard: TelegramCallbackGuard,
+    @InjectRepository(Clientes)
+    private readonly clientesRepository: Repository<Clientes>,
+    private readonly discipline: DisciplineService,
   ) {}
 
   /**
@@ -912,5 +917,93 @@ export class TelegramAdminUpdate {
 
     // Regresar al menú de edición actualizado
     await this.onJefeEditarSrv(ctx);
+  }
+
+  /**
+   * Bloquear al cliente desde el propio aviso en el que se ve el problema.
+   *
+   * En caliente, un boton en el mensaje que acaba de llegar es la unica via que
+   * se usa de verdad: si hay que abrir el panel, buscar al cliente y rellenar
+   * un formulario, no se bloquea a nadie. El motivo detallado se puede matizar
+   * despues desde la ficha del cliente.
+   */
+  @Action(/^bloq_cli:(\d+)$/)
+  async onBloquearCliente(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
+    const actor = await this.getActor(ctx);
+    if (!actor || (actor.rol !== 'jefe' && actor.rol !== 'admin')) {
+      this.callbackGuard.liberar(ctx);
+      await ctx.answerCbQuery('No tienes permisos para bloquear clientes.', {
+        show_alert: true,
+      });
+      return;
+    }
+
+    const telegramId = (ctx as any).match[1] as string;
+    const cliente = await this.clientesRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+    if (!cliente) {
+      this.callbackGuard.liberar(ctx);
+      await ctx.answerCbQuery('Ese cliente no está registrado.', {
+        show_alert: true,
+      });
+      return;
+    }
+
+    try {
+      await this.discipline.blockClient(cliente.id, actor, {
+        reason: `Bloqueado desde Telegram por ${actor.email}`,
+      });
+    } catch (error: any) {
+      this.callbackGuard.liberar(ctx);
+      await ctx.answerCbQuery(error?.message || 'No se pudo bloquear.', {
+        show_alert: true,
+      });
+      return;
+    }
+
+    await ctx.answerCbQuery('Cliente bloqueado.');
+    await ctx.reply(
+      `Cliente bloqueado: ${cliente.nombreTelegram || telegramId}. El bot deja de responderle.`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('Deshacer', `desbloq_cli:${telegramId}`)],
+      ]),
+    );
+  }
+
+  @Action(/^desbloq_cli:(\d+)$/)
+  async onDesbloquearCliente(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
+    const actor = await this.getActor(ctx);
+    if (!actor || (actor.rol !== 'jefe' && actor.rol !== 'admin')) {
+      this.callbackGuard.liberar(ctx);
+      await ctx.answerCbQuery('No tienes permisos.', { show_alert: true });
+      return;
+    }
+    const telegramId = (ctx as any).match[1] as string;
+    const cliente = await this.clientesRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+    if (!cliente) {
+      await ctx.answerCbQuery('Ese cliente no está registrado.', {
+        show_alert: true,
+      });
+      return;
+    }
+    try {
+      await this.discipline.unblockClient(
+        cliente.id,
+        actor,
+        `Bloqueo levantado desde Telegram por ${actor.email}`,
+      );
+    } catch (error: any) {
+      await ctx.answerCbQuery(error?.message || 'No se pudo levantar.', {
+        show_alert: true,
+      });
+      return;
+    }
+    await ctx.answerCbQuery('Bloqueo levantado.');
+    await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
   }
 }
