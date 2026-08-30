@@ -47,6 +47,70 @@ export class TelegramConversationsService {
     };
   }
 
+  /**
+   * Conversaciones que arrancaron pero nunca llegaron a convertirse en
+   * servicio: el registro ya se guarda desde el primer mensaje (enganchado
+   * por `bookingSessionId`), pero sin un servicio al que asociarlas quedaban
+   * invisibles para cualquier pantalla que solo navegara por servicios.
+   *
+   * Solo admin: no hay jefe al que atribuirle una conversacion que nunca
+   * llego a asignarse a nadie.
+   */
+  async listUnlinkedSessions(actor: Usuarios, limit = 100) {
+    if (actor.rol !== 'admin') {
+      throw new ConflictException('Solo un admin puede ver esto');
+    }
+    const take = Math.min(Math.max(limit || 100, 1), 300);
+    const rows = await this.conversationsRepository
+      .createQueryBuilder('c')
+      .innerJoin('c.cliente', 'cliente')
+      .select('c.bookingSessionId', 'bookingSessionId')
+      .addSelect('c.clienteId', 'clienteId')
+      .addSelect('cliente.nombreTelegram', 'clienteNombre')
+      .addSelect('cliente.telegramChatId', 'clienteTelegramId')
+      .addSelect('MIN(c.enviadoAt)', 'startedAt')
+      .addSelect('MAX(c.enviadoAt)', 'lastAt')
+      .addSelect('COUNT(*)', 'messageCount')
+      .where('c.bookingSessionId IS NOT NULL')
+      .andWhere('c.servicioId IS NULL')
+      .groupBy('c.bookingSessionId')
+      .addGroupBy('c.clienteId')
+      .addGroupBy('cliente.nombreTelegram')
+      .addGroupBy('cliente.telegramChatId')
+      .orderBy('MAX(c.enviadoAt)', 'DESC')
+      .limit(take)
+      .getRawMany<{
+        bookingSessionId: string;
+        clienteId: string;
+        clienteNombre: string | null;
+        clienteTelegramId: string;
+        startedAt: Date;
+        lastAt: Date;
+        messageCount: string;
+      }>();
+
+    return rows.map((r) => ({
+      bookingSessionId: r.bookingSessionId,
+      clienteId: r.clienteId,
+      clienteNombre: r.clienteNombre,
+      clienteTelegramId: r.clienteTelegramId,
+      startedAt: r.startedAt,
+      lastAt: r.lastAt,
+      messageCount: Number(r.messageCount),
+    }));
+  }
+
+  /** Historial completo de una conversacion que nunca se convirtio en servicio. */
+  async findByBookingSession(bookingSessionId: string, actor: Usuarios) {
+    if (actor.rol !== 'admin') {
+      throw new ConflictException('Solo un admin puede ver esto');
+    }
+    return this.conversationsRepository.find({
+      where: { bookingSessionId },
+      order: { enviadoAt: 'ASC' },
+    });
+  }
+
   async sendBossMessage(serviceId: string, actor: Usuarios, raw: string) {
     const service = await this.getAuthorizedService(serviceId, actor);
     const message = raw.trim();

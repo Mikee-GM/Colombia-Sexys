@@ -20,6 +20,8 @@
     "check": "corepack pnpm run lint && corepack pnpm run test && corepack pnpm run build",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
-    "docker:config": "docker compose config --quiet"
+    "docker:config": "docker compose config --quiet",
+    "db:clean": "corepack pnpm --filter backend run db:clean",
+    "db:clean:run": "corepack pnpm --filter backend run db:clean:run"
   }
 }
