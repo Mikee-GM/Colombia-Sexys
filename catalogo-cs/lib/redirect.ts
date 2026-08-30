@@ -54,6 +54,21 @@ export function redirectFromRequest(
     request.headers.get("x-forwarded-host") ?? request.headers.get("host");
   if (host) {
     destino.host = host;
+    /*
+     * Y hay que borrar el puerto a mano.
+     *
+     * El setter `host` de URL solo toca el puerto si el valor que se le da
+     * trae uno. Detras de un proxy inverso la cabecera llega sin puerto
+     * --`rvcs-pruebas.com.mx`-- mientras que la URL clonada tiene el puerto
+     * interno en el que escucha Next dentro del contenedor, asi que el destino
+     * quedaba en `https://rvcs-pruebas.com.mx:3000/admin`: un puerto que no
+     * esta publicado y al que el navegador no puede llegar. El sintoma era una
+     * URL con `:3000` aparecida de la nada y una pagina que no carga.
+     *
+     * Se mira si el host trae puerto propio en vez de buscar un `:` a secas,
+     * que en IPv6 (`[::1]`) esta siempre.
+     */
+    if (!/:\d+$/.test(host)) destino.port = "";
     const proto = request.headers.get("x-forwarded-proto");
     if (proto) destino.protocol = `${proto}:`;
   }
