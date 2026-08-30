@@ -873,6 +873,32 @@ export type StaffOnboarding = ApiUser & {
   } | null;
 };
 
+/**
+ * Un servicio que ocurrio fuera del sistema y que la empleada pide dejar
+ * registrado. Vive en su propia tabla hasta que el jefe lo autoriza: solo
+ * entonces nace el servicio de verdad.
+ */
+export interface SolicitudServicioManual {
+  id: string;
+  empleadaId: string;
+  jefeId: string;
+  clienteId: string | null;
+  clienteNombreLibre: string | null;
+  fechaServicio: string;
+  duracionHoras: number;
+  metodoPago: "efectivo" | "tarjeta" | "transferencia" | "mixto";
+  montoCobrado: number;
+  ubicacion: string | null;
+  motivo: string;
+  estado: "pendiente" | "aprobada" | "rechazada";
+  servicioId: string | null;
+  notaResolucion: string | null;
+  resueltoAt: string | null;
+  createdAt: string;
+  empleada?: { id: string; nombreArtistico: string } | null;
+  cliente?: { id: string; nombreTelegram: string | null } | null;
+}
+
 /** Un cliente tal y como lo lista el panel. */
 export interface ClienteResumen {
   id: string;
