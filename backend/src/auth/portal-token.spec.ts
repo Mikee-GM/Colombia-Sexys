@@ -40,7 +40,12 @@ describe('AuthService.verifyPortalToken', () => {
     };
     sesiones = { findOne: jest.fn().mockResolvedValue(sesionViva()) };
     jwt = { verifyAsync: jest.fn().mockResolvedValue(PAYLOAD_VALIDO) };
-    service = new AuthService(usuarios as any, sesiones as any, jwt as any);
+    service = new AuthService(
+      usuarios as any,
+      sesiones as any,
+      jwt as any,
+      { getOrThrow: () => 'secreto-de-prueba' } as never,
+    );
   });
 
   it('acepta un token de acceso con sesión viva y cuenta activa', async () => {

@@ -1,4 +1,5 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, IsNull, Repository } from 'typeorm';
@@ -50,6 +51,7 @@ export class AuthService {
     @InjectRepository(AuthSession)
     private readonly sessionsRepository: Repository<AuthSession>,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async login(loginDto: LoginDto, deviceId: string): Promise<AuthTokens> {
@@ -429,12 +431,18 @@ export class AuthService {
     return { sub: user.id, email: user.email, rol: user.rol };
   }
 
+  /**
+   * Los secretos se piden al ConfigService, no a `process.env`. El `as string`
+   * de antes era una promesa sin respaldo: si la variable faltaba, el valor
+   * seguia siendo undefined y el fallo aparecia al firmar, no al arrancar.
+   * `getOrThrow` no deja pasar ese caso.
+   */
   private accessSecret(): string {
-    return process.env.JWT_SECRET as string;
+    return this.configService.getOrThrow<string>('JWT_SECRET');
   }
 
   private refreshSecret(): string {
-    return process.env.JWT_REFRESH_SECRET as string;
+    return this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
   }
 
   private hashToken(token: string): string {
