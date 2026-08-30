@@ -1,4 +1,5 @@
 import { NestFactory, Reflector } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import {
   ClassSerializerInterceptor,
   INestApplication,
@@ -13,10 +14,24 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Enable shutdown hooks for graceful cleanup
   app.enableShutdownHooks();
+
+  /*
+   * La IP del cliente llega en `X-Forwarded-For`, puesta por el proxy.
+   *
+   * Se confia solo en los saltos internos --loopback y redes privadas--, que
+   * son nginx y el contenedor del frontend. Confiar en cualquiera dejaria que
+   * el propio cliente eligiera su IP con solo mandar la cabecera, y con ella
+   * el cubo del limite de peticiones y lo que quede escrito en los registros.
+   *
+   * El limite de peticiones ya no depende de esto --se cuenta por cuenta y por
+   * sesion, ver `HttpThrottlerGuard`-- pero para el trafico anonimo la IP sigue
+   * siendo lo unico que hay.
+   */
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
   // Security headers using Helmet
   app.use(helmet());

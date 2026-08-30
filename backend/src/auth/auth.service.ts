@@ -1,7 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'crypto';
 import { Usuarios } from '../users/entities/user.entity';
@@ -299,38 +299,54 @@ export class AuthService {
     return total;
   }
 
-  async generatePortalToken(user: Usuarios): Promise<string> {
-    return this.jwtService.signAsync(
-      {
-        sub: user.id,
-        email: user.email,
-        rol: user.rol,
-        type: 'employee_portal',
-      },
-      {
-        secret: this.accessSecret(),
-        expiresIn: 86400 * 7, // 7 días para conveniencia de la empleada en Telegram
-      },
-    );
-  }
-
+  /**
+   * Valida el token con el que se entra a los portales de empleada y chofer.
+   *
+   * Comprueba lo mismo que la estrategia de una peticion normal: que la sesion
+   * siga viva y que la cuenta siga activa. Antes solo miraba la firma, y eso
+   * dejaba dos agujeros: cerrar sesion no expulsaba a nadie del portal --el
+   * token seguia sirviendo hasta caducar-- y desactivar una cuenta tampoco.
+   *
+   * Y solo se admite ya el tipo `access`. Hubo un tipo `employee_portal` que
+   * duraba siete dias y no llevaba sesion asociada, de modo que era imposible
+   * de revocar; dejo de emitirse hace tiempo, pero se seguia aceptando, asi que
+   * cualquiera emitido entonces continuaba siendo una llave valida.
+   */
   async verifyPortalToken(
     token: string,
   ): Promise<{ sub: string; email: string; rol: string }> {
+    const invalido = new UnauthorizedException(
+      'Token de portal inválido o expirado',
+    );
+
+    let payload: TokenPayload;
     try {
-      const payload = await this.jwtService.verifyAsync<any>(token, {
+      payload = await this.jwtService.verifyAsync<TokenPayload>(token, {
         secret: this.accessSecret(),
       });
-      if (
-        !payload ||
-        (payload.type !== 'employee_portal' && payload.type !== 'access')
-      ) {
-        throw new Error('Tipo de token inválido');
-      }
-      return payload;
     } catch {
-      throw new UnauthorizedException('Token de portal inválido o expirado');
+      throw invalido;
     }
+
+    if (!payload || payload.type !== 'access' || !payload.sid) {
+      throw invalido;
+    }
+
+    const session = await this.sessionsRepository.findOne({
+      where: { id: payload.sid, userId: payload.sub, revokedAt: IsNull() },
+      select: { id: true, expiresAt: true },
+    });
+    if (!session || session.expiresAt.getTime() <= Date.now()) {
+      throw invalido;
+    }
+
+    const user = await this.usuariosRepository.findOne({
+      where: { id: payload.sub, activo: true },
+      select: { id: true, email: true, rol: true },
+    });
+    if (!user) throw invalido;
+
+    return { sub: user.id, email: user.email, rol: user.rol };
   }
 
   private accessSecret(): string {
