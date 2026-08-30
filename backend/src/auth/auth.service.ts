@@ -1,7 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { EntityManager, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'crypto';
 import { Usuarios } from '../users/entities/user.entity';
@@ -23,7 +23,11 @@ type TokenPayload = {
 
 type AuthTokens = {
   accessToken: string;
-  refreshToken: string;
+  /**
+   * Nulo cuando la renovacion no rota nada y hay que dejar la cookie de
+   * refresco como esta: es el caso de dos pestanas renovando a la vez.
+   */
+  refreshToken: string | null;
   csrfToken: string;
   user: Pick<Usuarios, 'id' | 'email' | 'rol'>;
 };
@@ -91,7 +95,10 @@ export class AuthService {
     return this.createTokenPair(user, deviceId);
   }
 
-  async refresh(refreshToken: string): Promise<AuthTokens> {
+  async refresh(
+    refreshToken: string,
+    csrfActual?: string,
+  ): Promise<AuthTokens> {
     const payload = await this.verifyRefreshToken(refreshToken);
 
     return this.sessionsRepository.manager.transaction(async (manager) => {
@@ -115,8 +122,15 @@ export class AuthService {
         current.expiresAt.getTime() <= Date.now() ||
         current.refreshTokenHash !== this.hashToken(refreshToken);
 
+      // Dos peticiones que renuevan a la vez --dos pestanas, o la pagina y su
+      // fetch-- mandan el mismo refresco: la primera lo rota y la segunda llega
+      // con uno ya gastado. Devolverle 401 a la segunda echaba del panel a
+      // alguien con la sesion perfectamente viva, que es justo lo que se
+      // reportaba al recargar tras un rato. En la ventana de gracia se le firma
+      // un acceso nuevo sobre la sesion que gano y no se toca nada mas: sin
+      // rotar, dos respuestas fuera de orden no pueden pisarse.
       if (isRecentlyReplaced) {
-        throw new UnauthorizedException('Sesión recién renovada');
+        return this.renovacionEnCarrera(manager, current, payload.sub);
       }
 
       if (compromised) {
@@ -158,10 +172,56 @@ export class AuthService {
 
       return {
         ...tokens,
-        csrfToken: randomUUID(),
+        // El CSRF no se rota aqui a proposito. Rotarlo abria una carrera
+        // propia: una peticion que ya habia leido la cookie vieja mandaba una
+        // cabecera que dejaba de coincidir, y el rechazo se veia como sesion
+        // caida. El token sigue cambiando en cada login y muriendo con el
+        // cierre de sesion, que es cuando importa.
+        csrfToken: csrfActual ?? randomUUID(),
         user: this.publicUser(user),
       };
     });
+  }
+
+  /**
+   * La renovacion perdedora de una carrera: la sesion que este refresco tenia
+   * ya fue sustituida hace segundos por otra peticion del mismo navegador.
+   *
+   * Se firma un acceso sobre la sesion nueva --la que esta viva, y a la que
+   * apunta `replacedBySessionId`-- y se devuelve `refreshToken: null` para que
+   * el controlador no reescriba la cookie de refresco. Si la respuesta ganadora
+   * llega despues, su cookie es la buena; si llego antes, esta no la estropea.
+   */
+  private async renovacionEnCarrera(
+    manager: EntityManager,
+    anterior: AuthSession,
+    userId: string,
+  ): Promise<AuthTokens> {
+    const sessions = manager.getRepository(AuthSession);
+    const vigente = await sessions.findOne({
+      where: { id: anterior.replacedBySessionId as string },
+    });
+    const user = await manager
+      .getRepository(Usuarios)
+      .findOne({ where: { id: userId, activo: true } });
+
+    if (
+      !vigente ||
+      !user ||
+      vigente.userId !== userId ||
+      vigente.revokedAt !== null ||
+      vigente.expiresAt.getTime() <= Date.now()
+    ) {
+      throw new UnauthorizedException('La sesión ya no está activa');
+    }
+
+    const { accessToken } = await this.signTokens(user, vigente);
+    return {
+      accessToken,
+      refreshToken: null,
+      csrfToken: '',
+      user: this.publicUser(user),
+    };
   }
 
   async logout(accessToken?: string): Promise<void> {

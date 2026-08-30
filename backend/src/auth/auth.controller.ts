@@ -87,7 +87,7 @@ export class AuthController {
       throw new UnauthorizedException('Token CSRF inválido');
     }
 
-    const result = await this.authService.refresh(refreshToken);
+    const result = await this.authService.refresh(refreshToken, csrfCookie);
     this.setAuthCookies(response, result);
     return { user: result.user };
   }
@@ -157,7 +157,7 @@ export class AuthController {
     response: Response,
     result: {
       accessToken: string;
-      refreshToken: string;
+      refreshToken: string | null;
       csrfToken: string;
     },
   ) {
@@ -166,12 +166,18 @@ export class AuthController {
       result.accessToken,
       cookieOptions(ACCESS_TOKEN_TTL_SECONDS),
     );
-    response.cookie(
-      REFRESH_COOKIE,
-      result.refreshToken,
-      cookieOptions(REFRESH_TOKEN_TTL_SECONDS, REFRESH_COOKIE_PATH),
-    );
-    response.cookie(CSRF_COOKIE, result.csrfToken, csrfCookieOptions());
+    // Sin refresco nuevo se deja el que ya tiene el navegador: es una
+    // renovacion que perdio una carrera y no rotó nada.
+    if (result.refreshToken) {
+      response.cookie(
+        REFRESH_COOKIE,
+        result.refreshToken,
+        cookieOptions(REFRESH_TOKEN_TTL_SECONDS, REFRESH_COOKIE_PATH),
+      );
+    }
+    if (result.csrfToken) {
+      response.cookie(CSRF_COOKIE, result.csrfToken, csrfCookieOptions());
+    }
   }
 
   private clearAuthCookies(response: Response) {
