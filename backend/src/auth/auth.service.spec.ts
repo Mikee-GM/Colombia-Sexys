@@ -138,18 +138,63 @@ describe('AuthService.refresh', () => {
     expect(revokeAll).toHaveBeenCalled();
   });
 
-  it('no castiga a dos peticiones concurrentes dentro de la ventana de gracia', async () => {
-    // Recien rotada: es la segunda peticion en vuelo del mismo cliente, no un
-    // atacante. Se rechaza la peticion pero no se tumba la familia entera.
-    const { service, revokeAll } = build({
+  /**
+   * Dos pestanas --o la pagina y una de sus peticiones-- renuevan a la vez con
+   * el mismo refresco. La segunda llega con uno recien gastado, y antes se
+   * llevaba un 401 que el frontend traducia a "vuelve a iniciar sesion": el
+   * usuario se veia en el login con la sesion intacta.
+   */
+  it('atiende a la renovación que pierde la carrera en vez de echarla', async () => {
+    const { service, store, revokeAll } = build({
       revokedAt: new Date(Date.now() - 1_000),
       replacedBySessionId: 'sid-2',
     });
+    store.set('sid-2', {
+      id: 'sid-2',
+      userId: user.id,
+      familyId: 'fam-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: null,
+    } as AuthSession);
+
+    const tokens = await service.refresh('token-valido');
+
+    expect(tokens.accessToken).toBeDefined();
+    // Sin rotar: la cookie de refresco que ya tiene el navegador es la buena, y
+    // dos respuestas que lleguen fuera de orden no pueden pisarse.
+    expect(tokens.refreshToken).toBeNull();
+    expect(revokeAll).not.toHaveBeenCalled();
+  });
+
+  it('rechaza la carrera si la sesión que ganó ya no está viva', async () => {
+    const { service, store, revokeAll } = build({
+      revokedAt: new Date(Date.now() - 1_000),
+      replacedBySessionId: 'sid-2',
+    });
+    store.set('sid-2', {
+      id: 'sid-2',
+      userId: user.id,
+      familyId: 'fam-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      revokedAt: new Date(),
+    } as AuthSession);
 
     await expect(service.refresh('token-valido')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
     expect(revokeAll).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Rotar el CSRF en cada renovacion abria otra carrera: una peticion que ya
+   * habia leido la cookie mandaba una cabecera que dejaba de coincidir.
+   */
+  it('conserva el token CSRF que ya tenía el navegador', async () => {
+    const { service } = build({});
+
+    const tokens = await service.refresh('token-valido', 'csrf-de-siempre');
+
+    expect(tokens.csrfToken).toBe('csrf-de-siempre');
   });
 });
 

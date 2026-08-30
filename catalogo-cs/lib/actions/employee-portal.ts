@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getApiBaseUrl } from "@/lib/api-server";
-import { getBackendCookieHeader } from "@/lib/auth";
+import { getBackendCookieHeader, getCsrfToken } from "@/lib/auth";
 import type {
   EmployeePortalData,
   EmployeeWeeklyContent,
@@ -15,11 +15,17 @@ import type {
  * El portal se abre de dos maneras: con la sesion normal, y con un token que
  * llega en el enlace del bot. Las dos tienen que viajar en cada peticion
  * porque no sabemos cual de las dos trae quien esta mirando.
+ *
+ * El `x-csrf-token` acompana a la cookie porque el backend ya no se fia solo de
+ * `SameSite` para las mutaciones del portal. Cuando se entra por el enlace del
+ * bot no hay cookie y tampoco hace falta la cabecera.
  */
 async function portalHeaders(token?: string) {
   const cookie = await getBackendCookieHeader();
+  const csrf = await getCsrfToken();
   const headers: Record<string, string> = {};
   if (cookie) headers["Cookie"] = cookie;
+  if (csrf) headers["x-csrf-token"] = csrf;
   if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
 }
