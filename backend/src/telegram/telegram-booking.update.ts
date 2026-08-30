@@ -911,6 +911,73 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       .catch(() => undefined);
   }
 
+  /**
+   * Aviso al jefe de que una empleada acaba de reportar a un cliente.
+   *
+   * El reporte solo emitia un evento en tiempo real al panel: si en ese momento
+   * nadie lo tenia abierto --que es lo normal de madrugada-- el reporte se
+   * quedaba en la base sin que nadie lo viera. Y es justo cuando hay que poder
+   * reaccionar deprisa, asi que el aviso lleva el boton de bloquear: en caliente
+   * nadie va a abrir el panel, buscar al cliente y rellenar un formulario.
+   *
+   * No interrumpe nada si falla: la empleada ya recibio su confirmacion y el
+   * reporte esta guardado.
+   */
+  private async avisarReporteDeClienteAlJefe(
+    servicioId: string,
+    descripcion: string,
+  ): Promise<void> {
+    try {
+      const servicio = await this.serviciosRepository.findOne({
+        where: { id: servicioId },
+        relations: { empleada: true, cliente: true },
+      });
+      if (!servicio?.empleada) return;
+
+      const jefe = await this.findAssignedJefe(servicio.empleada);
+      const destino = jefe?.grupoTelegramId || jefe?.telegramChatId;
+      if (!destino) return;
+
+      const cliente = servicio.cliente;
+      const nombre = cliente?.nombreTelegram || 'el cliente';
+      const texto =
+        `Reporte de conducta
+
+` +
+        `Empleada: ${servicio.empleada.nombreArtistico}
+` +
+        `Cliente: ${nombre}
+` +
+        `Servicio: ${servicio.id}
+
+` +
+        `${descripcion}`;
+
+      const teclado = cliente?.telegramChatId
+        ? Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                'Bloquear a este cliente',
+                `bloq_cli:${cliente.telegramChatId}`,
+              ),
+            ],
+          ])
+        : undefined;
+
+      await this.bot.telegram.sendMessage(destino, texto, {
+        ...(servicio.telegramThreadId
+          ? { message_thread_id: Number(servicio.telegramThreadId) }
+          : {}),
+        ...(teclado ?? {}),
+      });
+    } catch (error) {
+      this.logger.error(
+        `No se pudo avisar del reporte del servicio ${servicioId}`,
+        error,
+      );
+    }
+  }
+
   private async findAssignedJefe(
     empleada: Empleadas,
   ): Promise<Usuarios | null> {
@@ -5979,8 +6046,18 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
             description,
           },
         );
+        const servicioReportado =
+          ctx.session.disciplineDirection === 'employee_to_client'
+            ? interactionId
+            : null;
         ctx.session = {};
         await ctx.reply('Reporte enviado para revisión administrativa.');
+        if (servicioReportado) {
+          await this.avisarReporteDeClienteAlJefe(
+            servicioReportado,
+            description,
+          );
+        }
       }
       return;
     }
