@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { FileWarning, LogOut, MapPinned, ShieldCheck, Trophy, UsersRound } from "lucide-react";
+import { ClipboardList, FileWarning, LogOut, MapPinned, ShieldCheck, Trophy, UsersRound } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
 import SessionKeeper from "@/components/auth/session-keeper";
 import { broadcastLogout } from "@/lib/client-session";
@@ -12,6 +12,7 @@ const links = [
   { href: "/jefe", label: "Mi equipo", icon: UsersRound },
   { href: "/jefe/mapa", label: "Mapa", icon: MapPinned },
   { href: "/jefe/reportes", label: "Reportes", icon: FileWarning },
+  { href: "/jefe/servicios-manuales", label: "Registros a mano", icon: ClipboardList },
   { href: "/jefe/retos", label: "Retos", icon: Trophy },
 ];
 

@@ -16,6 +16,7 @@ import {
   BookOpen,
   Building2,
   Car,
+  ClipboardList,
   Clock,
   CreditCard,
   Eye,
@@ -78,6 +79,11 @@ const navGroups: NavGroup[] = [
     title: "Operacion",
     items: [
       { label: "Servicios", href: "/admin/services", icon: Activity },
+      {
+        label: "Registros a Mano",
+        href: "/admin/servicios-manuales",
+        icon: ClipboardList,
+      },
       { label: "Clientes", href: "/admin/clientes", icon: Contact },
       { label: "Departamentos", href: "/admin/departamentos", icon: Building2 },
       { label: "Transporte", href: "/admin/transport", icon: MapPin },
