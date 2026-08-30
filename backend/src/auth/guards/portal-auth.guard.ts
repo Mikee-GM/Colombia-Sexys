@@ -7,6 +7,7 @@ import {
 import type { Request } from 'express';
 import { AuthService } from '../auth.service';
 import { ACCESS_COOKIE } from '../auth.constants';
+import { CsrfGuard } from './csrf.guard';
 
 /**
  * Autenticacion de los portales de empleada y chofer, que se abren desde una
@@ -20,9 +21,24 @@ import { ACCESS_COOKIE } from '../auth.constants';
  */
 @Injectable()
 export class PortalAuthGuard implements CanActivate {
+  /**
+   * Los portales tienen mutaciones que mueven dinero --registrar un extra,
+   * cerrar un servicio-- y se autentican por cookie, asi que necesitan la misma
+   * proteccion contra peticiones de otro sitio que el resto del panel. Aqui
+   * faltaba: eran los unicos endpoints que la sostenian solo en `SameSite`, una
+   * variable pensada precisamente para poder cambiarse a `none`.
+   *
+   * El guardia se salta solo cuando no hay cookie de sesion, que es como entra
+   * un enlace antiguo con el token en la URL: sin cookie no hay nada que
+   * falsificar desde fuera.
+   */
+  private readonly csrfGuard = new CsrfGuard();
+
   constructor(private readonly authService: AuthService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    this.csrfGuard.canActivate(context);
+
     const request = context.switchToHttp().getRequest<
       Request & {
         portalUserId?: string;
