@@ -32,6 +32,14 @@ type AuthTokens = {
   user: Pick<Usuarios, 'id' | 'email' | 'rol'>;
 };
 
+/**
+ * Hash de bcrypt que no es de nadie, usado para que un correo inexistente
+ * cueste lo mismo que uno real. Es el hash de una cadena aleatoria: ninguna
+ * contrasena escrita por una persona coincide con el.
+ */
+const HASH_DE_RELLENO =
+  '$2b$10$DLAgOieOwvnrKXM3HkOkB.CF/viLWzLyuEW5Mc1TRwTSOj6TdrQ6O';
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -59,17 +67,29 @@ export class AuthService {
       .where('usuario.email = :email', { email })
       .getOne();
 
-    if (!user) {
+    // Se compara siempre, exista el correo o no. Sin esto, un correo
+    // desconocido respondia al instante y uno real tardaba lo que tarda bcrypt:
+    // la diferencia es medible desde fuera y basta para averiguar quien tiene
+    // cuenta. El hash de relleno no corresponde a ninguna contrasena.
+    const isMatch = await bcrypt.compare(
+      password,
+      user?.passwordHash ?? HASH_DE_RELLENO,
+    );
+
+    if (!user || !isMatch) {
+      // Queda el rastro para poder mirar despues quien esta probando, pero sin
+      // decir por que fallo: al que pregunta se le responde siempre lo mismo.
+      this.logger.warn(
+        `Intento de acceso fallido para ${email} desde ${deviceId}`,
+      );
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
+    // Despues de comprobar la contrasena, no antes: dicho antes, cualquiera
+    // podia distinguir un correo dado de baja de uno que no existe.
     if (!user.activo) {
+      this.logger.warn(`Acceso de una cuenta desactivada: ${email}`);
       throw new UnauthorizedException('Usuario inactivo');
-    }
-
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) {
-      throw new UnauthorizedException('Credenciales inválidas');
     }
 
     // Update puntual en vez de save(): guardar la entidad entera reescribiria
