@@ -6,7 +6,11 @@ import {
   REFRESH_COOKIE,
 } from "@/lib/auth-constants";
 import { BACKEND_API_VERSION } from "@/lib/api-constants";
-import { parseSetCookieHeaders, type ParsedCookie } from "@/lib/set-cookie";
+import {
+  buildCookieHeader,
+  parseSetCookieHeaders,
+  type ParsedCookie,
+} from "@/lib/set-cookie";
 import { redirectFromRequest } from "@/lib/redirect";
 import { inicioParaRol, puedeEntrarEn } from "@/lib/roles";
 
@@ -40,7 +44,9 @@ async function renovarSesion(
       method: "POST",
       cache: "no-store",
       headers: {
-        Cookie: request.headers.get("cookie") ?? "",
+        // Armada, no cruda: reenviarla tal cual llega con una capa de
+        // codificacion de mas y Express no reconoce la firma del refresh.
+        Cookie: buildCookieHeader(request),
         // El backend compara esta cabecera con la cookie homonima. La cookie no
         // es httpOnly justamente para poder repetirla aqui.
         "x-csrf-token": request.cookies.get(CSRF_COOKIE)?.value ?? "",
@@ -55,14 +61,6 @@ async function renovarSesion(
     // mandar al login que servir una pagina que va a reventar al pedir datos.
     return null;
   }
-}
-
-/** Cabecera `Cookie` con lo que lleva la peticion, incluidas las renovadas. */
-function cabeceraDeCookies(request: NextRequest): string {
-  return request.cookies
-    .getAll()
-    .map(({ name, value }) => `${name}=${value}`)
-    .join("; ");
 }
 
 /**
@@ -142,7 +140,7 @@ export async function middleware(request: NextRequest) {
         }
       }
 
-      const rol = await rolDeLaSesion(cabeceraDeCookies(request));
+      const rol = await rolDeLaSesion(buildCookieHeader(request));
       if (!rol) {
         if (!renovadas) return NextResponse.next();
         // La renovacion pudo dejar cookies nuevas aunque el rol no se haya
@@ -201,7 +199,7 @@ export async function middleware(request: NextRequest) {
      * ya autenticado sin haber hecho nada raro.
      */
     const area = isAdminRoute ? "admin" : "jefe";
-    const rol = await rolDeLaSesion(cabeceraDeCookies(request));
+    const rol = await rolDeLaSesion(buildCookieHeader(request));
     if (!rol) {
       return redirectFromRequest(request, "/admin");
     }

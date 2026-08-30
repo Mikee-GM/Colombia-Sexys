@@ -4,11 +4,17 @@ export const ACCESS_COOKIE = 'access_token';
 export const REFRESH_COOKIE = 'refresh_token';
 export const CSRF_COOKIE = 'csrf_token';
 /**
- * El access token es corto a proposito: no se puede revocar por si mismo, asi
- * que su ventana de riesgo tiene que ser pequeña. La sesion larga la sostiene
- * el refresh token, que si vive en base de datos y se puede invalidar.
+ * El access token sigue siendo corto a proposito: no se puede revocar por si
+ * mismo --cerrar sesion invalida el refresh, no este-- asi que su ventana de
+ * riesgo tiene que ser pequeña. La sesion larga la sostiene el refresh token,
+ * que si vive en base de datos y se puede invalidar.
+ *
+ * Una hora en vez de quince minutos: la renovacion es transparente cuando
+ * funciona, pero cada una es una oportunidad de que algo salga mal, y de las
+ * cuatro que habia por hora ahora queda una. Subirlo mas empieza a pesar del
+ * lado equivocado de la balanza.
  */
-export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutos
+export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60; // 1 hora
 export const REFRESH_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60; // 1 año de sesión por defecto
 
 /**

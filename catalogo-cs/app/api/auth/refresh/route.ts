@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiBaseUrl } from "@/lib/api-server";
 import { copyBackendCookies } from "@/lib/auth-cookies";
+import { buildCookieHeader } from "@/lib/set-cookie";
 
 /**
  * Renovacion de la sesion pedida desde el navegador.
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     method: "POST",
     cache: "no-store",
     headers: {
-      Cookie: request.headers.get("cookie") ?? "",
+      Cookie: buildCookieHeader(request),
       "x-csrf-token": request.headers.get("x-csrf-token") ?? "",
     },
   });

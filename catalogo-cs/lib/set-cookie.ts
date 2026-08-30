@@ -74,3 +74,30 @@ export function parseSetCookieHeaders(response: Response): ParsedCookie[] {
 
   return parsed;
 }
+
+/**
+ * Cabecera `Cookie` para hablar con el backend desde el middleware o un route
+ * handler.
+ *
+ * NO vale reenviar `request.headers.get("cookie")` tal cual. Las cookies que
+ * escribe Next quedan doblemente codificadas en el navegador: `parseSetCookieHeaders`
+ * copia el valor tal y como lo emitio Express --ya codificado, `s%3A...`-- y
+ * Next lo vuelve a codificar al guardarlo, asi que el navegador almacena
+ * `s%253A...`.
+ *
+ * Al leerlas con `request.cookies` se deshace una capa y queda el valor tal
+ * como lo emitio Express; Express deshace la otra al recibirlas y reconoce su
+ * firma. Reenviando la cabecera cruda llega una capa de mas: Express obtiene
+ * `s%3A...`, que no empieza por `s:`, no lo trata como cookie firmada y
+ * `signedCookies` queda vacio. El sintoma era que la renovacion de sesion
+ * respondia 401 siempre y la sesion moria a los quince minutos, mientras que
+ * `/auth/me` --que ya armaba la cabecera asi-- funcionaba sin problema.
+ */
+export function buildCookieHeader(request: {
+  cookies: { getAll: () => { name: string; value: string }[] };
+}): string {
+  return request.cookies
+    .getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ");
+}
