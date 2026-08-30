@@ -89,7 +89,26 @@ describe('ServicesService extras de servicio', () => {
       expect(extras).toHaveLength(1);
       expect(extrasCatalogoRepository.find).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { empleadaId: EMPLEADA, activo: true },
+          where: { empleadaId: EMPLEADA, activo: true, esGenerico: false },
+        }),
+      );
+    });
+
+    /**
+     * El comodin al que se cuelgan los montos libres no es una oferta: su
+     * precio es el del primer monto libre que se cobro con el, asi que
+     * ofrecerselo a la modelo en el portal era ensenarle un numero sin
+     * significado.
+     */
+    it('no ofrece el extra comodín de los montos libres', async () => {
+      serviciosRepository.findOne.mockResolvedValue(enCurso());
+      extrasCatalogoRepository.find.mockResolvedValue([]);
+
+      await service.listAvailableExtras('srv-1', USUARIO);
+
+      expect(extrasCatalogoRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ esGenerico: false }),
         }),
       );
     });
@@ -126,7 +145,7 @@ describe('ServicesService extras de servicio', () => {
 
       expect(extrasCatalogoRepository.find).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { empleadaId: 'emp-2', activo: true },
+          where: { empleadaId: 'emp-2', activo: true, esGenerico: false },
         }),
       );
     });
@@ -184,6 +203,33 @@ describe('ServicesService extras de servicio', () => {
       expect(resultado.totalExtras).toBe(800);
       expect(Number(resultado.servicio.totalFinal)).toBe(5800);
       expect(resultado.extras[0].nombre).toBe('Extra de prueba');
+    });
+
+    /**
+     * Con un monto libre, el precio del catalogo es el del primer monto libre
+     * que se cobro con el comodin, no lo que se acaba de cobrar. El aviso a la
+     * modelo salia con ese numero viejo.
+     */
+    it('devuelve el importe cobrado y no el del catálogo', async () => {
+      serviciosRepository.findOne
+        .mockResolvedValueOnce(enCurso())
+        .mockResolvedValueOnce(enCurso({ extrasServicios: [] }));
+      extrasCatalogoRepository.findOne.mockResolvedValue(
+        extra({ nombre: 'Extra', precio: 500, esGenerico: true }),
+      );
+
+      const resultado = await service.addServiceExtra({
+        servicioId: 'srv-1',
+        extraCatalogoId: 'extra-1',
+        metodoPago: 'efectivo',
+        actorUserId: USUARIO,
+        precioCobrado: 1800,
+      });
+
+      expect(resultado.precioCobrado).toBe(1800);
+      expect(extrasServicioRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ precioCobrado: 1800 }),
+      );
     });
 
     it('imputa el extra a la participante en un servicio grupal', async () => {

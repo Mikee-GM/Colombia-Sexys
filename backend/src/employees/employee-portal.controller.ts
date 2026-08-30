@@ -114,7 +114,7 @@ export class EmployeePortalController {
     return {
       agregado: {
         nombre: resultado.extraAgregado.nombre,
-        precio: Number(resultado.extraAgregado.precio),
+        precio: Number(resultado.precioCobrado),
         metodoPago: dto.metodoPago,
       },
       extras: resultado.extras,

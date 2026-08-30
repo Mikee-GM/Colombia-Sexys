@@ -91,6 +91,7 @@ describe('AuthService.refresh', () => {
       {} as Repository<Usuarios>,
       rootSessions,
       jwt,
+      { getOrThrow: () => 'secreto-de-prueba' } as never,
     );
     return { service, store, revokeAll, full };
   }
@@ -214,6 +215,7 @@ describe('AuthService.purgeStaleSessions', () => {
       {} as unknown as Repository<Usuarios>,
       { query } as unknown as Repository<AuthSession>,
       {} as unknown as JwtService,
+      { getOrThrow: () => 'secreto-de-prueba' } as never,
     );
     return { service, query };
   }

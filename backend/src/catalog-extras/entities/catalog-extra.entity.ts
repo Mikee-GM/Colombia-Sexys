@@ -51,6 +51,16 @@ export class ExtrasCatalogo {
   @ApiProperty({ description: 'Activo', example: true })
   activo: boolean;
 
+  /**
+   * El extra comodin al que se cuelgan los cobros de monto libre. No es una
+   * oferta del catalogo, asi que no se le enseña a nadie; existe solo para que
+   * el cobro tenga a que apuntar. Sigue `activo` porque tiene que poder
+   * usarse.
+   */
+  @Column('boolean', { name: 'es_generico', default: () => 'false' })
+  @ApiProperty({ description: 'Extra comodín de monto libre', example: false })
+  esGenerico: boolean;
+
   @Column('jsonb', {
     name: 'modelos_vinculadas_ids',
     nullable: true,

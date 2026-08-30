@@ -34,7 +34,7 @@ export class CatalogExtrasService {
 
   async findByEmpleada(empleadaId: string): Promise<ExtrasCatalogo[]> {
     return this.extrasCatalogoRepository.find({
-      where: { empleadaId, activo: true },
+      where: { empleadaId, activo: true, esGenerico: false },
       order: { nombre: 'ASC' },
     });
   }

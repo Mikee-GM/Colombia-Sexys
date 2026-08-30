@@ -42,6 +42,7 @@ describe('AuthService.login: no se puede averiguar quién tiene cuenta', () => {
       usuarios as never,
       { manager: {} } as never,
       {} as never,
+      { getOrThrow: () => 'secreto-de-prueba' } as never,
     );
     advertencias = [];
     jest

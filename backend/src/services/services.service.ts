@@ -133,6 +133,7 @@ export interface FinishByEmployeeResult {
 export interface AddServiceExtraResult {
   servicio: Servicios;
   extraAgregado: ExtrasCatalogo;
+  precioCobrado: number;
   extras: Array<{
     id: string;
     nombre: string;
@@ -2916,8 +2917,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const { employeeId } = await this.resolveExtrasActor(servicio, actorUserId);
 
+    // El comodin de los montos libres queda fuera: no es algo que se ofrezca,
+    // y su precio es el del primer monto libre que se cobro con el.
     return this.extrasCatalogoRepository.find({
-      where: { empleadaId: employeeId, activo: true },
+      where: { empleadaId: employeeId, activo: true, esGenerico: false },
       order: { nombre: 'ASC' },
     });
   }
@@ -2998,6 +3001,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return {
       servicio: actualizado,
       extraAgregado: extra,
+      // Lo que se cobro de verdad, que con un monto libre no es el precio del
+      // catalogo: quien avisa a la modelo o al cliente tiene que decir este.
+      precioCobrado: input.precioCobrado ?? extra.precio,
       extras: extras.map((item) => ({
         id: item.id,
         nombre: item.extraCatalogo?.nombre ?? 'Extra',
