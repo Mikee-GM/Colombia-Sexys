@@ -3131,6 +3131,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
           nombre: 'Extra',
           precio: amount,
           activo: true,
+          // No es una oferta suya: es el ancla de los montos libres, y sin
+          // esto le aparecia en el portal a un precio que no significa nada.
+          esGenerico: true,
         });
         await this.extrasCatalogoRepository.save(genericExtra);
       }
@@ -3159,7 +3162,7 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     const { servicio: actualizado, extraAgregado, extras } = resultado;
 
     await ctx.reply(
-      `✅ Servicio extra *${extraAgregado.nombre}* ($${extraAgregado.precio}) agregado con método de pago *${metodoPago.toUpperCase()}* con éxito.`,
+      `✅ Servicio extra *${extraAgregado.nombre}* ($${resultado.precioCobrado}) agregado con método de pago *${metodoPago.toUpperCase()}* con éxito.`,
       { parse_mode: 'Markdown' },
     );
 
