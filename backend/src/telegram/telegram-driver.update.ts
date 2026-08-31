@@ -29,6 +29,7 @@ import { PanelAccessService } from '../auth/panel-access.service';
 import { botonesDePortal } from './telegram-portal-buttons';
 import { describeError } from '../common/errors/error-message';
 import { TelegramCallbackGuard } from './telegram-callback-guard';
+import { DriverTripsService } from '../drivers/driver-trips.service';
 
 /**
  * Datos de identidad del chofer, cacheados diez minutos para no consultar la
@@ -76,6 +77,8 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     private readonly authService: AuthService,
     private readonly panelAccessService: PanelAccessService,
     private readonly callbackGuard: TelegramCallbackGuard,
+    @Inject(forwardRef(() => DriverTripsService))
+    private readonly driverTripsService: DriverTripsService,
   ) {
     this.cacheCleanupInterval = setInterval(() => {
       const now = Date.now();
@@ -701,84 +704,29 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    // Actualizar el viaje a llegado
-    await this.dataSource
-      .getRepository(Viajes)
-      .update(trip.id, { estado: 'llegado' });
-    trip.estado = 'llegado';
-
-    await ctx.answerCbQuery('📍 Has llegado con la empleada.');
-
-    await this.notifyBossTripTopic(
-      ctx,
-      trip,
-      chofer,
-      'Chofer llegó al punto de recogida',
-      `El chofer *${chofer.nombre}* ya llegó a la ubicación para recoger a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}*.`,
-    );
-
-    // Notificar a la empleada que el chofer ha llegado con la info de identificación
-    const empUserArrived = trip.servicio?.empleada?.usuario;
-    if (empUserArrived && empUserArrived.telegramChatId) {
-      const targetChatId = empUserArrived.telegramChatId;
-      const threadId = undefined;
-
-      if (targetChatId) {
-        const vehiculoInfo = [
-          chofer.vehiculoMarca ? `• *Marca:* ${chofer.vehiculoMarca}` : null,
-          chofer.vehiculoModelo ? `• *Modelo:* ${chofer.vehiculoModelo}` : null,
-          chofer.vehiculoColor ? `• *Color:* ${chofer.vehiculoColor}` : null,
-          chofer.vehiculoPlaca ? `• *Placa:* ${chofer.vehiculoPlaca}` : null,
-        ]
-          .filter(Boolean)
-          .join('\n');
-
-        const msgText =
-          `📍 *¡Tu chofer ha llegado!* 🚗\n\n` +
-          `El chofer *${chofer.nombre}* ya está fuera en el punto de recogida.\n\n` +
-          `*Datos de Identificación del Chofer:*\n` +
-          `• *Nombre:* ${chofer.nombre}\n` +
-          `• *Teléfono:* ${chofer.telefono}\n\n` +
-          (vehiculoInfo
-            ? `*Datos del Vehículo:*\n${vehiculoInfo}\n`
-            : `*Datos del Vehículo:* No registrados\n`) +
-          `Por favor, reúnete con él para iniciar el viaje.`;
-
-        try {
-          const sentMsg = await ctx.telegram.sendMessage(
-            targetChatId,
-            msgText,
-            {
-              message_thread_id: threadId,
-              parse_mode: 'Markdown',
-              ...Markup.inlineKeyboard([
-                [
-                  Markup.button.callback(
-                    '⏳ Solicitar Prórroga (10 min)',
-                    `pedir_prorroga:${trip.servicio.id}`,
-                  ),
-                ],
-              ]),
-            },
-          );
-          // Iniciar el timeout de espera de 10 minutos (600,000 ms)
-          this.servicesService.startWaitTimeout(trip.servicio.id, 600000);
-
-          // Guardar el ID del mensaje para poder borrarlo después
-          trip.telegramEmpleadaMsgChoferLlegadoId =
-            sentMsg.message_id.toString();
-          await this.dataSource.getRepository(Viajes).update(trip.id, {
-            telegramEmpleadaMsgChoferLlegadoId:
-              trip.telegramEmpleadaMsgChoferLlegadoId,
-          });
-        } catch (telegramErr) {
-          this.logger.error(
-            `Error al notificar a la empleada sobre la llegada (chatId: ${empUserArrived.telegramChatId}):`,
-            describeError(telegramErr),
-          );
-        }
-      }
+    /*
+     * El negocio vive en DriverTripsService: cambiar el estado, avisar a la
+     * modelo con los datos del coche, arrancarle el margen de espera y dejar
+     * constancia en el grupo del jefe.
+     *
+     * Se llama desde aqui y desde el portal, de modo que marcar la llegada por
+     * el chat y marcarla por la aplicacion hacen exactamente lo mismo. Lo que
+     * queda debajo es lo unico propio del chat: reescribir este mensaje con el
+     * boton del paso siguiente.
+     */
+    try {
+      await this.driverTripsService.marcarLlegada(trip.id, chofer.id);
+      trip.estado = 'llegado';
+    } catch (err) {
+      this.logger.error('Error marcando la llegada del chofer:', err);
+      await ctx.answerCbQuery(
+        err instanceof Error ? err.message : 'No se pudo marcar la llegada.',
+        { show_alert: true },
+      );
+      return;
     }
+
+    await ctx.answerCbQuery('Has llegado con la empleada.');
 
     // Actualizar el mensaje del chofer con el botón de "Empleada Recogida"
     const empLat = trip.servicio.empleada.ubicacionLat;

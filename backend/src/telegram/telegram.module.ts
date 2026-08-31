@@ -20,6 +20,7 @@ import { Empleadas } from '../employees/entities/employee.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { AuthModule } from '../auth/auth.module';
 import { ServicesModule } from '../services/services.module';
+import { DriversModule } from '../drivers/drivers.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { TelegramSession } from './entities/telegram-session.entity';
 import {
@@ -73,6 +74,9 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
     AiModule,
     EmployeeOnboardingModule,
     forwardRef(() => ServicesModule),
+    // El avance de un viaje lo resuelve DriverTripsService; ese modulo
+    // importa este a su vez, de ahi el forwardRef en los dos lados.
+    forwardRef(() => DriversModule),
     EmployeeReportsModule,
     ExtensionsModule,
     TransportOperationsModule,

@@ -7,7 +7,7 @@ import { Repository } from 'typeorm';
 import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { JwtService } from '@nestjs/jwt';
-import type { InlineKeyboardButton } from 'telegraf/types';
+import type { InlineKeyboardButton, Message } from 'telegraf/types';
 import { installSendThrottle } from './telegram-send-throttle';
 
 /**
@@ -19,6 +19,14 @@ import { installSendThrottle } from './telegram-send-throttle';
 export type SendMessageOptions = {
   parseMode?: 'Markdown' | 'MarkdownV2' | 'HTML';
   buttons?: InlineKeyboardButton[][];
+  /**
+   * Tema del grupo al que va el mensaje.
+   *
+   * Los avisos al jefe viven en el tema de su servicio; sin esto habia que
+   * alcanzar el bot por fuera para poder pasarlo, que es justo lo que este
+   * servicio existe para evitar.
+   */
+  threadId?: number;
 };
 
 @Injectable()
@@ -93,9 +101,12 @@ export class TelegramService implements OnModuleInit {
     telegramId: string,
     message: string,
     options?: SendMessageOptions,
-  ): Promise<void> {
-    await this.bot.telegram.sendMessage(telegramId, message, {
+  ): Promise<Message.TextMessage> {
+    // Devuelve el mensaje enviado: hay avisos cuyo id hay que guardar para
+    // poder borrarlos o editarlos despues. Quien no lo necesite lo ignora.
+    return this.bot.telegram.sendMessage(telegramId, message, {
       ...(options?.parseMode ? { parse_mode: options.parseMode } : {}),
+      ...(options?.threadId ? { message_thread_id: options.threadId } : {}),
       ...(options?.buttons?.length
         ? Markup.inlineKeyboard(options.buttons)
         : {}),

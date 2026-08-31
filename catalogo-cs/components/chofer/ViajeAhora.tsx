@@ -1,7 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { CheckCircle2, MapPin, Route } from "lucide-react";
+import { toast } from "sonner";
 
+import { marcarLlegadaDelViaje } from "@/lib/actions/driver-portal";
 import type { DriverPortalActiveTrip } from "@/lib/types";
 
 /**
@@ -11,9 +15,11 @@ import type { DriverPortalActiveTrip } from "@/lib/types";
  * debajo de las ganancias, asi que quien abria la aplicacion en mitad de un
  * viaje tenia que buscarlo. Ahora esta por encima de las pestañas.
  *
- * Todavia no lleva botones: el avance del viaje --llegue, recogi, termine--
- * solo existe hoy en el chat del bot, y el portal del chofer no publica
- * ninguna accion en el backend. Cuando esos endpoints existan, van aqui.
+ * El avance del viaje se marca desde aqui, sin tener que buscar el mensaje
+ * correcto en el chat justo cuando va conduciendo. Los botones del bot siguen
+ * valiendo: los dos caminos llaman al mismo servicio del backend, asi que no
+ * pueden divergir. De momento esta la llegada; recogida y fin siguen solo en
+ * el chat.
  */
 export default function ViajeAhora({
   viaje,
@@ -22,6 +28,21 @@ export default function ViajeAhora({
   viaje: DriverPortalActiveTrip | null;
   zonaLabel: Record<string, string>;
 }) {
+  const router = useRouter();
+  const [pendiente, startTransition] = useTransition();
+
+  function marcarLlegada(tripId: string) {
+    startTransition(async () => {
+      const resultado = await marcarLlegadaDelViaje(tripId);
+      if (!resultado.success) {
+        toast.error(resultado.error);
+        return;
+      }
+      toast.success("Llegada marcada. Ya avisamos a la empleada.");
+      router.refresh();
+    });
+  }
+
   if (!viaje) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3.5">
@@ -66,9 +87,26 @@ export default function ViajeAhora({
         </div>
       </div>
 
-      <p className="px-4 py-3 text-center text-[11px] text-gray-400">
-        Marca el avance del viaje desde tu chat de Telegram.
-      </p>
+      {viaje.estado === "aceptado" ? (
+        <div className="px-4 py-4">
+          <button
+            type="button"
+            disabled={pendiente}
+            onClick={() => marcarLlegada(viaje.id)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-500/10 py-4 text-xs font-bold uppercase tracking-wider text-emerald-300 transition-colors hover:bg-emerald-500 hover:text-black disabled:opacity-50"
+          >
+            <MapPin size={17} />
+            {pendiente ? "Marcando..." : "Ya llegué al punto de recogida"}
+          </button>
+          <p className="mt-2.5 text-center text-[11px] text-gray-500">
+            Al marcarlo le avisamos a la empleada con los datos de tu coche.
+          </p>
+        </div>
+      ) : (
+        <p className="px-4 py-3 text-center text-[11px] text-gray-400">
+          Los siguientes pasos del viaje se marcan desde tu chat de Telegram.
+        </p>
+      )}
     </section>
   );
 }
