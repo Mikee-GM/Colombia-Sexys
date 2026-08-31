@@ -250,6 +250,52 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Le pide a la modelo que califique al cliente al cerrar el servicio.
+   *
+   * Vivia solo en el manejador de Telegram, asi que cerrar desde el portal no
+   * pedia nada: se cerraba el servicio y la valoracion del cliente no se
+   * recogia nunca. Ahora sale del cierre, que es el punto por el que pasan las
+   * dos vias.
+   *
+   * El mensaje va a su chat aunque haya cerrado desde el portal: los botones
+   * de calificar son de Telegram, no hay pantalla equivalente en la aplicacion.
+   */
+  private async pedirCalificacionDelCliente(
+    servicio: Servicios,
+  ): Promise<void> {
+    const chatId = servicio.empleada?.usuario?.telegramChatId;
+    if (!chatId) return;
+
+    try {
+      await this.telegramService.sendMessage(
+        chatId,
+        'Califica tu interacción con el cliente.',
+        {
+          buttons: [
+            [1, 2, 3, 4, 5].map((estrellas) =>
+              Markup.button.callback(
+                `${estrellas}`,
+                `rate_client_service:${servicio.id}:${estrellas}`,
+              ),
+            ),
+            [
+              Markup.button.callback(
+                'Reportar al cliente',
+                `conduct_employee_client:${servicio.id}`,
+              ),
+            ],
+          ],
+        },
+      );
+    } catch (err) {
+      this.logger.error(
+        'No se pudo pedir la calificación del cliente a la empleada:',
+        err,
+      );
+    }
+  }
+
   private async recordAgencyMessage(
     service: Servicios,
     message: string,
@@ -3210,6 +3256,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+
+    // Se pide aqui y no en el manejador de Telegram: asi cerrar desde el chat
+    // y cerrar desde el portal recogen la valoracion igual.
+    await this.pedirCalificacionDelCliente(servicio);
 
     return {
       servicio: servicioConTotal,

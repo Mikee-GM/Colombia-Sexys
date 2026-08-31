@@ -4149,27 +4149,20 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       this.logger.error('Error al editar mensaje de cierre de actividad:', err);
     }
 
-    await ctx.reply(
-      'Califica tu interacción con el cliente.',
-      Markup.inlineKeyboard([
-        [1, 2, 3, 4, 5].map((stars) =>
-          Markup.button.callback(
-            `${stars}`,
-            `rate_client_service:${servicio.id}:${stars}`,
-          ),
-        ),
-        [
-          Markup.button.callback(
-            'Reportar al cliente',
-            `conduct_employee_client:${servicio.id}`,
-          ),
-        ],
-        ...(await this.botonesDelPortal(
-          servicio.empleada.usuarioId,
-          telegramId,
-        )),
-      ]),
+    /*
+     * La peticion de calificacion ya no sale de aqui: la manda `finishByEmployee`
+     * al cerrar, de modo que tambien la recibe quien cierra desde el portal, que
+     * antes se quedaba sin ella. Aqui solo queda el atajo al portal.
+     */
+    const atajos = await this.botonesDelPortal(
+      servicio.empleada.usuarioId,
+      telegramId,
     );
+    if (atajos.length > 0) {
+      await ctx.reply('Puedes revisar el detalle en tu portal.', {
+        ...Markup.inlineKeyboard(atajos),
+      });
+    }
 
     // Limpieza del chat del cliente: se quita el mensaje del servicio ya cerrado.
     if (servicio.cliente?.telegramChatId && servicio.telegramClienteMensajeId) {
