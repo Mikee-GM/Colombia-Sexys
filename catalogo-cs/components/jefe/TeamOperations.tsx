@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { ButtonHTMLAttributes, Dispatch, ReactNode, SetStateAction } from "react";
-import { Award, Banknote, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, Clock3, ExternalLink, FileCheck2, MapPin, MessageCircle, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { Award, Banknote, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, ExternalLink, FileCheck2, MapPin, MessageCircle, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
@@ -299,16 +299,105 @@ function CashDeliveryPanel({ summary, pending, run }: { summary: CashObligationS
   const money = formatCurrency;
   const groups = Object.values(summary.obligations.filter((item) => item.status === "pending").reduce<Record<string, typeof summary.obligations>>((result, item) => { (result[item.employeeId] ??= []).push(item); return result; }, {}));
   if (!groups.length) return <div className="rounded-2xl border border-dashed border-zinc-800 py-20 text-center text-sm text-zinc-500">No hay entregas de efectivo pendientes.</div>;
-  return <section><header className="mb-5"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Control de efectivo</p><h2 className="mt-1 font-heading text-3xl">Pendiente por entregar: {money(summary.total)}</h2></header><div className="grid gap-4 lg:grid-cols-2">{groups.map((obligations) => { const employeeId = obligations[0].employeeId; const employeeName = summary.employees.find((item) => item.id === employeeId)?.name || "Empleada"; const balance = obligations.reduce((sum, item) => sum + Number(item.amount) - Number(item.paidAmount), 0); const hasProvisional = obligations.some((item) => item.calculationStatus === "provisional"); return <article key={employeeId} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5"><div className="flex items-center justify-between gap-4"><div><p className="font-heading text-2xl">{employeeName}</p><p className="mt-1 text-xs text-zinc-500">{obligations.length} servicios pendientes</p></div><div className="flex items-center gap-2 text-[#E8D5A3]"><Banknote size={19}/><span className="font-heading text-2xl">{money(balance)}</span></div></div><div className="mt-4 space-y-2">{obligations.map((item) => <div key={item.id} className="rounded-xl border border-zinc-900 p-3 text-xs"><div className="grid grid-cols-[1fr_auto_auto] items-center gap-3"><span>Servicio {item.serviceId.slice(-6).toUpperCase()}</span><span>{money(Number(item.amount) - Number(item.paidAmount))}</span><button disabled={pending || item.calculationStatus !== "ready"} onClick={() => run(() => closeJefeCashObligation(item.id))} className="font-semibold text-[#C5A55A] disabled:text-zinc-700">Entregado</button></div><div className="mt-2 flex justify-between text-zinc-500"><span>Total cobrado: {money(Number(item.customerTotal))}</span><span>Ubers: -{money(Number(item.uberDeduction))}</span></div>{item.calculationStatus === "provisional" && <p className="mt-2 text-amber-400">Provisional: {item.pendingReason}</p>}</div>)}</div><div className="mt-4 flex gap-2"><input disabled={hasProvisional} value={amounts[employeeId] || ""} onChange={(event) => setAmounts({...amounts, [employeeId]: event.target.value})} inputMode="decimal" placeholder={hasProvisional ? "Confirma los Ubers pendientes" : "Monto recibido"} className="min-w-0 flex-1 rounded-xl border border-zinc-800 bg-black px-3 py-3 text-sm outline-none focus:border-[#C5A55A] disabled:text-zinc-700"/><button disabled={pending || hasProvisional} onClick={() => { const amount = Number(amounts[employeeId]); if (!Number.isFinite(amount) || amount <= 0) return toast.error("Ingresa un monto válido"); run(() => registerJefeCashPayment(employeeId, amount)); }} className="rounded-xl border border-[#C5A55A] px-4 text-xs font-semibold text-[#C5A55A] disabled:opacity-50">Registrar abono</button></div></article>; })}</div></section>;
+
+  const servicios = groups.reduce((total, obligations) => total + obligations.length, 0);
+
+  return (
+    <section className="flex flex-col gap-3">
+      {/* El total es la cifra que el jefe viene a ver: va solo y arriba, no
+          escondido dentro del titulo de la seccion. */}
+      <header className="flex items-center justify-between gap-4 rounded-2xl border border-[#C5A55A]/40 bg-[#C5A55A]/[0.07] px-4 py-3.5">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#8B7635]">Pendiente por entregar</p>
+          <p className="mt-1 font-heading text-3xl font-semibold tabular-nums text-[#E8D5A3]">{money(summary.total)}</p>
+          <p className="mt-1.5 text-[11px] text-zinc-500">{groups.length} {groups.length === 1 ? "empleada" : "empleadas"} · {servicios} {servicios === 1 ? "servicio" : "servicios"}</p>
+        </div>
+        <Banknote size={26} className="shrink-0 text-[#8B7635]" />
+      </header>
+
+      {groups.map((obligations) => {
+        const employeeId = obligations[0].employeeId;
+        const employeeName = summary.employees.find((item) => item.id === employeeId)?.name || "Empleada";
+        const balance = obligations.reduce((sum, item) => sum + Number(item.amount) - Number(item.paidAmount), 0);
+        const hasProvisional = obligations.some((item) => item.calculationStatus === "provisional");
+        return (
+          <article key={employeeId} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-heading text-xl font-semibold">{employeeName}</p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">{obligations.length} {obligations.length === 1 ? "servicio pendiente" : "servicios pendientes"}</p>
+              </div>
+              <span className="shrink-0 font-heading text-xl font-semibold tabular-nums text-[#E8D5A3]">{money(balance)}</span>
+            </div>
+
+            {/* Cada servicio en dos lineas. Antes eran tres columnas a 12px que
+                en el telefono se aplastaban unas contra otras. */}
+            <div className="mt-3 overflow-hidden rounded-xl border border-zinc-900 bg-black/50">
+              {obligations.map((item) => (
+                <div key={item.id} className="border-b border-zinc-900 px-3 py-2.5 last:border-b-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold tabular-nums text-zinc-200">Servicio {item.serviceId.slice(-6).toUpperCase()}</p>
+                      <p className="mt-1 truncate text-[10px] tabular-nums text-zinc-500">Cobrado {money(Number(item.customerTotal))} · Ubers -{money(Number(item.uberDeduction))}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2.5">
+                      <span className="text-sm font-bold tabular-nums text-white">{money(Number(item.amount) - Number(item.paidAmount))}</span>
+                      <button
+                        type="button"
+                        disabled={pending || item.calculationStatus !== "ready"}
+                        onClick={() => run(() => closeJefeCashObligation(item.id))}
+                        aria-label={`Marcar el servicio ${item.serviceId.slice(-6).toUpperCase()} como entregado`}
+                        title="Marcar como entregado"
+                        className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A55A]/50 text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:border-zinc-800 disabled:text-zinc-700 disabled:hover:bg-transparent"
+                      >
+                        <Check size={17} />
+                      </button>
+                    </div>
+                  </div>
+                  {item.calculationStatus === "provisional" && <p className="mt-2 text-[11px] text-[#E8D5A3]">Provisional: {item.pendingReason}</p>}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex gap-2">
+              <input
+                disabled={hasProvisional}
+                value={amounts[employeeId] || ""}
+                onChange={(event) => setAmounts({ ...amounts, [employeeId]: event.target.value })}
+                inputMode="decimal"
+                placeholder={hasProvisional ? "Confirma los Ubers pendientes" : "Monto recibido"}
+                className="h-12 min-w-0 flex-1 rounded-xl border border-zinc-800 bg-black px-3 text-sm outline-none focus:border-[#C5A55A] disabled:text-zinc-700"
+              />
+              <button
+                type="button"
+                disabled={pending || hasProvisional}
+                onClick={() => {
+                  const amount = Number(amounts[employeeId]);
+                  if (!Number.isFinite(amount) || amount <= 0) return toast.error("Ingresa un monto válido");
+                  run(() => registerJefeCashPayment(employeeId, amount));
+                }}
+                className="h-12 shrink-0 rounded-xl border border-[#C5A55A] px-4 text-xs font-bold uppercase tracking-wider text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-50"
+              >
+                Abonar
+              </button>
+            </div>
+          </article>
+        );
+      })}
+    </section>
+  );
 }
 
 function ServiceList({ services, allServices, active, disabled, onDecide, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { services: Service[]; allServices: Service[]; active: boolean; disabled: boolean; onDecide: (service: Service, decision: "aceptar" | "rechazar", transport?: "chofer" | "uber", bossNotes?: string) => void; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   if (!services.length) return <div className="rounded-2xl border border-dashed border-zinc-800 py-20 text-center text-sm text-zinc-500">No hay servicios en esta sección.</div>;
-  return <div className="space-y-3">{services.map((service) => <ServiceCard key={service.id} service={service} previous={allServices.find((item) => item.id === service.servicioPrevioId)} active={active} disabled={disabled} onRequestAccept={onRequestAccept} onRequestEdit={onRequestEdit} onCancel={onCancel} onChat={onChat} onRefresh={onRefresh} />)}</div>;
+  // Un servicio cerrado se consulta, no se opera: el historial es una lista
+  // para repasar y solo despliega el detalle el que se toca.
+  if (!active) return <HistoryList services={services} onChat={onChat} />;
+  return <div className="space-y-3">{services.map((service) => <ServiceCard key={service.id} service={service} previous={allServices.find((item) => item.id === service.servicioPrevioId)} disabled={disabled} onRequestAccept={onRequestAccept} onRequestEdit={onRequestEdit} onCancel={onCancel} onChat={onChat} onRefresh={onRefresh} />)}</div>;
 }
 
 /**
- * Un servicio.
+ * Un servicio en marcha.
  *
  * Los datos iban antes en un parrafo corrido separado por puntos, que en el
  * telefono se partia por donde caia; ahora son filas de clave y valor. Y las
@@ -316,9 +405,9 @@ function ServiceList({ services, allServices, active, disabled, onDecide, onRequ
  * segun lo que midieran los textos, cosa que en una pantalla estrecha pasaba
  * siempre.
  */
-function ServiceCard({ service, previous, active, disabled, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { service: Service; previous?: Service; active: boolean; disabled: boolean; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
+function ServiceCard({ service, previous, disabled, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { service: Service; previous?: Service; disabled: boolean; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   const programado = service.tipoAgenda === "programado";
-  const pendiente = active && service.estado === "pendiente";
+  const pendiente = service.estado === "pendiente";
 
   const datos: Array<[string, string]> = [
     ["Cliente", service.cliente?.nombreTelegram || "Cliente"],
@@ -338,7 +427,6 @@ function ServiceCard({ service, previous, active, disabled, onRequestAccept, onR
         <div className="min-w-0">
           <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#8B7635]">Servicio {service.id.slice(-6).toUpperCase()}</p>
           <h2 className="mt-1 truncate font-heading text-xl font-semibold sm:text-2xl">{service.empleada?.nombreArtistico || "Empleada asignada"}</h2>
-          {!active && service.empleada && <EmployeeRatingSummary employee={service.empleada} />}
         </div>
         <ServiceStatusBadge status={service.estado} />
       </div>
@@ -360,7 +448,6 @@ function ServiceCard({ service, previous, active, disabled, onRequestAccept, onR
       </dl>
 
       {service.notasJefe && <div className="mt-3 border-l-2 border-[#C5A55A]/70 bg-black/50 px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]">Notas internas</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{service.notasJefe}</p></div>}
-      {!active && <ServiceRating service={service} />}
       <ReceiptEvidenceList service={service} />
 
       {pendiente && (
@@ -369,20 +456,92 @@ function ServiceCard({ service, previous, active, disabled, onRequestAccept, onR
         </button>
       )}
 
-      <div className={`mt-2.5 grid gap-2 ${pendiente ? "grid-cols-3" : active ? "grid-cols-2" : "grid-cols-1"}`}>
+      <div className={`mt-2.5 grid gap-2 ${pendiente ? "grid-cols-3" : "grid-cols-2"}`}>
         {pendiente && <SecondaryAction onClick={() => onRequestEdit?.(service)} disabled={disabled} icon={<Pencil size={16} />} label="Editar" />}
         <SecondaryAction onClick={() => onChat(service)} icon={<MessageCircle size={16} />} label="Chat" />
-        {active && <SecondaryAction onClick={() => onCancel(service)} disabled={disabled} danger icon={<Ban size={16} />} label="Cancelar" />}
+        <SecondaryAction onClick={() => onCancel(service)} disabled={disabled} danger icon={<Ban size={16} />} label="Cancelar" />
       </div>
 
-      {!active && <p className="mt-3 flex items-center gap-1.5 text-[11px] text-zinc-500"><Clock3 size={13} />{new Date(service.updatedAt).toLocaleString(APP_LOCALE)}</p>}
-      {active && service.estado !== "agendado" && <TransportPanel service={service} onRefresh={onRefresh} />}
+      {service.estado !== "agendado" && <TransportPanel service={service} onRefresh={onRefresh} />}
     </article>
   );
 }
 
 function SecondaryAction({ onClick, disabled, danger = false, icon, label }: { onClick: () => void; disabled?: boolean; danger?: boolean; icon: ReactNode; label: string }) {
   return <button type="button" disabled={disabled} onClick={onClick} className={`flex h-[52px] flex-col items-center justify-center gap-1 rounded-xl border text-[10px] font-semibold transition-colors disabled:opacity-40 ${danger ? "border-red-500/50 bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white" : "border-zinc-800 bg-zinc-900/70 text-zinc-400 hover:border-[#C5A55A] hover:text-[#C5A55A]"}`}>{icon}{label}</button>;
+}
+
+/**
+ * El dia de una fecha, en la zona del negocio.
+ *
+ * Se comparan las fechas ya formateadas en `America/Mexico_City` y no los
+ * instantes: a las 23:30 de aqui, un `getDate()` sobre UTC ya habria pasado al
+ * dia siguiente y los servicios de esta noche saldrian agrupados bajo manana.
+ */
+function claveDia(iso: string) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: APP_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+}
+
+function etiquetaDia(iso: string) {
+  const clave = claveDia(iso);
+  if (clave === claveDia(new Date().toISOString())) return "Hoy";
+  if (clave === claveDia(new Date(Date.now() - 86_400_000).toISOString())) return "Ayer";
+  return new Intl.DateTimeFormat(APP_LOCALE, { timeZone: APP_TIME_ZONE, day: "numeric", month: "long" }).format(new Date(iso));
+}
+
+/**
+ * El historial, agrupado por dia.
+ *
+ * Cada servicio cerrado era una tarjeta entera con sus botones, asi que
+ * repasar la semana era un scroll larguisimo. Aqui cada uno ocupa una fila con
+ * lo que se busca al repasar --quien, cuando, cuanto duro y como acabo-- y el
+ * detalle completo se despliega solo en el que se toca.
+ */
+function HistoryList({ services, onChat }: { services: Service[]; onChat: (service: Service) => void }) {
+  const [abierto, setAbierto] = useState<string | null>(null);
+
+  const grupos: Array<[string, Service[]]> = [];
+  for (const service of services) {
+    const dia = etiquetaDia(service.updatedAt);
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo[0] === dia) ultimo[1].push(service);
+    else grupos.push([dia, [service]]);
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {grupos.map(([dia, delDia]) => (
+        <section key={dia} className="flex flex-col gap-2">
+          <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-600">{dia}</h3>
+          {delDia.map((service) => (
+            <article key={service.id} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950">
+              <button type="button" onClick={() => setAbierto(abierto === service.id ? null : service.id)} aria-expanded={abierto === service.id} className="flex w-full items-center gap-3 p-2.5 text-left">
+                <span className="block h-10 w-10 shrink-0 rounded-lg border border-zinc-800 bg-cover bg-center" style={service.empleada?.fotoPerfilUrl ? { backgroundImage: `url(${service.empleada.fotoPerfilUrl})` } : { background: "linear-gradient(135deg,#3f3a30,#14120e)" }} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-heading text-base font-semibold text-white">{service.empleada?.nombreArtistico || "Empleada"}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-zinc-500">{new Intl.DateTimeFormat(APP_LOCALE, { timeZone: APP_TIME_ZONE, hour: "2-digit", minute: "2-digit" }).format(new Date(service.updatedAt))} · {service.duracionPactadaHoras} h · {service.metodoPago.toUpperCase()}</span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-1.5">
+                  {service.calificacion != null && <span className="flex items-center gap-1 text-xs font-semibold tabular-nums text-[#E8D5A3]"><Star size={12} className="fill-[#C5A55A] text-[#C5A55A]" />{service.calificacion}</span>}
+                  <ServiceStatusBadge status={service.estado} />
+                </span>
+              </button>
+              {abierto === service.id && (
+                <div className="border-t border-zinc-900 p-3.5">
+                  {service.empleada && <EmployeeRatingSummary employee={service.empleada} />}
+                  <p className="mt-2 text-xs text-zinc-500">Cliente: {service.cliente?.nombreTelegram || "Cliente"}</p>
+                  {service.notasJefe && <div className="mt-3 border-l-2 border-[#C5A55A]/70 bg-black/50 px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]">Notas internas</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{service.notasJefe}</p></div>}
+                  <ServiceRating service={service} />
+                  <ReceiptEvidenceList service={service} />
+                  <div className="mt-3"><SecondaryAction onClick={() => onChat(service)} icon={<MessageCircle size={16} />} label="Abrir chat" /></div>
+                </div>
+              )}
+            </article>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
 }
 
 function EditPendingServiceDialog({ service, onClose, onSaved }: { service: Service; onClose: () => void; onSaved: (service: Service) => void }) {
