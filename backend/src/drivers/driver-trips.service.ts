@@ -397,9 +397,45 @@ export class DriverTripsService {
     // chat: la calificacion se pide siempre, y al cliente se le avisa solo
     // cuando el viaje que termina es el de ida, que es cuando llega ella.
     await this.pedirCalificacionAlaEmpleada(trip, chofer);
+    await this.pedirCalificacionAlChofer(trip);
     if (trip.tipo === 'ida') await this.avisarLlegadaAlCliente(trip);
 
     return trip;
+  }
+
+  /**
+   * Le pide al chofer que califique a la empleada del viaje.
+   *
+   * En el chat esto viajaba pegado a la reescritura de su propio mensaje, asi
+   * que cerrar desde el portal no se lo pedia y esa valoracion se perdia. Sale
+   * a su chat aunque haya cerrado en la aplicacion: los botones de calificar
+   * son de Telegram y no hay pantalla equivalente todavia.
+   */
+  private async pedirCalificacionAlChofer(trip: Viajes): Promise<void> {
+    if (!trip.choferId) return;
+    const chofer = await this.choferes.findOne({
+      where: { id: trip.choferId },
+      relations: { usuario: true },
+    });
+    const chatId = chofer?.usuario?.telegramChatId;
+    if (!chatId) return;
+
+    await this.telegram
+      .sendMessage(
+        chatId,
+        `Califica a ${trip.servicio?.empleada?.nombreArtistico ?? 'la empleada'} por este viaje.`,
+        {
+          buttons: [
+            [1, 2, 3, 4, 5].map((estrellas) =>
+              Markup.button.callback(
+                `${estrellas}`,
+                `rate_emp_trip:${trip.id}:${estrellas}`,
+              ),
+            ),
+          ],
+        },
+      )
+      .catch(() => undefined);
   }
 
   /** Le pide a la modelo que califique el trayecto recien terminado. */

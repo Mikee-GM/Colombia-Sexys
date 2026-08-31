@@ -335,3 +335,45 @@ export async function addServiceExtra(
     return { success: false, error: "Error de conexion con el servidor" };
   }
 }
+
+/**
+ * Extiende el servicio en curso.
+ *
+ * En el chat son varios pasos porque no cabe un formulario; aqui elige las
+ * horas y se manda de una vez. Quien comprueba que el servicio sea suyo es el
+ * backend, que ya lo hacia.
+ */
+export async function extenderMiServicio(
+  servicioId: string,
+  horas: number,
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/services/${servicioId}/extend`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          ...(await portalHeaders(token)),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ horas }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo extender el servicio",
+      };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al extender el servicio:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexión con el servidor",
+    };
+  }
+}

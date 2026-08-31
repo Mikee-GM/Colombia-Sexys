@@ -5,6 +5,7 @@ import { CalendarClock, CheckCircle2, Clock3, Wallet } from "lucide-react";
 import AccionesDelViaje from "@/components/empleada/AccionesDelViaje";
 import AgregarExtra from "@/components/empleada/AgregarExtra";
 import FinalizarServicio from "@/components/empleada/FinalizarServicio";
+import ExtenderServicio from "@/components/empleada/ExtenderServicio";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { EmployeePortalActiveService } from "@/lib/types";
@@ -99,6 +100,10 @@ export default function ServicioAhora({
         {enCurso && (
           <>
             <AgregarExtra servicioId={servicio.id} token={token} />
+            {/* Extender va antes de finalizar: el orden es el de lo que ocurre
+                --primero se alarga, al final se cierra-- y ademas aleja el
+                boton de cierre del resto. */}
+            <ExtenderServicio servicioId={servicio.id} token={token} />
             <FinalizarServicio servicioId={servicio.id} token={token} />
           </>
         )}
