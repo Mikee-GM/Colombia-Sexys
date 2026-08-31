@@ -5,7 +5,7 @@ import {
   CSRF_COOKIE,
   REFRESH_COOKIE,
 } from "@/lib/auth-constants";
-import { BACKEND_API_VERSION } from "@/lib/api-constants";
+import { BACKEND_API_PREFIX } from "@/lib/api-constants";
 import {
   buildCookieHeader,
   parseSetCookieHeaders,
@@ -35,7 +35,7 @@ async function renovarSesion(
   if (!request.cookies.has(REFRESH_COOKIE)) return null;
 
   const destino = new URL(
-    `/api/v${BACKEND_API_VERSION}/auth/refresh`,
+    `${BACKEND_API_PREFIX}/auth/refresh`,
     backendUrl(),
   );
 
@@ -75,7 +75,7 @@ async function renovarSesion(
 async function rolDeLaSesion(cookieHeader: string): Promise<string | null> {
   if (!cookieHeader) return null;
   const destino = new URL(
-    `/api/v${BACKEND_API_VERSION}/auth/me`,
+    `${BACKEND_API_PREFIX}/auth/me`,
     backendUrl(),
   );
   try {
@@ -100,12 +100,21 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/") &&
     !pathname.startsWith("/api/assistant") &&
     !pathname.startsWith("/api/auth") &&
+    !pathname.startsWith("/api/geocode") &&
     !pathname.startsWith("/api/health") &&
     !pathname.startsWith("/api/realtime")
   ) {
-    // El backend publica toda su superficie bajo `/api/v1`. Aqui se traduce
-    // `/api/algo` del navegador a `/api/v1/algo` del backend.
-    const apiPath = pathname.replace(/^\/api/, `/api/${BACKEND_API_VERSION}`);
+    /*
+     * El backend publica toda su superficie bajo `/api/v1`. Aqui se traduce
+     * `/api/algo` del navegador a `/api/v1/algo` del backend.
+     *
+     * Se usa el prefijo ya construido y no `/api/${BACKEND_API_VERSION}`, que
+     * daba `/api/1` sin la `v` y hacia que el backend respondiera 404. No se
+     * noto antes porque ninguna llamada del navegador pasaba por aqui: las
+     * paginas piden sus datos en el servidor con `apiFetch`, que arma el
+     * prefijo bien, y las rutas propias de Next quedan excluidas arriba.
+     */
+    const apiPath = pathname.replace(/^\/api/, BACKEND_API_PREFIX);
     const targetUrl = new URL(`${apiPath}${search}`, backendUrl());
     return NextResponse.rewrite(targetUrl);
   }
