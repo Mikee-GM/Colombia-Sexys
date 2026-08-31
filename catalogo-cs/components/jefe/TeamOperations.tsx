@@ -58,6 +58,10 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   const [creatingService, setCreatingService] = useState(false);
   const [selectedEvaluationUser, setSelectedEvaluationUser] = useState<{ id: string; name: string } | null>(null);
   const [photosEmployee, setPhotosEmployee] = useState<Employee | null>(null);
+  // Se guarda el id y no la empleada: si se guardara el objeto, al cambiar la
+  // disponibilidad desde la propia hoja esta seguiria mostrando el estado
+  // anterior, porque la lista se actualiza pero la copia de la hoja no.
+  const [detalleEmpleadaId, setDetalleEmpleadaId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const chatServiceRef = useRef<Service | null>(null);
@@ -66,6 +70,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   }, [chatService]);
 
   const visibleEmployees = useMemo(() => employees.filter((employee) => employee.nombreArtistico.toLowerCase().includes(query.toLowerCase())), [employees, query]);
+  const detalleEmpleada = detalleEmpleadaId ? employees.find((employee) => employee.id === detalleEmpleadaId) ?? null : null;
   const active = services.filter(
     (service) =>
       ["pendiente", "agendado", "en_curso"].includes(service.estado) ||
@@ -263,7 +268,10 @@ export default function TeamOperations({ initialEmployees, initialServices, init
       ))}
     </div>
     {tab === "historial" && <label className="mb-5 block"><span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Filtrar por empleada</span><select value={historyEmployeeId} onChange={(event) => setHistoryEmployeeId(event.target.value)} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-[#C5A55A] sm:max-w-sm"><option value="all">Todas las empleadas</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.nombreArtistico}</option>)}</select></label>}
-    {tab === "equipo" ? <section><label className="mb-5 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-4 text-sm text-white outline-none placeholder:text-zinc-600" /></label><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visibleEmployees.map((employee) => <article key={employee.id} className={`overflow-hidden rounded-2xl border bg-zinc-950 ${employee.disponible ? "border-[#C5A55A]/55" : "border-zinc-800"}`}><div className="h-36 bg-cover bg-center" style={employee.fotoPerfilUrl ? { backgroundImage: `linear-gradient(to top, #090909, transparent), url(${employee.fotoPerfilUrl})` } : { background: "linear-gradient(135deg,#18181b,#050505)" }} /><div className="p-5"><div className="mb-4 flex items-start justify-between"><div><h2 className="font-heading text-2xl font-semibold">{employee.nombreArtistico}</h2><p className="mt-1 flex items-center gap-1 text-xs text-zinc-500"><MapPin size={12} />{employee.ubicacionLat ? "Ubicación recibida" : "Sin ubicación"}</p>{employee.availabilityStatus === "ocupada" && <p className="mt-2 text-xs text-[#E8D5A3]">Ocupada{employee.estimatedAvailableAt ? ` hasta ${formatAvailabilityTime(employee.estimatedAvailableAt)}` : ""}</p>}<EmployeeRatingSummary employee={employee} /></div><span className={`h-3 w-3 rounded-full ${employee.disponible ? "bg-emerald-400" : "bg-zinc-700"}`} /></div><div className="space-y-2"><button disabled={pending} onClick={() => toggleAvailability(employee)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C5A55A] py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] disabled:opacity-50">{employee.disponible ? <UserRoundX size={18} /> : <UserRoundCheck size={18} />}{employee.disponible ? "Marcar no disponible" : "Marcar disponible"}</button><button type="button" onClick={() => setPhotosEmployee(employee)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:border-[#C5A55A] hover:text-[#C5A55A] transition-all"><Camera size={16} />Fotos Exclusivas</button><button type="button" onClick={() => setSelectedEvaluationUser({ id: employee.usuarioId || employee.id, name: employee.nombreArtistico })} className="flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:border-[#C5A55A] hover:text-[#C5A55A] transition-all"><Award size={16} />Historial de Exámenes</button></div></div></article>)}</div></section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />}
+    {tab === "equipo" ? <section>
+      <label className="mb-4 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-3.5 text-sm text-white outline-none placeholder:text-zinc-600" /></label>
+      <EmployeeList employees={visibleEmployees} disabled={pending} onToggle={toggleAvailability} onOpen={(employee) => setDetalleEmpleadaId(employee.id)} />
+    </section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />}
 
     {chatService && <ChatPanel service={chatService} messages={messages} setMessages={setMessages} onClose={() => setChatService(null)} />}
     {acceptingService && <AcceptServiceDialog service={acceptingService} previousService={services.find((item) => item.id === acceptingService.servicioPrevioId)} disabled={pending} onClose={() => setAcceptingService(null)} onAccept={(transport, notes) => decide(acceptingService, "aceptar", transport, notes)} />}
@@ -271,6 +279,17 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     <CreateServiceDialog open={creatingService} onClose={() => setCreatingService(false)} initialEmployees={employees} onCreated={() => { reloadServices(); }} />
     {cancellingService && <CancelServiceDialog serviceLabel={cancellingService.empleada?.nombreArtistico || "este servicio"} disabled={pending} onConfirm={(reason, note) => cancelService(cancellingService, reason, note)} onCancel={() => setCancellingService(null)} />}
     <EvaluationHistorySheet userId={selectedEvaluationUser?.id ?? null} workerName={selectedEvaluationUser?.name} open={Boolean(selectedEvaluationUser)} onOpenChange={(open) => !open && setSelectedEvaluationUser(null)} />
+    {detalleEmpleada && <EmployeeSheet
+      employee={detalleEmpleada}
+      disabled={pending}
+      onToggle={toggleAvailability}
+      /* Las dos abren su propio panel, asi que la hoja se cierra antes: si no,
+         quedaria una capa debajo de la otra y cerrar la de arriba dejaria al
+         jefe en una pantalla que no pidio. */
+      onPhotos={() => { setDetalleEmpleadaId(null); setPhotosEmployee(detalleEmpleada); }}
+      onExams={() => { setDetalleEmpleadaId(null); setSelectedEvaluationUser({ id: detalleEmpleada.usuarioId || detalleEmpleada.id, name: detalleEmpleada.nombreArtistico }); }}
+      onClose={() => setDetalleEmpleadaId(null)}
+    />}
     {photosEmployee && <ExclusivePhotosPanel employee={photosEmployee} onClose={() => setPhotosEmployee(null)} />}
   </>;
 }
@@ -378,6 +397,112 @@ function AcceptServiceDialog({ service, previousService, disabled, onClose, onAc
 function EmployeeRatingSummary({ employee }: { employee: Employee }) {
   if (employee.promedioCalificacion == null) return <p className="mt-2 text-xs text-zinc-500">Sin valoraciones</p>;
   return <p className="mt-2 flex items-center gap-1.5 text-xs text-zinc-400"><Star size={13} className="fill-[#C5A55A] text-[#C5A55A]" /><span className="font-semibold text-[#E8D5A3]">{Number(employee.promedioCalificacion).toFixed(2)}</span><span>{employee.totalServiciosValorados} {employee.totalServiciosValorados === 1 ? "servicio valorado" : "servicios valorados"}</span></p>;
+}
+
+/** Estado de la empleada en una linea, para la fila de la lista. */
+function resumenEmpleada(employee: Employee) {
+  if (employee.availabilityStatus === "ocupada") {
+    return `Ocupada${employee.estimatedAvailableAt ? ` hasta ${formatAvailabilityTime(employee.estimatedAvailableAt)}` : ""}`;
+  }
+  return `${employee.disponible ? "Libre" : "No disponible"} · ${employee.ubicacionLat ? "Ubicación recibida" : "Sin ubicación"}`;
+}
+
+function fondoEmpleada(employee: Employee) {
+  return employee.fotoPerfilUrl
+    ? { backgroundImage: `url(${employee.fotoPerfilUrl})` }
+    : { background: "linear-gradient(135deg,#3f3a30,#14120e)" };
+}
+
+/**
+ * El equipo como lista de filas.
+ *
+ * Antes cada empleada era una tarjeta con foto de 144px y tres botones
+ * apilados a ancho completo: en un telefono se veia una y media por pantalla,
+ * y la accion del dia a dia --marcar disponible-- quedaba al mismo nivel que
+ * dos consultas que casi nunca se abren. Ahora la fila mide 68px y se ven
+ * siete; disponibilidad se cambia desde aqui y el resto vive en la ficha.
+ */
+function EmployeeList({ employees, disabled, onToggle, onOpen }: { employees: Employee[]; disabled: boolean; onToggle: (employee: Employee) => void; onOpen: (employee: Employee) => void }) {
+  if (!employees.length) return <div className="rounded-2xl border border-dashed border-zinc-800 py-16 text-center text-sm text-zinc-500">No hay empleadas que coincidan con la búsqueda.</div>;
+  return (
+    <ul className="flex flex-col gap-2">
+      {employees.map((employee) => (
+        <li key={employee.id} className={`flex items-center gap-2 rounded-2xl border bg-zinc-950 pr-2 transition-colors ${employee.disponible ? "border-[#C5A55A]/45" : "border-zinc-800"}`}>
+          {/* El area de la izquierda abre la ficha; el interruptor es un boton
+              aparte, porque un boton no puede anidarse dentro de otro. */}
+          <button type="button" onClick={() => onOpen(employee)} className="flex min-w-0 flex-1 items-center gap-3 rounded-l-2xl py-2.5 pl-2.5 text-left">
+            <span className="relative shrink-0">
+              <span className="block h-12 w-12 rounded-xl border border-zinc-800 bg-cover bg-center" style={fondoEmpleada(employee)} />
+              <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-zinc-950 ${employee.availabilityStatus === "ocupada" ? "bg-[#8B7635]" : employee.disponible ? "bg-emerald-400" : "bg-zinc-700"}`} />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate font-heading text-[17px] font-semibold leading-tight text-white">{employee.nombreArtistico}</span>
+              <span className={`mt-1 block truncate text-[11px] ${employee.availabilityStatus === "ocupada" ? "text-[#E8D5A3]" : "text-zinc-500"}`}>{resumenEmpleada(employee)}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onToggle(employee)}
+            aria-pressed={employee.disponible}
+            aria-label={employee.disponible ? `Marcar a ${employee.nombreArtistico} como no disponible` : `Marcar a ${employee.nombreArtistico} como disponible`}
+            title={employee.disponible ? "Marcar no disponible" : "Marcar disponible"}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition-colors disabled:opacity-40 ${employee.disponible ? "border-[#C5A55A] text-[#C5A55A]" : "border-zinc-800 text-zinc-600 hover:border-[#C5A55A] hover:text-[#C5A55A]"}`}
+          >
+            {employee.disponible ? <UserRoundX size={18} /> : <UserRoundCheck size={18} />}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Ficha de la empleada: hoja inferior en movil, dialogo centrado a partir de
+ * `sm`. Recoge lo que salio de la tarjeta y no es del dia a dia.
+ */
+function EmployeeSheet({ employee, disabled, onToggle, onPhotos, onExams, onClose }: { employee: Employee; disabled: boolean; onToggle: (employee: Employee) => void; onPhotos: () => void; onExams: () => void; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-3"
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <div className="w-full rounded-t-3xl border border-b-0 border-zinc-800 bg-[#090909] p-5 pb-8 shadow-2xl sm:max-w-md sm:rounded-2xl sm:border-b sm:pb-5">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3.5">
+            <span className="block h-16 w-16 shrink-0 rounded-2xl border border-[#C5A55A]/45 bg-cover bg-center" style={fondoEmpleada(employee)} />
+            <div className="min-w-0">
+              <h3 className="truncate font-heading text-2xl font-semibold text-white">{employee.nombreArtistico}</h3>
+              <p className="mt-1 flex items-center gap-1 text-xs text-zinc-500"><MapPin size={12} />{employee.ubicacionLat ? "Ubicación recibida" : "Sin ubicación"}</p>
+              <EmployeeRatingSummary employee={employee} />
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Cerrar" className="shrink-0 text-zinc-500 hover:text-white"><X size={18} /></button>
+        </div>
+
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onToggle(employee)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C5A55A] bg-[#C5A55A]/10 py-3.5 text-xs font-bold uppercase tracking-wider text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-50"
+        >
+          {employee.disponible ? <UserRoundX size={18} /> : <UserRoundCheck size={18} />}
+          {employee.disponible ? "Marcar no disponible" : "Marcar disponible"}
+        </button>
+
+        <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+          <button type="button" onClick={onPhotos} className="flex h-24 flex-col items-start justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 p-3.5 text-left transition-colors hover:border-[#C5A55A]">
+            <Camera size={20} className="text-[#C5A55A]" />
+            <span className="text-xs font-semibold text-zinc-200">Fotos exclusivas</span>
+          </button>
+          <button type="button" onClick={onExams} className="flex h-24 flex-col items-start justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 p-3.5 text-left transition-colors hover:border-[#C5A55A]">
+            <Award size={20} className="text-[#C5A55A]" />
+            <span className="text-xs font-semibold text-zinc-200">Historial de exámenes</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ServiceRating({ service }: { service: Service }) {
