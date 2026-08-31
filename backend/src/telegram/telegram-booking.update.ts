@@ -6712,6 +6712,33 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         }, DEBOUNCE_WAIT_MS);
         return;
       } else {
+        /*
+         * Aviso de espera, solo al abrir un buffer nuevo.
+         *
+         * El mensaje del cliente espera hasta 20 s antes de llegar a la IA, y
+         * en ese intervalo no salia nada: el cliente escribia y se quedaba
+         * mirando un silencio sin saber si le habian leido. Esto ocupa ese
+         * hueco y ademas sostiene la ficcion de la agencia, que es lo que se
+         * busca: se esta contactando a la modelo, no respondiendo un robot.
+         *
+         * Va solo aqui y no en la rama de arriba a proposito: si saliera
+         * tambien al agrupar, el cliente que manda tres mensajes seguidos
+         * recibiria tres avisos identicos.
+         *
+         * No pasa por la IA porque tiene que ser inmediato; una llamada al
+         * modelo tardaria justo lo que este mensaje viene a tapar. Y no se
+         * bloquea el flujo si Telegram falla: es un acuse, no el servicio.
+         */
+        await ctx
+          .reply(
+            `Por favor espera un momento en lo que nos ponemos en contacto con ${empleada.nombreArtistico}.`,
+          )
+          .catch((err: unknown) =>
+            this.logger.warn(
+              `No se pudo enviar el aviso de espera a ${telegramId}: ${String(err)}`,
+            ),
+          );
+
         const timer = setTimeout(() => {
           void this.flushClientMessageBuffer(bufferKey, empleada);
         }, DEBOUNCE_WAIT_MS);
