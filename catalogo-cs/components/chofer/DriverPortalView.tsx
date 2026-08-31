@@ -15,6 +15,9 @@ interface DriverPortalViewProps {
 
 type TabType = "resumen" | "ranking" | "viajes" | "reputacion";
 
+import ViajeAhora from "@/components/chofer/ViajeAhora";
+import { BarChart3, Car, Star, Trophy } from "lucide-react";
+
 const ZONA_LABEL: Record<string, string> = {
   montecarlo: "Montecarlo",
   majestic: "Majestic",
@@ -121,20 +124,21 @@ export default function DriverPortalView({
         {/* NAVIGATION TABS */}
         <div className="max-w-4xl mx-auto mt-3 flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 border-t border-white/5 pt-2">
           {[
-            { id: "resumen", label: "📊 Resumen" },
-            { id: "ranking", label: "🏆 Ranking" },
-            { id: "viajes", label: "🚗 Viajes" },
-            { id: "reputacion", label: "⭐ Reputación" },
+            { id: "resumen", label: "Resumen", icono: <BarChart3 size={14} /> },
+            { id: "ranking", label: "Ranking", icono: <Trophy size={14} /> },
+            { id: "viajes", label: "Viajes", icono: <Car size={14} /> },
+            { id: "reputacion", label: "Reputación", icono: <Star size={14} /> },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as TabType)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
                 activeTab === tab.id
                   ? "bg-[#C5A55A] text-black shadow-md shadow-[#C5A55A]/25"
                   : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
               }`}
             >
+              {tab.icono}
               {tab.label}
             </button>
           ))}
@@ -143,6 +147,8 @@ export default function DriverPortalView({
 
       {/* MAIN CONTENT CONTAINER */}
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-6">
+        {/* Lo primero, en cualquier pestaña: el viaje que tiene ahora. */}
+        <ViajeAhora viaje={data.activeTrip} zonaLabel={ZONA_LABEL} />
         {/* ================= TAB 1: RESUMEN ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">
@@ -150,32 +156,6 @@ export default function DriverPortalView({
             {workShift !== undefined && workShift !== null && (
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <WorkShiftToggle initialStatus={workShift} />
-              </div>
-            )}
-
-            {data.activeTrip && (
-              <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-emerald-900/20 to-black border border-emerald-500/40 shadow-lg relative overflow-hidden">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                      Viaje en curso
-                    </span>
-                  </div>
-                  <span className="text-xs text-gray-300 font-medium capitalize">
-                    {data.activeTrip.estado.replace("_", " ")}
-                  </span>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-2 pt-2 border-t border-emerald-500/20">
-                  <div className="text-xs text-gray-300">
-                    Zona:{" "}
-                    <span className="font-semibold text-white">
-                      {ZONA_LABEL[data.activeTrip.zona] || data.activeTrip.zona}
-                    </span>{" "}
-                    · Tramo:{" "}
-                    <span className="font-semibold text-white capitalize">{data.activeTrip.tipo}</span>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -396,36 +376,6 @@ export default function DriverPortalView({
         {/* ================= TAB 3: VIAJES ================= */}
         {activeTab === "viajes" && (
           <div className="space-y-6 animate-fadeIn">
-            {data.activeTrip && (
-              <div className="bg-[#141721] p-5 rounded-xl border border-emerald-500/40 shadow-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider">
-                      Viaje Actual
-                    </h3>
-                  </div>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
-                    {data.activeTrip.estado.replace("_", " ").toUpperCase()}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  <div className="bg-black/30 p-3 rounded-lg border border-white/5">
-                    <div className="text-[11px] text-gray-400">Zona</div>
-                    <div className="text-sm font-bold text-white mt-0.5">
-                      {ZONA_LABEL[data.activeTrip.zona] || data.activeTrip.zona}
-                    </div>
-                  </div>
-                  <div className="bg-black/30 p-3 rounded-lg border border-white/5">
-                    <div className="text-[11px] text-gray-400">Tramo</div>
-                    <div className="text-sm font-bold text-white capitalize mt-0.5">
-                      {data.activeTrip.tipo}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             <div className="bg-[#141721] rounded-xl border border-white/5 overflow-hidden shadow-sm">
               <div className="p-4 border-b border-white/5 flex items-center justify-between">
                 <div>

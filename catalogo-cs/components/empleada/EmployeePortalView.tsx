@@ -11,9 +11,8 @@ import type { WeeklyPhotoSubmissionItem } from "@/lib/types";
 import SubirFotosSemanales, {
   AvisoFotosSemanales,
 } from "@/components/empleada/FotosSemanales";
-import AccionesDelViaje from "@/components/empleada/AccionesDelViaje";
-import FinalizarServicio from "@/components/empleada/FinalizarServicio";
-import AgregarExtra from "@/components/empleada/AgregarExtra";
+import ServicioAhora from "@/components/empleada/ServicioAhora";
+import { BarChart3, Camera, ClipboardList, Star, Trophy } from "lucide-react";
 
 interface EmployeePortalViewProps {
   initialData: EmployeePortalData;
@@ -136,21 +135,22 @@ export default function EmployeePortalView({
         {/* NAVIGATION TABS */}
         <div className="max-w-4xl mx-auto mt-3 flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 border-t border-white/5 pt-2">
           {[
-            { id: "resumen", label: "📊 Resumen", title: "Resumen" },
-            { id: "ranking", label: "🏆 Ranking", title: "Ranking Global" },
-            { id: "servicios", label: "📋 Servicios", title: "Mis Servicios" },
-            { id: "reputacion", label: "⭐ Reseñas", title: "Reputación" },
-            { id: "fotos", label: "📸 Mis Fotos", title: "Fotos" },
+            { id: "resumen", label: "Resumen", icono: <BarChart3 size={14} />, title: "Resumen" },
+            { id: "ranking", label: "Ranking", icono: <Trophy size={14} />, title: "Ranking Global" },
+            { id: "servicios", label: "Servicios", icono: <ClipboardList size={14} />, title: "Mis Servicios" },
+            { id: "reputacion", label: "Reseñas", icono: <Star size={14} />, title: "Reputación" },
+            { id: "fotos", label: "Mis Fotos", icono: <Camera size={14} />, title: "Fotos" },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as TabType)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
                 activeTab === tab.id
                   ? "bg-[#C5A55A] text-black shadow-md shadow-[#C5A55A]/25"
                   : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
               }`}
             >
+              {tab.icono}
               {tab.label}
             </button>
           ))}
@@ -159,6 +159,8 @@ export default function EmployeePortalView({
 
       {/* MAIN CONTENT CONTAINER */}
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-6">
+        {/* Lo primero, en cualquier pestaña: qué hay ahora y qué se puede hacer. */}
+        <ServicioAhora servicio={data.activeService} token={token} />
         {/* ================= TAB 1: RESUMEN Y FINANZAS ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">
@@ -169,68 +171,6 @@ export default function EmployeePortalView({
             {workShift !== undefined && workShift !== null && (
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <WorkShiftToggle initialStatus={workShift} />
-              </div>
-            )}
-
-            {/* SERVICIO ACTIVO ALERTA (SI EXISTE) */}
-            {data.activeService && (
-              <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-emerald-900/20 to-black border border-emerald-500/40 shadow-lg relative overflow-hidden">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                      Servicio en Curso / Agendado
-                    </span>
-                  </div>
-                  <span className="text-xs text-gray-300 font-medium">
-                    {data.activeService.duracionHoras} hrs pactadas
-                  </span>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-2 pt-2 border-t border-emerald-500/20">
-                  <div>
-                    <div className="text-xs text-gray-400">Tu Ganancia Estimada:</div>
-                    <div className="text-lg font-bold text-emerald-300">
-                      {formatCurrency(data.activeService.gananciaEstimada)}
-                    </div>
-                  </div>
-                  {data.activeService.transporte && (
-                    <div className="text-xs text-gray-300 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
-                      🚗 Transporte:{" "}
-                      <span className="font-semibold text-white">
-                        {data.activeService.transporte.proveedor.toUpperCase()}
-                      </span>{" "}
-                      ({data.activeService.transporte.estado})
-                      {data.activeService.transporte.choferNombre && (
-                        <span> • Chofer: {data.activeService.transporte.choferNombre}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/*
-                  Marcar el avance sin salir del portal. Los botones del chat
-                  siguen valiendo: esto es una segunda via, no un reemplazo.
-                */}
-                {data.activeService.transporte && (
-                  <AccionesDelViaje
-                    transporte={data.activeService.transporte}
-                    token={token}
-                  />
-                )}
-
-                {/* Extras y cierre: solo sobre un servicio ya arrancado. */}
-                {data.activeService.estado === "en_curso" && (
-                  <>
-                    <AgregarExtra
-                      servicioId={data.activeService.id}
-                      token={token}
-                    />
-                    <FinalizarServicio
-                      servicioId={data.activeService.id}
-                      token={token}
-                    />
-                  </>
-                )}
               </div>
             )}
 
@@ -630,43 +570,6 @@ export default function EmployeePortalView({
         {/* ================= TAB 3: MIS SERVICIOS ================= */}
         {activeTab === "servicios" && (
           <div className="space-y-6 animate-fadeIn">
-            {/* SERVICIO ACTIVO DESTACADO */}
-            {data.activeService && (
-              <div className="bg-[#141721] p-5 rounded-xl border border-emerald-500/40 shadow-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <h3 className="text-sm font-bold text-emerald-400 uppercase tracking-wider">
-                      Servicio Actual
-                    </h3>
-                  </div>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
-                    {data.activeService.estado.toUpperCase()}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
-                  <div className="bg-black/30 p-3 rounded-lg border border-white/5">
-                    <div className="text-[11px] text-gray-400">Duración Pactada</div>
-                    <div className="text-sm font-bold text-white mt-0.5">
-                      {data.activeService.duracionHoras} Horas
-                    </div>
-                  </div>
-                  <div className="bg-black/30 p-3 rounded-lg border border-white/5">
-                    <div className="text-[11px] text-gray-400">Método de Pago</div>
-                    <div className="text-sm font-bold text-white capitalize mt-0.5">
-                      {data.activeService.metodoPago}
-                    </div>
-                  </div>
-                  <div className="bg-black/30 p-3 rounded-lg border border-white/5 col-span-2 sm:col-span-1">
-                    <div className="text-[11px] text-gray-400">Tu Ganancia Neta</div>
-                    <div className="text-sm font-bold text-emerald-400 mt-0.5">
-                      {formatCurrency(data.activeService.gananciaEstimada)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* HISTORIAL DE SERVICIOS */}
             <div className="bg-[#141721] rounded-xl border border-white/5 overflow-hidden shadow-sm">
               <div className="p-4 border-b border-white/5 flex items-center justify-between">
