@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -17,6 +18,9 @@ import { ServicesService } from '../services/services.service';
 import { UpdatePortalTripStatusDto } from './dto/portal-trip-status.dto';
 import { AddPortalServiceExtraDto } from './dto/portal-service-extra.dto';
 import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
+import { DisciplineService } from '../discipline/discipline.service';
+import { CreateRatingDto } from '../discipline/dto/discipline.dto';
+import { ExtendServiceDto } from './dto/extend-service.dto';
 import { PortalUser } from '../auth/decorators/portal-user.decorator';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
 import {
@@ -35,6 +39,7 @@ export class EmployeePortalController {
     private readonly employeesService: EmployeesService,
     private readonly weeklyContentService: WeeklyContentService,
     private readonly servicesService: ServicesService,
+    private readonly disciplineService: DisciplineService,
   ) {}
 
   @Get('me')
@@ -197,5 +202,57 @@ export class EmployeePortalController {
       empleada.id,
     );
     return { subidas: subidas.length, estado };
+  }
+
+  /**
+   * Extiende el servicio en curso.
+   *
+   * En el chat son varios pasos porque no cabe un formulario; aqui elige las
+   * horas y se manda en una sola peticion. La comprobacion de que el servicio
+   * sea suyo la hace `extendByEmployee`, asi que no se repite: hacerlo dos
+   * veces invita a que una de las dos se quede atras.
+   */
+  @Post('services/:servicioId/extend')
+  @HttpCode(200)
+  async extenderServicio(
+    @PortalUser() userId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+    @Body() dto: ExtendServiceDto,
+  ) {
+    const servicio = await this.servicesService.extendByEmployee(
+      servicioId,
+      userId,
+      dto.horas,
+    );
+    return {
+      id: servicio.id,
+      duracionPactadaHoras: servicio.duracionPactadaHoras,
+    };
+  }
+
+  /**
+   * Califica al cliente o al chofer de un servicio.
+   *
+   * Una sola peticion frente a los dos pasos del chat: alli, una calificacion
+   * baja abre una conversacion aparte para pedir el motivo; aqui el formulario
+   * recoge las dos cosas a la vez. El DTO ya exige el comentario cuando son una
+   * o dos estrellas, asi que la regla no se duplica.
+   *
+   * Solo se admiten las direcciones que salen de ella: no puede calificar en
+   * nombre de nadie mas.
+   */
+  @Post('ratings')
+  @HttpCode(201)
+  async calificar(@PortalUser() userId: string, @Body() dto: CreateRatingDto) {
+    if (
+      dto.direction !== 'employee_to_client' &&
+      dto.direction !== 'employee_to_driver'
+    ) {
+      throw new ForbiddenException('Solo puedes calificar como empleada');
+    }
+    return this.disciplineService.createRating(
+      { id: userId, rol: 'empleada' },
+      dto,
+    );
   }
 }

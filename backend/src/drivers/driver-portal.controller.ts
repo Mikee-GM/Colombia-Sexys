@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -9,6 +10,8 @@ import {
 } from '@nestjs/common';
 import { DriversService } from './drivers.service';
 import { DriverTripsService } from './driver-trips.service';
+import { DisciplineService } from '../discipline/discipline.service';
+import { CreateRatingDto } from '../discipline/dto/discipline.dto';
 import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
 import { PortalUser } from '../auth/decorators/portal-user.decorator';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
@@ -20,6 +23,7 @@ export class DriverPortalController {
   constructor(
     private readonly driversService: DriversService,
     private readonly driverTripsService: DriverTripsService,
+    private readonly disciplineService: DisciplineService,
   ) {}
 
   @Get('me')
@@ -123,5 +127,25 @@ export class DriverPortalController {
       choferId,
     );
     return { estado: viaje.estado };
+  }
+
+  /**
+   * Califica a la empleada del viaje.
+   *
+   * En el chat, una calificacion baja abre una conversacion aparte para pedir
+   * el motivo; aqui el formulario recoge las dos cosas de una vez. El DTO ya
+   * exige el comentario con una o dos estrellas, asi que la regla no se
+   * duplica.
+   *
+   * La direccion se fija aqui y no se acepta del cuerpo: un chofer solo puede
+   * calificar en esa direccion.
+   */
+  @Post('ratings')
+  @HttpCode(201)
+  async calificar(@PortalUser() userId: string, @Body() dto: CreateRatingDto) {
+    return this.disciplineService.createRating(
+      { id: userId, rol: 'chofer' },
+      { ...dto, direction: 'driver_to_employee' },
+    );
   }
 }

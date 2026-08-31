@@ -7,6 +7,7 @@ import { Choferes } from './entities/driver.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Servicios } from '../services/entities/service.entity';
+import { DisciplineModule } from '../discipline/discipline.module';
 import { AuthModule } from '../auth/auth.module';
 import { DriverTripsService } from './driver-trips.service';
 import { TelegramModule } from '../telegram/telegram.module';
@@ -16,6 +17,7 @@ import { AiModule } from '../ai/ai.module';
 
 @Module({
   imports: [
+    DisciplineModule,
     TypeOrmModule.forFeature([Choferes, Usuarios, Viajes, Servicios]),
     AuthModule,
     // Ambos con forwardRef: el avance de un viaje avisa por Telegram y arranca

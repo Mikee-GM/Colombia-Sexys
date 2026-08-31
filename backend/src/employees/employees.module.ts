@@ -1,3 +1,4 @@
+import { DisciplineModule } from '../discipline/discipline.module';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmployeesService } from './employees.service';
@@ -15,6 +16,7 @@ import { ServicesModule } from '../services/services.module';
 
 @Module({
   imports: [
+    DisciplineModule,
     TypeOrmModule.forFeature([
       Empleadas,
       Usuarios,
