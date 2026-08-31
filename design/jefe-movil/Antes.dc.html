@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background-color: #000000; color: #ffffff; font-family: Montserrat, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    * { box-sizing: border-box; }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+
+    /* El marco recorta a 844px a proposito: es exactamente lo que cabe hoy
+       en la pantalla de un telefono, sin desplazar. */
+    .phone { width: 390px; height: 844px; overflow: hidden; position: relative; background-color: #000000; }
+    .scroll { padding: 16px; padding-bottom: 0; }
+
+    .flag { position: absolute; z-index: 5; display: flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; background-color: rgba(176,87,74,0.92); border: 1px solid #d98a7e; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; white-space: nowrap; }
+
+    /* ---- cabecera actual: mb-7, h1 text-4xl, boton que envuelve ---- */
+    .head { margin-bottom: 28px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+    .eyebrow { margin: 0 0 8px; font-size: 10px; font-weight: 600; letter-spacing: 0.25em; text-transform: uppercase; color: #C5A55A; }
+    .h1 { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 36px; font-weight: 600; line-height: 1.1; }
+    .sub { margin: 8px 0 0; font-size: 14px; color: #71717a; }
+    .cta { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border-radius: 16px; background-color: #C5A55A; padding: 12px 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #09090b; }
+
+    /* ---- pestanas actuales: grid-cols-2 con cinco = tres filas ---- */
+    .tabs { margin-bottom: 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; border-radius: 12px; border: 1px solid #27272a; background-color: #09090b; padding: 6px; }
+    .tab { border-radius: 8px; padding: 12px 8px; text-align: center; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #71717a; }
+    .tab.is-on { background-color: #C5A55A; color: #000000; }
+
+    .search { margin-bottom: 20px; display: flex; align-items: center; gap: 12px; border-radius: 12px; border: 1px solid #27272a; background-color: #09090b; padding: 0 16px; }
+    .search span { padding: 16px 0; font-size: 14px; color: #52525b; }
+
+    /* ---- tarjeta actual: foto de 144px + tres botones apilados ---- */
+    .card { border-radius: 16px; border: 1px solid rgba(197,165,90,0.55); background-color: #09090b; overflow: hidden; }
+    .card-photo { height: 144px; background-image: linear-gradient(to top, #090909, transparent), linear-gradient(135deg, #3f3a30, #14120e); }
+    .card-body { padding: 20px; }
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+    .card-name { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 24px; font-weight: 600; }
+    .card-meta { margin: 4px 0 0; display: flex; align-items: center; gap: 4px; font-size: 12px; color: #71717a; }
+    .dot { width: 12px; height: 12px; border-radius: 999px; background-color: #34d399; flex-shrink: 0; }
+    .stack { display: flex; flex-direction: column; gap: 8px; }
+    .b1 { display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; border: 1px solid #C5A55A; padding: 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #C5A55A; }
+    .b2 { display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; border: 1px solid #27272a; background-color: rgba(24,24,27,0.8); padding: 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #d4d4d8; }
+
+    /* ---- barra inferior actual: 6 hijos en grid-cols-5 ---- */
+    .nav { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid #27272a; background-color: rgba(5,5,5,0.95); padding: 8px; }
+    .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #52525b; text-align: center; line-height: 1.25; }
+    .nav-item.is-on { color: #C5A55A; }
+  </style>
+</helmet>
+
+<div class="phone">
+  <div class="flag" style="top: 150px; right: 14px;">Boton a ancho completo</div>
+  <div class="flag" style="top: 268px; right: 14px;">Tres filas de pestañas</div>
+  <div class="flag" style="bottom: 146px; left: 14px;">Salir cae a una segunda fila</div>
+
+  <div class="scroll">
+    <div class="head">
+      <div>
+        <p class="eyebrow">Operación diaria</p>
+        <h1 class="h1">Mi equipo</h1>
+        <p class="sub">Disponibilidad, servicios, transporte y conversaciones de tu equipo.</p>
+      </div>
+      <div class="cta">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>
+        Crear Servicio Manual
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab is-on">Disponibilidad</div>
+      <div class="tab">Grupos (3)</div>
+      <div class="tab">Activos (5)</div>
+      <div class="tab">Historial</div>
+      <div class="tab">Efectivo</div>
+    </div>
+
+    <div class="search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <span>Buscar empleada</span>
+    </div>
+
+    <div class="card">
+      <div class="card-photo"></div>
+      <div class="card-body">
+        <div class="card-top">
+          <div>
+            <h2 class="card-name">Valentina</h2>
+            <p class="card-meta">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 21s7-6.4 7-11a7 7 0 1 0-14 0c0 4.6 7 11 7 11z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              Ubicación recibida
+            </p>
+          </div>
+          <span class="dot"></span>
+        </div>
+        <div class="stack">
+          <div class="b1">Marcar no disponible</div>
+          <div class="b2">Fotos Exclusivas</div>
+          <div class="b2">Historial de Exámenes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <div class="nav-item is-on">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></svg>
+      Mi equipo
+    </div>
+    <div class="nav-item">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.4 7-11a7 7 0 1 0-14 0c0 4.6 7 11 7 11z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+      Mapa
+    </div>
+    <div class="nav-item">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M12 11v3"></path><path d="M12 18h.01"></path></svg>
+      Reportes
+    </div>
+    <div class="nav-item">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M9 12h6"></path><path d="M9 16h6"></path></svg>
+      Registros a mano
+    </div>
+    <div class="nav-item">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>
+      Retos
+    </div>
+    <div class="nav-item">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="m16 17 5-5-5-5"></path><path d="M21 12H9"></path></svg>
+      Salir
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

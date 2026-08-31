@@ -30,3 +30,11 @@ pnpm-debug.log*
 backups/
 *.dump
 *.dump.sha256
+
+# Lienzos de diseño ya empaquetados.
+#
+# Cada uno pesa un par de megas porque lleva el editor dentro, y se regenera
+# entero a partir de los .dc.html y el canvas.json de su carpeta. Lo que se
+# versiona son las fuentes; el empaquetado es un artefacto de salida.
+design/**/*.html
+!design/**/*.dc.html

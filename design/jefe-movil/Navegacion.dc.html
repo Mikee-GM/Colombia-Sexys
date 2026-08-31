@@ -1,0 +1,172 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background-color: #000000; color: #ffffff; font-family: Montserrat, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+    * { box-sizing: border-box; }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+
+    .sheet { width: 880px; min-height: 700px; background-color: #000000; padding: 36px 40px 44px; display: flex; flex-direction: column; gap: 32px; }
+
+    .head-eyebrow { margin: 0 0 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.24em; text-transform: uppercase; color: #8B7635; }
+    .head-title { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 28px; font-weight: 600; line-height: 1.15; color: #E8D5A3; }
+    .head-sub { margin: 8px 0 0; max-width: 62ch; font-size: 13px; line-height: 1.6; color: #71717a; }
+
+    .block { display: flex; flex-direction: column; gap: 14px; }
+    .block-title { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #a1a1aa; }
+    .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; }
+    .col { display: flex; flex-direction: column; gap: 10px; }
+    .col-tag { display: flex; align-items: center; gap: 7px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+    .col-tag.bad { color: #B0574A; }
+    .col-tag.good { color: #7C9470; }
+    .dotmark { width: 7px; height: 7px; border-radius: 999px; background-color: currentColor; }
+    .col-note { margin: 0; font-size: 11px; line-height: 1.6; color: #71717a; }
+
+    .frame { width: 380px; border: 1px solid #27272a; border-radius: 14px; overflow: hidden; background-color: #050505; }
+
+    /* ---- barra inferior, estado actual ---- */
+    .nav-old { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid #27272a; background-color: #050505; padding: 8px; }
+    .old-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #52525b; text-align: center; line-height: 1.25; }
+    .old-item.is-on { color: #C5A55A; }
+    .old-item.orphan { outline: 1px dashed rgba(176,87,74,0.85); outline-offset: -3px; border-radius: 8px; }
+
+    /* ---- barra inferior, propuesta ---- */
+    .nav-new { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; border-top: 1px solid #27272a; background-color: #050505; padding: 6px 4px 0; }
+    .new-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 52px; border-radius: 12px; font-size: 10px; font-weight: 600; color: #52525b; }
+    .new-item.is-on { color: #C5A55A; background-color: rgba(197,165,90,0.1); }
+    .safebar { height: 20px; background-color: #050505; border-top: 1px dashed #27272a; display: flex; align-items: center; justify-content: center; font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; color: #3f3f46; }
+
+    /* ---- pestanas, estado actual ---- */
+    .tabs-old { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; border-radius: 12px; border: 1px solid #27272a; background-color: #09090b; padding: 6px; margin: 12px; }
+    .told { border-radius: 8px; padding: 12px 8px; text-align: center; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #71717a; }
+    .told.is-on { background-color: #C5A55A; color: #000000; }
+    .told.orphan { outline: 1px dashed rgba(176,87,74,0.85); outline-offset: 2px; }
+
+    /* ---- pestanas, propuesta ---- */
+    .tabs-new { display: flex; align-items: center; gap: 8px; padding: 14px 12px; overflow: hidden; }
+    .tnew { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid #27272a; background-color: #09090b; font-size: 12px; font-weight: 600; color: #a1a1aa; white-space: nowrap; }
+    .tnew.is-on { border-color: #C5A55A; background-color: #C5A55A; color: #000000; }
+    .tcount { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background-color: rgba(197,165,90,0.16); color: #E8D5A3; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .tnew.is-on .tcount { background-color: rgba(0,0,0,0.22); color: #000000; }
+    .fade { flex-shrink: 0; width: 28px; height: 34px; background-image: linear-gradient(to right, rgba(0,0,0,0), #000000); }
+  </style>
+</helmet>
+
+<div class="sheet">
+  <div>
+    <p class="head-eyebrow">Panel de jefe · Teléfono</p>
+    <h1 class="head-title">Navegación y pestañas</h1>
+    <p class="head-sub">Las dos piezas donde el amontonamiento es un fallo de código y no una cuestión de gusto: una rejilla con más elementos que columnas, y otra con menos columnas que pestañas.</p>
+  </div>
+
+  <div class="block">
+    <p class="block-title">Barra inferior</p>
+    <div class="pair">
+      <div class="col">
+        <p class="col-tag bad"><span class="dotmark"></span> Hoy</p>
+        <div class="frame">
+          <div class="nav-old">
+            <div class="old-item is-on">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></svg>
+              Mi equipo
+            </div>
+            <div class="old-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.4 7-11a7 7 0 1 0-14 0c0 4.6 7 11 7 11z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              Mapa
+            </div>
+            <div class="old-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M12 11v3"></path><path d="M12 18h.01"></path></svg>
+              Reportes
+            </div>
+            <div class="old-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M9 12h6"></path><path d="M9 16h6"></path></svg>
+              Registros a mano
+            </div>
+            <div class="old-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>
+              Retos
+            </div>
+            <div class="old-item orphan">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="m16 17 5-5-5-5"></path><path d="M21 12H9"></path></svg>
+              Salir
+            </div>
+          </div>
+        </div>
+        <p class="col-note">Seis elementos en una rejilla de cinco columnas: Salir cae solo a una segunda fila. Como el contenido reserva la altura de una sola fila, la barra tapa lo último de la página. "Registros a mano" tampoco cabe en su columna y parte en dos líneas.</p>
+      </div>
+
+      <div class="col">
+        <p class="col-tag good"><span class="dotmark"></span> Propuesta</p>
+        <div class="frame">
+          <div class="nav-new">
+            <div class="new-item is-on">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></svg>
+              Equipo
+            </div>
+            <div class="new-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.4 7-11a7 7 0 1 0-14 0c0 4.6 7 11 7 11z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              Mapa
+            </div>
+            <div class="new-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M12 11v3"></path><path d="M12 18h.01"></path></svg>
+              Reportes
+            </div>
+            <div class="new-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M9 12h6"></path><path d="M9 16h6"></path></svg>
+              Registros
+            </div>
+            <div class="new-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>
+              Retos
+            </div>
+          </div>
+          <div class="safebar">Área segura del iPhone</div>
+        </div>
+        <p class="col-note">Cinco destinos, cinco columnas, una fila. Salir sale de la barra: no es un sitio al que se va, y era lo que rompía la rejilla; vive en la ficha del jefe. Etiquetas acortadas para que ninguna parta, celdas de 52px y espacio reservado para el indicador del iPhone.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="block">
+    <p class="block-title">Pestañas de la pantalla</p>
+    <div class="pair">
+      <div class="col">
+        <p class="col-tag bad"><span class="dotmark"></span> Hoy</p>
+        <div class="frame">
+          <div class="tabs-old">
+            <div class="told is-on">Disponibilidad</div>
+            <div class="told">Grupos (3)</div>
+            <div class="told">Activos (5)</div>
+            <div class="told">Historial</div>
+            <div class="told orphan">Efectivo</div>
+          </div>
+        </div>
+        <p class="col-note">Cinco pestañas en dos columnas: tres filas, la última coja. Se comen 130px antes de que empiece el contenido, y el texto va a 10px en mayúsculas con espaciado, que es de lo más difícil de leer.</p>
+      </div>
+
+      <div class="col">
+        <p class="col-tag good"><span class="dotmark"></span> Propuesta</p>
+        <div class="frame">
+          <div class="tabs-new">
+            <div class="tnew is-on">Disponibilidad</div>
+            <div class="tnew">Grupos <span class="tcount">3</span></div>
+            <div class="tnew">Activos <span class="tcount">5</span></div>
+            <div class="fade"></div>
+          </div>
+        </div>
+        <p class="col-note">Una sola tira que se desliza con el pulgar, 62px de alto en vez de 130. Texto a 12px en caja baja, y los contadores como distintivo en lugar de paréntesis. La clase `.tabs-scroll` que esto necesita ya existe sin usar en `globals.css`.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

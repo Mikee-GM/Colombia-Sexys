@@ -1,0 +1,51 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Pantallas" },
+    { "id": "page-2", "name": "Navegación" }
+  ],
+  "artboards": [
+    { "file": "Antes.dc.html", "title": "Hoy · Disponibilidad", "x": 0, "y": 0, "w": 390, "h": 844, "page": "page-1" },
+    { "file": "Main.dc.html", "title": "Disponibilidad", "x": 470, "y": 0, "w": 390, "h": 844, "page": "page-1" },
+    { "file": "Ficha.dc.html", "title": "Ficha de empleada", "x": 940, "y": 0, "w": 390, "h": 844, "page": "page-1" },
+    { "file": "Activos.dc.html", "title": "Activos", "x": 1410, "y": 0, "w": 390, "h": 844, "page": "page-1" },
+    { "file": "Grupos.dc.html", "title": "Grupos", "x": 0, "y": 964, "w": 390, "h": 844, "page": "page-1" },
+    { "file": "Historial.dc.html", "title": "Historial", "x": 470, "y": 964, "w": 390, "h": 844, "page": "page-1" },
+    { "file": "Efectivo.dc.html", "title": "Efectivo", "x": 940, "y": 964, "w": 390, "h": 844, "page": "page-1" },
+    { "file": "Navegacion.dc.html", "title": "Barra inferior y pestañas", "x": 0, "y": 0, "w": 880, "h": 840, "page": "page-2" }
+  ],
+  "annotations": [
+    {
+      "id": "nota-antes",
+      "x": 0,
+      "y": -190,
+      "w": 390,
+      "page": "page-1",
+      "text": "Lo que se ve hoy en un iPhone de 390 px, recortado a una pantalla.\nLa cabecera, las tres filas de pestañas y una sola tarjeta ya la llenan entera."
+    },
+    {
+      "id": "nota-disponibilidad",
+      "x": 470,
+      "y": -190,
+      "w": 390,
+      "page": "page-1",
+      "text": "El cambio de fondo: la tarjeta con foto y tres botones apilados pasa a una fila de 72 px.\nSe ven siete empleadas de un vistazo en vez de una y media."
+    },
+    {
+      "id": "nota-ficha",
+      "x": 940,
+      "y": -190,
+      "w": 390,
+      "page": "page-1",
+      "text": "Aquí van las dos acciones que salieron de la fila: fotos exclusivas e historial de exámenes.\nNo se pierde nada, deja de competir por el espacio del día a día."
+    },
+    {
+      "id": "nota-activos",
+      "x": 1410,
+      "y": -190,
+      "w": 390,
+      "page": "page-1",
+      "text": "Los datos del servicio en filas de clave y valor, y las acciones en una rejilla fija de tres.\nEl flex-wrap de ahora deja una fila coja según el largo de los textos."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}
