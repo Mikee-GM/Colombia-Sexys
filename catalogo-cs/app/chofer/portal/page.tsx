@@ -8,6 +8,15 @@ export const metadata: Metadata = {
   title: "Mi Portal -- Colombia Sexys",
   description: "Portal exclusivo para choferes de Colombia Sexys.",
   robots: "noindex, nofollow",
+  /*
+   * El portal se instala en la pantalla de inicio, y de ahi sale la sesion
+   * que traen los avisos push: dentro del webview de Telegram no existe el
+   * service worker que hacen falta, solo en la aplicacion instalada. En
+   * iPhone, ademas, `appleWebApp` no es un adorno: sin el, lo que se anade
+   * a la pantalla de inicio abre como una pestaña normal y no llega nada.
+   */
+  manifest: "/manifest-chofer.webmanifest",
+  appleWebApp: { capable: true, title: "Portal CS", statusBarStyle: "black-translucent" },
 };
 
 interface PageProps {

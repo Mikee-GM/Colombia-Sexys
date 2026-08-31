@@ -6,6 +6,7 @@ import type { EmployeePortalData } from "@/lib/types";
 import { formatCurrency as formatCurrencyMXN } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
+import AvisosPush from "@/components/ui/AvisosPush";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
 import type { WeeklyPhotoSubmissionItem } from "@/lib/types";
 import SubirFotosSemanales, {
@@ -161,6 +162,9 @@ export default function EmployeePortalView({
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-6">
         {/* Lo primero, en cualquier pestaña: qué hay ahora y qué se puede hacer. */}
         <ServicioAhora servicio={data.activeService} token={token} />
+        {/* Solo tiene sentido con sesion propia: un enlace con token no
+            identifica el dispositivo, y la suscripcion es por dispositivo. */}
+        {workShift !== undefined && workShift !== null && <AvisosPush />}
         {/* ================= TAB 1: RESUMEN Y FINANZAS ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">

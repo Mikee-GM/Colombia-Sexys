@@ -1,4 +1,4 @@
-import AvisosPush from "@/components/jefe/AvisosPush";
+import AvisosPush from "@/components/ui/AvisosPush";
 import TeamOperations from "@/components/jefe/TeamOperations";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import { getMyWorkShift } from "@/lib/actions/work-shift";

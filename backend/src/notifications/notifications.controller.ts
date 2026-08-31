@@ -93,9 +93,18 @@ export class NotificationsController {
     const enviados = await this.notifications.notificar(actor.id, {
       titulo: 'Aviso de prueba',
       cuerpo: 'Si ves esto, los avisos funcionan en este dispositivo.',
-      url: '/jefe',
+      // Cada rol tiene su pantalla: un aviso que lleva al panel del jefe desde
+      // el telefono de una modelo la deja en una pagina a la que no entra.
+      url: portalDeRol(actor.rol),
       tag: 'prueba',
     });
     return { enviados };
   }
+}
+
+/** A donde lleva tocar un aviso, segun quien lo recibe. */
+export function portalDeRol(rol: string): string {
+  if (rol === 'empleada') return '/empleada/portal';
+  if (rol === 'chofer') return '/chofer/portal';
+  return '/jefe';
 }

@@ -216,6 +216,38 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /**
+   * Aviso push a la modelo de que ya tiene un servicio autorizado.
+   *
+   * Va aparte del mensaje de Telegram de arriba y en su propio try/catch: son
+   * dos canales independientes y el fallo de uno no dice nada del otro. El
+   * push existe porque el de Telegram llega a un chat que puede estar
+   * silenciado, que es justo el problema que se venia arrastrando.
+   *
+   * El texto no lleva nombre de cliente ni lugar: se lee en la pantalla de
+   * bloqueo, a la vista de quien este al lado. El detalle vive detras del
+   * toque, donde ya hay sesion.
+   */
+  private async avisarEmpleadaDeServicio(
+    servicio: Servicios,
+    esProgramado: boolean,
+  ): Promise<void> {
+    const usuarioId = servicio.empleada?.usuarioId;
+    if (!usuarioId) return;
+
+    try {
+      await this.notificationsService.notificar(usuarioId, {
+        titulo: esProgramado ? 'Tienes una cita agendada' : 'Tienes un servicio',
+        cuerpo: 'Toca para ver los detalles en tu portal.',
+        url: '/empleada/portal',
+        tag: `servicio-${servicio.id}`,
+        requireInteraction: true,
+      });
+    } catch (err) {
+      this.logger.error('Error enviando el aviso push a la empleada:', err);
+    }
+  }
+
   private async recordAgencyMessage(
     service: Servicios,
     message: string,
@@ -1285,6 +1317,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           this.logger.error('Error notificando empleada cita agendada:', err);
         }
       }
+      // isFutureScheduled encadena una fecha, asi que no es un booleano puro.
+      await this.avisarEmpleadaDeServicio(servicio, Boolean(isFutureScheduled));
       return servicio;
     }
 
