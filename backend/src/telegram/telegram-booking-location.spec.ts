@@ -130,7 +130,7 @@ describe('Refrescos de una ubicación en vivo del cliente', () => {
   const COORDENADAS = { latitude: 19.4326, longitude: -99.1332 };
 
   function nuevaInstanciaDeCliente() {
-    const instancia = Object.create(TelegramBookingUpdate.prototype) as any;
+    const instancia = Object.create(TelegramBookingUpdate.prototype);
     instancia.userLocationCache = new Map();
     // Un cliente no es usuario del sistema: no es chofer ni empleada.
     instancia.usuariosRepository = {
@@ -255,7 +255,7 @@ describe('Cliente que escribe después de un servicio rechazado', () => {
   };
 
   function nuevaInstancia() {
-    const instancia = Object.create(TelegramBookingUpdate.prototype) as any;
+    const instancia = Object.create(TelegramBookingUpdate.prototype);
     instancia.serviciosRepository = { findOne: jest.fn() };
     instancia.persistSession = jest.fn();
     instancia.replyWithAvailableEmployees = jest.fn();

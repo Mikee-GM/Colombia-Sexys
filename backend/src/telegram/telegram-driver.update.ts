@@ -1225,157 +1225,32 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    // Actualizar el viaje a finalizado en memoria
-    const horaFin = new Date();
-    trip.estado = 'finalizado';
-    trip.horaFinViaje = horaFin;
-
-    await this.notifyBossTripTopic(
-      ctx,
-      trip,
-      chofer,
-      'Viaje finalizado',
-      `El chofer *${chofer.nombre}* ha dejado a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* en su destino y finalizó el viaje.`,
-    );
-
-    // Preparar promesas de escritura paralela
-    const promises: Promise<any>[] = [];
-    const wasScheduled = trip.servicio?.estado === 'agendado';
-
-    // Promesa 1: Viaje update dirigido
-    promises.push(
-      this.dataSource.getRepository(Viajes).update(trip.id, {
-        estado: 'finalizado',
-        horaFinViaje: horaFin,
-      }),
-    );
-
-    // Promesa 2: Chofer update dirigido
-    promises.push(
-      this.dataSource.getRepository(Choferes).update(chofer.id, {
-        disponible: true,
-      }),
-    );
-
-    // Promesa 3: Servicio update dirigido y borrado de forum topic si aplica
-    if (trip.servicio) {
-      const serviceUpdateData: any = {};
-      if (trip.tipo === 'ida') {
-        const horaInicio = new Date();
-        trip.servicio.horaInicioServicio = horaInicio;
-        serviceUpdateData.horaInicioServicio = horaInicio;
-        if (trip.servicio.estado === 'agendado') {
-          trip.servicio.estado = 'en_curso';
-          serviceUpdateData.estado = 'en_curso';
-          serviceUpdateData.servicioPrevioId = null;
-          serviceUpdateData.horaInicioEstimada = horaInicio;
-        }
-      } else {
-        const horaLlegada = new Date();
-        trip.servicio.horaLlegadaCasa = horaLlegada;
-        serviceUpdateData.horaLlegadaCasa = horaLlegada;
-        /*
-         * Si todavia falta el cobro final por transferencia (duracion
-         * abierta), no se puede dar por cerrada la liquidacion: el mismo
-         * criterio que ya usa el camino de Uber en updateUberStatus.
-         */
-        serviceUpdateData.estadoLiquidacion = trip.servicio.cobroFinalPendiente
-          ? 'transporte_pendiente'
-          : 'cerrada';
-
-        // Eliminar el tema (hilo) del grupo de Telegram si es viaje de regreso (final del servicio completo)
-        const jefeGrupoId =
-          trip.servicio.jefe?.grupoTelegramId ||
-          trip.servicio.empleada?.jefe?.grupoTelegramId;
-        const telegramThreadId = trip.servicio.telegramThreadId;
-        if (telegramThreadId && jefeGrupoId) {
-          promises.push(
-            (async () => {
-              const threadId = parseInt(telegramThreadId, 10);
-              await ctx.telegram.sendMessage(
-                jefeGrupoId,
-                `La empleada ${trip.servicio.empleada.nombreArtistico} llegó a su destino. El servicio quedó completado.`,
-                { message_thread_id: threadId },
-              );
-              await ctx.telegram.deleteForumTopic(jefeGrupoId, threadId);
-              await this.dataSource
-                .getRepository(Servicios)
-                .update(trip.servicio.id, { telegramThreadId: null });
-            })().catch((err) => {
-              this.logger.error(
-                'Error al notificar o eliminar el tema al finalizar el viaje de regreso:',
-                err,
-              );
-            }),
-          );
-        }
-      }
-      promises.push(
-        this.dataSource
-          .getRepository(Servicios)
-          .update(trip.servicio.id, serviceUpdateData),
+    /*
+     * El negocio vive en DriverTripsService, que conserva el orden exacto de
+     * los efectos: cerrar el viaje, liberar al chofer, mover el servicio segun
+     * el tramo --incluido el estado de liquidacion en el regreso--, sincronizar
+     * la liquidacion del chofer, mandar el recibo final y pedir las
+     * calificaciones.
+     *
+     * Lo llaman este manejador y el portal, asi que finalizar por el chat y
+     * finalizar por la aplicacion hacen lo mismo. Debajo queda lo propio del
+     * chat: reescribir este mensaje con los botones de calificar y reportar.
+     */
+    try {
+      const actualizado = await this.driverTripsService.finalizarViaje(
+        trip.id,
+        chofer.id,
       );
-    }
-
-    // Ejecutar todas las promesas en paralelo
-    await Promise.all(promises);
-    await this.settlementsService
-      .syncDriverSettlement(trip.id)
-      .catch((error) =>
-        this.logger.error(
-          `El viaje ${trip.id} finalizó, pero no se pudo sincronizar su liquidación`,
-          error,
-        ),
+      trip.estado = actualizado.estado;
+      trip.horaFinViaje = actualizado.horaFinViaje;
+    } catch (err) {
+      this.logger.error('Error finalizando el viaje:', err);
+      await ctx.answerCbQuery(
+        err instanceof Error ? err.message : 'No se pudo finalizar el viaje.',
+        { show_alert: true },
       );
-    if (trip.tipo === 'ida' && wasScheduled) {
-      await this.servicesService.notifyScheduledServiceStarted(
-        trip.servicio.id,
-      );
+      return;
     }
-
-    if (trip.tipo === 'regreso') {
-      if (trip.servicio.cliente?.telegramChatId) {
-        await ctx.telegram
-          .sendMessage(
-            trip.servicio.cliente.telegramChatId,
-            'El servicio quedó completado: la empleada llegó a su destino.',
-          )
-          .catch(() => undefined);
-      }
-      /*
-       * Con chofer propio nadie mandaba la cuenta definitiva ni la invitacion
-       * a calificar: solo ocurria en las rutas de Uber (cambio de transporte
-       * o confirmacion de tarifa). finishByEmployee ya dejo el servicio en
-       * 'finalizado' antes de que se despachara este viaje de regreso, asi
-       * que el candado de sendFinalReceiptAndAward no bloquea la llamada.
-       */
-      await this.servicesService
-        .sendFinalReceiptAndAward(trip.servicio.id)
-        .catch((error) =>
-          this.logger.error(
-            `No se pudo enviar el recibo final del servicio ${trip.servicio.id}:`,
-            error,
-          ),
-        );
-      this.realtimeEventsService.emitToBoss(trip.servicio.jefeId, {
-        type: 'trip_status_updated',
-        data: {
-          serviceId: trip.servicioId,
-          tripId: trip.id,
-          state: 'finalizado',
-          tripType: 'regreso',
-        },
-      });
-      if (trip.servicio.clienteId) {
-        this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
-          type: 'service_fully_completed',
-          data: { serviceId: trip.servicioId, tripId: trip.id },
-        });
-      }
-    }
-
-    // Igual que al aceptar: la caché no guarda `disponible`, así que cambiar la
-    // disponibilidad no la deja obsoleta.
 
     await ctx.answerCbQuery('🏁 Viaje finalizado con éxito.');
 
@@ -1383,7 +1258,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
       `✅ *¡Viaje Finalizado!* 🏁\n\n` +
       `• *Empleada:* ${trip.servicio.empleada.nombreArtistico}\n` +
       `• *Tipo de Viaje:* ${trip.tipo === 'ida' ? 'Ida' : 'Regreso'}\n` +
-      `• *Hora Fin:* ${trip.horaFinViaje.toLocaleTimeString()}\n\n` +
+      `• *Hora Fin:* ${(trip.horaFinViaje ?? new Date()).toLocaleTimeString()}\n\n` +
       `¡Buen trabajo! El trayecto ha sido registrado en el sistema.`;
 
     try {
@@ -1406,43 +1281,6 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
       });
     } catch (err) {
       this.logger.error('Error actualizando mensaje de finalización:', err);
-    }
-    const employeeChatId = trip.servicio.empleada?.usuario?.telegramChatId;
-    if (employeeChatId) {
-      await ctx.telegram
-        .sendMessage(
-          employeeChatId,
-          `Califica el trayecto realizado por ${chofer.nombre}.`,
-          Markup.inlineKeyboard([
-            [1, 2, 3, 4, 5].map((stars) =>
-              Markup.button.callback(
-                `${stars}`,
-                `rate_driver_trip:${trip.id}:${stars}`,
-              ),
-            ),
-          ]),
-        )
-        .catch(() => undefined);
-    }
-
-    // Notificar al cliente que la empleada ha llegado (únicamente para viajes de ida)
-    if (trip.tipo === 'ida' && trip.servicio?.cliente?.telegramChatId) {
-      try {
-        const clientMessage = await this.aiMessageService.generate(
-          'employee_arrived',
-          { employeeName: trip.servicio.empleada.nombreArtistico },
-          'Ya llegué al punto que cuadramos, aquí te espero',
-        );
-        await ctx.telegram.sendMessage(
-          trip.servicio.cliente.telegramChatId,
-          clientMessage,
-        );
-      } catch (telegramErr) {
-        this.logger.error(
-          `Error al notificar al cliente sobre llegada (chatId: ${trip.servicio.cliente.telegramChatId}):`,
-          describeError(telegramErr),
-        );
-      }
     }
   }
 

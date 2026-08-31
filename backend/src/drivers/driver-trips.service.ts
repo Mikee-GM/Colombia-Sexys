@@ -12,6 +12,10 @@ import { Repository } from 'typeorm';
 import { Markup } from 'telegraf';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Choferes } from './entities/driver.entity';
+import { Servicios } from '../services/entities/service.entity';
+import { RealtimeEventsService } from '../realtime/realtime.service';
+import { SettlementsService } from '../transport-operations/settlements.service';
+import { AiMessageService } from '../ai/ai-message.service';
 import { ServicesService } from '../services/services.service';
 import { TelegramService } from '../telegram/telegram.service';
 
@@ -40,6 +44,11 @@ export class DriverTripsService {
     private readonly viajes: Repository<Viajes>,
     @InjectRepository(Choferes)
     private readonly choferes: Repository<Choferes>,
+    @InjectRepository(Servicios)
+    private readonly servicios: Repository<Servicios>,
+    private readonly realtime: RealtimeEventsService,
+    private readonly settlements: SettlementsService,
+    private readonly aiMessages: AiMessageService,
     // Se usa el servicio y no el bot crudo: ahi vive el limitador de ritmo
     // por el que tiene que pasar todo lo que sale hacia Telegram.
     @Inject(forwardRef(() => TelegramService))
@@ -139,6 +148,242 @@ export class DriverTripsService {
       // usuario borro, o mas viejo de lo que Telegram deja retirar, no puede
       // impedir que el viaje avance.
       await this.telegram.deleteMessage(chatId, parseInt(id, 10));
+    }
+  }
+
+  /**
+   * El viaje termino.
+   *
+   * Es la transicion con mas cola de las tres, y la unica que toca dinero: al
+   * cerrar un viaje de regreso decide el estado de liquidacion del servicio y
+   * dispara el recibo final al cliente. Por eso conserva el orden exacto de
+   * los efectos que tenia en el chat, incluida la escritura en paralelo.
+   *
+   * Lo que cambia segun el tramo:
+   *  - ida: el servicio arranca de verdad, y si estaba agendado pasa a en_curso.
+   *  - regreso: se anota la llegada a casa, se cierra la liquidacion --salvo que
+   *    quede cobro final pendiente-- y se cierra el tema del grupo.
+   */
+  async finalizarViaje(viajeId: string, choferId: string): Promise<Viajes> {
+    const trip = await this.cargarViajeDelChofer(viajeId, choferId);
+
+    if (trip.estado !== 'en_curso') {
+      throw new ConflictException(`El viaje está en estado: ${trip.estado}`);
+    }
+
+    const horaFin = new Date();
+    trip.estado = 'finalizado';
+    trip.horaFinViaje = horaFin;
+
+    const chofer = await this.choferes.findOne({ where: { id: choferId } });
+
+    await this.avisarAlJefe(
+      trip,
+      chofer,
+      'Viaje finalizado',
+      `El chofer *${chofer?.nombre ?? ''}* ha dejado a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* en su destino y finalizó el viaje.`,
+    );
+
+    const escrituras: Promise<unknown>[] = [];
+    const veniaAgendado = trip.servicio?.estado === 'agendado';
+
+    escrituras.push(
+      this.viajes.update(trip.id, {
+        estado: 'finalizado',
+        horaFinViaje: horaFin,
+      }),
+    );
+    // El chofer vuelve a estar libre en cuanto suelta a la pasajera.
+    escrituras.push(this.choferes.update(choferId, { disponible: true }));
+
+    if (trip.servicio) {
+      const cambios: Partial<Servicios> = {};
+
+      if (trip.tipo === 'ida') {
+        const horaInicio = new Date();
+        trip.servicio.horaInicioServicio = horaInicio;
+        cambios.horaInicioServicio = horaInicio;
+        if (trip.servicio.estado === 'agendado') {
+          trip.servicio.estado = 'en_curso';
+          cambios.estado = 'en_curso';
+          cambios.servicioPrevioId = null;
+          cambios.horaInicioEstimada = horaInicio;
+        }
+      } else {
+        const horaLlegada = new Date();
+        trip.servicio.horaLlegadaCasa = horaLlegada;
+        cambios.horaLlegadaCasa = horaLlegada;
+        /*
+         * Si todavia falta el cobro final por transferencia (duracion
+         * abierta), no se puede dar por cerrada la liquidacion: el mismo
+         * criterio que ya usa el camino de Uber en updateUberStatus.
+         */
+        cambios.estadoLiquidacion = trip.servicio.cobroFinalPendiente
+          ? 'transporte_pendiente'
+          : 'cerrada';
+
+        escrituras.push(this.cerrarTemaDelServicio(trip));
+      }
+
+      escrituras.push(this.servicios.update(trip.servicio.id, cambios));
+    }
+
+    await Promise.all(escrituras);
+
+    await this.settlements
+      .syncDriverSettlement(trip.id)
+      .catch((error) =>
+        this.logger.error(
+          `El viaje ${trip.id} finalizó, pero no se pudo sincronizar su liquidación`,
+          error,
+        ),
+      );
+
+    if (trip.tipo === 'ida' && veniaAgendado && trip.servicio) {
+      await this.servicesService.notifyScheduledServiceStarted(
+        trip.servicio.id,
+      );
+    }
+
+    if (trip.tipo === 'regreso' && trip.servicio) {
+      await this.cerrarServicioDeRegreso(trip);
+    }
+
+    // Estos dos van al final y fuera de las ramas, igual que estaban en el
+    // chat: la calificacion se pide siempre, y al cliente se le avisa solo
+    // cuando el viaje que termina es el de ida, que es cuando llega ella.
+    await this.pedirCalificacionAlaEmpleada(trip, chofer);
+    if (trip.tipo === 'ida') await this.avisarLlegadaAlCliente(trip);
+
+    return trip;
+  }
+
+  /** Le pide a la modelo que califique el trayecto recien terminado. */
+  private async pedirCalificacionAlaEmpleada(
+    trip: Viajes,
+    chofer: Choferes | null,
+  ): Promise<void> {
+    const chatId = trip.servicio?.empleada?.usuario?.telegramChatId;
+    if (!chatId) return;
+
+    await this.telegram
+      .sendMessage(
+        chatId,
+        `Califica el trayecto realizado por ${chofer?.nombre ?? 'tu chofer'}.`,
+        {
+          buttons: [
+            [1, 2, 3, 4, 5].map((estrellas) =>
+              Markup.button.callback(
+                `${estrellas}`,
+                `rate_driver_trip:${trip.id}:${estrellas}`,
+              ),
+            ),
+          ],
+        },
+      )
+      .catch(() => undefined);
+  }
+
+  /**
+   * Le avisa al cliente de que la modelo ya llego.
+   *
+   * Solo al terminar la ida. El texto lo redacta la IA en personaje; si falla,
+   * sale el de reserva, porque el cliente tiene que enterarse igual.
+   */
+  private async avisarLlegadaAlCliente(trip: Viajes): Promise<void> {
+    const chatId = trip.servicio?.cliente?.telegramChatId;
+    if (!chatId) return;
+
+    try {
+      const mensaje = await this.aiMessages.generate(
+        'employee_arrived',
+        { employeeName: trip.servicio?.empleada?.nombreArtistico },
+        'Ya llegué al punto que cuadramos, aquí te espero',
+      );
+      await this.telegram.sendMessage(chatId, mensaje);
+    } catch (err) {
+      this.logger.error(
+        `No se pudo avisar al cliente de la llegada (chat ${chatId}):`,
+        err,
+      );
+    }
+  }
+
+  /**
+   * Avisa al grupo del jefe y cierra el tema del servicio.
+   *
+   * Solo al terminar el regreso: ahi el servicio esta completo y su hilo ya no
+   * tiene mas que decir.
+   */
+  private async cerrarTemaDelServicio(trip: Viajes): Promise<void> {
+    const servicio = trip.servicio;
+    if (!servicio) return;
+
+    const grupoId =
+      servicio.jefe?.grupoTelegramId ||
+      servicio.empleada?.jefe?.grupoTelegramId;
+    if (!servicio.telegramThreadId || !grupoId) return;
+
+    const threadId = parseInt(servicio.telegramThreadId, 10);
+    try {
+      await this.telegram.sendMessage(
+        grupoId,
+        `La empleada ${servicio.empleada?.nombreArtistico ?? ''} llegó a su destino. El servicio quedó completado.`,
+        { threadId },
+      );
+      await this.telegram.deleteForumTopic(grupoId, threadId);
+      await this.servicios.update(servicio.id, { telegramThreadId: null });
+    } catch (err) {
+      this.logger.error(
+        'No se pudo cerrar el tema del servicio al finalizar el regreso:',
+        err,
+      );
+    }
+  }
+
+  /**
+   * El cierre de cara al cliente cuando termina el viaje de regreso.
+   *
+   * Manda la cuenta definitiva y la invitacion a calificar. Con chofer propio
+   * esto no lo hacia nadie: solo ocurria por las rutas de Uber, asi que un
+   * servicio con transporte interno se quedaba sin recibo.
+   */
+  private async cerrarServicioDeRegreso(trip: Viajes): Promise<void> {
+    const servicio = trip.servicio;
+    if (!servicio) return;
+
+    if (servicio.cliente?.telegramChatId) {
+      await this.telegram
+        .sendMessage(
+          servicio.cliente.telegramChatId,
+          'El servicio quedó completado: la empleada llegó a su destino.',
+        )
+        .catch(() => undefined);
+    }
+
+    await this.servicesService
+      .sendFinalReceiptAndAward(servicio.id)
+      .catch((error) =>
+        this.logger.error(
+          `No se pudo enviar el recibo final del servicio ${servicio.id}:`,
+          error,
+        ),
+      );
+
+    this.realtime.emitToBoss(servicio.jefeId, {
+      type: 'trip_status_updated',
+      data: {
+        serviceId: trip.servicioId,
+        tripId: trip.id,
+        state: 'finalizado',
+        tripType: 'regreso',
+      },
+    });
+    if (servicio.clienteId) {
+      this.realtime.emitToClient(servicio.clienteId, {
+        type: 'service_fully_completed',
+        data: { serviceId: trip.servicioId, tripId: trip.id },
+      });
     }
   }
 

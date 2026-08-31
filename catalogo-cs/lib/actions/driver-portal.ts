@@ -76,9 +76,17 @@ export async function marcarRecogidaDelViaje(
   return avanzarViaje(tripId, "picked-up", token);
 }
 
+/** Cierra el viaje. Es la que dispara el recibo final del servicio. */
+export async function finalizarElViaje(
+  tripId: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  return avanzarViaje(tripId, "finished", token);
+}
+
 async function avanzarViaje(
   tripId: string,
-  paso: "arrived" | "picked-up",
+  paso: "arrived" | "picked-up" | "finished",
   token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {

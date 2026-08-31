@@ -65,4 +65,25 @@ export class DriverPortalController {
     );
     return { estado: viaje.estado };
   }
+
+  /**
+   * Cierra el viaje.
+   *
+   * Es la accion con mas cola: libera al chofer, mueve el servicio segun el
+   * tramo y, en el regreso, decide el estado de liquidacion y dispara el
+   * recibo final al cliente.
+   */
+  @Post('trips/:tripId/finished')
+  @HttpCode(200)
+  async finalizar(
+    @PortalUser() userId: string,
+    @Param('tripId', new ParseUUIDPipe()) tripId: string,
+  ) {
+    const choferId = await this.driverTripsService.choferDeUsuario(userId);
+    const viaje = await this.driverTripsService.finalizarViaje(
+      tripId,
+      choferId,
+    );
+    return { estado: viaje.estado };
+  }
 }

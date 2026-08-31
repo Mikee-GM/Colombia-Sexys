@@ -132,6 +132,23 @@ export class TelegramService implements OnModuleInit {
   }
 
   /**
+   * Cierra el tema del grupo que se abrio para un servicio.
+   *
+   * Se llama al final del viaje de regreso, cuando el servicio ya termino y su
+   * hilo no tiene mas que decir. Como `deleteMessage`, no lanza: que Telegram
+   * no deje borrar el tema no puede impedir que el servicio se cierre.
+   */
+  async deleteForumTopic(chatId: string, threadId: number): Promise<void> {
+    try {
+      await this.bot.telegram.deleteForumTopic(chatId, threadId);
+    } catch (error: unknown) {
+      this.logger.warn(
+        `No se pudo borrar el tema ${threadId} de ${chatId}: ${String(error)}`,
+      );
+    }
+  }
+
+  /**
    * Avisa al jefe, por Telegram, de un servicio que espera su autorizacion.
    *
    * El mensaje lleva los botones que ya maneja `jefe_autorizar`, asi que el

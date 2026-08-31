@@ -5,6 +5,10 @@ import { Viajes } from '../trips/entities/trip.entity';
 import { Choferes } from './entities/driver.entity';
 import { ServicesService } from '../services/services.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { Servicios } from '../services/entities/service.entity';
+import { RealtimeEventsService } from '../realtime/realtime.service';
+import { SettlementsService } from '../transport-operations/settlements.service';
+import { AiMessageService } from '../ai/ai-message.service';
 
 const CHOFER = 'chofer-1';
 const AJENO = 'chofer-2';
@@ -38,6 +42,9 @@ function montar(trip: Viajes | null) {
     return Promise.resolve();
   });
   const clearWaitTimeout = jest.fn();
+  const serviciosUpdate = jest.fn(() => Promise.resolve({ affected: 1 }));
+  const syncDriverSettlement = jest.fn(() => Promise.resolve());
+  const choferesUpdate = jest.fn(() => Promise.resolve({ affected: 1 }));
   const enviados: Array<{ chatId: string; texto: string }> = [];
   const sendMessage = jest.fn((chatId: string, texto: string) => {
     enviados.push({ chatId, texto });
@@ -59,9 +66,24 @@ function montar(trip: Viajes | null) {
           vehiculoPlaca: 'ABC-123',
         }),
       ),
+      update: choferesUpdate,
     } as unknown as Repository<Choferes>,
+    { update: serviciosUpdate } as unknown as Repository<Servicios>,
+    {
+      emitToBoss: jest.fn(),
+      emitToClient: jest.fn(),
+    } as unknown as RealtimeEventsService,
+    { syncDriverSettlement } as unknown as SettlementsService,
+    {
+      generate: jest.fn(() => Promise.resolve('Ya llegué')),
+    } as unknown as AiMessageService,
     { sendMessage, deleteMessage } as unknown as TelegramService,
-    { startWaitTimeout, clearWaitTimeout } as unknown as ServicesService,
+    {
+      startWaitTimeout,
+      clearWaitTimeout,
+      notifyScheduledServiceStarted: jest.fn(() => Promise.resolve()),
+      sendFinalReceiptAndAward: jest.fn(() => Promise.resolve()),
+    } as unknown as ServicesService,
   );
 
   return {
@@ -72,6 +94,9 @@ function montar(trip: Viajes | null) {
     startWaitTimeout,
     clearWaitTimeout,
     sendMessage,
+    serviciosUpdate,
+    syncDriverSettlement,
+    choferesUpdate,
   };
 }
 
@@ -136,7 +161,7 @@ describe('DriverTripsService.marcarLlegada', () => {
 describe('DriverTripsService.marcarRecogida', () => {
   it('arranca el trayecto y detiene el conteo de espera', async () => {
     const { service, update, clearWaitTimeout } = montar(
-      viaje({ estado: 'llegado', servicioId: 'servicio-1' } as Partial<Viajes>),
+      viaje({ estado: 'llegado', servicioId: 'servicio-1' }),
     );
 
     const resultado = await service.marcarRecogida('viaje-1', CHOFER);
@@ -157,7 +182,7 @@ describe('DriverTripsService.marcarRecogida', () => {
         estado: 'llegado',
         telegramEmpleadaMsgChoferCaminoId: '11',
         telegramEmpleadaMsgChoferLlegadoId: '22',
-      } as Partial<Viajes>),
+      }),
     );
 
     await service.marcarRecogida('viaje-1', CHOFER);
@@ -193,6 +218,85 @@ describe('DriverTripsService.marcarRecogida', () => {
     await expect(
       service.marcarRecogida('viaje-1', AJENO),
     ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('DriverTripsService.finalizarViaje', () => {
+  it('cierra el viaje, libera al chofer y sincroniza su liquidacion', async () => {
+    const { service, update, choferesUpdate, syncDriverSettlement } = montar(
+      viaje({ estado: 'en_curso' }),
+    );
+
+    const resultado = await service.finalizarViaje('viaje-1', CHOFER);
+
+    expect(resultado.estado).toBe('finalizado');
+    expect(update).toHaveBeenCalledWith(
+      'viaje-1',
+      expect.objectContaining({ estado: 'finalizado' }),
+    );
+    // Vuelve a estar libre en cuanto suelta a la pasajera.
+    expect(choferesUpdate).toHaveBeenCalledWith(CHOFER, { disponible: true });
+    expect(syncDriverSettlement).toHaveBeenCalledWith('viaje-1');
+  });
+
+  it('en la ida arranca el servicio agendado', async () => {
+    const trip = viaje({ estado: 'en_curso', tipo: 'ida' });
+    (trip.servicio as unknown as { estado: string }).estado = 'agendado';
+    const { service, serviciosUpdate } = montar(trip);
+
+    await service.finalizarViaje('viaje-1', CHOFER);
+
+    expect(serviciosUpdate).toHaveBeenCalledWith(
+      'servicio-1',
+      expect.objectContaining({ estado: 'en_curso', servicioPrevioId: null }),
+    );
+  });
+
+  it('en el regreso cierra la liquidacion cuando no queda cobro pendiente', async () => {
+    const trip = viaje({
+      estado: 'en_curso',
+      tipo: 'regreso',
+    });
+    (
+      trip.servicio as unknown as { cobroFinalPendiente: boolean }
+    ).cobroFinalPendiente = false;
+    const { service, serviciosUpdate } = montar(trip);
+
+    await service.finalizarViaje('viaje-1', CHOFER);
+
+    expect(serviciosUpdate).toHaveBeenCalledWith(
+      'servicio-1',
+      expect.objectContaining({ estadoLiquidacion: 'cerrada' }),
+    );
+  });
+
+  it('en el regreso deja el transporte pendiente si falta el cobro final', async () => {
+    // Con duracion abierta el cobro se hace al terminar: dar la liquidacion
+    // por cerrada aqui perderia ese dinero.
+    const trip = viaje({
+      estado: 'en_curso',
+      tipo: 'regreso',
+    });
+    (
+      trip.servicio as unknown as { cobroFinalPendiente: boolean }
+    ).cobroFinalPendiente = true;
+    const { service, serviciosUpdate } = montar(trip);
+
+    await service.finalizarViaje('viaje-1', CHOFER);
+
+    expect(serviciosUpdate).toHaveBeenCalledWith(
+      'servicio-1',
+      expect.objectContaining({ estadoLiquidacion: 'transporte_pendiente' }),
+    );
+  });
+
+  it('no finaliza un viaje que no iba en curso', async () => {
+    const { service, update } = montar(viaje({ estado: 'llegado' }));
+
+    await expect(
+      service.finalizarViaje('viaje-1', CHOFER),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(update).not.toHaveBeenCalled();
   });
 });

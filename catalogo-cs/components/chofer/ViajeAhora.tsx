@@ -2,10 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { CheckCircle2, MapPin, Route, UserRoundCheck } from "lucide-react";
+import {
+  CheckCircle2,
+  Flag,
+  MapPin,
+  Route,
+  UserRoundCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
+  finalizarElViaje,
   marcarLlegadaDelViaje,
   marcarRecogidaDelViaje,
 } from "@/lib/actions/driver-portal";
@@ -21,8 +28,7 @@ import type { DriverPortalActiveTrip } from "@/lib/types";
  * El avance del viaje se marca desde aqui, sin tener que buscar el mensaje
  * correcto en el chat justo cuando va conduciendo. Los botones del bot siguen
  * valiendo: los dos caminos llaman al mismo servicio del backend, asi que no
- * pueden divergir. Estan la llegada y la recogida; finalizar sigue solo en el
- * chat hasta que esa transicion tambien salga de alli.
+ * pueden divergir. Estan los tres pasos: llegada, recogida y fin.
  */
 export default function ViajeAhora({
   viaje,
@@ -131,9 +137,26 @@ export default function ViajeAhora({
               : "Al marcarlo se detiene el conteo de espera de la empleada."}
           </p>
         </div>
+      ) : viaje.estado === "en_curso" ? (
+        <div className="px-4 py-4">
+          <button
+            type="button"
+            disabled={pendiente}
+            onClick={() =>
+              avanzar(() => finalizarElViaje(viaje.id), "Viaje finalizado.")
+            }
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C5A55A] bg-[#C5A55A]/10 py-4 text-xs font-bold uppercase tracking-wider text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-50"
+          >
+            <Flag size={17} />
+            {pendiente ? "Finalizando..." : "Finalizar viaje"}
+          </button>
+          <p className="mt-2.5 text-center text-[11px] text-gray-500">
+            Marca el fin cuando la hayas dejado en su destino.
+          </p>
+        </div>
       ) : (
         <p className="px-4 py-3 text-center text-[11px] text-gray-400">
-          Finalizar el viaje se marca desde tu chat de Telegram.
+          Este viaje ya no admite cambios desde aquí.
         </p>
       )}
     </section>
