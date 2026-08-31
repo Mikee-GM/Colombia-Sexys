@@ -23,6 +23,20 @@ export interface DriverPortalTripItem {
   driverPayout: number;
 }
 
+/**
+ * Un viaje ofrecido que todavia espera respuesta.
+ *
+ * Aparte del viaje activo a proposito: aquel es el que ya acepto, y esto es lo
+ * que aun puede aceptar o rechazar.
+ */
+export interface DriverPortalOffer {
+  id: string;
+  tipo: 'ida' | 'regreso';
+  zona: string;
+  proveedorTransporte: string;
+  expiraEn: string | null;
+}
+
 export interface DriverPortalActiveTrip {
   id: string;
   tipo: 'ida' | 'regreso';
@@ -62,6 +76,8 @@ export interface DriverPortalData {
     weeklySettlementStatus: 'preview' | 'pending' | 'paid';
   };
   activeTrip: DriverPortalActiveTrip | null;
+  /** Ofertas que esperan su respuesta; vacio si no hay ninguna viva. */
+  pendingOffers: DriverPortalOffer[];
   recentTrips: DriverPortalTripItem[];
   reputation: {
     ratingAverage: number;
@@ -602,6 +618,29 @@ export class DriversService {
         }
       : null;
 
+    /*
+     * Las ofertas que todavia puede tomar.
+     *
+     * `notificado` es el estado en el que el reparto deja un viaje mientras
+     * espera respuesta. No llegaban al portal, asi que aceptar dependia por
+     * completo de ver el mensaje del bot a tiempo: si no lo veia, el viaje se
+     * quedaba sin chofer. Se descartan las ya vencidas, que el barrido
+     * periodico retira poco despues.
+     */
+    const pendingOffers = trips
+      .filter(
+        (t) =>
+          t.estado === 'notificado' &&
+          (!t.ofertaExpiraEn || t.ofertaExpiraEn.getTime() > now.getTime()),
+      )
+      .map((t) => ({
+        id: t.id,
+        tipo: t.tipo,
+        zona: t.zona,
+        proveedorTransporte: t.proveedorTransporte,
+        expiraEn: t.ofertaExpiraEn ? t.ofertaExpiraEn.toISOString() : null,
+      }));
+
     const weekBounds = (() => {
       const d = new Date(now);
       const day = d.getDay();
@@ -648,6 +687,7 @@ export class DriversService {
         weeklySettlementStatus,
       },
       activeTrip,
+      pendingOffers,
       recentTrips,
       reputation: {
         ratingAverage,

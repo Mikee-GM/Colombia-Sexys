@@ -76,6 +76,29 @@ export async function marcarRecogidaDelViaje(
   return avanzarViaje(tripId, "picked-up", token);
 }
 
+/**
+ * Toma una oferta de viaje.
+ *
+ * La misma oferta va a varios choferes, asi que puede perderse la carrera. Eso
+ * llega como `aceptado: false`, no como error: es una respuesta valida y la
+ * pantalla debe decirlo con esas palabras.
+ */
+export async function aceptarOfertaDeViaje(
+  tripId: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string; aceptado?: boolean }> {
+  const resultado = await avanzarViaje(tripId, "accept", token);
+  return resultado;
+}
+
+/** Deja pasar una oferta, que se reofrece al siguiente chofer. */
+export async function rechazarOfertaDeViaje(
+  tripId: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  return avanzarViaje(tripId, "reject", token);
+}
+
 /** Cierra el viaje. Es la que dispara el recibo final del servicio. */
 export async function finalizarElViaje(
   tripId: string,
@@ -86,9 +109,9 @@ export async function finalizarElViaje(
 
 async function avanzarViaje(
   tripId: string,
-  paso: "arrived" | "picked-up" | "finished",
+  paso: "arrived" | "picked-up" | "finished" | "accept" | "reject",
   token?: string,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; aceptado?: boolean }> {
   try {
     const cookie = await getBackendCookieHeader();
     const csrf = await getCsrfToken();
@@ -117,7 +140,11 @@ async function avanzarViaje(
         error: err.message || "No se pudo marcar el avance del viaje",
       };
     }
-    return { success: true };
+    // `accept` responde si se gano la carrera; los demas pasos no dicen nada.
+    const cuerpo = (await response.json().catch(() => ({}))) as {
+      aceptado?: boolean;
+    };
+    return { success: true, aceptado: cuerpo.aceptado };
   } catch (error: any) {
     console.error("Error al marcar el avance del viaje:", error);
     return {

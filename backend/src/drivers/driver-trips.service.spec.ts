@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { DriverTripsService } from './driver-trips.service';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Choferes } from './entities/driver.entity';
@@ -34,7 +34,7 @@ function viaje(overrides: Partial<Viajes> = {}): Viajes {
   } as unknown as Viajes;
 }
 
-function montar(trip: Viajes | null) {
+function montar(trip: Viajes | null, afectadas = 1) {
   const update = jest.fn(() => Promise.resolve({ affected: 1 }));
   const borrados: Array<{ chatId: string; messageId: number }> = [];
   const deleteMessage = jest.fn((chatId: string, messageId: number) => {
@@ -45,6 +45,23 @@ function montar(trip: Viajes | null) {
   const serviciosUpdate = jest.fn(() => Promise.resolve({ affected: 1 }));
   const syncDriverSettlement = jest.fn(() => Promise.resolve());
   const choferesUpdate = jest.fn(() => Promise.resolve({ affected: 1 }));
+  // `afectadas` decide si el UPDATE condicionado se lleva la oferta: con 0 se
+  // simula que otro chofer llego antes.
+  const ejecutar = jest.fn(() => Promise.resolve({ affected: afectadas }));
+  const managerUpdate = jest.fn(() => Promise.resolve({ affected: 1 }));
+  const dataSource = {
+    transaction: (cb: (m: unknown) => unknown) =>
+      Promise.resolve(
+        cb({
+          update: managerUpdate,
+          createQueryBuilder: () => ({
+            update: () => ({
+              set: () => ({ where: () => ({ execute: ejecutar }) }),
+            }),
+          }),
+        }),
+      ),
+  } as unknown as DataSource;
   const enviados: Array<{ chatId: string; texto: string }> = [];
   const sendMessage = jest.fn((chatId: string, texto: string) => {
     enviados.push({ chatId, texto });
@@ -53,6 +70,7 @@ function montar(trip: Viajes | null) {
   const startWaitTimeout = jest.fn();
 
   const service = new DriverTripsService(
+    dataSource,
     {
       findOne: jest.fn(() => Promise.resolve(trip)),
       update,
@@ -72,6 +90,8 @@ function montar(trip: Viajes | null) {
     {
       emitToBoss: jest.fn(),
       emitToClient: jest.fn(),
+      emitToDriver: jest.fn(),
+      emitToEmployee: jest.fn(),
     } as unknown as RealtimeEventsService,
     { syncDriverSettlement } as unknown as SettlementsService,
     {
@@ -82,6 +102,8 @@ function montar(trip: Viajes | null) {
       startWaitTimeout,
       clearWaitTimeout,
       notifyScheduledServiceStarted: jest.fn(() => Promise.resolve()),
+      clearDispatchTimeout: jest.fn(),
+      rechazarOfertaManual: jest.fn(() => Promise.resolve()),
       sendFinalReceiptAndAward: jest.fn(() => Promise.resolve()),
     } as unknown as ServicesService,
   );
@@ -97,6 +119,7 @@ function montar(trip: Viajes | null) {
     serviciosUpdate,
     syncDriverSettlement,
     choferesUpdate,
+    managerUpdate,
   };
 }
 
@@ -298,5 +321,43 @@ describe('DriverTripsService.finalizarViaje', () => {
       service.finalizarViaje('viaje-1', CHOFER),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('DriverTripsService.aceptarOferta', () => {
+  it('toma la oferta y deja al chofer ocupado', async () => {
+    const { service, managerUpdate } = montar(
+      viaje({ estado: 'notificado' }),
+      1,
+    );
+
+    const { aceptado } = await service.aceptarOferta('viaje-1', CHOFER);
+
+    expect(aceptado).toBe(true);
+    // Deja de estar disponible y se le borra la racha de rechazos.
+    expect(managerUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      CHOFER,
+      expect.objectContaining({ disponible: false, rechazosConsecutivos: 0 }),
+    );
+  });
+
+  it('no la toma si otro chofer llego antes', async () => {
+    // La condicion vive dentro del UPDATE: si no afecta a ninguna fila es que
+    // el viaje ya no estaba en `notificado`. No es un error, es una carrera
+    // perdida, y no debe tocar nada del chofer.
+    const { service, managerUpdate } = montar(
+      viaje({ estado: 'notificado' }),
+      0,
+    );
+
+    const { aceptado, viaje: resultado } = await service.aceptarOferta(
+      'viaje-1',
+      CHOFER,
+    );
+
+    expect(aceptado).toBe(false);
+    expect(resultado).toBeNull();
+    expect(managerUpdate).not.toHaveBeenCalled();
   });
 });

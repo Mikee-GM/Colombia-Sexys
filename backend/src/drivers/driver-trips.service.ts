@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Markup } from 'telegraf';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Choferes } from './entities/driver.entity';
@@ -40,6 +40,7 @@ export class DriverTripsService {
   private readonly logger = new Logger(DriverTripsService.name);
 
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(Viajes)
     private readonly viajes: Repository<Viajes>,
     @InjectRepository(Choferes)
@@ -56,6 +57,149 @@ export class DriverTripsService {
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
   ) {}
+
+  /**
+   * El chofer toma una oferta de viaje.
+   *
+   * La oferta se manda a varios a la vez, asi que esto es una carrera: gana
+   * quien escriba primero. La condicion va dentro del propio UPDATE --id, su
+   * chofer y estado `notificado`-- de modo que la base decide, no el codigo.
+   * Comprobar antes y escribir despues dejaria una ventana en la que dos
+   * choferes se llevan el mismo viaje.
+   *
+   * Si no gana, no es un error: alguien fue mas rapido, y quien llama debe
+   * decirlo con esas palabras.
+   */
+  async aceptarOferta(
+    viajeId: string,
+    choferId: string,
+  ): Promise<{ aceptado: boolean; viaje: Viajes | null }> {
+    const gano = await this.dataSource.transaction(async (manager) => {
+      const resultado = await manager
+        .createQueryBuilder()
+        .update(Viajes)
+        .set({
+          estado: 'aceptado',
+          horaAceptacion: new Date(),
+          // La oferta deja de estar viva: sin limpiarlo, el barrido de ofertas
+          // vencidas la tomaria como pendiente.
+          ofertaExpiraEn: null,
+        })
+        .where('id = :viajeId AND chofer_id = :choferId AND estado = :estado', {
+          viajeId,
+          choferId,
+          estado: 'notificado',
+        })
+        .execute();
+
+      if (resultado.affected !== 1) return false;
+
+      await manager.update(Choferes, choferId, {
+        disponible: false,
+        // Aceptar borra la racha: el contador mide rechazos SEGUIDOS, y sin
+        // este reinicio tres rechazos sueltos repartidos en semanas acabarian
+        // multando igual que tres seguidos.
+        rechazosConsecutivos: 0,
+      });
+      return true;
+    });
+
+    if (!gano) return { aceptado: false, viaje: null };
+
+    // Ya es suyo: se detiene el reparto para que no se lo ofrezcan a nadie mas.
+    this.servicesService.clearDispatchTimeout(viajeId);
+
+    const viaje = await this.cargarViajeDelChofer(viajeId, choferId);
+    const chofer = await this.choferes.findOne({ where: { id: choferId } });
+
+    await this.avisarAlJefe(
+      viaje,
+      chofer,
+      'Viaje aceptado',
+      `El chofer *${chofer?.nombre ?? ''}* acepto el viaje de la empleada *${viaje.servicio?.empleada?.nombreArtistico || ''}* y va en camino.`,
+    );
+
+    await this.avisarALaModeloQueVaEnCamino(viaje, chofer);
+
+    this.realtime.emitToDriver(choferId, {
+      type: 'trip_accepted',
+      data: { tripId: viajeId },
+    });
+    if (viaje.servicio) {
+      this.realtime.emitToEmployee(viaje.servicio.empleadaId, {
+        type: 'trip_accepted',
+        data: { tripId: viajeId, serviceId: viaje.servicio.id },
+      });
+      this.realtime.emitToBoss(viaje.servicio.jefeId, {
+        type: 'trip_accepted',
+        data: { tripId: viajeId, serviceId: viaje.servicio.id },
+      });
+    }
+
+    return { aceptado: true, viaje };
+  }
+
+  /**
+   * Le dice a la modelo que su chofer ya va en camino.
+   *
+   * Lleva los datos con los que identificara el coche, y el id del mensaje se
+   * guarda porque se borra mas adelante, cuando ella ya subio: si no, el aviso
+   * se queda en su conversacion mucho despues de dejar de ser cierto.
+   */
+  private async avisarALaModeloQueVaEnCamino(
+    trip: Viajes,
+    chofer: Choferes | null,
+  ): Promise<void> {
+    const chatId = trip.servicio?.empleada?.usuario?.telegramChatId;
+    if (!chatId) return;
+
+    const vehiculo = [
+      chofer?.vehiculoMarca ? `• *Marca:* ${chofer.vehiculoMarca}` : null,
+      chofer?.vehiculoModelo ? `• *Modelo:* ${chofer.vehiculoModelo}` : null,
+      chofer?.vehiculoColor ? `• *Color:* ${chofer.vehiculoColor}` : null,
+      chofer?.vehiculoPlaca ? `• *Placa:* ${chofer.vehiculoPlaca}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const texto =
+      `*¡Tu chofer va en camino!*\n\n` +
+      `El chofer *${chofer?.nombre ?? ''}* ha aceptado tu viaje y se dirige a tu ubicación.\n\n` +
+      `*Datos del Chofer:*\n` +
+      `• *Nombre:* ${chofer?.nombre ?? 'No registrado'}\n` +
+      `• *Teléfono:* ${chofer?.telefono ?? 'No registrado'}\n\n` +
+      (vehiculo
+        ? `*Datos del Vehículo:*\n${vehiculo}\n`
+        : `*Datos del Vehículo:* No registrados\n`);
+
+    try {
+      const enviado = await this.telegram.sendMessage(chatId, texto, {
+        parseMode: 'Markdown',
+      });
+      trip.telegramEmpleadaMsgChoferCaminoId = enviado.message_id.toString();
+      await this.viajes.update(trip.id, {
+        telegramEmpleadaMsgChoferCaminoId:
+          trip.telegramEmpleadaMsgChoferCaminoId,
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo avisar a la empleada de que el chofer va en camino (chat ${chatId}):`,
+        err,
+      );
+    }
+  }
+
+  /**
+   * El chofer deja pasar una oferta.
+   *
+   * El rechazo en si --la racha, la reoferta al siguiente-- ya vivia en
+   * `ServicesService`; aqui solo se le devuelve la disponibilidad, que es lo
+   * que hacia el manejador del chat despues de llamarlo.
+   */
+  async rechazarOferta(viajeId: string, choferId: string): Promise<void> {
+    await this.servicesService.rechazarOfertaManual(viajeId, choferId);
+    await this.choferes.update(choferId, { disponible: true });
+  }
 
   /**
    * El chofer llego al punto de recogida.

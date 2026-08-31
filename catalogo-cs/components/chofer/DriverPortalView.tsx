@@ -18,6 +18,7 @@ interface DriverPortalViewProps {
 type TabType = "resumen" | "ranking" | "viajes" | "reputacion";
 
 import ViajeAhora from "@/components/chofer/ViajeAhora";
+import OfertaDeViaje from "@/components/chofer/OfertaDeViaje";
 import { BarChart3, Car, Star, Trophy } from "lucide-react";
 
 const ZONA_LABEL: Record<string, string> = {
@@ -153,6 +154,10 @@ export default function DriverPortalView({
         {/* Sin esto la pantalla se queda con los datos del primer
             render: lo que autoriza el jefe no llegaba nunca. */}
         <ActualizarEnVivo canal="chofer" />
+        {/* Por encima de todo: es lo unico de esta pantalla que caduca. */}
+        {data.pendingOffers.map((oferta) => (
+          <OfertaDeViaje key={oferta.id} oferta={oferta} />
+        ))}
         <ViajeAhora viaje={data.activeTrip} zonaLabel={ZONA_LABEL} />
         {/* Solo tiene sentido con sesion propia: un enlace con token no
             identifica el dispositivo, y la suscripcion es por dispositivo. */}

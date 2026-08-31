@@ -334,218 +334,70 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    const result = await this.dataSource.transaction(async (manager) => {
-      const updateResult = await manager
-        .createQueryBuilder()
-        .update(Viajes)
-        .set({
-          estado: 'aceptado',
-          horaAceptacion: new Date(),
-          // La oferta deja de estar viva: sin limpiarlo, el barrido de ofertas
-          // vencidas la tomaria como pendiente.
-          ofertaExpiraEn: null,
-        })
-        .where('id = :viajeId AND chofer_id = :choferId AND estado = :estado', {
-          viajeId,
-          choferId: chofer.id,
-          estado: 'notificado',
-        })
-        .execute();
-
-      if (updateResult.affected === 1) {
-        await manager.update(Choferes, chofer.id, {
-          disponible: false,
-          // Aceptar borra la racha: el contador mide rechazos SEGUIDOS, y sin
-          // este reinicio tres rechazos sueltos repartidos en semanas acabarian
-          // multando igual que tres seguidos.
-          rechazosConsecutivos: 0,
-        });
-        return true;
-      }
-      return false;
-    });
-
-    if (result) {
-      // La caché guarda solo la identidad del chofer (id, nombre, teléfono,
-      // vehículo), no su disponibilidad: `disponible` se lee siempre de la base
-      // en el momento. No hay nada que invalidar aquí.
-
-      // Cancelar el timeout de despacho del viaje
-      this.servicesService.clearDispatchTimeout(viajeId);
-
-      await ctx.answerCbQuery('✅ ¡Viaje asignado con éxito!', {
+    /*
+     * La carrera entre choferes la resuelve DriverTripsService, que la mete en
+     * la condicion del propio UPDATE. Se llama desde aqui y desde el portal, de
+     * modo que aceptar por el chat y aceptar por la aplicacion compiten en el
+     * mismo sitio y con la misma regla.
+     */
+    let result = false;
+    try {
+      const { aceptado } = await this.driverTripsService.aceptarOferta(
+        viajeId,
+        chofer.id,
+      );
+      result = aceptado;
+    } catch (err) {
+      this.logger.error('Error aceptando la oferta de viaje:', err);
+      await ctx.answerCbQuery('No se pudo aceptar el viaje.', {
         show_alert: true,
       });
+      return;
+    }
 
-      const driverName = chofer.nombre;
-      try {
-        let messageText = (ctx.callbackQuery?.message as any)?.text || '';
-        // Limpiar encabezados de confirmación
-        messageText = messageText.replace(
-          /⚠️ \*?\[Confirmación pendiente\]\*?\n\*?.*?\*?,? ¿confirmas que deseas tomar este viaje\?\n\n/,
-          '',
-        );
-        await ctx.editMessageText(
-          messageText + `\n\n✅ *Viaje tomado por:* ${driverName}`,
-          { parse_mode: 'Markdown' },
-        );
-      } catch (err) {
-        this.logger.error('Error al actualizar mensaje de grupo:', err);
-      }
+    if (result) {
+      /*
+       * Todo lo que era negocio --detener el reparto, avisar al grupo del jefe,
+       * decirle a la modelo que su chofer va en camino y emitir los eventos en
+       * vivo-- lo hace ya DriverTripsService, que llaman tanto este manejador
+       * como el portal. Aqui queda solo lo del chat.
+       */
+      await ctx.answerCbQuery('Viaje asignado con exito.');
 
       const trip = await this.dataSource.getRepository(Viajes).findOne({
         where: { id: viajeId },
-        relations: {
-          servicio: {
-            empleada: { usuario: true, jefe: true },
-            cliente: true,
-            jefe: true,
-          },
-        },
+        relations: { servicio: { empleada: true } },
       });
 
-      if (trip && trip.servicio) {
-        this.realtimeEventsService.emitToDriver(chofer.id, {
-          type: 'new_trip',
-          data: trip,
-        });
+      const empLat = trip?.servicio?.empleada?.ubicacionLat;
+      const empLng = trip?.servicio?.empleada?.ubicacionLng;
+      const botones: any[][] = [];
+      if (empLat && empLng) {
+        botones.push([
+          Markup.button.url(
+            'Google Maps',
+            `https://www.google.com/maps/search/?api=1&query=${empLat},${empLng}`,
+          ),
+          Markup.button.url(
+            'Waze',
+            `https://waze.com/ul?ll=${empLat},${empLng}&navigate=yes`,
+          ),
+        ]);
+      }
+      botones.push([
+        Markup.button.callback('He llegado', `chofer_llegado:${viajeId}`),
+      ]);
 
-        this.realtimeEventsService.emitToEmployee(trip.servicio.empleadaId, {
-          type: 'trip_accepted',
-          data: {
-            tripId: trip.id,
-            choferName: driverName,
-            serviceId: trip.servicio.id,
-          },
-        });
-
-        this.realtimeEventsService.emitToBoss(trip.servicio.jefeId, {
-          type: 'trip_accepted',
-          data: {
-            tripId: trip.id,
-            choferName: driverName,
-            serviceId: trip.servicio.id,
-          },
-        });
-
-        await this.notifyBossTripTopic(
-          ctx,
-          trip,
-          chofer,
-          'Chofer aceptó el viaje',
-          `El chofer *${driverName}* aceptó el viaje de *${trip.tipo}*.`,
+      try {
+        await ctx.editMessageText(
+          `*Viaje aceptado*\n\n` +
+            `• *Empleada:* ${trip?.servicio?.empleada?.nombreArtistico || ''}\n` +
+            `• *Tramo:* ${trip?.tipo === 'ida' ? 'Ida' : 'Regreso'}\n\n` +
+            `Avisa cuando llegues al punto de recogida.`,
+          { parse_mode: 'Markdown', ...Markup.inlineKeyboard(botones) },
         );
-
-        // Notificaciones en paralelo usando Promise.allSettled
-        const notifyEmployeePromise = (async () => {
-          const empUser = trip.servicio.empleada?.usuario;
-          if (empUser && empUser.telegramChatId) {
-            const targetChatId = empUser.telegramChatId;
-            const threadId = undefined;
-
-            const vehiculoInfo = [
-              chofer.vehiculoMarca
-                ? `• *Marca:* ${chofer.vehiculoMarca}`
-                : null,
-              chofer.vehiculoModelo
-                ? `• *Modelo:* ${chofer.vehiculoModelo}`
-                : null,
-              chofer.vehiculoColor
-                ? `• *Color:* ${chofer.vehiculoColor}`
-                : null,
-              chofer.vehiculoPlaca
-                ? `• *Placa:* ${chofer.vehiculoPlaca}`
-                : null,
-            ]
-              .filter(Boolean)
-              .join('\n');
-
-            const employeeNotificationText =
-              `🚗 *¡Tu chofer va en camino!* 💨\n\n` +
-              `El chofer *${chofer.nombre}* ha aceptado tu viaje y se dirige a tu ubicación.\n\n` +
-              `*Datos del Chofer:*\n` +
-              `• *Nombre:* ${chofer.nombre}\n` +
-              `• *Teléfono:* ${chofer.telefono}\n\n` +
-              (vehiculoInfo
-                ? `*Datos del Vehículo:*\n${vehiculoInfo}\n`
-                : `*Datos del Vehículo:* No registrados\n`);
-
-            try {
-              const sentMsg = await ctx.telegram.sendMessage(
-                targetChatId,
-                employeeNotificationText,
-                {
-                  message_thread_id: threadId,
-                  parse_mode: 'Markdown',
-                },
-              );
-              // Guardar el ID del mensaje para poder borrarlo después
-              trip.telegramEmpleadaMsgChoferCaminoId =
-                sentMsg.message_id.toString();
-              await this.dataSource.getRepository(Viajes).update(trip.id, {
-                telegramEmpleadaMsgChoferCaminoId:
-                  trip.telegramEmpleadaMsgChoferCaminoId,
-              });
-            } catch (sendErr) {
-              this.logger.error('Error al notificar a la empleada:', sendErr);
-            }
-          }
-        })();
-
-        const notifyDriverPromise = (async () => {
-          if (clickerTelegramId) {
-            const empLat = trip.servicio.empleada.ubicacionLat;
-            const empLng = trip.servicio.empleada.ubicacionLng;
-            let empLocationText = 'No registrada';
-            const inlineButtons: any[][] = [];
-
-            if (empLat && empLng) {
-              empLocationText = `[Ver en Google Maps](https://www.google.com/maps/search/?api=1&query=${empLat},${empLng})`;
-              inlineButtons.push([
-                Markup.button.url(
-                  '🗺️ Google Maps',
-                  `https://www.google.com/maps/search/?api=1&query=${empLat},${empLng}`,
-                ),
-                Markup.button.url(
-                  '🚙 Waze',
-                  `https://waze.com/ul?ll=${empLat},${empLng}&navigate=yes`,
-                ),
-              ]);
-            }
-
-            inlineButtons.push([
-              Markup.button.callback(
-                '📍 He Llegado con la Empleada',
-                `chofer_llegado:${trip.id}`,
-              ),
-            ]);
-
-            const privateMessageText =
-              `🚗 *¡Viaje Tomado con Éxito!* 🚗\n\n` +
-              `• *Empleada:* ${trip.servicio.empleada.nombreArtistico}\n` +
-              `• *Cliente:* ${trip.servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
-              `• *Ubicación de Recogida (Empleada):* ${empLocationText}\n\n` +
-              `Por favor, presiona el botón de abajo una vez hayas llegado con la empleada.`;
-
-            try {
-              await ctx.telegram.sendMessage(
-                clickerTelegramId,
-                privateMessageText,
-                {
-                  parse_mode: 'Markdown',
-                  ...Markup.inlineKeyboard(inlineButtons),
-                },
-              );
-            } catch (sendErr) {
-              this.logger.error(
-                'Error al enviar mensaje privado al chofer:',
-                sendErr,
-              );
-            }
-          }
-        })();
-
-        await Promise.allSettled([notifyEmployeePromise, notifyDriverPromise]);
+      } catch (err) {
+        this.logger.error('Error actualizando el mensaje de aceptacion:', err);
       }
     } else {
       await ctx.answerCbQuery(

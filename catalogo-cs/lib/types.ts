@@ -446,6 +446,23 @@ export type DriverPortalActiveTrip = {
   proveedorTransporte: string;
 };
 
+/**
+ * Una oferta de viaje que espera respuesta.
+ *
+ * Vive aparte de `activeTrip` porque son cosas distintas: el viaje activo es el
+ * que ya acepto, y esto es lo que todavia puede aceptar o rechazar. Antes no
+ * llegaba al portal en absoluto, asi que la unica forma de aceptar un viaje era
+ * ver el mensaje del bot a tiempo.
+ */
+export type DriverPortalOffer = {
+  id: string;
+  tipo: "ida" | "regreso";
+  zona: string;
+  proveedorTransporte: string;
+  /** Cuando deja de valer la oferta, para poder mostrar la cuenta atras. */
+  expiraEn: string | null;
+};
+
 export type DriverPortalData = {
   profile: {
     id: string;
@@ -477,6 +494,8 @@ export type DriverPortalData = {
     weeklySettlementStatus: "preview" | "pending" | "paid";
   };
   activeTrip: DriverPortalActiveTrip | null;
+  /** Ofertas que esperan su respuesta. */
+  pendingOffers: DriverPortalOffer[];
   recentTrips: DriverPortalTripItem[];
   reputation: {
     ratingAverage: number;

@@ -28,6 +28,44 @@ export class DriverPortalController {
   }
 
   /**
+   * Toma una oferta de viaje.
+   *
+   * La misma oferta se manda a varios choferes, asi que puede perderse la
+   * carrera. Eso no es un error del que avisar con un fallo: se responde que
+   * ya no esta disponible, que es lo que ha pasado.
+   */
+  @Post('trips/:tripId/accept')
+  @HttpCode(200)
+  async aceptarOferta(
+    @PortalUser() userId: string,
+    @Param('tripId', new ParseUUIDPipe()) tripId: string,
+  ) {
+    const choferId = await this.driverTripsService.choferDeUsuario(userId);
+    const { aceptado } = await this.driverTripsService.aceptarOferta(
+      tripId,
+      choferId,
+    );
+    return {
+      aceptado,
+      mensaje: aceptado
+        ? 'Viaje asignado.'
+        : 'Otro chofer tomó este viaje primero.',
+    };
+  }
+
+  /** Deja pasar una oferta, que se reofrece al siguiente chofer. */
+  @Post('trips/:tripId/reject')
+  @HttpCode(200)
+  async rechazarOferta(
+    @PortalUser() userId: string,
+    @Param('tripId', new ParseUUIDPipe()) tripId: string,
+  ) {
+    const choferId = await this.driverTripsService.choferDeUsuario(userId);
+    await this.driverTripsService.rechazarOferta(tripId, choferId);
+    return { rechazado: true };
+  }
+
+  /**
    * Marca que ya llego al punto de recogida.
    *
    * Hasta ahora esto solo existia en el chat del bot, donde el chofer tenia
