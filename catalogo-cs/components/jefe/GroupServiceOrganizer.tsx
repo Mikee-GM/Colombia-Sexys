@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { AlertCircle, Ban, Car, CheckCircle2, Clock3, ExternalLink, FileCheck2, ImageIcon, Loader2, MapPin, Plus, Send, Smartphone, Trash2, UsersRound } from "lucide-react";
+import { AlertCircle, Ban, Car, ChevronLeft, CheckCircle2, Clock3, ExternalLink, FileCheck2, ImageIcon, Loader2, MapPin, Plus, Send, Smartphone, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import {
   addGroupManualTransportCharge,
@@ -53,6 +53,16 @@ export default function GroupServiceOrganizer({
   const [requests, setRequests] = useState(visibleInitialRequests);
   const [selectedId, setSelectedId] = useState(visibleInitialRequests[0]?.id ?? "");
   const [candidates, setCandidates] = useState<Employee[]>([]);
+  /*
+   * En movil la lista y el organizador no caben a la vez.
+   *
+   * El layout es maestro-detalle en dos columnas a partir de `lg`, pero por
+   * debajo se apilaban: habia que pasar por delante de todas las solicitudes
+   * para llegar al organizador de la que estaba seleccionada. Este estado
+   * decide cual de los dos se ve en pantalla estrecha; en `lg` no se usa,
+   * porque ahi se ven los dos.
+   */
+  const [vistaMovil, setVistaMovil] = useState<"lista" | "detalle">("lista");
   const [pending, startTransition] = useTransition();
   const selected = requests.find((item) => item.id === selectedId) ?? null;
 
@@ -103,54 +113,100 @@ export default function GroupServiceOrganizer({
 
   return (
     <section className="grid items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <aside className="space-y-3 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-        <header className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+      <aside className={`space-y-3 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto ${vistaMovil === "detalle" ? "hidden" : ""}`}>
+        <header className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
             Solicitudes grupales
           </p>
-          <h2 className="mt-1 font-heading text-3xl">{requests.length}</h2>
+          <h2 className="mt-0.5 font-heading text-2xl">{requests.length}</h2>
         </header>
-        {requests.map((request) => (
-          <button
-            key={request.id}
-            type="button"
-            onClick={() => setSelectedId(request.id)}
-            className={`w-full rounded-2xl border p-4 text-left ${
-              request.id === selectedId
-                ? "border-[#C5A55A] bg-[#C5A55A]/5"
-                : "border-zinc-800 bg-zinc-950"
-            }`}
-          >
-            <p className="font-heading text-xl text-white">
-              {request.client?.nombreTelegram || "Cliente"}
-            </p>
-            <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-              <span>{request.status.replaceAll("_", " ")}</span>
-              <span>{activeSelectionIds(request).length} seleccionadas</span>
-            </div>
-          </button>
-        ))}
+        {requests.map((request) => {
+          const seleccionadas = activeSelectionIds(request).length;
+          return (
+            <button
+              key={request.id}
+              type="button"
+              onClick={() => {
+                setSelectedId(request.id);
+                setVistaMovil("detalle");
+              }}
+              className={`w-full rounded-2xl border p-4 text-left transition-colors ${
+                request.id === selectedId
+                  ? "border-[#C5A55A] bg-[#C5A55A]/5"
+                  : "border-zinc-800 bg-zinc-950"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="min-w-0 truncate font-heading text-xl text-white">
+                  {request.client?.nombreTelegram || "Cliente"}
+                </p>
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${tonoEstadoGrupo(request.status)}`}>
+                  {etiquetaEstadoGrupo(request.status)}
+                </span>
+              </div>
+              <div className="mt-2.5 flex items-center gap-3 text-[11px] text-zinc-500">
+                <span className="flex items-center gap-1.5">
+                  <UsersRound size={13} />
+                  {seleccionadas} {seleccionadas === 1 ? "seleccionada" : "seleccionadas"}
+                </span>
+                {request.durationHours ? <span className="flex items-center gap-1.5"><Clock3 size={13} />{request.durationHours} h</span> : null}
+              </div>
+            </button>
+          );
+        })}
         {!requests.length && (
           <div className="rounded-2xl border border-dashed border-zinc-800 p-8 text-center text-sm text-zinc-500">
             No hay solicitudes grupales.
           </div>
         )}
       </aside>
-      {selected ? (
-        <GroupRequestEditor
-          key={selected.id}
-          request={selected}
-          candidates={candidates}
-          pending={pending}
-          run={run}
-        />
-      ) : (
-        <div className="rounded-2xl border border-dashed border-zinc-800 p-16 text-center text-sm text-zinc-500">
-          Selecciona una solicitud para organizarla.
-        </div>
-      )}
+      <div className={`min-w-0 lg:block ${vistaMovil === "lista" ? "hidden" : ""}`}>
+        {/* La vuelta a la lista solo existe en movil: en `lg` los dos paneles
+            estan a la vista y no hay de donde volver. */}
+        <button
+          type="button"
+          onClick={() => setVistaMovil("lista")}
+          className="mb-3 flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 py-2.5 pl-2.5 pr-4 text-xs font-semibold text-zinc-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A] lg:hidden"
+        >
+          <ChevronLeft size={16} />
+          Todas las solicitudes
+        </button>
+        {selected ? (
+          <GroupRequestEditor
+            key={selected.id}
+            request={selected}
+            candidates={candidates}
+            pending={pending}
+            run={run}
+          />
+        ) : (
+          <div className="rounded-2xl border border-dashed border-zinc-800 p-16 text-center text-sm text-zinc-500">
+            Selecciona una solicitud para organizarla.
+          </div>
+        )}
+      </div>
     </section>
   );
+}
+
+/** El estado de la solicitud, en palabras y no con guiones bajos. */
+function etiquetaEstadoGrupo(status: GroupServiceRequest["status"]) {
+  switch (status) {
+    case "esperando_jefe": return "Esperando al jefe";
+    case "seleccionando": return "Seleccionando";
+    case "reservada": return "Lista reservada";
+    case "esperando_pago": return "Esperando pago";
+    case "confirmada": return "Confirmada";
+    case "vencida": return "Vencida";
+    default: return "Cancelada";
+  }
+}
+
+/** Dorado lo que espera al jefe, verde lo confirmado, apagado el resto. */
+function tonoEstadoGrupo(status: GroupServiceRequest["status"]) {
+  if (status === "confirmada") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-300";
+  if (status === "vencida" || status === "cancelada") return "border-zinc-700 bg-zinc-900 text-zinc-500";
+  return "border-[#C5A55A]/50 bg-[#C5A55A]/10 text-[#E8D5A3]";
 }
 
 function GroupRequestEditor({

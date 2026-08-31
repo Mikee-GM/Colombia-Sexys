@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { ButtonHTMLAttributes, Dispatch, SetStateAction } from "react";
-import { Award, Banknote, Ban, Camera, Car, Check, CircleDollarSign, Clock3, ExternalLink, FileCheck2, MapPin, MessageCircle, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import type { ButtonHTMLAttributes, Dispatch, ReactNode, SetStateAction } from "react";
+import { Award, Banknote, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, Clock3, ExternalLink, FileCheck2, MapPin, MessageCircle, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
@@ -304,7 +304,85 @@ function CashDeliveryPanel({ summary, pending, run }: { summary: CashObligationS
 
 function ServiceList({ services, allServices, active, disabled, onDecide, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { services: Service[]; allServices: Service[]; active: boolean; disabled: boolean; onDecide: (service: Service, decision: "aceptar" | "rechazar", transport?: "chofer" | "uber", bossNotes?: string) => void; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   if (!services.length) return <div className="rounded-2xl border border-dashed border-zinc-800 py-20 text-center text-sm text-zinc-500">No hay servicios en esta sección.</div>;
-  return <div className="space-y-4">{services.map((service) => { const previous = allServices.find((item) => item.id === service.servicioPrevioId); return <article key={service.id} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex items-center gap-2"><p className="text-[10px] uppercase tracking-widest text-[#C5A55A]">Servicio {service.id.slice(-6).toUpperCase()}</p>{service.tipoAgenda === "programado" && <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-300">📅 Cita Programada</span>}</div><h2 className="mt-1 font-heading text-2xl">{service.empleada?.nombreArtistico || "Empleada asignada"}</h2>{!active && service.empleada && <EmployeeRatingSummary employee={service.empleada} />}<p className="mt-1 text-xs text-zinc-500">{service.cliente?.nombreTelegram || "Cliente"} · {service.duracionPactadaHoras} horas · {service.metodoPago.toUpperCase()}</p>{service.tipoAgenda === "programado" && service.fechaProgramada && <p className="mt-1.5 text-xs font-semibold text-purple-300">📅 Cita pactada: {new Date(service.fechaProgramada).toLocaleString(APP_LOCALE, { dateStyle: "short", timeStyle: "short" })}</p>}{service.servicioPrevioId && <p className="mt-2 text-xs text-[#E8D5A3]">Después del servicio {previous?.id.slice(-6).toUpperCase() || service.servicioPrevioId.slice(-6).toUpperCase()}</p>}{service.horaInicioEstimada && service.tipoAgenda !== "programado" && <p className="mt-1 text-xs text-zinc-400">Llegada estimada: {formatAvailabilityTime(service.horaInicioEstimada)}</p>}{service.locationNameSnapshot && <p className="mt-1 text-xs text-zinc-500">Ubicación: {service.locationNameSnapshot}</p>}</div><ServiceStatusBadge status={service.estado} /></div>{service.notasJefe && <div className="mt-4 border-l-2 border-[#C5A55A]/70 bg-black/50 px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]">Notas internas</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{service.notasJefe}</p></div>}{!active && <ServiceRating service={service} />}<ReceiptEvidenceList service={service} /><div className="mt-5 flex flex-wrap gap-2">{active && service.estado === "pendiente" && <><ActionButton disabled={disabled} onClick={() => onRequestAccept(service)}><Check size={15} />Aceptar servicio</ActionButton><ActionButton outline disabled={disabled} onClick={() => onRequestEdit?.(service)}><Pencil size={15} />Editar servicio</ActionButton></>}{!active && <span className="flex items-center gap-1 text-xs text-zinc-500"><Clock3 size={14} />{new Date(service.updatedAt).toLocaleString(APP_LOCALE)}</span>}<ActionButton outline onClick={() => onChat(service)}><MessageCircle size={15} />Abrir chat</ActionButton>{active && <button type="button" disabled={disabled} onClick={() => onCancel(service)} className="flex items-center gap-2 rounded-xl border border-red-500/80 bg-red-500/10 px-4 py-3 text-xs font-bold uppercase tracking-wider text-red-300 transition hover:bg-red-500 hover:text-white disabled:opacity-40"><Ban size={16} />Cancelar servicio</button>}</div>{active && service.estado !== "agendado" && <TransportPanel service={service} onRefresh={onRefresh} />}</article>; })}</div>;
+  return <div className="space-y-3">{services.map((service) => <ServiceCard key={service.id} service={service} previous={allServices.find((item) => item.id === service.servicioPrevioId)} active={active} disabled={disabled} onRequestAccept={onRequestAccept} onRequestEdit={onRequestEdit} onCancel={onCancel} onChat={onChat} onRefresh={onRefresh} />)}</div>;
+}
+
+/**
+ * Un servicio.
+ *
+ * Los datos iban antes en un parrafo corrido separado por puntos, que en el
+ * telefono se partia por donde caia; ahora son filas de clave y valor. Y las
+ * acciones van en rejilla fija: con `flex-wrap` la ultima fila quedaba coja
+ * segun lo que midieran los textos, cosa que en una pantalla estrecha pasaba
+ * siempre.
+ */
+function ServiceCard({ service, previous, active, disabled, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { service: Service; previous?: Service; active: boolean; disabled: boolean; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
+  const programado = service.tipoAgenda === "programado";
+  const pendiente = active && service.estado === "pendiente";
+
+  const datos: Array<[string, string]> = [
+    ["Cliente", service.cliente?.nombreTelegram || "Cliente"],
+    ["Duración", `${service.duracionPactadaHoras} horas`],
+    ["Pago", service.metodoPago.toUpperCase()],
+  ];
+  if (service.locationNameSnapshot) datos.push(["Lugar", service.locationNameSnapshot]);
+  // `formatAvailabilityTime` devuelve null si la fecha no se puede leer: en ese
+  // caso no se pinta la fila, mejor que una fila con un hueco.
+  const llegada = service.horaInicioEstimada && !programado ? formatAvailabilityTime(service.horaInicioEstimada) : null;
+  if (llegada) datos.push(["Llegada estimada", llegada]);
+  if (service.servicioPrevioId) datos.push(["Después de", previous?.id.slice(-6).toUpperCase() || service.servicioPrevioId.slice(-6).toUpperCase()]);
+
+  return (
+    <article className={`rounded-2xl border bg-zinc-950 p-4 sm:p-5 ${pendiente ? "border-[#C5A55A]/50" : "border-zinc-800"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#8B7635]">Servicio {service.id.slice(-6).toUpperCase()}</p>
+          <h2 className="mt-1 truncate font-heading text-xl font-semibold sm:text-2xl">{service.empleada?.nombreArtistico || "Empleada asignada"}</h2>
+          {!active && service.empleada && <EmployeeRatingSummary employee={service.empleada} />}
+        </div>
+        <ServiceStatusBadge status={service.estado} />
+      </div>
+
+      {programado && service.fechaProgramada && (
+        <p className="mt-3 flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-2.5 text-xs font-semibold text-purple-300">
+          <CalendarClock size={15} className="shrink-0" />
+          Cita pactada: {new Date(service.fechaProgramada).toLocaleString(APP_LOCALE, { dateStyle: "short", timeStyle: "short" })}
+        </p>
+      )}
+
+      <dl className="mt-3 overflow-hidden rounded-xl border border-zinc-900 bg-black/50">
+        {datos.map(([clave, valor]) => (
+          <div key={clave} className="flex items-center justify-between gap-3 border-b border-zinc-900 px-3 py-2.5 text-xs last:border-b-0">
+            <dt className="shrink-0 text-zinc-500">{clave}</dt>
+            <dd className="truncate text-right font-semibold text-zinc-200">{valor}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {service.notasJefe && <div className="mt-3 border-l-2 border-[#C5A55A]/70 bg-black/50 px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]">Notas internas</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{service.notasJefe}</p></div>}
+      {!active && <ServiceRating service={service} />}
+      <ReceiptEvidenceList service={service} />
+
+      {pendiente && (
+        <button type="button" disabled={disabled} onClick={() => onRequestAccept(service)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#C5A55A] py-3.5 text-xs font-bold uppercase tracking-wider text-black transition-colors hover:bg-[#d8b769] disabled:opacity-50">
+          <Check size={16} />Aceptar servicio
+        </button>
+      )}
+
+      <div className={`mt-2.5 grid gap-2 ${pendiente ? "grid-cols-3" : active ? "grid-cols-2" : "grid-cols-1"}`}>
+        {pendiente && <SecondaryAction onClick={() => onRequestEdit?.(service)} disabled={disabled} icon={<Pencil size={16} />} label="Editar" />}
+        <SecondaryAction onClick={() => onChat(service)} icon={<MessageCircle size={16} />} label="Chat" />
+        {active && <SecondaryAction onClick={() => onCancel(service)} disabled={disabled} danger icon={<Ban size={16} />} label="Cancelar" />}
+      </div>
+
+      {!active && <p className="mt-3 flex items-center gap-1.5 text-[11px] text-zinc-500"><Clock3 size={13} />{new Date(service.updatedAt).toLocaleString(APP_LOCALE)}</p>}
+      {active && service.estado !== "agendado" && <TransportPanel service={service} onRefresh={onRefresh} />}
+    </article>
+  );
+}
+
+function SecondaryAction({ onClick, disabled, danger = false, icon, label }: { onClick: () => void; disabled?: boolean; danger?: boolean; icon: ReactNode; label: string }) {
+  return <button type="button" disabled={disabled} onClick={onClick} className={`flex h-[52px] flex-col items-center justify-center gap-1 rounded-xl border text-[10px] font-semibold transition-colors disabled:opacity-40 ${danger ? "border-red-500/50 bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white" : "border-zinc-800 bg-zinc-900/70 text-zinc-400 hover:border-[#C5A55A] hover:text-[#C5A55A]"}`}>{icon}{label}</button>;
 }
 
 function EditPendingServiceDialog({ service, onClose, onSaved }: { service: Service; onClose: () => void; onSaved: (service: Service) => void }) {
