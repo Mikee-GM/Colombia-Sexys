@@ -165,7 +165,8 @@ export async function middleware(request: NextRequest) {
     !pathname.startsWith("/api/auth") &&
     !pathname.startsWith("/api/geocode") &&
     !pathname.startsWith("/api/health") &&
-    !pathname.startsWith("/api/realtime")
+    !pathname.startsWith("/api/realtime") &&
+    !pathname.startsWith("/api/version")
   ) {
     /*
      * El backend publica toda su superficie bajo `/api/v1`. Aqui se traduce
