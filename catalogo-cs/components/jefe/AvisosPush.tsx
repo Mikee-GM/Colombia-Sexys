@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bell, BellOff, BellRing, Send, Smartphone } from "lucide-react";
 import { toast } from "sonner";
+import { refreshSession } from "@/lib/client-session";
 
 /**
  * Activacion de los avisos push del panel, dispositivo por dispositivo.
@@ -43,6 +44,41 @@ function leerCsrf() {
       .find((cookie) => cookie.startsWith(prefijo))
       ?.slice(prefijo.length) ?? ""
   );
+}
+
+/**
+ * Llama al backend renovando la sesion si hace falta.
+ *
+ * El middleware renueva el access token al navegar a una pagina, pero las
+ * peticiones del navegador a `/api/*` se reenvian al backend tal cual, sin
+ * pasar por ese bloque. Como el access token dura una hora, la tarjeta se
+ * llevaba un 401 en cuanto la app llevaba un rato abierta, y desde fuera
+ * parecia que los avisos estaban rotos.
+ *
+ * Ante un 401 se renueva una vez y se repite. Si la renovacion tampoco vale,
+ * la sesion termino de verdad y hay que volver a entrar.
+ */
+async function pedirConSesion(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const opciones: RequestInit = {
+    ...init,
+    credentials: "same-origin",
+    headers: { ...(init.headers ?? {}), "x-csrf-token": leerCsrf() },
+  };
+
+  const respuesta = await fetch(url, opciones);
+  if (respuesta.status !== 401) return respuesta;
+
+  const renovada = await refreshSession();
+  if (renovada !== "refreshed") return respuesta;
+
+  // El CSRF se vuelve a leer: la renovacion emite una cookie nueva.
+  return fetch(url, {
+    ...opciones,
+    headers: { ...(init.headers ?? {}), "x-csrf-token": leerCsrf() },
+  });
 }
 
 /**
@@ -104,9 +140,11 @@ export default function AvisosPush() {
         return;
       }
 
-      const respuestaClave = await fetch("/api/push/clave-publica", {
-        credentials: "same-origin",
-      });
+      const respuestaClave = await pedirConSesion("/api/push/clave-publica");
+      if (respuestaClave.status === 401) {
+        toast.error("Tu sesion caduco. Vuelve a entrar y reintenta.");
+        return;
+      }
       if (!respuestaClave.ok) throw new Error("No se pudo pedir la clave");
       const { clavePublica, activo } = (await respuestaClave.json()) as {
         clavePublica: string;
@@ -132,13 +170,9 @@ export default function AvisosPush() {
       };
       // Se manda solo lo que el backend valida. `toJSON()` incluye ademas
       // `expirationTime`, y el ValidationPipe rechaza los campos de mas.
-      const alta = await fetch("/api/push/suscripciones", {
+      const alta = await pedirConSesion("/api/push/suscripciones", {
         method: "POST",
-        credentials: "same-origin",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": leerCsrf(),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           endpoint: datos.endpoint,
           keys: { p256dh: datos.keys?.p256dh, auth: datos.keys?.auth },
@@ -162,13 +196,9 @@ export default function AvisosPush() {
       const registro = await navigator.serviceWorker.getRegistration();
       const suscripcion = await registro?.pushManager.getSubscription();
       if (suscripcion) {
-        await fetch("/api/push/suscripciones", {
+        await pedirConSesion("/api/push/suscripciones", {
           method: "DELETE",
-          credentials: "same-origin",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": leerCsrf(),
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ endpoint: suscripcion.endpoint }),
         });
         await suscripcion.unsubscribe();
@@ -186,11 +216,13 @@ export default function AvisosPush() {
   const probar = useCallback(async () => {
     setOcupado(true);
     try {
-      const respuesta = await fetch("/api/push/prueba", {
+      const respuesta = await pedirConSesion("/api/push/prueba", {
         method: "POST",
-        credentials: "same-origin",
-        headers: { "x-csrf-token": leerCsrf() },
       });
+      if (respuesta.status === 401) {
+        toast.error("Tu sesion caduco. Vuelve a entrar y reintenta.");
+        return;
+      }
       if (!respuesta.ok) throw new Error("El servidor rechazo la prueba");
       const { enviados } = (await respuesta.json()) as { enviados: number };
       if (enviados === 0) {
