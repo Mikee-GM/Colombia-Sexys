@@ -114,6 +114,24 @@ export class TelegramService implements OnModuleInit {
   }
 
   /**
+   * Borra un mensaje que el bot mando antes.
+   *
+   * Se usa para retirar avisos que dejaron de ser ciertos --el "tu chofer va
+   * en camino" cuando ya subio al coche-- y no lanza si falla: el mensaje pudo
+   * borrarlo el usuario, o ser mas viejo de lo que Telegram deja retirar, y
+   * ninguna de las dos cosas debe tumbar la operacion que lo pidio.
+   */
+  async deleteMessage(chatId: string, messageId: number): Promise<void> {
+    try {
+      await this.bot.telegram.deleteMessage(chatId, messageId);
+    } catch (error: unknown) {
+      this.logger.warn(
+        `No se pudo borrar el mensaje ${messageId} de ${chatId}: ${String(error)}`,
+      );
+    }
+  }
+
+  /**
    * Avisa al jefe, por Telegram, de un servicio que espera su autorizacion.
    *
    * El mensaje lleva los botones que ya maneja `jefe_autorizar`, asi que el

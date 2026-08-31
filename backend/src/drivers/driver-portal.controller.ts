@@ -45,4 +45,24 @@ export class DriverPortalController {
     const viaje = await this.driverTripsService.marcarLlegada(tripId, choferId);
     return { estado: viaje.estado };
   }
+
+  /**
+   * Marca que la empleada ya subio al coche y arranca el trayecto.
+   *
+   * Cancela su margen de espera, asi que no es un boton inocente: se toca
+   * cuando de verdad va a bordo.
+   */
+  @Post('trips/:tripId/picked-up')
+  @HttpCode(200)
+  async marcarRecogida(
+    @PortalUser() userId: string,
+    @Param('tripId', new ParseUUIDPipe()) tripId: string,
+  ) {
+    const choferId = await this.driverTripsService.choferDeUsuario(userId);
+    const viaje = await this.driverTripsService.marcarRecogida(
+      tripId,
+      choferId,
+    );
+    return { estado: viaje.estado };
+  }
 }

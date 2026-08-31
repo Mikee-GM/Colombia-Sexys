@@ -61,6 +61,26 @@ export async function marcarLlegadaDelViaje(
   tripId: string,
   token?: string,
 ): Promise<{ success: boolean; error?: string }> {
+  return avanzarViaje(tripId, "arrived", token);
+}
+
+/**
+ * Marca que la empleada ya subio al coche.
+ *
+ * Cancela su margen de espera en el backend, asi que no es un boton inocente.
+ */
+export async function marcarRecogidaDelViaje(
+  tripId: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  return avanzarViaje(tripId, "picked-up", token);
+}
+
+async function avanzarViaje(
+  tripId: string,
+  paso: "arrived" | "picked-up",
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
   try {
     const cookie = await getBackendCookieHeader();
     const csrf = await getCsrfToken();
@@ -72,7 +92,7 @@ export async function marcarLlegadaDelViaje(
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
     const url = new URL(
-      `${getApiBaseUrl()}/driver-portal/trips/${tripId}/arrived`,
+      `${getApiBaseUrl()}/driver-portal/trips/${tripId}/${paso}`,
     );
     if (token) url.searchParams.set("token", token);
 
@@ -86,12 +106,12 @@ export async function marcarLlegadaDelViaje(
       const err = await response.json().catch(() => ({}));
       return {
         success: false,
-        error: err.message || "No se pudo marcar la llegada",
+        error: err.message || "No se pudo marcar el avance del viaje",
       };
     }
     return { success: true };
   } catch (error: any) {
-    console.error("Error al marcar la llegada del chofer:", error);
+    console.error("Error al marcar el avance del viaje:", error);
     return {
       success: false,
       error: error.message || "Error de conexión con el servidor",

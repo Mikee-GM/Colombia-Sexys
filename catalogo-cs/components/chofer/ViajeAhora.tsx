@@ -2,10 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
-import { CheckCircle2, MapPin, Route } from "lucide-react";
+import { CheckCircle2, MapPin, Route, UserRoundCheck } from "lucide-react";
 import { toast } from "sonner";
 
-import { marcarLlegadaDelViaje } from "@/lib/actions/driver-portal";
+import {
+  marcarLlegadaDelViaje,
+  marcarRecogidaDelViaje,
+} from "@/lib/actions/driver-portal";
 import type { DriverPortalActiveTrip } from "@/lib/types";
 
 /**
@@ -18,8 +21,8 @@ import type { DriverPortalActiveTrip } from "@/lib/types";
  * El avance del viaje se marca desde aqui, sin tener que buscar el mensaje
  * correcto en el chat justo cuando va conduciendo. Los botones del bot siguen
  * valiendo: los dos caminos llaman al mismo servicio del backend, asi que no
- * pueden divergir. De momento esta la llegada; recogida y fin siguen solo en
- * el chat.
+ * pueden divergir. Estan la llegada y la recogida; finalizar sigue solo en el
+ * chat hasta que esa transicion tambien salga de alli.
  */
 export default function ViajeAhora({
   viaje,
@@ -31,14 +34,17 @@ export default function ViajeAhora({
   const router = useRouter();
   const [pendiente, startTransition] = useTransition();
 
-  function marcarLlegada(tripId: string) {
+  function avanzar(
+    accion: () => Promise<{ success: boolean; error?: string }>,
+    exito: string,
+  ) {
     startTransition(async () => {
-      const resultado = await marcarLlegadaDelViaje(tripId);
+      const resultado = await accion();
       if (!resultado.success) {
         toast.error(resultado.error);
         return;
       }
-      toast.success("Llegada marcada. Ya avisamos a la empleada.");
+      toast.success(exito);
       router.refresh();
     });
   }
@@ -87,24 +93,47 @@ export default function ViajeAhora({
         </div>
       </div>
 
-      {viaje.estado === "aceptado" ? (
-        <div className="px-4 py-4">
+      {viaje.estado === "aceptado" || viaje.estado === "llegado" ? (
+        <div className="flex flex-col gap-2.5 px-4 py-4">
+          {viaje.estado === "aceptado" && (
+            <button
+              type="button"
+              disabled={pendiente}
+              onClick={() =>
+                avanzar(
+                  () => marcarLlegadaDelViaje(viaje.id),
+                  "Llegada marcada. Ya avisamos a la empleada.",
+                )
+              }
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-500/10 py-4 text-xs font-bold uppercase tracking-wider text-emerald-300 transition-colors hover:bg-emerald-500 hover:text-black disabled:opacity-50"
+            >
+              <MapPin size={17} />
+              {pendiente ? "Marcando..." : "Ya llegué al punto de recogida"}
+            </button>
+          )}
           <button
             type="button"
             disabled={pendiente}
-            onClick={() => marcarLlegada(viaje.id)}
+            onClick={() =>
+              avanzar(
+                () => marcarRecogidaDelViaje(viaje.id),
+                "Trayecto iniciado.",
+              )
+            }
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-500/10 py-4 text-xs font-bold uppercase tracking-wider text-emerald-300 transition-colors hover:bg-emerald-500 hover:text-black disabled:opacity-50"
           >
-            <MapPin size={17} />
-            {pendiente ? "Marcando..." : "Ya llegué al punto de recogida"}
+            <UserRoundCheck size={17} />
+            {pendiente ? "Marcando..." : "La empleada ya subió"}
           </button>
-          <p className="mt-2.5 text-center text-[11px] text-gray-500">
-            Al marcarlo le avisamos a la empleada con los datos de tu coche.
+          <p className="text-center text-[11px] text-gray-500">
+            {viaje.estado === "aceptado"
+              ? "Al marcar la llegada le avisamos a la empleada con los datos de tu coche."
+              : "Al marcarlo se detiene el conteo de espera de la empleada."}
           </p>
         </div>
       ) : (
         <p className="px-4 py-3 text-center text-[11px] text-gray-400">
-          Los siguientes pasos del viaje se marcan desde tu chat de Telegram.
+          Finalizar el viaje se marca desde tu chat de Telegram.
         </p>
       )}
     </section>

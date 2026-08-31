@@ -952,64 +952,32 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     }
 
     // Actualizar el viaje a en_curso
-    const now = new Date();
-    await this.dataSource.getRepository(Viajes).update(trip.id, {
-      estado: 'en_curso',
-      horaInicioViaje: now,
-    });
-    trip.estado = 'en_curso';
-    trip.horaInicioViaje = now;
-
-    // Cancelar el timeout de espera de la empleada
-    this.servicesService.clearWaitTimeout(trip.servicioId);
-
-    await ctx.answerCbQuery(
-      '🟢 Pasajera a bordo. Iniciando trayecto al cliente.',
-    );
-
-    await this.notifyBossTripTopic(
-      ctx,
-      trip,
-      chofer,
-      'Empleada recogida',
-      `El chofer *${chofer.nombre}* ya recogió a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* e inició el trayecto al destino.`,
-    );
-
-    // Borrar mensajes previos del chat de la empleada ("chofer va en camino" y "chofer ha llegado")
-    const empChatId = trip?.servicio?.empleada?.usuario?.telegramChatId;
-
-    if (empChatId) {
-      const msgCaminoId = trip?.telegramEmpleadaMsgChoferCaminoId;
-      const msgLlegadoId = trip?.telegramEmpleadaMsgChoferLlegadoId;
-
-      if (msgCaminoId) {
-        try {
-          await ctx.telegram.deleteMessage(
-            empChatId,
-            parseInt(msgCaminoId, 10),
-          );
-        } catch (err) {
-          this.logger.error(
-            'Error al borrar mensaje "chofer va en camino" de la empleada:',
-            err,
-          );
-        }
-      }
-
-      if (msgLlegadoId) {
-        try {
-          await ctx.telegram.deleteMessage(
-            empChatId,
-            parseInt(msgLlegadoId, 10),
-          );
-        } catch (err) {
-          this.logger.error(
-            'Error al borrar mensaje "chofer ha llegado" de la empleada:',
-            err,
-          );
-        }
-      }
+    /*
+     * El negocio vive en DriverTripsService: cambiar el estado, cancelar el
+     * margen de espera de la modelo, avisar al grupo del jefe y retirar de su
+     * chat los avisos que dejaron de ser ciertos.
+     *
+     * Se llama desde aqui y desde el portal, de modo que los dos caminos hacen
+     * lo mismo. Debajo queda solo lo propio del chat: reescribir este mensaje
+     * con el destino y el boton del paso siguiente.
+     */
+    try {
+      const actualizado = await this.driverTripsService.marcarRecogida(
+        trip.id,
+        chofer.id,
+      );
+      trip.estado = actualizado.estado;
+      trip.horaInicioViaje = actualizado.horaInicioViaje;
+    } catch (err) {
+      this.logger.error('Error marcando la recogida de la empleada:', err);
+      await ctx.answerCbQuery(
+        err instanceof Error ? err.message : 'No se pudo marcar la recogida.',
+        { show_alert: true },
+      );
+      return;
     }
+
+    await ctx.answerCbQuery('Pasajera a bordo. Iniciando trayecto al cliente.');
 
     // Mostrar destino del cliente con botones de navegación
     const clientLat = trip.servicio.ubicacionClienteLat;

@@ -79,6 +79,70 @@ export class DriverTripsService {
   }
 
   /**
+   * La modelo ya subio al coche y arranca el trayecto al cliente.
+   *
+   * Cancela el margen de espera --ya no procede cobrarlo-- y retira del chat
+   * de la modelo los avisos que dejaron de ser ciertos: el de que el chofer va
+   * en camino y el de que ha llegado.
+   *
+   * Admite venir de `llegado` y tambien de `aceptado`, igual que antes: hay
+   * choferes que recogen sin llegar a marcar la llegada, y bloquearlo dejaria
+   * el viaje atascado.
+   */
+  async marcarRecogida(viajeId: string, choferId: string): Promise<Viajes> {
+    const trip = await this.cargarViajeDelChofer(viajeId, choferId);
+
+    if (trip.estado !== 'llegado' && trip.estado !== 'aceptado') {
+      throw new ConflictException(`El viaje está en estado: ${trip.estado}`);
+    }
+
+    const ahora = new Date();
+    await this.viajes.update(trip.id, {
+      estado: 'en_curso',
+      horaInicioViaje: ahora,
+    });
+    trip.estado = 'en_curso';
+    trip.horaInicioViaje = ahora;
+
+    // La espera deja de contar en cuanto sube al coche.
+    this.servicesService.clearWaitTimeout(trip.servicioId);
+
+    const chofer = await this.choferes.findOne({ where: { id: choferId } });
+
+    await this.avisarAlJefe(
+      trip,
+      chofer,
+      'Empleada recogida',
+      `El chofer *${chofer?.nombre ?? ''}* ya recogió a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* e inició el trayecto al destino.`,
+    );
+    await this.retirarAvisosDeCamino(trip);
+
+    return trip;
+  }
+
+  /**
+   * Quita del chat de la modelo los avisos que ya no son ciertos.
+   *
+   * Sin esto, "tu chofer ha llegado" se quedaba en su conversacion mucho
+   * despues de haber subido al coche, compitiendo con lo que si importa.
+   */
+  private async retirarAvisosDeCamino(trip: Viajes): Promise<void> {
+    const chatId = trip.servicio?.empleada?.usuario?.telegramChatId;
+    if (!chatId) return;
+
+    for (const id of [
+      trip.telegramEmpleadaMsgChoferCaminoId,
+      trip.telegramEmpleadaMsgChoferLlegadoId,
+    ]) {
+      if (!id) continue;
+      // `deleteMessage` ya se traga sus propios fallos: un mensaje que el
+      // usuario borro, o mas viejo de lo que Telegram deja retirar, no puede
+      // impedir que el viaje avance.
+      await this.telegram.deleteMessage(chatId, parseInt(id, 10));
+    }
+  }
+
+  /**
    * El chofer que hay detras del usuario de la sesion del portal.
    *
    * El guard del portal deja el id de usuario, no el de chofer, y las
