@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ClipboardList, FileWarning, LogOut, MapPinned, ShieldCheck, Trophy, UsersRound } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
 import SessionKeeper from "@/components/auth/session-keeper";
+import ComprobarVersion from "@/components/ui/ComprobarVersion";
 import { broadcastLogout } from "@/lib/client-session";
 
 // `corto` es la etiqueta de la barra inferior del movil. Con el texto largo,
@@ -32,6 +33,9 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
   return (
     <div className="min-h-screen bg-black font-body text-white md:flex">
       <SessionKeeper />
+      {/* El panel tambien se instala en el telefono, y alli una version vieja
+          puede quedarse cargada dias. */}
+      <ComprobarVersion />
       <aside className="hidden w-64 shrink-0 border-r border-zinc-800 bg-[#050505] md:flex md:flex-col">
         <div className="border-b border-zinc-800 p-7">
           <Image src="/logo-horizontal.webp" alt="Colombia Sexys" width={190} height={70} className="h-auto w-full" />

@@ -296,6 +296,26 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Da por cobrado el importe final de un servicio de duracion abierta.
+   *
+   * Lo escribia a mano el manejador que valida el comprobante de transferencia,
+   * y no es un detalle: `cobroFinalPendiente` es exactamente el campo que lee
+   * la finalizacion del viaje para decidir si la liquidacion queda cerrada o
+   * transporte_pendiente. Una decision de dinero no puede vivir dentro de un
+   * manejador de chat, donde nadie la va a buscar.
+   *
+   * Devuelve si de verdad cambio algo: llamarlo dos veces --dos comprobantes
+   * seguidos del mismo cliente-- no debe dar por cobrado nada nuevo.
+   */
+  async marcarCobroFinalRecibido(servicioId: string): Promise<boolean> {
+    const resultado = await this.serviciosRepository.update(
+      { id: servicioId, cobroFinalPendiente: true },
+      { cobroFinalPendiente: false },
+    );
+    return resultado.affected === 1;
+  }
+
   private async recordAgencyMessage(
     service: Servicios,
     message: string,

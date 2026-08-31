@@ -4019,9 +4019,9 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         return;
       }
 
-      await this.serviciosRepository.update(servicio.id, {
-        cobroFinalPendiente: false,
-      });
+      // El cierre del cobro vive en ServicesService: es lo que decide despues
+      // el estado de liquidacion del servicio, y no puede quedarse aqui.
+      await this.servicesService.marcarCobroFinalRecibido(servicio.id);
       await ctx.reply(
         '✅ ¡Comprobante verificado, todo quedó pagado! Gracias mi amor 😘',
       );
