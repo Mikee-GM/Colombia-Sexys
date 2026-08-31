@@ -37,6 +37,7 @@ import { DriverShiftsModule } from './driver-shifts/driver-shifts.module';
 import { ClientAlertsModule } from './client-alerts/client-alerts.module';
 import { ServiceExtensionsModule } from './service-extensions/service-extensions.module';
 import { UserPreferencesModule } from './user-preferences/user-preferences.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -106,6 +107,18 @@ import { UserPreferencesModule } from './user-preferences/user-preferences.modul
           .min(10_000)
           .default(60_000),
         ONBOARDING_REMINDER_HOURS: Joi.number().positive().default(3),
+        /*
+         * Avisos push del navegador. Opcionales a proposito: sin ellas el canal
+         * queda inactivo y se registra al arrancar, pero el backend levanta. Un
+         * entorno de desarrollo sin configurar tiene que poder arrancar, y un
+         * aviso que no sale pesa menos que un backend que no inicia.
+         *
+         * Se generan una sola vez con `npx web-push generate-vapid-keys`.
+         * VAPID_SUBJECT es un `mailto:` de contacto que exige el protocolo.
+         */
+        VAPID_PUBLIC_KEY: Joi.string().allow('').optional(),
+        VAPID_PRIVATE_KEY: Joi.string().allow('').optional(),
+        VAPID_SUBJECT: Joi.string().allow('').optional(),
       }),
     }),
     TypeOrmModule.forRootAsync({
@@ -178,6 +191,7 @@ import { UserPreferencesModule } from './user-preferences/user-preferences.modul
     ClientAlertsModule,
     ServiceExtensionsModule,
     UserPreferencesModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [

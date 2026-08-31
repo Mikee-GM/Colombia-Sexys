@@ -26,6 +26,7 @@ import { Servicios } from './entities/service.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { Choferes } from '../drivers/entities/driver.entity';
@@ -203,6 +204,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly extrasServicioRepository: Repository<ExtrasServicio>,
     @InjectRepository(ServiceParticipant)
     private readonly serviceParticipantsRepository: Repository<ServiceParticipant>,
+    // Los avisos push, que salen aparte de los de Telegram porque el problema
+    // que resuelven es justo que el de Telegram llega y nadie lo ve.
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private estimatedEnd(service: Servicios): Date | null {
@@ -544,6 +548,19 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'Error notifying jefes via Telegram for new service:',
         telegramErr,
       );
+    }
+
+    /*
+     * El aviso push va en su propio try/catch, como los dos de arriba: son tres
+     * canales independientes y el fallo de uno no dice nada de los otros ni
+     * puede impedir que el servicio quede creado.
+     */
+    try {
+      await this.notificationsService.notificarJefeServicioPendiente(
+        servicioGuardado.id,
+      );
+    } catch (pushErr) {
+      this.logger.error('Error enviando el aviso push del servicio:', pushErr);
     }
 
     return servicioGuardado;

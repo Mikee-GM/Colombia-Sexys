@@ -1,3 +1,4 @@
+import AvisosPush from "@/components/jefe/AvisosPush";
 import TeamOperations from "@/components/jefe/TeamOperations";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import { getMyWorkShift } from "@/lib/actions/work-shift";
@@ -18,6 +19,11 @@ export default async function JefePage({ searchParams }: PageProps) {
       {/* Cerrar la jornada avisa al panel de admin; no es lo mismo que estar ocupado. */}
       <div className="mb-6 max-w-xs">
         <WorkShiftToggle initialStatus={workShift} />
+      </div>
+      {/* La suscripcion es por dispositivo, asi que la tarjeta aparece en cada
+          equipo hasta que se activa en ese. */}
+      <div className="mb-6 max-w-md">
+        <AvisosPush />
       </div>
       <TeamOperations
         initialEmployees={employees}

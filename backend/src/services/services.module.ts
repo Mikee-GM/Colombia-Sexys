@@ -22,6 +22,7 @@ import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entit
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
 import { DisciplineModule } from '../discipline/discipline.module';
 import { UploadModule } from '../upload/upload.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 import { GodEyeService } from './god-eye.service';
 import { GodEyeController } from './god-eye.controller';
@@ -54,6 +55,7 @@ import { ServiceScheduleScheduler } from './service-schedule.scheduler';
     TransportOperationsModule,
     DisciplineModule,
     UploadModule,
+    NotificationsModule,
   ],
   controllers: [ServicesController, GodEyeController],
   providers: [ServicesService, GodEyeService, ServiceScheduleScheduler],
