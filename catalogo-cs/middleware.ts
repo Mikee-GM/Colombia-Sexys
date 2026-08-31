@@ -116,7 +116,21 @@ export async function middleware(request: NextRequest) {
      */
     const apiPath = pathname.replace(/^\/api/, BACKEND_API_PREFIX);
     const targetUrl = new URL(`${apiPath}${search}`, backendUrl());
-    return NextResponse.rewrite(targetUrl);
+    /*
+     * La cookie se rearma antes de reenviarla, igual que hacen la renovacion y
+     * la consulta de rol de mas abajo.
+     *
+     * Las cookies de sesion van firmadas por Express, que las escribe como
+     * `s%3A<valor>.<firma>`, y Next les añade su propia capa de codificacion al
+     * guardarlas. Reenviar la cabecera cruda del navegador le entrega al
+     * backend ese texto con la capa de mas: `cookie-parser` no reconoce la
+     * firma, `signedCookies` llega vacio y el guard responde 401 aunque la
+     * sesion acabe de empezar. `buildCookieHeader` la reconstruye desde las
+     * cookies ya decodificadas por Next, que es lo que Express espera.
+     */
+    const cabeceras = new Headers(request.headers);
+    cabeceras.set("cookie", buildCookieHeader(request));
+    return NextResponse.rewrite(targetUrl, { request: { headers: cabeceras } });
   }
 
   // 2. Auth checks for /admin and /jefe routes
