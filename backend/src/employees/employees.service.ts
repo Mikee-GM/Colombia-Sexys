@@ -509,7 +509,17 @@ export class EmployeesService {
     }
 
     // Ejecutar transacción si hay fotos extras o servicios extras a actualizar
-    const { fotosExtra, extras, ...camposAActualizar } = updateEmployeeDto;
+    /*
+     * El correo y la contraseña no son columnas de `empleadas`: viven en su
+     * fila de `usuarios`. Se sacan aparte porque, mezclados con el resto,
+     * acabarian en un `update` sobre una tabla que no los tiene.
+     *
+     * Poder cambiarlos desde el panel es lo que permite arreglar las cuentas
+     * creadas antes, cuando el alta les inventaba una contraseña igual para
+     * todas.
+     */
+    const { fotosExtra, extras, email, password, ...camposAActualizar } =
+      updateEmployeeDto;
 
     // A. Si cambia la foto de perfil, eliminar la anterior de R2
     if (
@@ -568,6 +578,28 @@ export class EmployeesService {
             : null;
       }
       await manager.update(Empleadas, id, updateData);
+
+      // 1.b Credenciales, que viven en la fila de usuario de esta empleada.
+      if ((email || password) && empleada.usuarioId) {
+        const credenciales: Partial<Usuarios> = {};
+        if (email) {
+          const ocupado = await manager.findOne(Usuarios, {
+            where: { email, id: Not(empleada.usuarioId) },
+            select: { id: true },
+          });
+          if (ocupado) {
+            throw new ConflictException(
+              `El correo electrónico ${email} ya está registrado`,
+            );
+          }
+          credenciales.email = email;
+        }
+        if (password) {
+          const salt = await bcrypt.genSalt(10);
+          credenciales.passwordHash = await bcrypt.hash(password, salt);
+        }
+        await manager.update(Usuarios, empleada.usuarioId, credenciales);
+      }
 
       // 2. Actualizar fotos extras si se especifican
       if (fotosExtra !== undefined) {

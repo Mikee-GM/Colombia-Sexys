@@ -94,6 +94,10 @@ export default function ModelModal({
   const [form, setForm] = useState<ModeloPayload>(
     modelo
       ? {
+          // El correo no viaja al panel, asi que en edicion se deja vacio:
+          // en blanco significa "no lo cambies".
+          email: "",
+          password: "",
           nombreReal: modelo.nombreReal || "",
           nombreArtistico: modelo.nombreArtistico || "",
           descripcion: modelo.descripcion,
@@ -113,6 +117,8 @@ export default function ModelModal({
           extras: modelo.extras ? [...modelo.extras] : [],
         }
       : {
+          email: "",
+          password: "",
           nombreReal: "",
           nombreArtistico: "",
           descripcion: "",
@@ -410,6 +416,19 @@ export default function ModelModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Solo al crear: sin credenciales la cuenta nace sin forma de entrar.
+    if (!modelo) {
+      if (!form.email.trim()) {
+        showNotification("Escribe el correo con el que entrará a la aplicación.", "error");
+        return;
+      }
+      if (!form.password || form.password.trim().length < 8) {
+        showNotification("La contraseña debe tener al menos 8 caracteres.", "error");
+        return;
+      }
+    }
+
     if (!form.nombreReal.trim() || !form.nombreArtistico.trim()) {
       showNotification("El nombre real y el artistico son obligatorios.", "error");
       return;
@@ -762,6 +781,43 @@ export default function ModelModal({
                   placeholder="Ej: Sofia Velez"
                   required
                 />
+              </div>
+
+              {/*
+                Acceso a la aplicacion.
+
+                Antes esto no se preguntaba y el alta inventaba un correo y una
+                contraseña igual para todas, lo que en cuanto se les permitio
+                entrar dejaba una cuenta abierta por modelo. Al editar se dejan
+                vacios: en blanco no se toca lo que ya tiene.
+              */}
+              <div className="mb-6 border border-[#C5A55A]/25 bg-[#C5A55A]/[0.04] p-4">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
+                  Acceso a la aplicación
+                </p>
+                <p className="mb-4 text-xs text-zinc-500">
+                  {modelo
+                    ? "Con esto entra a su portal desde el teléfono. Deja los campos vacíos para no cambiar nada."
+                    : "Con esto entrará a su portal desde el teléfono. Anótalos para dárselos."}
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <InputField
+                    label="Correo"
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder={modelo ? "Sin cambios" : "sofia@colombiasexys.com"}
+                    required={!modelo}
+                  />
+                  <InputField
+                    label={modelo ? "Nueva contraseña" : "Contraseña"}
+                    type="text"
+                    value={form.password || ""}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    placeholder={modelo ? "Sin cambios" : "Mínimo 8 caracteres"}
+                    required={!modelo}
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

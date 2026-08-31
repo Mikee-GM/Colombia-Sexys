@@ -55,6 +55,10 @@ export interface Modelo {
 }
 
 export interface ModeloPayload {
+  /** Credenciales con las que entra a su portal desde la app web. */
+  email: string;
+  /** Solo al crear, o al cambiarla desde la edicion. Vacio deja la que tiene. */
+  password?: string;
   nombreReal: string;
   nombreArtistico: string;
   descripcion: string;

@@ -40,14 +40,19 @@ export async function getModeloAction(id: string): Promise<Modelo> {
 export async function createModeloAction(
   payload: ModeloPayload,
 ): Promise<Modelo> {
-  const cleanName = payload.nombreArtistico
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
   const slug = `${payload.nombreArtistico.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now().toString().slice(-4)}`;
 
+  /*
+   * Las credenciales las escribe quien da de alta.
+   *
+   * Antes se inventaban aqui: un correo derivado del nombre artistico y la
+   * MISMA contraseña para todas. Mientras el login rechazaba el rol `empleada`
+   * daba igual, pero en cuanto se les permitio entrar con correo y contraseña
+   * eso se convirtio en una cuenta abierta por cada modelo.
+   */
   const createDto = {
-    email: `${cleanName}-${Date.now().toString().slice(-6)}@chambapasteles.com`,
-    password: "Password12345!",
+    email: payload.email.trim().toLowerCase(),
+    password: payload.password,
     nombreReal: payload.nombreReal,
     nombreArtistico: payload.nombreArtistico,
     slugCatalogo: slug,
@@ -89,6 +94,12 @@ export async function updateModeloAction(
   payload: ModeloPayload,
 ): Promise<Modelo> {
   const updateDto = {
+    // El correo siempre; la contraseña solo si se escribio una nueva, para no
+    // pisar la que ya tiene cada vez que se edita otra cosa.
+    ...(payload.email?.trim()
+      ? { email: payload.email.trim().toLowerCase() }
+      : {}),
+    ...(payload.password?.trim() ? { password: payload.password.trim() } : {}),
     nombreReal: payload.nombreReal,
     nombreArtistico: payload.nombreArtistico,
     fotoPerfilUrl: payload.fotoPrincipal,
