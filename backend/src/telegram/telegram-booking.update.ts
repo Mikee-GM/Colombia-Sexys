@@ -7,7 +7,15 @@ import {
   BeforeApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Update, Ctx, Action, On, Hears, InjectBot } from 'nestjs-telegraf';
+import {
+  Update,
+  Ctx,
+  Action,
+  Next,
+  On,
+  Hears,
+  InjectBot,
+} from 'nestjs-telegraf';
 import { Context, Markup, Telegraf } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, ILike } from 'typeorm';
@@ -5696,8 +5704,32 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     }
   }
 
+  /**
+   * Pasos de sesion que pertenecen a otros manejadores de texto.
+   *
+   * Este manejador atrapa todo el texto, y no cedia el paso nunca, asi que los
+   * manejadores registrados despues --el del chofer-- no llegaban a ejecutarse
+   * jamas: un chofer que calificaba con una o dos estrellas escribia su
+   * comentario y se lo comia este flujo. Telegraf corta la cadena en cuanto un
+   * manejador no llama a `next`.
+   *
+   * Se ceden por paso y no por rol porque el paso es lo que declara de quien es
+   * la conversacion en ese momento, que es justo lo que hace el manejador de
+   * autenticacion desde siempre.
+   */
+  private static readonly PASOS_AJENOS = new Set([
+    'AWAITING_DRIVER_RATING_COMMENT',
+    'AWAITING_DRIVER_CONDUCT_DESCRIPTION',
+  ]);
+
   @On('text')
-  async onMessage(@Ctx() ctx: BotContext) {
+  async onMessage(@Ctx() ctx: BotContext, @Next() next: () => Promise<void>) {
+    const pasoActual = (ctx.session as { step?: string } | undefined)?.step;
+    if (pasoActual && TelegramBookingUpdate.PASOS_AJENOS.has(pasoActual)) {
+      await next();
+      return;
+    }
+
     /*
      * El formulario de registro manual va primero.
      *
