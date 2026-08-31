@@ -10,6 +10,10 @@ import {
   isRedirectError,
 } from "@/lib/auth";
 import { getApiBaseUrl } from "@/lib/api-server";
+import { inicioParaRol } from "@/lib/roles";
+
+/** Los roles que tienen a donde ir. Cualquier otro no entra. */
+const INICIO_CONOCIDO = ["admin", "jefe", "empleada", "chofer"];
 
 /**
  * Inicio de sesion.
@@ -43,11 +47,23 @@ export async function loginAction(email: string, password: string) {
       throw new Error(data.message || "Credenciales incorrectas");
     }
 
-    if (!data.user || !["admin", "jefe"].includes(data.user.rol)) {
-      return { success: false, error: "Tu cuenta no tiene acceso a este panel" };
+    /*
+     * Entran los cuatro roles, no solo admin y jefe.
+     *
+     * Las modelos y los choferes ya tenian correo y contraseña --se les asignan
+     * al darlos de alta-- pero no podian usarlos: su unica via era el enlace
+     * con token del bot, que hay que rehacer cada vez que se cierra la sesion.
+     * Con esto la aplicacion instalada en su telefono se arregla sola, porque
+     * si caduca la sesion basta con volver a entrar.
+     *
+     * El destino sale de `inicioParaRol`, que es la fuente unica: un rol
+     * desconocido acaba en el login, no en el panel.
+     */
+    if (!data.user?.rol || !INICIO_CONOCIDO.includes(data.user.rol)) {
+      return { success: false, error: "Tu cuenta no tiene acceso a la aplicación" };
     }
     await applyBackendSetCookies(response);
-    destino = data.user.rol === "jefe" ? "/jefe" : "/admin/dashboard";
+    destino = inicioParaRol(data.user.rol);
   } catch (error: unknown) {
     console.error("loginAction error:", error);
     return {

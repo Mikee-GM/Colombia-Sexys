@@ -4,6 +4,7 @@ import {
   getMyWeeklyPhotos,
 } from "@/lib/actions/employee-portal";
 import EmployeePortalView from "@/components/empleada/EmployeePortalView";
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyWorkShift } from "@/lib/actions/work-shift";
 
@@ -40,6 +41,17 @@ export default async function EmployeePortalPage({ searchParams }: PageProps) {
    * tiene permiso para ver su portal.
    */
   const sesion = await getCurrentUser();
+
+  /*
+   * Sin sesion y sin token no hay nada que mostrar, y la pantalla de "acceso no
+   * disponible" era un callejon sin salida: obligaba a volver a Telegram a
+   * pedir un enlace nuevo. Ahora se manda al login, donde puede entrar con su
+   * correo y su contraseña. Es lo que hace que la aplicacion instalada se
+   * arregle sola cuando caduca la sesion.
+   */
+  if (!sesion && !token) {
+    redirect("/admin");
+  }
   const workShift = sesion ? await getMyWorkShift() : null;
 
   if (!result.success || !result.data) {
