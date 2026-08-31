@@ -1593,6 +1593,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    /*
+     * El aviso push a la modelo estaba solo en la rama de arriba --citas
+     * programadas y servicios encadenados-- asi que la aceptacion normal, que
+     * es la que mas ocurre, no le avisaba nunca. Va tambien aqui.
+     */
+    await this.avisarEmpleadaDeServicio(servicio, false);
+
     return {
       ...servicio,
       uberLink,
