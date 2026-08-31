@@ -193,6 +193,14 @@ interface SessionData {
    * inventarse un acuse suelto, que es justo lo que delata al bot.
    */
   quitarTecladoPendiente?: boolean;
+  /**
+   * Ya se le dijo una vez que estamos contactando a la modelo.
+   *
+   * El aviso tiene sentido antes de que ella "aparezca" por primera vez. A
+   * partir de ahi la conversacion ya esta en marcha y repetirlo en cada
+   * mensaje delata al bot, que es justo lo contrario de lo que busca.
+   */
+  avisoDeEsperaEnviado?: boolean;
   humanTakeover?: boolean;
   iaActiva?: boolean;
   /**
@@ -6713,31 +6721,36 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
         return;
       } else {
         /*
-         * Aviso de espera, solo al abrir un buffer nuevo.
+         * Aviso de espera, una sola vez por conversacion.
          *
          * El mensaje del cliente espera hasta 20 s antes de llegar a la IA, y
-         * en ese intervalo no salia nada: el cliente escribia y se quedaba
-         * mirando un silencio sin saber si le habian leido. Esto ocupa ese
-         * hueco y ademas sostiene la ficcion de la agencia, que es lo que se
-         * busca: se esta contactando a la modelo, no respondiendo un robot.
+         * en ese intervalo no salia nada: escribia y se quedaba mirando un
+         * silencio sin saber si le habian leido. Esto ocupa ese hueco y
+         * sostiene la ficcion de la agencia: se esta contactando a la modelo.
          *
-         * Va solo aqui y no en la rama de arriba a proposito: si saliera
-         * tambien al agrupar, el cliente que manda tres mensajes seguidos
-         * recibiria tres avisos identicos.
+         * La marca en sesion es lo que impide repetirlo. Al principio salia
+         * cada vez que se abria una ventana de agrupacion, o sea practicamente
+         * en cada mensaje, y un acuse identico una y otra vez delata al bot,
+         * que es justo lo contrario de lo que se busca. Tiene sentido antes de
+         * que ella "aparezca" por primera vez; despues la conversacion ya esta
+         * en marcha y contesta ella.
          *
          * No pasa por la IA porque tiene que ser inmediato; una llamada al
          * modelo tardaria justo lo que este mensaje viene a tapar. Y no se
          * bloquea el flujo si Telegram falla: es un acuse, no el servicio.
          */
-        await ctx
-          .reply(
-            `Por favor espera un momento en lo que nos ponemos en contacto con ${empleada.nombreArtistico}.`,
-          )
-          .catch((err: unknown) =>
-            this.logger.warn(
-              `No se pudo enviar el aviso de espera a ${telegramId}: ${String(err)}`,
-            ),
-          );
+        if (ctx.session && !ctx.session.avisoDeEsperaEnviado) {
+          ctx.session.avisoDeEsperaEnviado = true;
+          await ctx
+            .reply(
+              `Por favor espera un momento en lo que nos ponemos en contacto con ${empleada.nombreArtistico}.`,
+            )
+            .catch((err: unknown) =>
+              this.logger.warn(
+                `No se pudo enviar el aviso de espera a ${telegramId}: ${String(err)}`,
+              ),
+            );
+        }
 
         const timer = setTimeout(() => {
           void this.flushClientMessageBuffer(bufferKey, empleada);

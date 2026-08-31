@@ -425,6 +425,24 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     if (competing.length > 0) {
       this.warnAboutCompetingRequests(reserved, competing.length + 1);
     }
+
+    /*
+     * El aviso push al jefe vive aqui y no en `create`, que es por donde entra
+     * solo el panel. La reserva que hace un cliente desde el bot llama directa
+     * a este metodo, asi que el camino principal --el normal, el que mas
+     * ocurre-- se quedaba sin aviso: solo llegaba el de prueba.
+     *
+     * En su propio try/catch: un aviso que falla no puede deshacer una reserva
+     * que ya esta hecha.
+     */
+    try {
+      await this.notificationsService.notificarJefeServicioPendiente(
+        reserved.id,
+      );
+    } catch (pushErr) {
+      this.logger.error('Error enviando el aviso push del servicio:', pushErr);
+    }
+
     return reserved;
   }
 
@@ -584,19 +602,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    /*
-     * El aviso push va en su propio try/catch, como los dos de arriba: son tres
-     * canales independientes y el fallo de uno no dice nada de los otros ni
-     * puede impedir que el servicio quede creado.
-     */
-    try {
-      await this.notificationsService.notificarJefeServicioPendiente(
-        servicioGuardado.id,
-      );
-    } catch (pushErr) {
-      this.logger.error('Error enviando el aviso push del servicio:', pushErr);
-    }
-
+    // El aviso push sale de `reserveNext`, que es por donde pasan tanto esta
+    // via como la reserva que hace el cliente desde el bot.
     return servicioGuardado;
   }
 
