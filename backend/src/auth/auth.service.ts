@@ -109,6 +109,45 @@ export class AuthService {
    * tokens, sesion registrada, expiraciones -- es identico a un login normal,
    * asi que la sesion resultante no es mas larga ni mas poderosa.
    */
+  /**
+   * Cambia el token con el que se abre un portal por una sesion normal.
+   *
+   * Existe para que los portales se puedan instalar en el telefono. Se entra a
+   * ellos desde una Mini App de Telegram, que trae el token en la URL; una
+   * aplicacion instalada arranca desde su icono, sin token y sin nada que la
+   * identifique, asi que hasta ahora no habia forma de abrirla dos veces. Con
+   * la sesion en cookie si la hay, y ademas es lo que necesitan los avisos
+   * push, que no existen dentro del webview de Telegram.
+   *
+   * Es la misma sustitucion que hace `panel-access`: una prueba de identidad
+   * por otra equivalente, porque el token solo se emitio contra un chat ya
+   * vinculado a esa cuenta.
+   *
+   * Se acota a empleada y chofer a proposito. El token viaja en una URL --y las
+   * URL acaban en los registros del proxy, en el historial y en la cabecera
+   * Referer--, asi que este canje no puede ser una puerta para abrir sesion de
+   * jefe o de admin.
+   */
+  async issueSessionFromPortalToken(
+    token: string,
+    deviceId: string,
+  ): Promise<AuthTokens> {
+    // Comprueba firma, tipo, sesion viva y cuenta activa.
+    const { sub } = await this.verifyPortalToken(token);
+
+    const user = await this.usuariosRepository.findOne({ where: { id: sub } });
+    if (!user) {
+      throw new UnauthorizedException('Token de portal inválido o expirado');
+    }
+    if (user.rol !== 'empleada' && user.rol !== 'chofer') {
+      throw new UnauthorizedException(
+        'Este acceso es solo para los portales de empleada y chofer',
+      );
+    }
+
+    return this.issueSessionFor(user, deviceId);
+  }
+
   async issueSessionFor(user: Usuarios, deviceId: string): Promise<AuthTokens> {
     if (!user.activo) {
       throw new UnauthorizedException('Usuario inactivo');

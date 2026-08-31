@@ -16,6 +16,7 @@ import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { PanelAccessService } from './panel-access.service';
 import { PanelAccessDto } from './dto/panel-access.dto';
+import { PortalSessionDto } from './dto/portal-session.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CsrfGuard } from './guards/csrf.guard';
@@ -138,6 +139,36 @@ export class AuthController {
     this.setAuthCookies(response, result);
 
     return { user: result.user, redirectPath };
+  }
+
+  /**
+   * Canjea el token con el que se abre un portal por una sesion en cookie.
+   *
+   * Lo llama el middleware del front la primera vez que alguien entra al portal
+   * desde Telegram; a partir de ahi la aplicacion instalada vive de la cookie.
+   * Se limita el ritmo igual que el login y que `panel-access`, porque tambien
+   * abre sesion.
+   */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('portal-session')
+  @HttpCode(HttpStatus.OK)
+  async portalSession(
+    @Body() dto: PortalSessionDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const deviceId =
+      request.headers['x-device-id']?.toString().slice(0, 128) ||
+      request.headers['user-agent']?.slice(0, 128) ||
+      'portal-link';
+
+    const result = await this.authService.issueSessionFromPortalToken(
+      dto.token,
+      deviceId,
+    );
+    this.setAuthCookies(response, result);
+
+    return { user: result.user };
   }
 
   @Get('me')

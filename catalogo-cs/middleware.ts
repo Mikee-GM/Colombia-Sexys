@@ -92,8 +92,71 @@ async function rolDeLaSesion(cookieHeader: string): Promise<string | null> {
   }
 }
 
+/**
+ * Cambia el token con el que se abre un portal por una sesion en cookie.
+ *
+ * Los portales de empleada y chofer se abren desde una Mini App de Telegram,
+ * que trae el token en la URL. Una aplicacion instalada arranca desde su icono,
+ * sin token, asi que sin esto no se podia abrir dos veces; y los avisos push
+ * tampoco funcionan dentro del webview de Telegram, solo en la app instalada.
+ *
+ * Devuelve las cookies nuevas, o `null` si el canje falla. En ese caso no se
+ * toca nada y la pagina sigue resolviendo el token por su cuenta, como hasta
+ * ahora: un enlace viejo tiene que seguir abriendo el portal.
+ */
+async function canjearTokenDePortal(
+  request: NextRequest,
+  token: string,
+): Promise<ParsedCookie[] | null> {
+  const destino = new URL(`${BACKEND_API_PREFIX}/auth/portal-session`, backendUrl());
+
+  try {
+    const response = await fetch(destino, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/json",
+        // Identifica el dispositivo en la sesion, igual que en el login.
+        "user-agent": request.headers.get("user-agent") ?? "portal",
+      },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) return null;
+
+    const cookies = parseSetCookieHeaders(response);
+    return cookies.length > 0 ? cookies : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  /*
+   * 0. Canje del token de portal.
+   *
+   * Solo la primera vez: si ya hay cookie de acceso, la sesion esta abierta y
+   * el token de la URL sobra. Al canjear se redirige a la misma ruta sin el
+   * token, porque una URL con credencial acaba en el historial del telefono,
+   * en los registros del proxy y en la cabecera Referer de cualquier recurso.
+   */
+  if (pathname === "/empleada/portal" || pathname === "/chofer/portal") {
+    const tokenDePortal = request.nextUrl.searchParams.get("token");
+    if (tokenDePortal && !request.cookies.has(ACCESS_COOKIE)) {
+      const canjeadas = await canjearTokenDePortal(request, tokenDePortal);
+      if (canjeadas) {
+        const limpia = new URL(request.nextUrl);
+        limpia.searchParams.delete("token");
+        const respuesta = NextResponse.redirect(limpia);
+        for (const { name, value, options } of canjeadas) {
+          respuesta.cookies.set(name, value, options);
+        }
+        return respuesta;
+      }
+    }
+    return NextResponse.next();
+  }
 
   // 1. Proxy /api/* requests to NestJS backend (excluding Next.js internal API routes)
   if (
@@ -246,5 +309,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/:path*", "/admin/:path*", "/jefe/:path*"],
+  matcher: ["/api/:path*", "/admin/:path*", "/jefe/:path*", "/empleada/portal", "/chofer/portal"],
 };
