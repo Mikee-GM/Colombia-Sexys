@@ -237,7 +237,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     try {
       await this.notificationsService.notificar(usuarioId, {
-        titulo: esProgramado ? 'Tienes una cita agendada' : 'Tienes un servicio',
+        titulo: esProgramado
+          ? 'Tienes una cita agendada'
+          : 'Tienes un servicio',
         cuerpo: 'Toca para ver los detalles en tu portal.',
         url: '/empleada/portal',
         tag: `servicio-${servicio.id}`,

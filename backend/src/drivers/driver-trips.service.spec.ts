@@ -88,9 +88,9 @@ describe('DriverTripsService.marcarLlegada', () => {
   it('no deja que un chofer toque el viaje de otro', async () => {
     const { service, update } = montar(viaje());
 
-    await expect(service.marcarLlegada('viaje-1', AJENO)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.marcarLlegada('viaje-1', AJENO),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -99,18 +99,18 @@ describe('DriverTripsService.marcarLlegada', () => {
     // portal a la vez-- volveria a avisar a la modelo de una llegada ya dada.
     const { service, update } = montar(viaje({ estado: 'en_curso' }));
 
-    await expect(service.marcarLlegada('viaje-1', CHOFER)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(
+      service.marcarLlegada('viaje-1', CHOFER),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(update).not.toHaveBeenCalled();
   });
 
   it('un fallo de Telegram no deshace la llegada', async () => {
     const { service, update } = montar(viaje());
     // El chofer ya esta fisicamente alli: el viaje avanza igual.
-    (service as unknown as { telegram: { sendMessage: jest.Mock } }).telegram.sendMessage.mockRejectedValue(
-      new Error('Telegram caido'),
-    );
+    (
+      service as unknown as { telegram: { sendMessage: jest.Mock } }
+    ).telegram.sendMessage.mockRejectedValue(new Error('Telegram caido'));
 
     const resultado = await service.marcarLlegada('viaje-1', CHOFER);
 

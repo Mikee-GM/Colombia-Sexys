@@ -203,7 +203,8 @@ export class DriverTripsService {
     if (!servicio) return;
 
     const grupoId =
-      servicio.jefe?.grupoTelegramId || servicio.empleada?.jefe?.grupoTelegramId;
+      servicio.jefe?.grupoTelegramId ||
+      servicio.empleada?.jefe?.grupoTelegramId;
     const destino =
       grupoId ||
       servicio.jefe?.telegramChatId ||
