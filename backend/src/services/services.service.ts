@@ -2437,6 +2437,32 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ofertaExpiraEn: new Date(Date.now() + DISPATCH_OFFER_TTL_MS),
     });
 
+    /*
+     * Aviso push de la oferta.
+     *
+     * Es el aviso que mas cuesta perderse de todo el sistema: la oferta caduca
+     * sola, y un chofer que no la ve a tiempo deja el viaje sin cubrir. Hasta
+     * ahora dependia por completo de que Telegram le sonara, que es justo el
+     * problema del que se partio.
+     *
+     * En su propio try/catch: el viaje ya esta ofrecido y el mensaje del chat
+     * ya salio; que falle el push no puede deshacer nada de eso.
+     */
+    try {
+      await this.notificationsService.notificar(nearestDriver.usuarioId, {
+        titulo: 'Viaje disponible',
+        cuerpo: 'Tienes una oferta que caduca pronto. Toca para responder.',
+        url: '/chofer/portal',
+        tag: `oferta-${viajeId}`,
+        requireInteraction: true,
+      });
+    } catch (pushErr) {
+      this.logger.error(
+        'Error enviando el aviso push de la oferta al chofer:',
+        pushErr,
+      );
+    }
+
     const timeout = setTimeout(() => {
       void (async () => {
         try {
