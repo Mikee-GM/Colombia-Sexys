@@ -3,7 +3,27 @@ import { getBackendCookieHeader, getCsrfToken } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+/**
+ * Canales que este proxy sabe abrir.
+ *
+ * Estaba fijado al de jefes, asi que los portales de modelo y chofer no tenian
+ * por donde enterarse de nada: se quedaban con los datos del primer render y
+ * en una aplicacion instalada eso se ve como una pantalla congelada, porque no
+ * hay ni un gesto de recargar.
+ */
+const CANALES: Record<string, string> = {
+  jefes: "/realtime/sse/jefes",
+  empleada: "/realtime/sse/empleada",
+  chofer: "/realtime/sse/chofer",
+};
+
+export async function GET(request: Request) {
+  const canal = new URL(request.url).searchParams.get("canal") ?? "jefes";
+  const ruta = CANALES[canal];
+  if (!ruta) {
+    return new Response("Canal desconocido", { status: 400 });
+  }
+
   const cookie = await getBackendCookieHeader();
   if (!cookie) {
     return new Response("No autorizado", { status: 401 });
@@ -11,7 +31,7 @@ export async function GET() {
 
   const csrfToken = await getCsrfToken();
   const apiBaseUrl = getApiBaseUrl();
-  const backendUrl = `${apiBaseUrl}/realtime/sse/jefes`;
+  const backendUrl = `${apiBaseUrl}${ruta}`;
 
   try {
     const headers: Record<string, string> = {
