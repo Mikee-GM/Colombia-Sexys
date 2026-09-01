@@ -13,6 +13,7 @@ import { DriverTripsService } from './driver-trips.service';
 import { TelegramModule } from '../telegram/telegram.module';
 import { ServicesModule } from '../services/services.module';
 import { TransportOperationsModule } from '../transport-operations/transport-operations.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { AiModule } from '../ai/ai.module';
 
 @Module({
@@ -26,6 +27,7 @@ import { AiModule } from '../ai/ai.module';
     forwardRef(() => TelegramModule),
     forwardRef(() => ServicesModule),
     TransportOperationsModule,
+    NotificationsModule,
     AiModule,
   ],
   controllers: [DriversController, DriverPortalController],
