@@ -43,6 +43,9 @@ describe('DisciplineService: bloqueo de clientes', () => {
         query: jest.fn().mockResolvedValue([{ id: 'cli-1' }]),
         getRepository: jest.fn(),
       } as never,
+      // Los avisos push no cambian nada de un bloqueo: se comprueba que no
+      // estorben, no lo que mandan.
+      { notificar: jest.fn().mockResolvedValue(0) } as never,
       realtime as never,
       { get: jest.fn() } as never,
     );

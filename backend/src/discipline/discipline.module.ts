@@ -1,3 +1,4 @@
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RealtimeModule } from '../realtime/realtime.module';
@@ -9,6 +10,7 @@ import { InteractionRating } from './entities/interaction-rating.entity';
 
 @Module({
   imports: [
+    NotificationsModule,
     TypeOrmModule.forFeature([
       InteractionRating,
       ConductReport,

@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
@@ -20,6 +21,7 @@ import {
 } from './dto/discipline.dto';
 import { ConductReport } from './entities/conduct-report.entity';
 import { DisciplinarySanction } from './entities/disciplinary-sanction.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   InteractionRating,
   RatingDirection,
@@ -58,6 +60,8 @@ type ResolvedInteraction = {
 
 @Injectable()
 export class DisciplineService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(DisciplineService.name);
+
   private static readonly WINDOW_MS = 24 * 60 * 60 * 1000;
   private expirationTimer?: NodeJS.Timeout;
 
@@ -69,6 +73,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(DisciplinarySanction)
     private readonly sanctions: Repository<DisciplinarySanction>,
     private readonly dataSource: DataSource,
+    private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeEventsService,
     private readonly configService: ConfigService,
   ) {}
@@ -346,6 +351,48 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     return saved;
   }
 
+  /**
+   * El usuario que hay detras de una empleada o un chofer.
+   *
+   * Las sanciones y las calificaciones razonan sobre la persona operativa, pero
+   * un aviso se manda a su cuenta. Se resuelve como ya lo hace el resto del
+   * servicio: leyendo `usuario_id` de su tabla.
+   */
+  private async usuarioDelSujeto(
+    tipo: string,
+    sujetoId: string,
+  ): Promise<string | null> {
+    if (tipo !== 'employee' && tipo !== 'driver') return null;
+    const tabla = tipo === 'employee' ? 'empleadas' : 'choferes';
+    const filas = await this.dataSource.query(
+      `SELECT usuario_id FROM ${tabla} WHERE id = $1`,
+      [sujetoId],
+    );
+    return filas[0]?.usuario_id ?? null;
+  }
+
+  /**
+   * Manda un aviso push sin que su fallo arrastre a nada.
+   *
+   * La sancion ya esta puesta y la calificacion ya esta guardada cuando esto se
+   * llama: un aviso que no sale se registra y se sigue.
+   */
+  private async avisar(
+    usuarioId: string | null,
+    tipo: 'employee' | 'driver',
+    aviso: { titulo: string; cuerpo: string; tag: string },
+  ): Promise<void> {
+    if (!usuarioId) return;
+    try {
+      await this.notifications.notificar(usuarioId, {
+        ...aviso,
+        url: tipo === 'employee' ? '/empleada/portal' : '/chofer/portal',
+      });
+    } catch (err) {
+      this.logger.error(`Error enviando el aviso push "${aviso.titulo}":`, err);
+    }
+  }
+
   async createSanction(dto: CreateSanctionDto, admin: Actor) {
     this.assertAdmin(admin);
     return this.persistSanction(dto, admin.id);
@@ -469,6 +516,23 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         false,
       );
     }
+    /*
+     * Nivel 2: le afecta al bolsillo o le impide trabajar, asi que tiene que
+     * enterarse, pero no es algo que resuelva en el momento.
+     */
+    if (dto.subjectType === 'employee' || dto.subjectType === 'driver') {
+      const usuarioId = await this.usuarioDelSujeto(
+        dto.subjectType,
+        dto.subjectId,
+      );
+      await this.avisar(usuarioId, dto.subjectType, {
+        titulo:
+          dto.type === 'fine' ? 'Se te aplicó una multa' : 'Tienes una sanción',
+        cuerpo: 'Toca para ver el detalle en tu portal.',
+        tag: `sancion-${sanction.id}`,
+      });
+    }
+
     if (dto.type === 'fine' && dto.subjectType === 'employee') {
       await this.dataSource.getRepository('LiquidationRecord').save({
         employeeId: dto.subjectId,
