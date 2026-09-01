@@ -1080,6 +1080,9 @@ export class EmployeesService {
               proveedor: activeTrip.proveedorTransporte,
               estado: activeTrip.estado,
               choferNombre: activeTrip.chofer?.nombre || undefined,
+              // La captura del Uber: con transporte externo es lo unico que
+              // le dice en que coche se sube. Llegaba solo por Telegram.
+              uberScreenshotUrl: activeTrip.uberScreenshotUrl || undefined,
             }
           : null,
       };

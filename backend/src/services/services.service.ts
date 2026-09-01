@@ -3969,6 +3969,36 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         ) / 2;
   }
 
+  /**
+   * Avisa a la modelo de que ya tiene la captura de su Uber.
+   *
+   * Con transporte externo, esa captura es lo unico que le dice en que coche se
+   * sube: sin ella no sabe ni la placa. Salia solo por Telegram, que es
+   * justamente el canal que puede estar silenciado.
+   *
+   * El texto no dice mas de la cuenta: se lee en la pantalla de bloqueo y el
+   * detalle esta detras del toque.
+   */
+  private async avisarCapturaDeUber(trip: Viajes): Promise<void> {
+    const usuarioId = trip.servicio?.empleada?.usuarioId;
+    if (!usuarioId) return;
+
+    try {
+      await this.notificationsService.notificar(usuarioId, {
+        titulo: 'Ya tienes los datos de tu Uber',
+        cuerpo: 'Toca para ver la captura en tu portal.',
+        url: '/empleada/portal',
+        tag: `uber-${trip.id}`,
+        requireInteraction: true,
+      });
+    } catch (err) {
+      this.logger.error(
+        'Error enviando el aviso push de la captura del Uber:',
+        err,
+      );
+    }
+  }
+
   async saveUberScreenshot(
     tripId: string,
     actorId: string,
@@ -3992,9 +4022,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       // en el mismo bot: un `file_id` solo sirve dentro del bot que recibio el
       // archivo.
       await this.bot.telegram.sendPhoto(chatId, fileId, {
-        caption: `📱 Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.`,
+        caption: `Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.`,
       });
     }
+
+    await this.avisarCapturaDeUber(trip);
   }
 
   async saveUberScreenshotFromDashboard(
@@ -4038,6 +4070,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       uberScreenshotUrl: evidence.url,
       uberScreenshotUploadedAt: uploadedAt,
     });
+    await this.avisarCapturaDeUber(trip);
+
     return { fileId, imageUrl: evidence.url };
   }
 

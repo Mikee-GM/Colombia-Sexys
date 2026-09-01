@@ -1,6 +1,12 @@
 "use client";
 
-import { CalendarClock, CheckCircle2, Clock3, Wallet } from "lucide-react";
+import {
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+  ImageIcon,
+  Wallet,
+} from "lucide-react";
 
 import AccionesDelViaje from "@/components/empleada/AccionesDelViaje";
 import AgregarExtra from "@/components/empleada/AgregarExtra";
@@ -85,6 +91,35 @@ export default function ServicioAhora({
             ({servicio.transporte.estado})
             {servicio.transporte.choferNombre && <> · Chofer: {servicio.transporte.choferNombre}</>}
           </p>
+        )}
+
+        {/*
+          La captura del Uber.
+
+          Con transporte externo es lo unico que le dice en que coche se sube:
+          sin ella no sabe ni la placa. Llegaba solo por Telegram, asi que si
+          ese chat estaba silenciado o el mensaje quedaba enterrado, no tenia
+          donde mirarla. Se abre a tamaño completo porque los datos van escritos
+          pequeño dentro de la imagen.
+        */}
+        {servicio.transporte?.uberScreenshotUrl && (
+          <a
+            href={servicio.transporte.uberScreenshotUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="block overflow-hidden rounded-xl border border-[#C5A55A]/40"
+          >
+            <span className="flex items-center gap-2 border-b border-[#C5A55A]/25 bg-[#C5A55A]/10 px-3 py-2 text-[11px] font-semibold text-[#E8D5A3]">
+              <ImageIcon size={14} />
+              Datos de tu Uber
+            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={servicio.transporte.uberScreenshotUrl}
+              alt="Captura con los datos del Uber"
+              className="w-full"
+            />
+          </a>
         )}
 
         {/*

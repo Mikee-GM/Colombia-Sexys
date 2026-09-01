@@ -51,6 +51,8 @@ export interface EmployeePortalActiveService {
     proveedor: string;
     estado: string;
     choferNombre?: string;
+    /** Captura del Uber, cuando el jefe ya la subio. */
+    uberScreenshotUrl?: string;
   } | null;
 }
 
