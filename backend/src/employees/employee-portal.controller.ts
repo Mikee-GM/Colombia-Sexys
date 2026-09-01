@@ -22,6 +22,8 @@ import { DisciplineService } from '../discipline/discipline.service';
 import { CreateRatingDto } from '../discipline/dto/discipline.dto';
 import { ExtendServiceDto } from './dto/extend-service.dto';
 import { PortalUser } from '../auth/decorators/portal-user.decorator';
+import { LocationsService } from '../locations/locations.service';
+import { RegistrarUbicacionDto } from '../locations/dto/registrar-ubicacion.dto';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
 import {
   UPLOAD_MAX_BYTES,
@@ -40,6 +42,7 @@ export class EmployeePortalController {
     private readonly weeklyContentService: WeeklyContentService,
     private readonly servicesService: ServicesService,
     private readonly disciplineService: DisciplineService,
+    private readonly locationsService: LocationsService,
   ) {}
 
   @Get('me')
@@ -228,6 +231,45 @@ export class EmployeePortalController {
       id: servicio.id,
       duracionPactadaHoras: servicio.duracionPactadaHoras,
     };
+  }
+
+  /**
+   * Donde esta ahora mismo.
+   *
+   * Hasta ahora la unica via era compartir ubicacion en vivo desde Telegram, y
+   * dependia de acordarse de hacerlo. El portal la manda solo mientras esta
+   * abierto, que es justo cuando la persona esta trabajando.
+   *
+   * La espera entre escrituras la aplica el servicio, asi que un navegador que
+   * mande de mas no castiga a la base.
+   */
+  @Post('location')
+  @HttpCode(200)
+  async registrarUbicacion(
+    @PortalUser() userId: string,
+    @Body() dto: RegistrarUbicacionDto,
+  ) {
+    return this.locationsService.registrar(userId, dto.lat, dto.lng);
+  }
+
+  /**
+   * Diez minutos mas de margen mientras el cliente espera.
+   *
+   * No es lo mismo que extender el servicio: aqui no se alarga lo pactado, se
+   * pide aire cuando la modelo va con retraso y el reloj de espera esta a punto
+   * de tumbar el servicio. En el chat era un boton que solo aparecia dentro del
+   * mensaje correcto; desde aqui esta siempre a mano.
+   *
+   * La comprobacion de que el servicio sea suyo y el tope de tres los hace
+   * `solicitarProrroga`, asi que no se repiten.
+   */
+  @Post('services/:servicioId/prorroga')
+  @HttpCode(200)
+  async pedirProrroga(
+    @PortalUser() userId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    return this.servicesService.solicitarProrroga(servicioId, userId);
   }
 
   /**

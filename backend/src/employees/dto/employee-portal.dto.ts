@@ -44,6 +44,8 @@ export interface EmployeePortalActiveService {
   horaInicio?: string | null;
   horaFinEstimada?: string | null;
   gananciaEstimada: number;
+  /** Prorrogas de espera ya gastadas, de un maximo de tres. */
+  prorrogasUsadas?: number;
   transporte?: {
     /** Id del viaje: es lo que el portal necesita para marcar el avance. */
     id: string;

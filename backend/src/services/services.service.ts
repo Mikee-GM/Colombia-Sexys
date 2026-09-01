@@ -26,6 +26,7 @@ import { Servicios } from './entities/service.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { ExtensionsService } from '../extensions/extensions.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Usuarios } from '../users/entities/user.entity';
@@ -207,6 +208,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     // Los avisos push, que salen aparte de los de Telegram porque el problema
     // que resuelven es justo que el de Telegram llega y nadie lo ve.
     private readonly notificationsService: NotificationsService,
+    /*
+     * Va la ultima a proposito. Varios specs de este servicio todavia lo
+     * construyen por posicion, asi que una dependencia en medio de la lista
+     * les desplaza todos los dobles y los rompe por un motivo ajeno a lo que
+     * prueban.
+     */
+    private readonly extensionsService: ExtensionsService,
   ) {}
 
   private estimatedEnd(service: Servicios): Date | null {
@@ -1674,6 +1682,127 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    * solo pueden cuajar una vez; la segunda encuentra otra duracion y no toca
    * nada.
    */
+  /**
+   * La modelo pide diez minutos mas de margen mientras el cliente espera.
+   *
+   * Es la prorroga que hasta ahora solo existia dentro del handler de Telegram:
+   * los tres efectos que importan --anotar la prorroga, reiniciar el reloj de
+   * espera y avisar al chofer que esta esperando abajo-- vivian pegados al
+   * boton del chat, asi que desde el portal no habia forma de pedirla.
+   *
+   * La validacion del estado y del tope de tres la hace
+   * `requestServiceExtension`, que ademas bloquea la fila: dos toques seguidos
+   * no pueden gastar dos prorrogas ni saltarse el tope.
+   */
+  async solicitarProrroga(
+    servicioId: string,
+    actorUserId: string,
+  ): Promise<{ prorrogasUsadas: number; restantes: number; minutos: number }> {
+    const MINUTOS = 10;
+
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: {
+        empleada: { usuario: true },
+        viajes: { chofer: { usuario: true } },
+      },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (!(await this.puedePedirProrroga(servicio, actorUserId))) {
+      throw new ForbiddenException(
+        'No puedes solicitar prórrogas para este servicio',
+      );
+    }
+
+    const { extensionNumber } =
+      await this.extensionsService.requestServiceExtension(servicioId, MINUTOS);
+
+    // El reloj de espera vuelve a empezar: es lo que hace que la prorroga
+    // signifique algo. Sin esto se anota el intento y el servicio se cae igual.
+    this.startWaitTimeout(servicioId, MINUTOS * 60 * 1000);
+
+    await this.avisarProrrogaAlChofer(servicio, extensionNumber, MINUTOS);
+
+    return {
+      prorrogasUsadas: extensionNumber,
+      restantes: 3 - extensionNumber,
+      minutos: MINUTOS,
+    };
+  }
+
+  /**
+   * Quien puede pedir una prorroga de este servicio.
+   *
+   * En uno normal, la modelo asignada. En uno grupal no hay una sola: cualquiera
+   * de las que siguen dentro puede ir con retraso, y el chat ya lo permitia, asi
+   * que restringirlo a la titular al mover la logica aqui habria quitado en
+   * silencio algo que funcionaba.
+   */
+  private async puedePedirProrroga(
+    servicio: Servicios,
+    actorUserId: string,
+  ): Promise<boolean> {
+    if (!actorUserId) return false;
+    if (servicio.empleada?.usuarioId === actorUserId) return true;
+    if (servicio.serviceType !== 'grupal') return false;
+
+    const participante = await this.serviceParticipantsRepository.findOne({
+      where: {
+        serviceId: servicio.id,
+        status: In(['activa', 'reservada', 'pendiente_pago']),
+        employee: { usuarioId: actorUserId },
+      },
+      relations: { employee: true },
+    });
+    return Boolean(participante);
+  }
+
+  /**
+   * Le dice al chofer que la espera se alargo.
+   *
+   * Es quien esta abajo con el motor encendido, asi que es el unico al que la
+   * prorroga le cambia el plan. Va por los dos canales y en su propio
+   * try/catch: la prorroga ya esta concedida y el reloj ya se reinicio, asi que
+   * un aviso que falla se registra y no deshace nada.
+   */
+  private async avisarProrrogaAlChofer(
+    servicio: Servicios,
+    numero: number,
+    minutos: number,
+  ): Promise<void> {
+    const chofer = servicio.viajes?.find((v) => v.tipo === 'ida')?.chofer;
+    if (!chofer) return;
+
+    const nombre = servicio.empleada?.nombreArtistico ?? 'La modelo';
+    const chatId = chofer.usuario?.telegramChatId;
+    if (chatId) {
+      try {
+        await this.telegramService.sendMessage(
+          chatId,
+          `Aviso de demora: ${nombre} pidió una prórroga de ${minutos} minutos (${numero} de 3). El tiempo de espera se extendió.`,
+        );
+      } catch (err) {
+        this.logger.error('Error avisando al chofer de la prórroga:', err);
+      }
+    }
+
+    if (chofer.usuarioId) {
+      try {
+        await this.notificationsService.notificar(chofer.usuarioId, {
+          titulo: 'La espera se alargó',
+          cuerpo: `Pidieron ${minutos} minutos más. Toca para ver el viaje.`,
+          url: '/chofer/portal',
+          tag: `prorroga-${servicio.id}`,
+        });
+      } catch (err) {
+        this.logger.error(
+          'Error enviando el aviso push de la prórroga al chofer:',
+          err,
+        );
+      }
+    }
+  }
+
   async extendByEmployee(
     servicioId: string,
     actorUserId: string,

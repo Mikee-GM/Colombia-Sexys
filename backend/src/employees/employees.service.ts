@@ -1073,6 +1073,9 @@ export class EmployeesService {
         horaInicio: startTime?.toISOString() || null,
         horaFinEstimada: endTime?.toISOString() || null,
         gananciaEstimada: estimatedNet,
+        // Cuantas prorrogas ha gastado: el portal necesita saber si el boton
+        // sigue teniendo sentido, y decirle cuantas le quedan antes de tocarlo.
+        prorrogasUsadas: activeOrUpcoming.prorrogasUsadas ?? 0,
         transporte: activeTrip
           ? {
               id: activeTrip.id,

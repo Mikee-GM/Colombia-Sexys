@@ -69,7 +69,6 @@ import {
   buildReportCategoryCallback,
   parseReportCategoryCode,
 } from '../employee-reports/report-callback';
-import { ExtensionsService } from '../extensions/extensions.service';
 import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
@@ -807,7 +806,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly telegramBookingService: TelegramBookingService,
     private readonly aiMessageService: AiMessageService,
     private readonly employeeReportsService: EmployeeReportsService,
-    private readonly extensionsService: ExtensionsService,
     private readonly transportOperations: TransportOperationsService,
     private readonly disciplineService: DisciplineService,
     private readonly groupServicesService: GroupServicesService,
@@ -7045,104 +7043,63 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     return true;
   }
 
+  /**
+   * El boton de prorroga del chat.
+   *
+   * Solo traduce el toque a una llamada de servicio y edita el mensaje, igual
+   * que un controller HTTP. Los efectos --anotar la prorroga, reiniciar el
+   * reloj de espera, avisar al chofer-- vivian aqui dentro y por eso el portal
+   * no podia pedirla; ahora estan en `ServicesService.solicitarProrroga`.
+   */
   @Action(/^pedir_prorroga:(.+)$/)
   async onPedirProrroga(@Ctx() ctx: Context) {
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
+    const servicioId = ((ctx as any).match as RegExpMatchArray)[1];
 
-    const match = (ctx as any).match;
-    const servicioId = match[1];
-
-    const servicio = await this.serviciosRepository.findOne({
-      where: { id: servicioId },
-      relations: {
-        empleada: { usuario: true },
-        viajes: { chofer: { usuario: true } },
-      },
+    // La identidad del chat es el chat id; el servicio razona sobre usuarios.
+    const usuario = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId },
+      select: { id: true },
     });
 
-    if (!servicio) {
-      await ctx.answerCbQuery('❌ Servicio no encontrado.', {
-        show_alert: true,
-      });
-      return;
-    }
-
-    if (!(await this.isAssignedEmployee(ctx, servicio))) {
+    let resultado: { prorrogasUsadas: number; restantes: number };
+    try {
+      resultado = await this.servicesService.solicitarProrroga(
+        servicioId,
+        usuario?.id ?? '',
+      );
+    } catch (error: any) {
       await ctx.answerCbQuery(
-        'No puedes solicitar prórrogas para este servicio.',
+        error?.message || 'No se pudo solicitar la prórroga.',
         { show_alert: true },
       );
       return;
     }
 
-    if (!['pendiente', 'agendado', 'en_curso'].includes(servicio.estado)) {
-      await ctx.answerCbQuery(
-        '⚠️ Este servicio ya no está activo o fue cancelado.',
-        { show_alert: true },
-      );
-      return;
-    }
-
-    if (servicio.prorrogasUsadas >= 3) {
-      await ctx.answerCbQuery(
-        '❌ Ya has utilizado el máximo de 3 prórrogas permitidas.',
-        { show_alert: true },
-      );
-      return;
-    }
-
-    const extension = await this.extensionsService.requestServiceExtension(
-      servicio.id,
-      10,
-    );
-    servicio.prorrogasUsadas = extension.extensionNumber;
     await ctx.answerCbQuery('Prórroga de 10 minutos concedida.');
 
-    // Reiniciar wait timeout a 10 minutos (600,000 ms)
-    this.servicesService.startWaitTimeout(servicio.id, 600000);
+    // El texto anterior se limpia de avisos de prorrogas previas para que no se
+    // apilen uno debajo de otro cada vez que se pide una.
+    let texto = (ctx.callbackQuery?.message as any)?.text || '';
+    texto = texto.replace(/\n\n⚠️ \*Has solicitado.*?\*/g, '');
+    texto += `\n\n⚠️ *Has solicitado una prórroga. Has usado ${resultado.prorrogasUsadas} de 3 prórrogas.*`;
 
-    // Notificar al chofer
-    const viajeIda = servicio.viajes.find((v) => v.tipo === 'ida');
-    if (viajeIda && viajeIda.chofer?.usuario?.telegramChatId) {
-      try {
-        await this.bot.telegram.sendMessage(
-          viajeIda.chofer.usuario.telegramChatId,
-          `⏳ *Aviso de Demora:* La empleada *${servicio.empleada.nombreArtistico}* ha solicitado una prórroga de 10 minutos (Prórroga ${servicio.prorrogasUsadas} de 3). El tiempo de espera se ha extendido.`,
-          { parse_mode: 'Markdown' },
-        );
-      } catch (err) {
-        this.logger.error(
-          'Error al notificar al chofer sobre la prórroga:',
-          err,
-        );
-      }
-    }
-
-    // Actualizar mensaje de la empleada
-    let originalText = (ctx.callbackQuery?.message as any)?.text || '';
-    // Limpiar alertas de prórroga previas
-    originalText = originalText.replace(/\n\n⚠️ \*Has solicitado.*?\*/g, '');
-
-    const newText =
-      originalText +
-      `\n\n⚠️ *Has solicitado una prórroga. Has usado ${servicio.prorrogasUsadas} de 3 prórrogas.*`;
-
-    // Si aún tiene prórrogas disponibles, mantener el botón. De lo contrario, quitarlo.
-    const inlineButtons: any[][] = [];
-    if (servicio.prorrogasUsadas < 3) {
-      inlineButtons.push([
+    // El boton solo sigue si le queda alguna.
+    const botones: any[][] = [];
+    if (resultado.restantes > 0) {
+      botones.push([
         Markup.button.callback(
           '⏳ Solicitar Prórroga (10 min)',
-          `pedir_prorroga:${servicio.id}`,
+          `pedir_prorroga:${servicioId}`,
         ),
       ]);
     }
 
     try {
-      await ctx.editMessageText(newText, {
+      await ctx.editMessageText(texto, {
         parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard(inlineButtons),
+        ...Markup.inlineKeyboard(botones),
       });
     } catch (err) {
       this.logger.error(

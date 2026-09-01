@@ -12,6 +12,7 @@ import AccionesDelViaje from "@/components/empleada/AccionesDelViaje";
 import AgregarExtra from "@/components/empleada/AgregarExtra";
 import FinalizarServicio from "@/components/empleada/FinalizarServicio";
 import ExtenderServicio from "@/components/empleada/ExtenderServicio";
+import PedirProrroga from "@/components/empleada/PedirProrroga";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { EmployeePortalActiveService } from "@/lib/types";
@@ -129,6 +130,20 @@ export default function ServicioAhora({
         */}
         {servicio.transporte && (
           <AccionesDelViaje transporte={servicio.transporte} token={token} />
+        )}
+
+        {/*
+          La prorroga solo tiene sentido antes de arrancar: es el margen que se
+          pide cuando va con retraso y el cliente ya esta esperando. Una vez
+          empezado, lo que se alarga es el servicio, y para eso esta el boton de
+          abajo.
+        */}
+        {!enCurso && (
+          <PedirProrroga
+            servicioId={servicio.id}
+            prorrogasUsadas={servicio.prorrogasUsadas ?? 0}
+            token={token}
+          />
         )}
 
         {/* Extras y cierre: solo sobre un servicio ya arrancado. */}

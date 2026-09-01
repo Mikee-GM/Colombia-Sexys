@@ -337,6 +337,91 @@ export async function addServiceExtra(
 }
 
 /**
+ * Anota donde esta la modelo mientras tiene el portal abierto.
+ *
+ * Hasta ahora la unica via era compartir ubicacion en vivo desde Telegram, y
+ * dependia de acordarse. La espera entre escrituras la aplica el backend, asi
+ * que llamar de mas no castiga a la base.
+ */
+export async function registrarMiUbicacion(
+  lat: number,
+  lng: number,
+  token?: string,
+): Promise<{ success: boolean }> {
+  try {
+    const response = await fetch(
+      portalUrl("/employee-portal/location", token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          ...(await portalHeaders(token)),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ lat, lng }),
+      },
+    );
+    return { success: response.ok };
+  } catch (error) {
+    // Un envio perdido no se avisa: el siguiente lo corrige.
+    console.error("Error al registrar la ubicacion:", error);
+    return { success: false };
+  }
+}
+
+/**
+ * Pide diez minutos mas de margen mientras el cliente espera.
+ *
+ * No es lo mismo que extender el servicio: no alarga lo pactado ni cambia lo
+ * que se cobra, solo evita que el reloj de espera tumbe el servicio cuando va
+ * con retraso. En el chat era un boton que solo existia dentro del mensaje
+ * correcto, asi que si ese mensaje se perdia entre otros, no habia forma de
+ * pedirla.
+ *
+ * El tope de tres y la comprobacion de que el servicio sea suyo los hace el
+ * backend, que ya los hacia.
+ */
+export async function pedirProrroga(
+  servicioId: string,
+  token?: string,
+): Promise<{
+  success: boolean;
+  error?: string;
+  prorrogasUsadas?: number;
+  restantes?: number;
+}> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/services/${servicioId}/prorroga`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: await portalHeaders(token),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo pedir la prorroga",
+      };
+    }
+    const datos = await response.json();
+    return {
+      success: true,
+      prorrogasUsadas: datos.prorrogasUsadas,
+      restantes: datos.restantes,
+    };
+  } catch (error: any) {
+    console.error("Error al pedir la prorroga:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
+
+/**
  * Extiende el servicio en curso.
  *
  * En el chat son varios pasos porque no cabe un formulario; aqui elige las
