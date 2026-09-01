@@ -75,36 +75,50 @@ describe('ServicesService.aceptar (concurrencia)', () => {
       save: jest.fn((data: any) => Promise.resolve({ ...data, id: 'trip-1' })),
     };
 
-    service = new ServicesService(
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio --y son mas de
+     * veinte-- desplazaba todos los dobles y estas pruebas fallaban por un motivo
+     * ajeno a lo que probaban. El registro entra como doble porque `Object.create`
+     * no ejecuta los campos inicializados de la clase.
+     */
+    service = Object.create(ServicesService.prototype) as ServicesService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      // Los dos relojes en memoria del servicio: son campos inicializados
+      // de la clase, y `Object.create` no los ejecuta.
+      waitTimeouts: new Map(),
+      dispatchTimeouts: new Map(),
       serviciosRepository,
       viajesRepository,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {
+      choferesRepository: {},
+      usuariosRepository: {},
+      conversationsRepository: {},
+      bankAccountsRepository: {},
+      paymentReceiptValidationsRepository: {},
+      realtimeEventsService: {
         emitToBoss: jest.fn(),
         emitToEmployee: jest.fn(),
         emitToJefes: jest.fn(),
-      } as any,
-      { telegram: { sendMessage: jest.fn() } } as any,
-      {} as any,
-      { generate: jest.fn().mockResolvedValue('mensaje') } as any,
-      {} as any,
-      {} as any,
-      { get: jest.fn() } as any,
-      {
+      },
+      bot: { telegram: { sendMessage: jest.fn() } },
+      telegramService: {},
+      aiMessageService: { generate: jest.fn().mockResolvedValue('mensaje') },
+      loyaltyService: {},
+      liquidationSync: {},
+      configService: { get: jest.fn() },
+      disciplineService: {
         assertOperationallyAllowed: jest.fn().mockResolvedValue(undefined),
-      } as any,
-      {} as any,
+      },
+      uploadService: {},
       empleadasRepository,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+      clientesRepository: {},
+      telegramSessionRepository: {},
+      extrasCatalogoRepository: {},
+      extrasServicioRepository: {},
+      serviceParticipantsRepository: {},
+    });
     // El despacho de choferes no es lo que se prueba aqui.
     jest.spyOn(service as any, 'dispatchViaje').mockResolvedValue(undefined);
   });
@@ -174,30 +188,44 @@ describe('ServicesService.extendByEmployee', () => {
       createQueryBuilder: jest.fn(() => updateBuilder),
       manager: {},
     };
-    service = new ServicesService(
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio --y son mas de
+     * veinte-- desplazaba todos los dobles y estas pruebas fallaban por un motivo
+     * ajeno a lo que probaban. El registro entra como doble porque `Object.create`
+     * no ejecuta los campos inicializados de la clase.
+     */
+    service = Object.create(ServicesService.prototype) as ServicesService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      // Los dos relojes en memoria del servicio: son campos inicializados
+      // de la clase, y `Object.create` no los ejecuta.
+      waitTimeouts: new Map(),
+      dispatchTimeouts: new Map(),
       serviciosRepository,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      { emitToJefes: jest.fn(), emitToBoss: jest.fn() } as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      { get: jest.fn() } as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+      viajesRepository: {},
+      choferesRepository: {},
+      usuariosRepository: {},
+      conversationsRepository: {},
+      bankAccountsRepository: {},
+      paymentReceiptValidationsRepository: {},
+      realtimeEventsService: { emitToJefes: jest.fn(), emitToBoss: jest.fn() },
+      bot: {},
+      telegramService: {},
+      aiMessageService: {},
+      loyaltyService: {},
+      liquidationSync: {},
+      configService: { get: jest.fn() },
+      disciplineService: {},
+      uploadService: {},
+      empleadasRepository: {},
+      clientesRepository: {},
+      telegramSessionRepository: {},
+      extrasCatalogoRepository: {},
+      extrasServicioRepository: {},
+      serviceParticipantsRepository: {},
+    });
     jest
       .spyOn(service, 'recalculateScheduledSuccessor')
       .mockResolvedValue(undefined);

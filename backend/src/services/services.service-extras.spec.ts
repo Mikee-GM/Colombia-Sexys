@@ -53,30 +53,44 @@ describe('ServicesService extras de servicio', () => {
     };
     participantsRepository = { findOne: jest.fn() };
 
-    service = new ServicesService(
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio --y son mas de
+     * veinte-- desplazaba todos los dobles y estas pruebas fallaban por un motivo
+     * ajeno a lo que probaban. El registro entra como doble porque `Object.create`
+     * no ejecuta los campos inicializados de la clase.
+     */
+    service = Object.create(ServicesService.prototype) as ServicesService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      // Los dos relojes en memoria del servicio: son campos inicializados
+      // de la clase, y `Object.create` no los ejecuta.
+      waitTimeouts: new Map(),
+      dispatchTimeouts: new Map(),
       serviciosRepository,
-      {} as any,
-      {} as any,
+      viajesRepository: {},
+      choferesRepository: {},
       usuariosRepository,
-      {} as any,
-      {} as any,
-      {} as any,
-      { emitToJefes: jest.fn(), emitToBoss: jest.fn() } as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      { get: jest.fn() } as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
+      conversationsRepository: {},
+      bankAccountsRepository: {},
+      paymentReceiptValidationsRepository: {},
+      realtimeEventsService: { emitToJefes: jest.fn(), emitToBoss: jest.fn() },
+      bot: {},
+      telegramService: {},
+      aiMessageService: {},
+      loyaltyService: {},
+      liquidationSync: {},
+      configService: { get: jest.fn() },
+      disciplineService: {},
+      uploadService: {},
+      empleadasRepository: {},
+      clientesRepository: {},
+      telegramSessionRepository: {},
       extrasCatalogoRepository,
       extrasServicioRepository,
-      participantsRepository,
-    );
+      serviceParticipantsRepository: participantsRepository,
+    });
   });
 
   describe('listAvailableExtras', () => {

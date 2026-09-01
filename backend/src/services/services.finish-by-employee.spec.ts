@@ -91,30 +91,46 @@ describe('ServicesService.finishByEmployee', () => {
       save: jest.fn().mockResolvedValue(undefined),
     };
 
-    service = new ServicesService(
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio --y son mas de
+     * veinte-- desplazaba todos los dobles y estas pruebas fallaban por un motivo
+     * ajeno a lo que probaban. El registro entra como doble porque `Object.create`
+     * no ejecuta los campos inicializados de la clase.
+     */
+    service = Object.create(ServicesService.prototype) as ServicesService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      // Los dos relojes en memoria del servicio: son campos inicializados
+      // de la clase, y `Object.create` no los ejecuta.
+      waitTimeouts: new Map(),
+      dispatchTimeouts: new Map(),
       serviciosRepository,
-      { find: jest.fn().mockResolvedValue([]) } as any,
-      {} as any,
-      {} as any,
-      { save: jest.fn(), create: jest.fn((v) => v) } as any,
-      {} as any,
-      {} as any,
-      realtime,
+      viajesRepository: { find: jest.fn().mockResolvedValue([]) },
+      choferesRepository: {},
+      usuariosRepository: {},
+      conversationsRepository: { save: jest.fn(), create: jest.fn((v) => v) },
+      bankAccountsRepository: {},
+      paymentReceiptValidationsRepository: {},
+      realtimeEventsService: realtime,
       bot,
-      {} as any,
-      {} as any,
-      {} as any,
-      { syncOfficeRecord: jest.fn().mockResolvedValue(null) } as any,
-      { get: jest.fn() } as any,
-      {} as any,
-      {} as any,
+      telegramService: {},
+      aiMessageService: {},
+      loyaltyService: {},
+      liquidationSync: { syncOfficeRecord: jest.fn().mockResolvedValue(null) },
+      configService: { get: jest.fn() },
+      disciplineService: {},
+      uploadService: {},
       empleadasRepository,
-      { findOne: jest.fn().mockResolvedValue(null) } as any,
+      clientesRepository: { findOne: jest.fn().mockResolvedValue(null) },
       telegramSessionRepository,
       extrasCatalogoRepository,
       extrasServicioRepository,
-      { findOne: jest.fn().mockResolvedValue(null) } as any,
-    );
+      serviceParticipantsRepository: {
+        findOne: jest.fn().mockResolvedValue(null),
+      },
+    });
 
     // Lo que ocurre despues del cierre se prueba por separado; aqui solo se
     // comprueba si se dispara y con que.

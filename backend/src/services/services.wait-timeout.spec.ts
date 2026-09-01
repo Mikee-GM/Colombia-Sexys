@@ -7,30 +7,44 @@ describe('ServicesService plazo de espera de la empleada', () => {
     findOne: jest.fn(),
   };
 
-  const service = new ServicesService(
-    serviciosRepository as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-  );
+  /*
+   * Se construye por nombre y no con `new`.
+   *
+   * Con la lista posicional, cada dependencia nueva del servicio --y son mas de
+   * veinte-- desplazaba todos los dobles y estas pruebas fallaban por un motivo
+   * ajeno a lo que probaban. El registro entra como doble porque `Object.create`
+   * no ejecuta los campos inicializados de la clase.
+   */
+  const service = Object.create(ServicesService.prototype) as ServicesService;
+  Object.assign(service, {
+    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+    // Los dos relojes en memoria del servicio: son campos
+    // inicializados de la clase, y `Object.create` no los ejecuta.
+    waitTimeouts: new Map(),
+    dispatchTimeouts: new Map(),
+    serviciosRepository,
+    viajesRepository: {},
+    choferesRepository: {},
+    usuariosRepository: {},
+    conversationsRepository: {},
+    bankAccountsRepository: {},
+    paymentReceiptValidationsRepository: {},
+    realtimeEventsService: {},
+    bot: {},
+    telegramService: {},
+    aiMessageService: {},
+    loyaltyService: {},
+    liquidationSync: {},
+    configService: {},
+    disciplineService: {},
+    uploadService: {},
+    empleadasRepository: {},
+    clientesRepository: {},
+    telegramSessionRepository: {},
+    extrasCatalogoRepository: {},
+    extrasServicioRepository: {},
+    serviceParticipantsRepository: {},
+  });
 
   afterEach(() => {
     jest.clearAllMocks();

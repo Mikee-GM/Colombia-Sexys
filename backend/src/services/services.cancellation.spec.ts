@@ -30,33 +30,45 @@ describe('ServicesService cancel', () => {
     syncCancelledRecord: jest.fn().mockResolvedValue(null),
   };
 
-  const service = new ServicesService(
-    serviciosRepository as any,
-    viajesRepository as any,
-    choferesRepository as any,
-    usuariosRepository as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    realtime as any,
-    bot as any,
-    {} as any,
-    aiMessageService as any,
-    {} as any,
-    liquidationSync as any,
-    { get: jest.fn() } as any,
-    {} as any,
-    {} as any,
+  /*
+   * Se construye por nombre y no con `new`.
+   *
+   * Con la lista posicional, cada dependencia nueva del servicio --y son mas de
+   * veinte-- desplazaba todos los dobles y estas pruebas fallaban por un motivo
+   * ajeno a lo que probaban. El registro y los dos relojes en memoria entran como
+   * dobles porque `Object.create` no ejecuta los campos inicializados.
+   */
+  const service = Object.create(ServicesService.prototype) as ServicesService;
+  Object.assign(service, {
+    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+    waitTimeouts: new Map(),
+    dispatchTimeouts: new Map(),
+    serviciosRepository,
+    viajesRepository,
+    choferesRepository,
+    usuariosRepository,
+    conversationsRepository: {},
+    bankAccountsRepository: {},
+    paymentReceiptValidationsRepository: {},
+    realtimeEventsService: realtime,
+    bot,
+    telegramService: {},
+    aiMessageService,
+    loyaltyService: {},
+    liquidationSync,
+    configService: { get: jest.fn() },
+    disciplineService: {},
+    uploadService: {},
     // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
-    {} as any,
-    {} as any,
-    {} as any,
+    empleadasRepository: {},
+    clientesRepository: {},
+    telegramSessionRepository: {},
     // catalogo de extras, extras cobrados y participantes: solo los usa
     // agregar un extra. Ninguna de las dos cosas se ejercita aqui.
-    {} as any,
-    {} as any,
-    {} as any,
-  );
+    extrasCatalogoRepository: {},
+    extrasServicioRepository: {},
+    serviceParticipantsRepository: {},
+  });
 
   const actor = { id: 'user-1', rol: 'admin' } as any;
 
@@ -226,33 +238,45 @@ describe('ServicesService settleCancelledTripCost', () => {
   };
   const bot = { telegram: { sendMessage: jest.fn() } };
 
-  const service = new ServicesService(
-    {} as any,
-    viajesRepository as any,
-    {} as any,
-    usuariosRepository as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    bot as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    liquidationSync as any,
-    { get: jest.fn() } as any,
-    {} as any,
-    {} as any,
+  /*
+   * Se construye por nombre y no con `new`.
+   *
+   * Con la lista posicional, cada dependencia nueva del servicio --y son mas de
+   * veinte-- desplazaba todos los dobles y estas pruebas fallaban por un motivo
+   * ajeno a lo que probaban. El registro y los dos relojes en memoria entran como
+   * dobles porque `Object.create` no ejecuta los campos inicializados.
+   */
+  const service = Object.create(ServicesService.prototype) as ServicesService;
+  Object.assign(service, {
+    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+    waitTimeouts: new Map(),
+    dispatchTimeouts: new Map(),
+    serviciosRepository: {},
+    viajesRepository,
+    choferesRepository: {},
+    usuariosRepository,
+    conversationsRepository: {},
+    bankAccountsRepository: {},
+    paymentReceiptValidationsRepository: {},
+    realtimeEventsService: {},
+    bot,
+    telegramService: {},
+    aiMessageService: {},
+    loyaltyService: {},
+    liquidationSync,
+    configService: { get: jest.fn() },
+    disciplineService: {},
+    uploadService: {},
     // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
-    {} as any,
-    {} as any,
-    {} as any,
+    empleadasRepository: {},
+    clientesRepository: {},
+    telegramSessionRepository: {},
     // catalogo de extras, extras cobrados y participantes: solo los usa
     // agregar un extra. Ninguna de las dos cosas se ejercita aqui.
-    {} as any,
-    {} as any,
-    {} as any,
-  );
+    extrasCatalogoRepository: {},
+    extrasServicioRepository: {},
+    serviceParticipantsRepository: {},
+  });
 
   function viajePendiente(overrides: Record<string, unknown> = {}) {
     return {

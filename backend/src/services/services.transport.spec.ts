@@ -44,33 +44,45 @@ describe('ServicesService transport settlement', () => {
     uploadEvidenceFromUrl: jest.fn(),
   };
 
-  const service = new ServicesService(
-    serviciosRepository as any,
-    viajesRepository as any,
-    {} as any,
-    usuariosRepository as any,
-    conversationsRepository as any,
-    {} as any,
-    {} as any,
-    realtime as any,
-    bot as any,
-    {} as any,
-    aiMessageService as any,
-    loyalty as any,
-    liquidationSync as any,
-    { get: jest.fn() } as any,
-    {} as any,
-    uploadService as any,
+  /*
+   * Se construye por nombre y no con `new`.
+   *
+   * Con la lista posicional, cada dependencia nueva del servicio --y son mas de
+   * veinte-- desplazaba todos los dobles y estas pruebas fallaban por un motivo
+   * ajeno a lo que probaban. El registro y los dos relojes en memoria entran como
+   * dobles porque `Object.create` no ejecuta los campos inicializados.
+   */
+  const service = Object.create(ServicesService.prototype) as ServicesService;
+  Object.assign(service, {
+    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+    waitTimeouts: new Map(),
+    dispatchTimeouts: new Map(),
+    serviciosRepository,
+    viajesRepository,
+    choferesRepository: {},
+    usuariosRepository,
+    conversationsRepository,
+    bankAccountsRepository: {},
+    paymentReceiptValidationsRepository: {},
+    realtimeEventsService: realtime,
+    bot,
+    telegramService: {},
+    aiMessageService,
+    loyaltyService: loyalty,
+    liquidationSync,
+    configService: { get: jest.fn() },
+    disciplineService: {},
+    uploadService,
     // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
-    {} as any,
-    {} as any,
-    {} as any,
+    empleadasRepository: {},
+    clientesRepository: {},
+    telegramSessionRepository: {},
     // catalogo de extras, extras cobrados y participantes: solo los usa
     // agregar un extra. Ninguna de las dos cosas se ejercita aqui.
-    {} as any,
-    {} as any,
-    {} as any,
-  );
+    extrasCatalogoRepository: {},
+    extrasServicioRepository: {},
+    serviceParticipantsRepository: {},
+  });
 
   beforeEach(() => jest.clearAllMocks());
 

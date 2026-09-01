@@ -31,6 +31,10 @@ describe('ServicesService solicitarProrroga', () => {
     const service = Object.create(ServicesService.prototype) as ServicesService;
     Object.assign(service, {
       logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      // Los dos relojes en memoria del servicio: son campos inicializados
+      // de la clase, y `Object.create` no los ejecuta.
+      waitTimeouts: new Map(),
+      dispatchTimeouts: new Map(),
       serviciosRepository: { findOne: jest.fn().mockResolvedValue(servicio) },
       serviceParticipantsRepository: {
         findOne: jest.fn().mockResolvedValue(participante),

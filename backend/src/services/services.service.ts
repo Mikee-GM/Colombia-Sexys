@@ -179,6 +179,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     @InjectBot() private readonly bot: Telegraf<Context>,
     @Inject(forwardRef(() => TelegramService))
     private readonly telegramService: TelegramService,
+    private readonly extensionsService: ExtensionsService,
     private readonly aiMessageService: AiMessageService,
     private readonly loyaltyService: LoyaltyService,
     private readonly liquidationSync: OfficeLiquidationSyncService,
@@ -208,13 +209,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     // Los avisos push, que salen aparte de los de Telegram porque el problema
     // que resuelven es justo que el de Telegram llega y nadie lo ve.
     private readonly notificationsService: NotificationsService,
-    /*
-     * Va la ultima a proposito. Varios specs de este servicio todavia lo
-     * construyen por posicion, asi que una dependencia en medio de la lista
-     * les desplaza todos los dobles y los rompe por un motivo ajeno a lo que
-     * prueban.
-     */
-    private readonly extensionsService: ExtensionsService,
   ) {}
 
   private estimatedEnd(service: Servicios): Date | null {
