@@ -104,17 +104,29 @@ describe('ManualServicesService', () => {
       syncOfficeRecord: jest.fn().mockResolvedValue(undefined),
     };
 
-    service = new ManualServicesService(
-      solicitudes,
-      empleadas,
-      usuarios,
-      clientes,
-      servicios,
-      realtime,
-      // Los avisos push no intervienen en aprobar un registro: se comprueba que
-      // no estorben, no lo que mandan.
-      { notificar: jest.fn().mockResolvedValue(0) } as never,
-      liquidationSync,
+    /*
+     * Se construye por nombre y no por posicion.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio desplazaba
+     * todos los dobles y las pruebas fallaban por un motivo ajeno a lo que
+     * probaban. Paso cinco veces en una sola tanda de trabajo. El registro entra
+     * como doble porque `Object.create` no ejecuta los campos inicializados de la
+     * clase.
+     */
+    service = Object.assign(
+      Object.create(ManualServicesService.prototype) as ManualServicesService,
+      {
+        logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+        solicitudes,
+        empleadas,
+        usuarios,
+        clientes,
+        servicios,
+        realtime,
+        // Los avisos push no intervienen en aprobar un registro.
+        notifications: { notificar: jest.fn().mockResolvedValue(0) },
+        liquidationSync,
+      },
     );
   });
 

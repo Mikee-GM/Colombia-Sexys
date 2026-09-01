@@ -13,15 +13,27 @@ describe('DriverShiftsService listCandidates', () => {
   const choferesRepository = { find: jest.fn() };
   const dataSource = { query: jest.fn() };
 
-  const service = new DriverShiftsService(
-    shifts as any,
-    assignments as any,
-    choferesRepository as any,
-    // Los avisos push no intervienen en elegir candidatos: se comprueba que no
-    // estorben, no lo que mandan.
-    { notificar: jest.fn().mockResolvedValue(0) } as any,
-    dataSource as any,
-    {} as any,
+  /*
+   * Se construye por nombre y no por posicion.
+   *
+   * Con la lista posicional, cada dependencia nueva del servicio desplazaba
+   * todos los dobles y las pruebas fallaban por un motivo ajeno a lo que
+   * probaban. Paso cinco veces en una sola tanda de trabajo. El registro entra
+   * como doble porque `Object.create` no ejecuta los campos inicializados de la
+   * clase.
+   */
+  const service = Object.assign(
+    Object.create(DriverShiftsService.prototype) as DriverShiftsService,
+    {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      shifts,
+      assignments,
+      choferesRepository,
+      // Los avisos push no intervienen en elegir candidatos.
+      notifications: { notificar: jest.fn().mockResolvedValue(0) },
+      dataSource,
+      telegram: {},
+    },
   );
 
   beforeEach(() => {

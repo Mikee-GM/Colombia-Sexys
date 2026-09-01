@@ -34,20 +34,33 @@ describe('DisciplineService: bloqueo de clientes', () => {
       find: jest.fn().mockResolvedValue([]),
     };
     realtime = { emitToJefes: jest.fn() };
-    service = new DisciplineService(
-      {} as never,
-      {} as never,
-      sanciones as never,
+    /*
+     * Se construye por nombre y no por posicion.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio desplazaba
+     * todos los dobles y las pruebas fallaban por un motivo ajeno a lo que
+     * probaban. Paso cinco veces en una sola tanda de trabajo. El registro entra
+     * como doble porque `Object.create` no ejecuta los campos inicializados de la
+     * clase.
+     */
+    service = Object.assign(
+      Object.create(DisciplineService.prototype) as DisciplineService,
       {
+        logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+        ratings: {},
+        reports: {},
+        sanctions: sanciones,
         // persistSanction comprueba que la persona existe antes de nada.
-        query: jest.fn().mockResolvedValue([{ id: 'cli-1' }]),
-        getRepository: jest.fn(),
-      } as never,
-      // Los avisos push no cambian nada de un bloqueo: se comprueba que no
-      // estorben, no lo que mandan.
-      { notificar: jest.fn().mockResolvedValue(0) } as never,
-      realtime as never,
-      { get: jest.fn() } as never,
+        dataSource: {
+          query: jest.fn().mockResolvedValue([{ id: 'cli-1' }]),
+          getRepository: jest.fn(),
+        },
+        // Los avisos push no cambian nada de un bloqueo: se comprueba que no
+        // estorben, no lo que mandan.
+        notifications: { notificar: jest.fn().mockResolvedValue(0) },
+        realtime,
+        configService: { get: jest.fn() },
+      },
     );
   });
 

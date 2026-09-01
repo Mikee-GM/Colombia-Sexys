@@ -30,18 +30,30 @@ describe('WeeklyContentScheduler', () => {
   };
   const dataSource = { query: jest.fn() };
 
-  const scheduler = new WeeklyContentScheduler(
-    { get: () => '' } as any,
-    weeklyContentService as any,
-    // Los avisos push no intervienen en el ciclo semanal: se comprueba que no
-    // estorben, no lo que mandan.
-    { notificar: jest.fn().mockResolvedValue(0) } as any,
-    telegramService as any,
-    panelAccessService as any,
-    scheduleRepo as any,
-    empleadasRepo as any,
-    conductReportRepo as any,
-    dataSource as any,
+  /*
+   * Se construye por nombre y no por posicion.
+   *
+   * Con la lista posicional, cada dependencia nueva del servicio desplazaba
+   * todos los dobles y las pruebas fallaban por un motivo ajeno a lo que
+   * probaban. Paso cinco veces en una sola tanda de trabajo. El registro entra
+   * como doble porque `Object.create` no ejecuta los campos inicializados de la
+   * clase.
+   */
+  const scheduler = Object.assign(
+    Object.create(WeeklyContentScheduler.prototype) as WeeklyContentScheduler,
+    {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      configService: { get: () => '' },
+      weeklyContentService,
+      // Los avisos push no intervienen en el ciclo semanal.
+      notifications: { notificar: jest.fn().mockResolvedValue(0) },
+      telegramService,
+      panelAccessService,
+      scheduleRepo,
+      empleadasRepo,
+      conductReportRepo,
+      dataSource,
+    },
   );
 
   /** Ciclo pendiente de una modelo con chat vinculado. */
