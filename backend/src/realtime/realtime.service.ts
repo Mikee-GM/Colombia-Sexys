@@ -1,4 +1,4 @@
-import { Injectable, MessageEvent, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, MessageEvent, OnModuleInit } from '@nestjs/common';
 import { merge, Observable, Subject, timer } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { RealtimeBus, RealtimeMessage } from './realtime.bus';
@@ -27,6 +27,10 @@ export class RealtimeEventsService implements OnModuleInit {
   private readonly employeeSubjects: ChannelRegistry = new Map();
   private readonly driverSubjects: ChannelRegistry = new Map();
   private readonly clientSubjects: ChannelRegistry = new Map();
+
+  private readonly observadores: ((message: RealtimeMessage) => void)[] = [];
+
+  private readonly logger = new Logger(RealtimeEventsService.name);
 
   constructor(private readonly bus: RealtimeBus) {}
 
@@ -81,6 +85,31 @@ export class RealtimeEventsService implements OnModuleInit {
   private dispatch(message: RealtimeMessage): void {
     this.deliverLocally(message);
     void this.bus.publish(message);
+
+    for (const observador of this.observadores) {
+      try {
+        observador(message);
+      } catch (err) {
+        // Un observador que falla no puede impedir la entrega en vivo, que es
+        // lo que este servicio existe para hacer.
+        this.logger.error('Un observador de eventos falló:', err);
+      }
+    }
+  }
+
+  /**
+   * Escucha lo que se emite desde ESTA replica.
+   *
+   * Se engancha aqui y no en `deliverLocally` a proposito: alli tambien entra lo
+   * que llega de otras replicas, asi que con dos procesos cada evento se
+   * observaria dos veces y saldrian avisos duplicados. `dispatch` solo corre en
+   * la replica que origina el evento.
+   *
+   * Lo usa la fachada de avisos para no tener que sembrar llamadas por todo el
+   * codigo: los eventos son donde los cambios de estado ocurren de verdad.
+   */
+  onLocalDispatch(observador: (message: RealtimeMessage) => void): void {
+    this.observadores.push(observador);
   }
 
   getJefesStream(): Observable<MessageEvent> {

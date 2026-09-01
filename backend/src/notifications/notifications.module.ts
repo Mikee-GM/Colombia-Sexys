@@ -7,6 +7,8 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { PushSubscriptionsService } from './push-subscriptions.service';
 import { WebPushProvider } from './web-push.provider';
+import { NotificationsBridge } from './notifications.bridge';
+import { UserPreferencesModule } from '../user-preferences/user-preferences.module';
 
 /**
  * La salida de avisos del sistema.
@@ -20,9 +22,15 @@ import { WebPushProvider } from './web-push.provider';
   imports: [
     TypeOrmModule.forFeature([PushSubscription, Servicios]),
     AuthModule,
+    UserPreferencesModule,
   ],
   controllers: [NotificationsController],
-  providers: [WebPushProvider, PushSubscriptionsService, NotificationsService],
+  providers: [
+    WebPushProvider,
+    PushSubscriptionsService,
+    NotificationsService,
+    NotificationsBridge,
+  ],
   exports: [NotificationsService],
 })
 export class NotificationsModule {}

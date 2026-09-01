@@ -4,7 +4,9 @@ import { Repository } from 'typeorm';
 import { UserPreference } from './entities/user-preference.entity';
 
 /** Claves que el sistema reconoce. Una clave libre convertiria la tabla en un basurero. */
-export const PREFERENCE_KEYS = ['dashboard_layout'] as const;
+// `avisos` guarda que tipos de aviso push quiere recibir esta persona:
+// `{ [tipo]: false }` apaga uno. Lo que no aparece se manda.
+export const PREFERENCE_KEYS = ['dashboard_layout', 'avisos'] as const;
 export type PreferenceKey = (typeof PREFERENCE_KEYS)[number];
 
 /**
