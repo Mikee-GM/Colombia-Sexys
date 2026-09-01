@@ -141,6 +141,23 @@ export default function CreateServiceDialog({
 
   if (!open) return null;
 
+  /*
+   * Que cuenta como "cliente resuelto" segun la opcion elegida.
+   *
+   * El boton exigia `selectedClientId` siempre, asi que con "sin cliente" o con
+   * un nombre libre se quedaba apagado y no habia forma de crear el servicio:
+   * justo las dos opciones que existen para cuando no hay cliente registrado.
+   *
+   * Se mira lo mismo que ya comprobaba el envio, para que el boton y la
+   * validacion no puedan discrepar.
+   */
+  const clienteResuelto =
+    clientMode === "registered"
+      ? Boolean(selectedClientId)
+      : clientMode === "custom"
+        ? Boolean(clientFreeName.trim())
+        : true;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -629,7 +646,7 @@ export default function CreateServiceDialog({
             </button>
             <button
               type="submit"
-              disabled={submitting || loadingInitial || !selectedClientId || !selectedEmployeeId}
+              disabled={submitting || loadingInitial || !clienteResuelto || !selectedEmployeeId}
               className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-zinc-950 bg-[#C5A55A] hover:bg-[#d8b769] shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
