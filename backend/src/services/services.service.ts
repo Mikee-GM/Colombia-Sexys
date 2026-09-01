@@ -1297,6 +1297,19 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         const empleadaUser = await this.usuariosRepository.findOne({
           where: { id: service.empleada?.usuarioId },
         });
+        /*
+         * Nivel 1, y de los que mas urgen: si no se entera a tiempo sale de
+         * casa hacia un servicio que ya no existe. Va antes que el mensaje del
+         * chat porque es el unico que le llega si no usa Telegram.
+         */
+        await this.avisar(service.empleada?.usuarioId, {
+          titulo: 'Cancelaron el servicio',
+          cuerpo: 'Ya no tienes que asistir. Toca para verlo.',
+          url: '/empleada/portal',
+          tag: `cancelado-${service.id}`,
+          requireInteraction: true,
+        });
+
         if (empleadaUser?.telegramChatId) {
           await this.bot.telegram.sendMessage(
             empleadaUser.telegramChatId,
@@ -1324,6 +1337,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           where: { id: choferId },
           relations: { usuario: true },
         });
+        // Mismo caso que la modelo: puede estar ya en camino a recogerla.
+        await this.avisar(chofer?.usuarioId, {
+          titulo: 'Cancelaron el viaje',
+          cuerpo: 'El servicio se canceló. Toca para verlo.',
+          url: '/chofer/portal',
+          tag: `cancelado-${service.id}`,
+          requireInteraction: true,
+        });
+
         if (chofer?.usuario?.telegramChatId) {
           await this.bot.telegram.sendMessage(
             chofer.usuario.telegramChatId,
@@ -2308,10 +2330,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ) {
         continue;
       }
-      if (
-        !service.horaInicioServicio ||
-        !service.empleada?.usuario?.telegramChatId
-      ) {
+      /*
+       * Solo hace falta saber cuando empezo. Antes tambien se exigia chat de
+       * Telegram, y desde que se puede entrar al portal con correo y
+       * contrasena eso dejaba a las modelos sin Telegram sin este aviso: el
+       * `continue` ocurria antes de mandar el push, asi que no les llegaba por
+       * ningun sitio.
+       */
+      if (!service.horaInicioServicio) {
         continue;
       }
 
@@ -2325,18 +2351,21 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         await this.serviciosRepository.save(service);
 
         try {
-          const targetChatId = service.empleada.usuario.telegramChatId;
+          const targetChatId = service.empleada?.usuario?.telegramChatId;
           const threadId = undefined;
 
+          // Nivel 1: la ventana para decidir es corta y ella esta trabajando.
+          // Fuera del `if` del chat: es el unico aviso que le llega si no usa
+          // Telegram.
+          await this.avisar(service.empleada?.usuarioId, {
+            titulo: '¿Extiendes el servicio?',
+            cuerpo: 'Termina en unos 15 minutos. Toca para decidir.',
+            url: '/empleada/portal',
+            tag: `extender-${service.id}`,
+            requireInteraction: true,
+          });
+
           if (targetChatId) {
-            // Nivel 1: la ventana para decidir es corta y ella esta trabajando.
-            await this.avisar(service.empleada?.usuarioId, {
-              titulo: '¿Extiendes el servicio?',
-              cuerpo: 'Termina en unos 15 minutos. Toca para decidir.',
-              url: '/empleada/portal',
-              tag: `extender-${service.id}`,
-              requireInteraction: true,
-            });
             await this.bot.telegram.sendMessage(
               targetChatId,
               `⏳ *Aviso de Finalización* ⏳\n\n` +
@@ -2372,7 +2401,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           }
         } catch (err) {
           this.logger.error(
-            `Error sending extension prompt to employee (chatId: ${service.empleada.usuario.telegramChatId}):`,
+            `Error avisando de la extensión a la empleada del servicio ${service.id}:`,
             err,
           );
         }
@@ -3088,6 +3117,16 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           where: { id: viajeIda.choferId },
           relations: { usuario: true },
         });
+        // Este se cae solo, sin que nadie lo decida: el chofer puede estar
+        // esperando abajo sin saber que ya no hay a quien recoger.
+        await this.avisar(chofer?.usuarioId, {
+          titulo: 'Cancelaron el viaje',
+          cuerpo: 'El servicio se canceló por la demora. Quedas libre.',
+          url: '/chofer/portal',
+          tag: `cancelado-${servicio.id}`,
+          requireInteraction: true,
+        });
+
         if (chofer && chofer.usuario?.telegramChatId) {
           try {
             await this.bot.telegram.sendMessage(

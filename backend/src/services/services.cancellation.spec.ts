@@ -29,6 +29,7 @@ describe('ServicesService cancel', () => {
   const liquidationSync = {
     syncCancelledRecord: jest.fn().mockResolvedValue(null),
   };
+  const notificationsService = { notificar: jest.fn().mockResolvedValue(1) };
 
   /*
    * Se construye por nombre y no con `new`.
@@ -68,6 +69,7 @@ describe('ServicesService cancel', () => {
     extrasCatalogoRepository: {},
     extrasServicioRepository: {},
     serviceParticipantsRepository: {},
+    notificationsService,
   });
 
   const actor = { id: 'user-1', rol: 'admin' } as any;
@@ -221,6 +223,58 @@ describe('ServicesService cancel', () => {
 
     expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
       '777',
+      expect.stringContaining('queda sin efecto'),
+    );
+  });
+
+  /*
+   * El aviso push de la cancelacion, para los dos que estan a punto de salir.
+   *
+   * Iba solo por Telegram, que es justo el canal del que se partio: un chat
+   * silenciado no avisa a nadie, y aqui enterarse tarde significa hacer el
+   * viaje para nada. Ademas, desde que se puede entrar al portal con correo y
+   * contrasena, hay gente sin chat a la que no le llegaba por ningun sitio.
+   */
+  it('avisa a la modelo por push, no solo por el chat', async () => {
+    serviciosRepository.findOne.mockResolvedValue(servicioEnCurso());
+    usuariosRepository.findOne.mockResolvedValue(null);
+
+    await service.cancel('svc-1', actor, { reason: 'cliente_desistio' });
+
+    expect(notificationsService.notificar).toHaveBeenCalledWith(
+      'user-emp',
+      expect.objectContaining({
+        titulo: 'Cancelaron el servicio',
+        url: '/empleada/portal',
+      }),
+    );
+  });
+
+  it('avisa al chofer por push aunque no tenga Telegram', async () => {
+    const servicio = servicioEnCurso();
+    servicio.viajes = [
+      { id: 'trip-1', estado: 'aceptado', choferId: 'chofer-1' },
+    ] as any;
+    serviciosRepository.findOne.mockResolvedValue(servicio);
+    usuariosRepository.findOne.mockResolvedValue(null);
+    choferesRepository.findOne.mockResolvedValue({
+      id: 'chofer-1',
+      usuarioId: 'user-chofer',
+      usuario: {},
+    });
+
+    await service.cancel('svc-1', actor, { reason: 'cliente_desistio' });
+
+    expect(notificationsService.notificar).toHaveBeenCalledWith(
+      'user-chofer',
+      expect.objectContaining({
+        titulo: 'Cancelaron el viaje',
+        url: '/chofer/portal',
+      }),
+    );
+    // Sin chat no hay mensaje de Telegram, y aun asi se entera.
+    expect(bot.telegram.sendMessage).not.toHaveBeenCalledWith(
+      expect.anything(),
       expect.stringContaining('queda sin efecto'),
     );
   });
