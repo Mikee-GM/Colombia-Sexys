@@ -2,7 +2,6 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import type { RealtimeMessage } from '../realtime/realtime.bus';
 import { NotificationsService } from './notifications.service';
-import { UserPreferencesService } from '../user-preferences/user-preferences.service';
 
 /** Como se describe un aviso derivado de un evento del sistema. */
 type AvisoDeEvento = {
@@ -63,8 +62,10 @@ const AVISOS_DEL_JEFE: Record<string, AvisoDeEvento> = {
  * cambia de verdad.
  *
  * Todo lo que sale de aqui es de nivel 2 --conviene enterarse, pero nada se
- * rompe si tarda-- y por eso respeta el ajuste de la persona. Los de nivel 1
- * siguen enganchados en su sitio y no pasan por aqui: no deben poder apagarse.
+ * rompe si tarda-- y por eso viaja con su `tipo`, que es lo que hace que
+ * `NotificationsService` consulte los ajustes de la persona antes de mandarlo.
+ * Los de nivel 1 siguen enganchados en su sitio y no pasan por aqui: van sin
+ * `tipo` y no deben poder apagarse.
  */
 @Injectable()
 export class NotificationsBridge implements OnModuleInit {
@@ -73,7 +74,6 @@ export class NotificationsBridge implements OnModuleInit {
   constructor(
     private readonly realtime: RealtimeEventsService,
     private readonly notifications: NotificationsService,
-    private readonly preferences: UserPreferencesService,
   ) {}
 
   onModuleInit(): void {
@@ -93,34 +93,16 @@ export class NotificationsBridge implements OnModuleInit {
     const aviso = AVISOS_DEL_JEFE[tipo];
     if (!aviso) return;
 
-    if (!(await this.losQuiere(message.key, tipo))) return;
-
     try {
       await this.notifications.notificar(message.key, {
         titulo: aviso.titulo,
         cuerpo: aviso.cuerpo,
         url: aviso.url,
         tag: `${aviso.asunto}-${this.referencia(message.event)}`,
+        tipo,
       });
     } catch (err) {
       this.logger.error(`Error avisando del evento ${tipo}:`, err);
-    }
-  }
-
-  /**
-   * Si esta persona quiere este tipo de aviso.
-   *
-   * Sin ajuste guardado se manda: quien nunca ha tocado sus preferencias espera
-   * que la aplicacion le avise, no lo contrario. Y si la consulta falla tambien
-   * se manda, porque perder un aviso es peor que mandar uno de mas.
-   */
-  private async losQuiere(usuarioId: string, tipo: string): Promise<boolean> {
-    try {
-      const ajuste = await this.preferences.get(usuarioId, 'avisos');
-      if (!ajuste) return true;
-      return ajuste[tipo] !== false;
-    } catch {
-      return true;
     }
   }
 

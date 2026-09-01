@@ -116,10 +116,10 @@ function montar(trip: Viajes | null, afectadas = 1) {
     },
   };
 
-  const service = Object.assign(
-    Object.create(DriverTripsService.prototype) as DriverTripsService,
-    dependencias,
-  );
+  const service = Object.create(
+    DriverTripsService.prototype,
+  ) as DriverTripsService;
+  Object.assign(service, dependencias);
 
   return {
     service,

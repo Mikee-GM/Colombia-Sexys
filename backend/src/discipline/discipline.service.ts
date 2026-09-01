@@ -22,6 +22,7 @@ import {
 import { ConductReport } from './entities/conduct-report.entity';
 import { DisciplinarySanction } from './entities/disciplinary-sanction.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AVISO_SANCION } from '../notifications/avisos-catalogo';
 import {
   InteractionRating,
   RatingDirection,
@@ -408,6 +409,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.notifications.notificar(usuarioId, {
         ...aviso,
+        tipo: AVISO_SANCION,
         url: tipo === 'employee' ? '/empleada/portal' : '/chofer/portal',
       });
     } catch (err) {

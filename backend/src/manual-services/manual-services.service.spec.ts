@@ -113,21 +113,21 @@ describe('ManualServicesService', () => {
      * como doble porque `Object.create` no ejecuta los campos inicializados de la
      * clase.
      */
-    service = Object.assign(
-      Object.create(ManualServicesService.prototype) as ManualServicesService,
-      {
-        logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
-        solicitudes,
-        empleadas,
-        usuarios,
-        clientes,
-        servicios,
-        realtime,
-        // Los avisos push no intervienen en aprobar un registro.
-        notifications: { notificar: jest.fn().mockResolvedValue(0) },
-        liquidationSync,
-      },
-    );
+    service = Object.create(
+      ManualServicesService.prototype,
+    ) as ManualServicesService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      solicitudes,
+      empleadas,
+      usuarios,
+      clientes,
+      servicios,
+      realtime,
+      // Los avisos push no intervienen en aprobar un registro.
+      notifications: { notificar: jest.fn().mockResolvedValue(0) },
+      liquidationSync,
+    });
   });
 
   describe('crear', () => {

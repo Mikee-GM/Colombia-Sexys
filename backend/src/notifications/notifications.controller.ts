@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +19,9 @@ import { PushSubscriptionsService } from './push-subscriptions.service';
 import { WebPushProvider } from './web-push.provider';
 import { RegistrarSuscripcionDto } from './dto/registrar-suscripcion.dto';
 import { DarDeBajaDto } from './dto/dar-de-baja.dto';
+import { AjustesDeAvisosDto } from './dto/ajustes-de-avisos.dto';
+import { avisosDeRol, TipoDeAviso } from './avisos-catalogo';
+import { UserPreferencesService } from '../user-preferences/user-preferences.service';
 
 /**
  * Avisos push del usuario que trae la sesion.
@@ -37,6 +41,7 @@ export class NotificationsController {
     private readonly notifications: NotificationsService,
     private readonly suscripciones: PushSubscriptionsService,
     private readonly webPush: WebPushProvider,
+    private readonly preferences: UserPreferencesService,
   ) {}
 
   /**
@@ -52,6 +57,50 @@ export class NotificationsController {
       clavePublica: this.webPush.clavePublica(),
       activo: this.webPush.estaConfigurado(),
     };
+  }
+
+  /**
+   * Los interruptores de avisos de quien llama, con su estado.
+   *
+   * El catalogo se sirve desde el backend en vez de escribirlo tambien en el
+   * frontend porque es el mismo que decide si un aviso sale: dos listas que se
+   * desincronizan dejan un interruptor que no apaga nada, o un aviso apagado
+   * que la pantalla nunca muestra.
+   */
+  @Get('ajustes')
+  async ajustes(
+    @GetUser() actor: Usuarios,
+  ): Promise<{ tipos: TipoDeAviso[]; apagados: string[] }> {
+    const tipos = avisosDeRol(actor.rol);
+    const guardado = await this.preferences.get(actor.id, 'avisos');
+    const apagados = tipos
+      .filter((t) => guardado?.[t.tipo] === false)
+      .map((t) => t.tipo);
+    return { tipos, apagados };
+  }
+
+  /**
+   * Guarda que avisos no quiere recibir.
+   *
+   * Se descarta lo que no le corresponda a su rol: si no, cualquiera podria
+   * dejar en su fila claves inventadas, y la tabla se lee en cada aviso.
+   */
+  @Put('ajustes')
+  async guardarAjustes(
+    @Body() dto: AjustesDeAvisosDto,
+    @GetUser() actor: Usuarios,
+  ): Promise<{ apagados: string[] }> {
+    const suyos = new Set(avisosDeRol(actor.rol).map((t) => t.tipo));
+    const apagados = dto.apagados.filter((tipo) => suyos.has(tipo));
+
+    // Solo se guardan los apagados. Lo encendido es la ausencia de la clave, no
+    // un `true`: asi un tipo nuevo llega encendido a quien ya tenia ajustes.
+    await this.preferences.set(
+      actor.id,
+      'avisos',
+      Object.fromEntries(apagados.map((tipo) => [tipo, false])),
+    );
+    return { apagados };
   }
 
   @Post('suscripciones')

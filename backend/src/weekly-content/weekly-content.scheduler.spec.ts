@@ -39,22 +39,22 @@ describe('WeeklyContentScheduler', () => {
    * como doble porque `Object.create` no ejecuta los campos inicializados de la
    * clase.
    */
-  const scheduler = Object.assign(
-    Object.create(WeeklyContentScheduler.prototype) as WeeklyContentScheduler,
-    {
-      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
-      configService: { get: () => '' },
-      weeklyContentService,
-      // Los avisos push no intervienen en el ciclo semanal.
-      notifications: { notificar: jest.fn().mockResolvedValue(0) },
-      telegramService,
-      panelAccessService,
-      scheduleRepo,
-      empleadasRepo,
-      conductReportRepo,
-      dataSource,
-    },
-  );
+  const scheduler = Object.create(
+    WeeklyContentScheduler.prototype,
+  ) as WeeklyContentScheduler;
+  Object.assign(scheduler, {
+    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+    configService: { get: () => '' },
+    weeklyContentService,
+    // Los avisos push no intervienen en el ciclo semanal.
+    notifications: { notificar: jest.fn().mockResolvedValue(0) },
+    telegramService,
+    panelAccessService,
+    scheduleRepo,
+    empleadasRepo,
+    conductReportRepo,
+    dataSource,
+  });
 
   /** Ciclo pendiente de una modelo con chat vinculado. */
   const pendiente = (overrides: Record<string, unknown> = {}) => ({

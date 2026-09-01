@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Bell, BellOff, BellRing, Send, Smartphone } from "lucide-react";
 import { toast } from "sonner";
-import { refreshSession } from "@/lib/client-session";
+import { pedirConSesion } from "@/lib/client-fetch";
+import AjustesDeAvisos from "@/components/ui/AjustesDeAvisos";
 
 /**
  * Activacion de los avisos push del panel, dispositivo por dispositivo.
@@ -33,52 +34,6 @@ function claveABytes(base64: string): Uint8Array {
   const bytes = new Uint8Array(binario.length);
   for (let i = 0; i < binario.length; i += 1) bytes[i] = binario.charCodeAt(i);
   return bytes;
-}
-
-function leerCsrf() {
-  const prefijo = "csrf_token=";
-  return (
-    document.cookie
-      .split(";")
-      .map((cookie) => cookie.trim())
-      .find((cookie) => cookie.startsWith(prefijo))
-      ?.slice(prefijo.length) ?? ""
-  );
-}
-
-/**
- * Llama al backend renovando la sesion si hace falta.
- *
- * El middleware renueva el access token al navegar a una pagina, pero las
- * peticiones del navegador a `/api/*` se reenvian al backend tal cual, sin
- * pasar por ese bloque. Como el access token dura una hora, la tarjeta se
- * llevaba un 401 en cuanto la app llevaba un rato abierta, y desde fuera
- * parecia que los avisos estaban rotos.
- *
- * Ante un 401 se renueva una vez y se repite. Si la renovacion tampoco vale,
- * la sesion termino de verdad y hay que volver a entrar.
- */
-async function pedirConSesion(
-  url: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const opciones: RequestInit = {
-    ...init,
-    credentials: "same-origin",
-    headers: { ...(init.headers ?? {}), "x-csrf-token": leerCsrf() },
-  };
-
-  const respuesta = await fetch(url, opciones);
-  if (respuesta.status !== 401) return respuesta;
-
-  const renovada = await refreshSession();
-  if (renovada !== "refreshed") return respuesta;
-
-  // El CSRF se vuelve a leer: la renovacion emite una cookie nueva.
-  return fetch(url, {
-    ...opciones,
-    headers: { ...(init.headers ?? {}), "x-csrf-token": leerCsrf() },
-  });
 }
 
 /**
@@ -292,6 +247,8 @@ export default function AvisosPush() {
               </button>
             </div>
           )}
+
+          {estado === "activo" && <AjustesDeAvisos />}
         </div>
       </div>
     </div>

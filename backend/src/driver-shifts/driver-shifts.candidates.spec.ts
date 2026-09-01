@@ -22,19 +22,19 @@ describe('DriverShiftsService listCandidates', () => {
    * como doble porque `Object.create` no ejecuta los campos inicializados de la
    * clase.
    */
-  const service = Object.assign(
-    Object.create(DriverShiftsService.prototype) as DriverShiftsService,
-    {
-      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
-      shifts,
-      assignments,
-      choferesRepository,
-      // Los avisos push no intervienen en elegir candidatos.
-      notifications: { notificar: jest.fn().mockResolvedValue(0) },
-      dataSource,
-      telegram: {},
-    },
-  );
+  const service = Object.create(
+    DriverShiftsService.prototype,
+  ) as DriverShiftsService;
+  Object.assign(service, {
+    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+    shifts,
+    assignments,
+    choferesRepository,
+    // Los avisos push no intervienen en elegir candidatos.
+    notifications: { notificar: jest.fn().mockResolvedValue(0) },
+    dataSource,
+    telegram: {},
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -105,13 +105,18 @@ describe('DriverShiftsService listShiftsForDriver', () => {
   const assignments = { find: jest.fn(), createQueryBuilder: jest.fn() };
   const choferesRepository = { findOneBy: jest.fn() };
 
-  const service = new DriverShiftsService(
-    shifts as any,
-    assignments as any,
-    choferesRepository as any,
-    {} as any,
-    {} as any,
-  );
+  const service = Object.create(
+    DriverShiftsService.prototype,
+  ) as DriverShiftsService;
+  Object.assign(service, {
+    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+    shifts,
+    assignments,
+    choferesRepository,
+    notifications: { notificar: jest.fn().mockResolvedValue(0) },
+    dataSource: {},
+    telegram: {},
+  });
 
   function conteos(filas: Array<{ shiftId: string; count: number }>) {
     assignments.createQueryBuilder.mockReturnValue({

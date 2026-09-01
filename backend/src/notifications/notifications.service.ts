@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Servicios } from '../services/entities/service.entity';
 import { PushSubscriptionsService } from './push-subscriptions.service';
 import { WebPushProvider } from './web-push.provider';
+import { UserPreferencesService } from '../user-preferences/user-preferences.service';
 
 /**
  * Un aviso, descrito por lo que significa y no por como se envia.
@@ -21,6 +22,17 @@ export type Aviso = {
   tag?: string;
   /** Mantiene el aviso en pantalla hasta que alguien lo toca (Android). */
   requireInteraction?: boolean;
+  /**
+   * Que clase de aviso es, si se puede apagar desde los ajustes.
+   *
+   * Sin `tipo` el aviso sale siempre: es lo correcto para los de nivel 1, que
+   * no deben poder silenciarse. Los de nivel 2 lo declaran y entonces se
+   * consulta la preferencia de la persona. Vive aqui y no en cada punto que
+   * avisa porque ya hubo un aviso que se colgo de un camino por el que el flujo
+   * real no pasaba: cuanto menos haya que recordar en el sitio de la llamada,
+   * mejor.
+   */
+  tipo?: string;
 };
 
 @Injectable()
@@ -32,6 +44,7 @@ export class NotificationsService {
     private readonly suscripciones: PushSubscriptionsService,
     @InjectRepository(Servicios)
     private readonly servicios: Repository<Servicios>,
+    private readonly preferences: UserPreferencesService,
   ) {}
 
   /**
@@ -46,6 +59,7 @@ export class NotificationsService {
    */
   async notificar(usuarioId: string, aviso: Aviso): Promise<number> {
     if (!this.webPush.estaConfigurado()) return 0;
+    if (aviso.tipo && !(await this.losQuiere(usuarioId, aviso.tipo))) return 0;
 
     let destinos;
     try {
@@ -94,6 +108,23 @@ export class NotificationsService {
     );
 
     return resultados.filter((r) => r.status === 'fulfilled' && r.value).length;
+  }
+
+  /**
+   * Si esta persona quiere recibir esta clase de aviso.
+   *
+   * Sin ajuste guardado se manda: quien nunca ha tocado sus preferencias espera
+   * que la aplicacion le avise, no lo contrario. Y si la consulta falla tambien
+   * se manda, porque perder un aviso es peor que mandar uno de mas.
+   */
+  private async losQuiere(usuarioId: string, tipo: string): Promise<boolean> {
+    try {
+      const ajuste = await this.preferences.get(usuarioId, 'avisos');
+      if (!ajuste) return true;
+      return ajuste[tipo] !== false;
+    } catch {
+      return true;
+    }
   }
 
   /**

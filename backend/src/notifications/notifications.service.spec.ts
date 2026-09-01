@@ -54,6 +54,27 @@ function suscripcionesDeMentira(destinos: PushSubscription[]) {
 
 const serviciosVacio = {} as Repository<Servicios>;
 
+/**
+ * Arma el servicio por nombre y no con `new`.
+ *
+ * Con la lista posicional, cada dependencia nueva desplazaba todos los dobles y
+ * las pruebas fallaban por un motivo ajeno a lo que probaban. El registro entra
+ * como doble porque `Object.create` no ejecuta los campos inicializados.
+ */
+function servicioCon(partes: Record<string, unknown>): NotificationsService {
+  const service = Object.create(
+    NotificationsService.prototype,
+  ) as NotificationsService;
+  Object.assign(service, {
+    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+    servicios: serviciosVacio,
+    // Sin ajuste guardado se manda todo, que es el caso por defecto.
+    preferences: { get: jest.fn().mockResolvedValue(null) },
+    ...partes,
+  });
+  return service;
+}
+
 describe('NotificationsService', () => {
   const aviso = { titulo: 'Titulo', cuerpo: 'Cuerpo', url: '/jefe' };
 
@@ -64,11 +85,17 @@ describe('NotificationsService', () => {
       destino('b'),
       destino('c'),
     ]);
-    const service = new NotificationsService(
-      proveedor,
+    const service = Object.create(
+      NotificationsService.prototype,
+    ) as NotificationsService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      webPush: proveedor,
       suscripciones,
-      serviciosVacio,
-    );
+      servicios: serviciosVacio,
+      // Sin ajuste guardado se manda todo, que es el caso por defecto.
+      preferences: { get: jest.fn().mockResolvedValue(null) },
+    });
 
     const enviados = await service.notificar('usuario-1', aviso);
 
@@ -84,11 +111,17 @@ describe('NotificationsService', () => {
       destino('viva'),
       destino('muerta'),
     ]);
-    const service = new NotificationsService(
-      proveedor,
+    const service = Object.create(
+      NotificationsService.prototype,
+    ) as NotificationsService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      webPush: proveedor,
       suscripciones,
-      serviciosVacio,
-    );
+      servicios: serviciosVacio,
+      // Sin ajuste guardado se manda todo, que es el caso por defecto.
+      preferences: { get: jest.fn().mockResolvedValue(null) },
+    });
 
     const enviados = await service.notificar('usuario-1', aviso);
 
@@ -106,11 +139,17 @@ describe('NotificationsService', () => {
     const { suscripciones, olvidar, marcarFallo } = suscripcionesDeMentira([
       destino('intermitente'),
     ]);
-    const service = new NotificationsService(
-      proveedor,
+    const service = Object.create(
+      NotificationsService.prototype,
+    ) as NotificationsService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      webPush: proveedor,
       suscripciones,
-      serviciosVacio,
-    );
+      servicios: serviciosVacio,
+      // Sin ajuste guardado se manda todo, que es el caso por defecto.
+      preferences: { get: jest.fn().mockResolvedValue(null) },
+    });
 
     const enviados = await service.notificar('usuario-1', aviso);
 
@@ -122,11 +161,17 @@ describe('NotificationsService', () => {
   it('sin claves VAPID no lanza ni consulta la base', async () => {
     const { proveedor } = proveedorDeMentira({}, false);
     const { suscripciones, listarDe } = suscripcionesDeMentira([destino('a')]);
-    const service = new NotificationsService(
-      proveedor,
+    const service = Object.create(
+      NotificationsService.prototype,
+    ) as NotificationsService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      webPush: proveedor,
       suscripciones,
-      serviciosVacio,
-    );
+      servicios: serviciosVacio,
+      // Sin ajuste guardado se manda todo, que es el caso por defecto.
+      preferences: { get: jest.fn().mockResolvedValue(null) },
+    });
 
     await expect(service.notificar('usuario-1', aviso)).resolves.toBe(0);
     expect(listarDe).not.toHaveBeenCalled();
@@ -140,11 +185,16 @@ describe('NotificationsService', () => {
         Promise.resolve({ id: 'servicio-1', jefeId: 'jefe-1' }),
       ),
     } as unknown as Repository<Servicios>;
-    const service = new NotificationsService(
-      proveedor,
+    const service = Object.create(
+      NotificationsService.prototype,
+    ) as NotificationsService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      webPush: proveedor,
       suscripciones,
       servicios,
-    );
+      preferences: { get: jest.fn().mockResolvedValue(null) },
+    });
 
     await service.notificarJefeServicioPendiente('servicio-1');
 
@@ -153,5 +203,63 @@ describe('NotificationsService', () => {
     // El aviso se lee en la pantalla de bloqueo: solo dice que hay algo que
     // autorizar, nunca de quien ni por cuanto.
     expect(JSON.stringify(carga)).not.toMatch(/cliente|empleada|\$/i);
+  });
+
+  /*
+   * El ajuste solo puede silenciar lo que se declara silenciable. Si un aviso
+   * de nivel 1 --uno que la operacion necesita que llegue-- se pudiera apagar
+   * desde una pantalla, el sistema dejaria de funcionar sin que nadie supiera
+   * por que.
+   */
+  it('no manda un aviso opcional que la persona apago', async () => {
+    const { proveedor, enviar } = proveedorDeMentira({});
+    const { suscripciones } = suscripcionesDeMentira([destino('a')]);
+    const service = servicioCon({
+      webPush: proveedor,
+      suscripciones,
+      preferences: {
+        get: jest.fn().mockResolvedValue({ liquidacion: false }),
+      },
+    });
+
+    const enviados = await service.notificar('usuario-1', {
+      ...aviso,
+      tipo: 'liquidacion',
+    });
+
+    expect(enviados).toBe(0);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it('manda igual un aviso sin tipo, que es el que no se puede apagar', async () => {
+    const { proveedor, enviar } = proveedorDeMentira({});
+    const { suscripciones } = suscripcionesDeMentira([destino('a')]);
+    const service = servicioCon({
+      webPush: proveedor,
+      suscripciones,
+      preferences: {
+        get: jest.fn().mockResolvedValue({ liquidacion: false }),
+      },
+    });
+
+    await service.notificar('usuario-1', aviso);
+
+    expect(enviar).toHaveBeenCalledTimes(1);
+  });
+
+  it('manda cuando la consulta del ajuste falla: perder un aviso es peor', async () => {
+    const { proveedor, enviar } = proveedorDeMentira({});
+    const { suscripciones } = suscripcionesDeMentira([destino('a')]);
+    const service = servicioCon({
+      webPush: proveedor,
+      suscripciones,
+      preferences: {
+        get: jest.fn().mockRejectedValue(new Error('base caida')),
+      },
+    });
+
+    await service.notificar('usuario-1', { ...aviso, tipo: 'liquidacion' });
+
+    expect(enviar).toHaveBeenCalledTimes(1);
   });
 });

@@ -15,6 +15,7 @@ import { Clientes } from '../clients/entities/client.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AVISO_REGISTRO_APROBADO } from '../notifications/avisos-catalogo';
 import { OfficeLiquidationSyncService } from '../liquidations/office-liquidation-sync.service';
 import { CreateManualServiceRequestDto } from './dto/create-manual-service-request.dto';
 import { describeError } from '../common/errors/error-message';
@@ -258,6 +259,7 @@ export class ManualServicesService {
           cuerpo: 'El servicio que registraste a mano quedó aprobado.',
           url: '/empleada/portal',
           tag: `registro-${id}`,
+          tipo: AVISO_REGISTRO_APROBADO,
         });
       } catch (err) {
         this.logger.error(

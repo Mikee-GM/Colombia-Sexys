@@ -17,6 +17,7 @@ import { DriverSettlement } from './entities/driver-settlement.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Choferes } from '../drivers/entities/driver.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AVISO_LIQUIDACION } from '../notifications/avisos-catalogo';
 import { Usuarios } from '../users/entities/user.entity';
 import { LiquidationAudit } from '../liquidations/entities/liquidation-audit.entity';
 
@@ -387,6 +388,7 @@ export class SettlementsService {
           cuerpo: 'Toca para ver el detalle de tu pago.',
           url: '/chofer/portal',
           tag: `liquidacion-${resultado.id}`,
+          tipo: AVISO_LIQUIDACION,
         });
       } catch (err) {
         this.logger.error(

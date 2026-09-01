@@ -13,6 +13,7 @@ import {
 } from '../common/scheduling/advisory-lock';
 import { WeeklyContentService } from './weekly-content.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AVISO_FOTOS_SEMANALES } from '../notifications/avisos-catalogo';
 import { WeeklyContentSchedule } from './entities/weekly-content-schedule.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { TelegramService } from '../telegram/telegram.service';
@@ -211,6 +212,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
                 : 'Es el último recordatorio antes de la multa.',
             url: '/empleada/portal?seccion=fotos',
             tag: `fotos-${schedule.id}`,
+            tipo: AVISO_FOTOS_SEMANALES,
           });
         } catch (err) {
           this.logger.error(

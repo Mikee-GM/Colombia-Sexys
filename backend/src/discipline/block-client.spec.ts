@@ -43,25 +43,23 @@ describe('DisciplineService: bloqueo de clientes', () => {
      * como doble porque `Object.create` no ejecuta los campos inicializados de la
      * clase.
      */
-    service = Object.assign(
-      Object.create(DisciplineService.prototype) as DisciplineService,
-      {
-        logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
-        ratings: {},
-        reports: {},
-        sanctions: sanciones,
-        // persistSanction comprueba que la persona existe antes de nada.
-        dataSource: {
-          query: jest.fn().mockResolvedValue([{ id: 'cli-1' }]),
-          getRepository: jest.fn(),
-        },
-        // Los avisos push no cambian nada de un bloqueo: se comprueba que no
-        // estorben, no lo que mandan.
-        notifications: { notificar: jest.fn().mockResolvedValue(0) },
-        realtime,
-        configService: { get: jest.fn() },
+    service = Object.create(DisciplineService.prototype) as DisciplineService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      ratings: {},
+      reports: {},
+      sanctions: sanciones,
+      // persistSanction comprueba que la persona existe antes de nada.
+      dataSource: {
+        query: jest.fn().mockResolvedValue([{ id: 'cli-1' }]),
+        getRepository: jest.fn(),
       },
-    );
+      // Los avisos push no cambian nada de un bloqueo: se comprueba que no
+      // estorben, no lo que mandan.
+      notifications: { notificar: jest.fn().mockResolvedValue(0) },
+      realtime,
+      configService: { get: jest.fn() },
+    });
   });
 
   it('sin fecha final el bloqueo es definitivo', async () => {
