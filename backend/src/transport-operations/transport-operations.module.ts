@@ -1,3 +1,4 @@
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PresetServiceLocation } from './entities/preset-service-location.entity';
@@ -17,6 +18,7 @@ import { Choferes } from '../drivers/entities/driver.entity';
 
 @Module({
   imports: [
+    NotificationsModule,
     TypeOrmModule.forFeature([
       TransportSetting,
       PresetServiceLocation,

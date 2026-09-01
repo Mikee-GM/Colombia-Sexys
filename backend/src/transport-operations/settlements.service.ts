@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, DataSource, In, IsNull, Repository } from 'typeorm';
@@ -15,11 +16,14 @@ import {
 import { DriverSettlement } from './entities/driver-settlement.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Choferes } from '../drivers/entities/driver.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Usuarios } from '../users/entities/user.entity';
 import { LiquidationAudit } from '../liquidations/entities/liquidation-audit.entity';
 
 @Injectable()
 export class SettlementsService {
+  private readonly logger = new Logger(SettlementsService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     @InjectRepository(EmployeeCashObligation)
@@ -31,6 +35,7 @@ export class SettlementsService {
     private readonly employees: Repository<Empleadas>,
     @InjectRepository(Choferes)
     private readonly drivers: Repository<Choferes>,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private getWeekBounds(date: Date): { weekStart: string; weekEnd: string } {
@@ -107,7 +112,7 @@ export class SettlementsService {
     actor: Usuarios,
   ) {
     await this.assertEmployeeAccess(employeeId, actor);
-    return this.dataSource.transaction(async (manager) => {
+    const resultado = await this.dataSource.transaction(async (manager) => {
       const pending = await manager.getRepository(EmployeeCashObligation).find({
         where: { employeeId, status: 'pending', calculationStatus: 'ready' },
         order: { createdAt: 'ASC' },
@@ -324,7 +329,7 @@ export class SettlementsService {
     endDate: string,
     actorId: string,
   ) {
-    return this.dataSource.transaction(async (manager) => {
+    const resultado = await this.dataSource.transaction(async (manager) => {
       const existing = await manager
         .getRepository(DriverSettlement)
         .findOneBy({ driverId, weekStart: startDate });
@@ -365,6 +370,33 @@ export class SettlementsService {
         );
       return settlement;
     });
+
+    /*
+     * Nivel 2: es dinero suyo, y hasta ahora se enteraba mirando el portal por
+     * su cuenta. En su propio try/catch, que la liquidacion ya esta cerrada.
+     */
+    const chofer = await this.drivers.findOne({
+      where: { id: driverId },
+      select: { id: true, usuarioId: true },
+    });
+    const usuarioId = chofer?.usuarioId;
+    if (usuarioId) {
+      try {
+        await this.notifications.notificar(usuarioId, {
+          titulo: 'Tu liquidación está lista',
+          cuerpo: 'Toca para ver el detalle de tu pago.',
+          url: '/chofer/portal',
+          tag: `liquidacion-${resultado.id}`,
+        });
+      } catch (err) {
+        this.logger.error(
+          'Error enviando el aviso push de la liquidación:',
+          err,
+        );
+      }
+    }
+
+    return resultado;
   }
 
   async syncDriverSettlement(tripId: string): Promise<void> {
