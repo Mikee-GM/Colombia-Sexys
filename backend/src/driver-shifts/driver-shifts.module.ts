@@ -1,3 +1,4 @@
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Choferes } from '../drivers/entities/driver.entity';
@@ -9,6 +10,7 @@ import { DriverShift } from './entities/driver-shift.entity';
 
 @Module({
   imports: [
+    NotificationsModule,
     TypeOrmModule.forFeature([DriverShift, DriverShiftAssignment, Choferes]),
     forwardRef(() => TelegramModule),
   ],

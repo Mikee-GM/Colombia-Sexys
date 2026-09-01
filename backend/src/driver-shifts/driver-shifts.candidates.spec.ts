@@ -17,6 +17,9 @@ describe('DriverShiftsService listCandidates', () => {
     shifts as any,
     assignments as any,
     choferesRepository as any,
+    // Los avisos push no intervienen en elegir candidatos: se comprueba que no
+    // estorben, no lo que mandan.
+    { notificar: jest.fn().mockResolvedValue(0) } as any,
     dataSource as any,
     {} as any,
   );

@@ -3,10 +3,12 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Choferes } from '../drivers/entities/driver.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { TelegramService } from '../telegram/telegram.service';
 import {
   AssignDriverShiftDto,
@@ -18,6 +20,8 @@ import { DriverShift } from './entities/driver-shift.entity';
 
 @Injectable()
 export class DriverShiftsService {
+  private readonly logger = new Logger(DriverShiftsService.name);
+
   constructor(
     @InjectRepository(DriverShift)
     private readonly shifts: Repository<DriverShift>,
@@ -25,6 +29,7 @@ export class DriverShiftsService {
     private readonly assignments: Repository<DriverShiftAssignment>,
     @InjectRepository(Choferes)
     private readonly choferesRepository: Repository<Choferes>,
+    private readonly notifications: NotificationsService,
     private readonly dataSource: DataSource,
     private readonly telegram: TelegramService,
   ) {}
@@ -253,6 +258,23 @@ export class DriverShiftsService {
       `Se te asignó el turno "${shift.title}" (${shift.startsAt}-${shift.endsAt}, ${this.formatDays(shift.daysOfWeek)}). ` +
         `Fuera de ese horario no recibirás ofertas de viaje automáticas.`,
     );
+    /*
+     * Nivel 2: organiza su semana, pero no es algo que resuelva en el momento.
+     *
+     * En su propio try/catch: el turno ya esta asignado y un aviso que falla no
+     * puede deshacerlo.
+     */
+    try {
+      await this.notifications.notificar(driver.usuarioId, {
+        titulo: 'Te asignaron un turno',
+        cuerpo: 'Toca para ver tus turnos en el portal.',
+        url: '/chofer/portal',
+        tag: `turno-${shift.id}`,
+      });
+    } catch (err) {
+      this.logger.error('Error enviando el aviso push del turno:', err);
+    }
+
     return shift;
   }
 

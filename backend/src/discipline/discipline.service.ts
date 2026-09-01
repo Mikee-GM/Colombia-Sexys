@@ -159,6 +159,28 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         ratingId: saved.id,
         direction: saved.direction,
       });
+
+      /*
+       * Nivel 2 para quien recibe la nota.
+       *
+       * Se avisa al sujeto de la calificacion, no a quien la puso: `subjectType`
+       * es precisamente el que la recibe. Le importa --afecta a su reputacion y
+       * a su posicion-- pero no cambia nada de lo que este haciendo ahora.
+       */
+      if (
+        interaction.subjectType === 'employee' ||
+        interaction.subjectType === 'driver'
+      ) {
+        const usuarioId = await this.usuarioDelSujeto(
+          interaction.subjectType,
+          interaction.subjectId,
+        );
+        await this.avisar(usuarioId, interaction.subjectType, {
+          titulo: 'Te calificaron',
+          cuerpo: `Recibiste ${dto.stars} ${dto.stars === 1 ? 'estrella' : 'estrellas'}. Toca para verlo.`,
+          tag: `calificacion-${saved.id}`,
+        });
+      }
       if (dto.direction === 'client_to_employee' && dto.stars <= 2) {
         await this.autoCreateReportFromBadRating(dto, interaction, saved.id);
       }
