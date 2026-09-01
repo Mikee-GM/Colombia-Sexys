@@ -23,6 +23,7 @@ import { Clientes } from '../clients/entities/client.entity';
 import { DisciplineService } from '../discipline/discipline.service';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentReceiptValidations } from '../services/entities/payment-receipt-validation.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { TransportSetting } from '../transport-operations/entities/transport-setting.entity';
@@ -86,6 +87,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     @InjectBot() private readonly bot: Telegraf<Context>,
     private readonly discipline: DisciplineService,
     private readonly realtime: RealtimeEventsService,
+    private readonly notifications: NotificationsService,
     private readonly config: ConfigService,
     private readonly liquidationSync: OfficeLiquidationSyncService,
     @Inject(forwardRef(() => ServicesService))
@@ -2350,6 +2352,29 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         type: 'group_service_hold_expired',
         data: { requestId: request.id, serviceId: request.serviceId },
       });
+
+      /*
+       * Nivel 1: la reserva se libera sola y las modelos que estaban apartadas
+       * vuelven al catalogo. Si el jefe no se entera, el cliente sigue creyendo
+       * que su grupo esta guardado.
+       *
+       * En su propio try/catch: la reserva ya se libero y un aviso que falla no
+       * puede deshacer eso.
+       */
+      try {
+        await this.notifications.notificar(request.bossId, {
+          titulo: 'Se venció una reserva de grupo',
+          cuerpo: 'Las modelos apartadas volvieron al catálogo.',
+          url: '/jefe?tab=grupos',
+          tag: `grupo-vencido-${request.id}`,
+          requireInteraction: true,
+        });
+      } catch (err) {
+        this.logger.error(
+          'Error enviando el aviso push de la reserva vencida:',
+          err,
+        );
+      }
     }
   }
 }

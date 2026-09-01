@@ -1,6 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DisciplineModule } from '../discipline/discipline.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { Viajes } from '../trips/entities/trip.entity';
@@ -31,6 +32,7 @@ import { GroupBossAssignmentService } from './group-boss-assignment.service';
       Viajes,
     ]),
     DisciplineModule,
+    NotificationsModule,
     forwardRef(() => TelegramModule),
     LiquidationsModule,
     forwardRef(() => ServicesModule),

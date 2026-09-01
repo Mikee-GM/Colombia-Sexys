@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { DriverTripsService } from './driver-trips.service';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Choferes } from './entities/driver.entity';
@@ -70,13 +70,21 @@ function montar(trip: Viajes | null, afectadas = 1) {
   });
   const startWaitTimeout = jest.fn();
 
-  const service = new DriverTripsService(
+  /*
+   * Se construye por nombre y no por posicion.
+   *
+   * Con la lista posicional, cada dependencia nueva del servicio desplazaba
+   * todos los dobles y las pruebas empezaban a fallar por un motivo que no
+   * tenia nada que ver con lo que probaban. Ha pasado tres veces. Asi, anadir
+   * una dependencia solo rompe si de verdad hace falta un doble nuevo.
+   */
+  const dependencias: Record<string, unknown> = {
+    // El registro va como doble porque `Object.create` no ejecuta los campos
+    // inicializados de la clase, y varios caminos lo usan al tragarse un fallo.
+    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
     dataSource,
-    {
-      findOne: jest.fn(() => Promise.resolve(trip)),
-      update,
-    } as unknown as Repository<Viajes>,
-    {
+    viajes: { findOne: jest.fn(() => Promise.resolve(trip)), update },
+    choferes: {
       findOne: jest.fn(() =>
         Promise.resolve({
           id: CHOFER,
@@ -86,32 +94,31 @@ function montar(trip: Viajes | null, afectadas = 1) {
         }),
       ),
       update: choferesUpdate,
-    } as unknown as Repository<Choferes>,
-    { update: serviciosUpdate } as unknown as Repository<Servicios>,
-    {
+    },
+    servicios: { update: serviciosUpdate },
+    realtime: {
       emitToBoss: jest.fn(),
       emitToClient: jest.fn(),
       emitToDriver: jest.fn(),
       emitToEmployee: jest.fn(),
-    } as unknown as RealtimeEventsService,
-    { syncDriverSettlement } as unknown as SettlementsService,
-    // Los avisos push no cambian el resultado de ninguna transicion: se
-    // comprueba que no estorben, no lo que mandan.
-    {
-      notificar: jest.fn(() => Promise.resolve(0)),
-    } as unknown as NotificationsService,
-    {
-      generate: jest.fn(() => Promise.resolve('Ya llegué')),
-    } as unknown as AiMessageService,
-    { sendMessage, deleteMessage } as unknown as TelegramService,
-    {
+    },
+    settlements: { syncDriverSettlement },
+    notifications: { notificar: jest.fn(() => Promise.resolve(0)) },
+    aiMessages: { generate: jest.fn(() => Promise.resolve('Ya llegué')) },
+    telegram: { sendMessage, deleteMessage, deleteForumTopic: jest.fn() },
+    servicesService: {
       startWaitTimeout,
       clearWaitTimeout,
-      notifyScheduledServiceStarted: jest.fn(() => Promise.resolve()),
       clearDispatchTimeout: jest.fn(),
       rechazarOfertaManual: jest.fn(() => Promise.resolve()),
+      notifyScheduledServiceStarted: jest.fn(() => Promise.resolve()),
       sendFinalReceiptAndAward: jest.fn(() => Promise.resolve()),
-    } as unknown as ServicesService,
+    },
+  };
+
+  const service = Object.assign(
+    Object.create(DriverTripsService.prototype) as DriverTripsService,
+    dependencias,
   );
 
   return {
