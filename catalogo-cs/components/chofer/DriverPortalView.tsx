@@ -6,6 +6,7 @@ import { formatCurrency as formatCurrencyMXN } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import AvisosPush from "@/components/ui/AvisosPush";
+import CerrarSesion from "@/components/ui/CerrarSesion";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
 
@@ -123,6 +124,14 @@ export default function DriverPortalView({
             </div>
           </div>
         </div>
+
+        {/* Solo con sesion propia: quien entra con el enlace del bot no tiene
+            sesion que cerrar. */}
+        {workShift !== undefined && workShift !== null && (
+          <div className="max-w-4xl mx-auto mt-2 flex justify-end">
+            <CerrarSesion />
+          </div>
+        )}
 
         {/* NAVIGATION TABS */}
         <div className="max-w-4xl mx-auto mt-3 flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 border-t border-white/5 pt-2">

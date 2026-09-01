@@ -7,6 +7,7 @@ import { formatCurrency as formatCurrencyMXN } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import AvisosPush from "@/components/ui/AvisosPush";
+import CerrarSesion from "@/components/ui/CerrarSesion";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
 import type { WeeklyPhotoSubmissionItem } from "@/lib/types";
@@ -123,14 +124,20 @@ export default function EmployeePortalView({
             </div>
           </div>
 
-          <div className="text-right">
-            <div className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">
-              Ranking Global
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">
+                Ranking Global
+              </div>
+              <div className="text-sm sm:text-base font-bold text-[#E8D5A3] flex items-center justify-end gap-1">
+                <Trophy size={14} />
+                <span>#{data.ranking.myPosition}</span>
+                <span className="text-xs text-gray-500 font-normal">/ {data.ranking.totalModels}</span>
+              </div>
             </div>
-            <div className="text-sm sm:text-base font-bold text-[#E8D5A3] flex items-center justify-end gap-1">
-              <span>🏆 #{data.ranking.myPosition}</span>
-              <span className="text-xs text-gray-500 font-normal">/ {data.ranking.totalModels}</span>
-            </div>
+            {/* Solo con sesion propia: quien entra con el enlace del bot no
+                tiene sesion que cerrar. */}
+            {workShift !== undefined && workShift !== null && <CerrarSesion />}
           </div>
         </div>
 
