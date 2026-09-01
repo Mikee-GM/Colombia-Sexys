@@ -1,3 +1,4 @@
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SolicitudServicioManual } from './entities/manual-service-request.entity';
@@ -12,6 +13,7 @@ import { LiquidationsModule } from '../liquidations/liquidations.module';
 
 @Module({
   imports: [
+    NotificationsModule,
     TypeOrmModule.forFeature([
       SolicitudServicioManual,
       Empleadas,

@@ -33,6 +33,9 @@ describe('WeeklyContentScheduler', () => {
   const scheduler = new WeeklyContentScheduler(
     { get: () => '' } as any,
     weeklyContentService as any,
+    // Los avisos push no intervienen en el ciclo semanal: se comprueba que no
+    // estorben, no lo que mandan.
+    { notificar: jest.fn().mockResolvedValue(0) } as any,
     telegramService as any,
     panelAccessService as any,
     scheduleRepo as any,

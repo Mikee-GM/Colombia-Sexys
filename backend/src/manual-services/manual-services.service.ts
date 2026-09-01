@@ -14,6 +14,7 @@ import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { OfficeLiquidationSyncService } from '../liquidations/office-liquidation-sync.service';
 import { CreateManualServiceRequestDto } from './dto/create-manual-service-request.dto';
 import { describeError } from '../common/errors/error-message';
@@ -38,6 +39,7 @@ export class ManualServicesService {
     @InjectRepository(Servicios)
     private readonly servicios: Repository<Servicios>,
     private readonly realtime: RealtimeEventsService,
+    private readonly notifications: NotificationsService,
     private readonly liquidationSync: OfficeLiquidationSyncService,
   ) {}
 
@@ -244,6 +246,27 @@ export class ManualServicesService {
       type: 'manual_service_approved',
       data: { solicitudId: id, servicioId: servicio.id },
     });
+    /*
+     * Nivel 2: le confirma que ese servicio se le va a pagar. El evento en vivo
+     * de debajo va a su canal de panel, que no sirve para avisar: la clave de
+     * ese canal es el id de empleada, no el de su usuario.
+     */
+    if (solicitud.empleada?.usuarioId) {
+      try {
+        await this.notifications.notificar(solicitud.empleada.usuarioId, {
+          titulo: 'Aprobaron tu registro',
+          cuerpo: 'El servicio que registraste a mano quedó aprobado.',
+          url: '/empleada/portal',
+          tag: `registro-${id}`,
+        });
+      } catch (err) {
+        this.logger.error(
+          'Error enviando el aviso push del registro aprobado:',
+          err,
+        );
+      }
+    }
+
     this.realtime.emitToEmployee(solicitud.empleadaId, {
       type: 'manual_service_resolved',
       data: { solicitudId: id, estado: 'aprobada' },

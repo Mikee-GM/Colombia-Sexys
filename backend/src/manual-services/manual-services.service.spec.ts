@@ -111,6 +111,9 @@ describe('ManualServicesService', () => {
       clientes,
       servicios,
       realtime,
+      // Los avisos push no intervienen en aprobar un registro: se comprueba que
+      // no estorben, no lo que mandan.
+      { notificar: jest.fn().mockResolvedValue(0) } as never,
       liquidationSync,
     );
   });

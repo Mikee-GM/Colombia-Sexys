@@ -1,3 +1,4 @@
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { WeeklyPhotoSubmission } from './entities/weekly-photo-submission.entity';
@@ -15,6 +16,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
+    NotificationsModule,
     TypeOrmModule.forFeature([
       WeeklyPhotoSubmission,
       WeeklyContentSchedule,

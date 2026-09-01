@@ -12,6 +12,7 @@ import {
   withAdvisoryLock,
 } from '../common/scheduling/advisory-lock';
 import { WeeklyContentService } from './weekly-content.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { WeeklyContentSchedule } from './entities/weekly-content-schedule.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { TelegramService } from '../telegram/telegram.service';
@@ -32,6 +33,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly configService: ConfigService,
     private readonly weeklyContentService: WeeklyContentService,
+    private readonly notifications: NotificationsService,
     private readonly telegramService: TelegramService,
     private readonly panelAccessService: PanelAccessService,
     @InjectRepository(WeeklyContentSchedule)
@@ -194,6 +196,29 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
 
       const numero = schedule.recordatoriosEnviados + 1;
       const restantes = maxRecordatorios - numero;
+
+      /*
+       * Nivel 2: tiene plazo, no urgencia. Pero se le cobra una multa si se le
+       * pasa, asi que enterarse tarde le cuesta dinero.
+       */
+      if (usuario.id) {
+        try {
+          await this.notifications.notificar(usuario.id, {
+            titulo: 'Te faltan tus fotos de la semana',
+            cuerpo:
+              restantes > 0
+                ? `Te quedan ${restantes} recordatorios antes de la multa.`
+                : 'Es el último recordatorio antes de la multa.',
+            url: '/empleada/portal?seccion=fotos',
+            tag: `fotos-${schedule.id}`,
+          });
+        } catch (err) {
+          this.logger.error(
+            'Error enviando el aviso push de las fotos semanales:',
+            err,
+          );
+        }
+      }
 
       schedule.estado = 'recordatorio_enviado';
       schedule.recordatorioAt = new Date();
