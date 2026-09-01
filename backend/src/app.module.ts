@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { LocationsModule } from './locations/locations.module';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -175,6 +176,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     ManualServicesModule,
     CatalogExtrasModule,
     ExtensionsModule,
+    LocationsModule,
     TelegramConversationsModule,
     EmployeePhotosModule,
     ApartmentsModule,

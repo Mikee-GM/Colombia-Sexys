@@ -14,6 +14,8 @@ import { DisciplineService } from '../discipline/discipline.service';
 import { CreateRatingDto } from '../discipline/dto/discipline.dto';
 import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
 import { PortalUser } from '../auth/decorators/portal-user.decorator';
+import { LocationsService } from '../locations/locations.service';
+import { RegistrarUbicacionDto } from '../locations/dto/registrar-ubicacion.dto';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
 
 @Controller('driver-portal')
@@ -24,7 +26,27 @@ export class DriverPortalController {
     private readonly driversService: DriversService,
     private readonly driverTripsService: DriverTripsService,
     private readonly disciplineService: DisciplineService,
+    private readonly locationsService: LocationsService,
   ) {}
+
+  /**
+   * Donde esta ahora mismo.
+   *
+   * Hasta ahora la unica via era compartir ubicacion en vivo desde Telegram, y
+   * dependia de acordarse de hacerlo. El portal la manda solo mientras esta
+   * abierto, que es justo cuando la persona esta trabajando.
+   *
+   * La espera entre escrituras la aplica el servicio, asi que un navegador que
+   * mande de mas no castiga a la base.
+   */
+  @Post('location')
+  @HttpCode(200)
+  async registrarUbicacion(
+    @PortalUser() userId: string,
+    @Body() dto: RegistrarUbicacionDto,
+  ) {
+    return this.locationsService.registrar(userId, dto.lat, dto.lng);
+  }
 
   @Get('me')
   getMyPortal(@PortalUser() userId: string) {

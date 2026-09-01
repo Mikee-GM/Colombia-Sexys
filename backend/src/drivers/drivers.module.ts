@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { LocationsModule } from '../locations/locations.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DriversService } from './drivers.service';
 import { DriversController } from './drivers.controller';
@@ -18,6 +19,7 @@ import { AiModule } from '../ai/ai.module';
 
 @Module({
   imports: [
+    LocationsModule,
     DisciplineModule,
     TypeOrmModule.forFeature([Choferes, Usuarios, Viajes, Servicios]),
     AuthModule,

@@ -153,3 +153,36 @@ async function avanzarViaje(
     };
   }
 }
+
+/** Igual que en el portal de la modelo, con las cabeceras propias de este. */
+export async function registrarMiUbicacion(
+  lat: number,
+  lng: number,
+  token?: string,
+): Promise<{ success: boolean }> {
+  try {
+    const cookie = await getBackendCookieHeader();
+    const csrf = await getCsrfToken();
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (cookie) headers["Cookie"] = cookie;
+    if (csrf) headers["x-csrf-token"] = csrf;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const url = new URL(`${getApiBaseUrl()}/driver-portal/location`);
+    if (token) url.searchParams.set("token", token);
+
+    const response = await fetch(url.toString(), {
+      method: "POST",
+      cache: "no-store",
+      headers,
+      body: JSON.stringify({ lat, lng }),
+    });
+    return { success: response.ok };
+  } catch (error) {
+    // Un envio perdido no se avisa: el siguiente lo corrige.
+    console.error("Error al registrar la ubicacion:", error);
+    return { success: false };
+  }
+}

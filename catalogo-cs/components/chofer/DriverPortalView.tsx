@@ -6,6 +6,8 @@ import { formatCurrency as formatCurrencyMXN } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import AvisosPush from "@/components/ui/AvisosPush";
+import CompartirUbicacion from "@/components/ui/CompartirUbicacion";
+import { registrarMiUbicacion } from "@/lib/actions/driver-portal";
 import CerrarSesion from "@/components/ui/CerrarSesion";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
@@ -171,6 +173,11 @@ export default function DriverPortalView({
         {/* Solo tiene sentido con sesion propia: un enlace con token no
             identifica el dispositivo, y la suscripcion es por dispositivo. */}
         {workShift !== undefined && workShift !== null && <AvisosPush />}
+        {/* Mientras esta pantalla siga abierta, el panel la ve en el mapa: es
+            lo que evita tener que mandar la ubicacion por Telegram. */}
+        {workShift !== undefined && workShift !== null && (
+          <CompartirUbicacion registrar={registrarMiUbicacion} />
+        )}
         {/* ================= TAB 1: RESUMEN ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">
