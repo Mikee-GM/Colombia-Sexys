@@ -217,6 +217,31 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Manda un aviso push sin que su fallo arrastre a nada.
+   *
+   * Todos los avisos son accesorios respecto a la operacion que los origina: el
+   * servicio ya esta creado, el viaje ya esta asignado, la cancelacion ya
+   * ocurrio. Se registra y se sigue.
+   */
+  private async avisar(
+    usuarioId: string | null | undefined,
+    aviso: {
+      titulo: string;
+      cuerpo: string;
+      url: string;
+      tag?: string;
+      requireInteraction?: boolean;
+    },
+  ): Promise<void> {
+    if (!usuarioId) return;
+    try {
+      await this.notificationsService.notificar(usuarioId, aviso);
+    } catch (err) {
+      this.logger.error(`Error enviando el aviso push "${aviso.titulo}":`, err);
+    }
+  }
+
+  /**
    * Aviso push a la modelo de que ya tiene un servicio autorizado.
    *
    * Va aparte del mensaje de Telegram de arriba y en su propio try/catch: son
@@ -1210,6 +1235,38 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     estadoPrevio: string,
     viajesActivos: Viajes[],
   ): Promise<void> {
+    /*
+     * Nivel 1 para los dos: ella puede estar vestida o en camino, y el chofer
+     * puede ir conduciendo hacia el punto de recogida. Enterarse tarde de una
+     * cancelacion es de las cosas que mas molestan de este sistema.
+     */
+    await this.avisar(service.empleada?.usuarioId, {
+      titulo: 'Servicio cancelado',
+      cuerpo: 'Uno de tus servicios se canceló. Toca para verlo.',
+      url: '/empleada/portal',
+      tag: `cancelado-${service.id}`,
+      requireInteraction: true,
+    });
+    /*
+     * El chofer se busca por su id y no por la relacion: `findOne` carga los
+     * viajes pero no su chofer, asi que leerlo de ahi habria dejado el aviso
+     * mudo sin que nadie se enterara.
+     */
+    for (const viaje of viajesActivos) {
+      if (!viaje.choferId) continue;
+      const chofer = await this.choferesRepository.findOne({
+        where: { id: viaje.choferId },
+        select: { id: true, usuarioId: true },
+      });
+      await this.avisar(chofer?.usuarioId, {
+        titulo: 'Viaje cancelado',
+        cuerpo: 'Se canceló el servicio de uno de tus viajes.',
+        url: '/chofer/portal',
+        tag: `viaje-cancelado-${viaje.id}`,
+        requireInteraction: true,
+      });
+    }
+
     const yaConfirmado =
       estadoPrevio === 'agendado' || estadoPrevio === 'en_curso';
 
@@ -2149,6 +2206,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           const threadId = undefined;
 
           if (targetChatId) {
+            // Nivel 1: la ventana para decidir es corta y ella esta trabajando.
+            await this.avisar(service.empleada?.usuarioId, {
+              titulo: '¿Extiendes el servicio?',
+              cuerpo: 'Termina en unos 15 minutos. Toca para decidir.',
+              url: '/empleada/portal',
+              tag: `extender-${service.id}`,
+              requireInteraction: true,
+            });
             await this.bot.telegram.sendMessage(
               targetChatId,
               `⏳ *Aviso de Finalización* ⏳\n\n` +
@@ -2541,6 +2606,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
     };
     this.realtimeEventsService.emitToBoss(viaje.servicio.jefeId, event);
+
+    // Nivel 1: ese viaje no lo cubre nadie si el jefe no lo resuelve a mano.
+    await this.avisar(viaje.servicio.jefeId, {
+      titulo: 'Sin choferes disponibles',
+      cuerpo: 'Un viaje necesita transporte. Toca para resolverlo.',
+      url: '/jefe',
+      tag: `sin-chofer-${viaje.id}`,
+      requireInteraction: true,
+    });
 
     const topic = this.getServiceTopic(viaje.servicio);
     if (!topic) return;
@@ -3659,6 +3733,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               ),
             ),
         );
+        await this.avisar(servicio.jefeId, {
+          titulo: 'Regreso sin resolver',
+          cuerpo:
+            'Una modelo lleva tres recordatorios sin transporte de vuelta.',
+          url: '/jefe',
+          tag: `regreso-${servicio.id}`,
+          requireInteraction: true,
+        });
         this.realtimeEventsService.emitToBoss(servicio.jefeId, {
           type: 'return_transport_escalated',
           data: { serviceId: servicio.id },

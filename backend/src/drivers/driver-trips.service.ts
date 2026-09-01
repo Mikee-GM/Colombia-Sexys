@@ -18,6 +18,7 @@ import { SettlementsService } from '../transport-operations/settlements.service'
 import { AiMessageService } from '../ai/ai-message.service';
 import { ServicesService } from '../services/services.service';
 import { TelegramService } from '../telegram/telegram.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Lo que la modelo tiene de margen antes de que se le cuente la espera. */
 const ESPERA_MS = 600_000;
@@ -49,6 +50,7 @@ export class DriverTripsService {
     private readonly servicios: Repository<Servicios>,
     private readonly realtime: RealtimeEventsService,
     private readonly settlements: SettlementsService,
+    private readonly notifications: NotificationsService,
     private readonly aiMessages: AiMessageService,
     // Se usa el servicio y no el bot crudo: ahi vive el limitador de ritmo
     // por el que tiene que pasar todo lo que sale hacia Telegram.
@@ -57,6 +59,30 @@ export class DriverTripsService {
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
   ) {}
+
+  /**
+   * Manda un aviso push sin que su fallo arrastre a nada.
+   *
+   * El viaje ya avanzo cuando esto se llama: un aviso que no sale se registra y
+   * se sigue.
+   */
+  private async avisar(
+    usuarioId: string | null | undefined,
+    aviso: {
+      titulo: string;
+      cuerpo: string;
+      url: string;
+      tag?: string;
+      requireInteraction?: boolean;
+    },
+  ): Promise<void> {
+    if (!usuarioId) return;
+    try {
+      await this.notifications.notificar(usuarioId, aviso);
+    } catch (err) {
+      this.logger.error(`Error enviando el aviso push "${aviso.titulo}":`, err);
+    }
+  }
 
   /**
    * El chofer toma una oferta de viaje.
@@ -176,6 +202,15 @@ export class DriverTripsService {
       const enviado = await this.telegram.sendMessage(chatId, texto, {
         parseMode: 'Markdown',
       });
+      // Nivel 1: tiene que estar lista cuando el coche llegue.
+      await this.avisar(trip.servicio?.empleada?.usuarioId, {
+        titulo: 'Tu chofer va en camino',
+        cuerpo: 'Toca para ver los datos del coche.',
+        url: '/empleada/portal',
+        tag: `viaje-${trip.id}`,
+        requireInteraction: true,
+      });
+
       trip.telegramEmpleadaMsgChoferCaminoId = enviado.message_id.toString();
       await this.viajes.update(trip.id, {
         telegramEmpleadaMsgChoferCaminoId:
@@ -659,6 +694,15 @@ export class DriverTripsService {
             ),
           ],
         ],
+      });
+
+      // Nivel 1: desde aqui empieza a correr su margen de espera.
+      await this.avisar(trip.servicio?.empleada?.usuarioId, {
+        titulo: 'Tu chofer ya llegó',
+        cuerpo: 'Está en el punto de recogida. Toca para ver sus datos.',
+        url: '/empleada/portal',
+        tag: `viaje-${trip.id}`,
+        requireInteraction: true,
       });
 
       this.servicesService.startWaitTimeout(trip.servicio.id, ESPERA_MS);

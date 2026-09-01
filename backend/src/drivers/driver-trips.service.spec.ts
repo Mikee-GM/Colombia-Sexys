@@ -9,6 +9,7 @@ import { Servicios } from '../services/entities/service.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { SettlementsService } from '../transport-operations/settlements.service';
 import { AiMessageService } from '../ai/ai-message.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const CHOFER = 'chofer-1';
 const AJENO = 'chofer-2';
@@ -94,6 +95,11 @@ function montar(trip: Viajes | null, afectadas = 1) {
       emitToEmployee: jest.fn(),
     } as unknown as RealtimeEventsService,
     { syncDriverSettlement } as unknown as SettlementsService,
+    // Los avisos push no cambian el resultado de ninguna transicion: se
+    // comprueba que no estorben, no lo que mandan.
+    {
+      notificar: jest.fn(() => Promise.resolve(0)),
+    } as unknown as NotificationsService,
     {
       generate: jest.fn(() => Promise.resolve('Ya llegué')),
     } as unknown as AiMessageService,

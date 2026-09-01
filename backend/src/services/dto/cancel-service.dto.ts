@@ -11,7 +11,7 @@ export class CancelServiceDto {
    * decidir despues quien asume el costo de la cancelacion.
    */
   @ApiProperty({ enum: CANCELLATION_REASONS })
-  @IsIn(CANCELLATION_REASONS as unknown as string[])
+  @IsIn(CANCELLATION_REASONS)
   reason: CancellationReason;
 
   @ApiPropertyOptional({
