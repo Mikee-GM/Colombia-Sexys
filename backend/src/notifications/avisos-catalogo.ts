@@ -51,6 +51,18 @@ export const AVISOS_OPCIONALES: TipoDeAviso[] = [
     roles: ['jefe', 'admin'],
   },
   {
+    tipo: 'chat_message',
+    titulo: 'Mensajes del cliente',
+    descripcion: 'Un cliente escribe en una conversación tuya.',
+    roles: ['jefe', 'admin'],
+  },
+  {
+    tipo: 'group_chat_message',
+    titulo: 'Mensajes en grupales',
+    descripcion: 'Un cliente escribe en un servicio grupal tuyo.',
+    roles: ['jefe', 'admin'],
+  },
+  {
     tipo: 'service_cancelled',
     titulo: 'Cancelaciones',
     descripcion: 'Se cancela un servicio de tu equipo.',

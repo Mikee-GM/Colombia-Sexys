@@ -10,6 +10,14 @@ type AvisoDeEvento = {
   url: string;
   /** Prefijo del `tag`, para que dos avisos del mismo asunto no se apilen. */
   asunto: string;
+  /**
+   * Cuando el evento solo justifica un aviso a veces.
+   *
+   * `chat_message` se emite tambien por cada respuesta de la IA y por cada nota
+   * del sistema: sin filtrar, una conversacion normal seria una lluvia de
+   * avisos por algo que el jefe no tiene que atender.
+   */
+  soloSi?: (evento: Record<string, unknown>) => boolean;
 };
 
 /**
@@ -43,6 +51,24 @@ const AVISOS_DEL_JEFE: Record<string, AvisoDeEvento> = {
     cuerpo: 'Una modelo pide registrar un servicio.',
     url: '/jefe/servicios-manuales',
     asunto: 'registro',
+  },
+  chat_message: {
+    titulo: 'El cliente escribió',
+    cuerpo: 'Hay un mensaje nuevo en una conversación tuya.',
+    url: '/jefe',
+    asunto: 'mensaje',
+    // Solo lo que escribe el cliente. Las respuestas de la IA y las notas del
+    // sistema van al mismo evento y no son algo que el jefe tenga que atender.
+    soloSi: (evento) =>
+      (evento.data as { emisor?: string } | undefined)?.emisor === 'cliente',
+  },
+  group_chat_message: {
+    titulo: 'El cliente escribió',
+    cuerpo: 'Hay un mensaje nuevo en un servicio grupal tuyo.',
+    url: '/jefe?tab=grupos',
+    asunto: 'mensaje-grupo',
+    soloSi: (evento) =>
+      (evento.data as { emisor?: string } | undefined)?.emisor === 'cliente',
   },
   service_cancelled: {
     titulo: 'Servicio cancelado',
@@ -92,6 +118,12 @@ export class NotificationsBridge implements OnModuleInit {
 
     const aviso = AVISOS_DEL_JEFE[tipo];
     if (!aviso) return;
+    if (
+      aviso.soloSi &&
+      !aviso.soloSi(message.event as Record<string, unknown>)
+    ) {
+      return;
+    }
 
     try {
       await this.notifications.notificar(message.key, {
@@ -115,7 +147,19 @@ export class NotificationsBridge implements OnModuleInit {
   private referencia(event: unknown): string {
     const data = (event as { data?: Record<string, unknown> } | undefined)
       ?.data;
-    for (const clave of ['serviceId', 'requestId', 'tripId', 'id']) {
+    /*
+     * El orden importa: `id` va el ultimo a proposito. En un `chat_message` el
+     * `id` es el del mensaje, asi que agrupar por el convertiria una
+     * conversacion de diez mensajes en diez avisos apilados. `servicioId` --en
+     * espanol, como la columna-- los junta todos en uno que se va reemplazando.
+     */
+    for (const clave of [
+      'serviceId',
+      'servicioId',
+      'requestId',
+      'tripId',
+      'id',
+    ]) {
       const valor = data?.[clave];
       // Solo lo que de verdad identifica algo: un objeto acabaria como
       // "[object Object]" y agruparia avisos que no tienen nada que ver.

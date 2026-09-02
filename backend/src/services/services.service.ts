@@ -2105,6 +2105,23 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       `Estado del viaje ${viajeId} corregido a "${estado}" por ${actor.id}: ${motivo}`,
     );
 
+    /*
+     * El chofer tiene que enterarse: su portal le va a ensenar otro paso del
+     * que el dejo, y sin aviso parece que la aplicacion se equivoco sola.
+     */
+    const chofer = viaje.choferId
+      ? await this.choferesRepository.findOne({
+          where: { id: viaje.choferId },
+          select: { id: true, usuarioId: true },
+        })
+      : null;
+    await this.avisar(chofer?.usuarioId, {
+      titulo: 'Corregimos tu viaje',
+      cuerpo: 'La oficina ajustó en qué punto va. Toca para verlo.',
+      url: '/chofer/portal',
+      tag: `corregido-${viajeId}`,
+    });
+
     return (
       (await this.viajesRepository.findOne({ where: { id: viajeId } })) ?? viaje
     );
@@ -3792,7 +3809,23 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     servicio.cerradoPorOficinaAt = new Date();
     servicio.motivoCierreOficina = motivo.trim().slice(0, 2000);
 
-    return this.cerrarServicio(servicio);
+    const cierre = await this.cerrarServicio(servicio);
+
+    /*
+     * Nivel 1: ella no lo cerro, asi que hasta que se lo digan sigue creyendo
+     * que tiene un servicio en curso --y acaban de calcularle las horas
+     * facturadas y lo que le toca--. Va despues del cierre y en su propio
+     * try/catch: el servicio ya esta cerrado y un aviso que falla no lo deshace.
+     */
+    await this.avisar(servicio.empleada?.usuarioId, {
+      titulo: 'Cerramos tu servicio',
+      cuerpo: 'Lo cerró la oficina por ti. Toca para ver el resumen.',
+      url: '/empleada/portal',
+      tag: `cerrado-${servicio.id}`,
+      requireInteraction: true,
+    });
+
+    return cierre;
   }
 
   /**

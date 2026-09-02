@@ -353,7 +353,7 @@ export class SettlementsService {
       );
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    const resultado = await this.dataSource.transaction(async (manager) => {
       const settlement = await manager.getRepository(DriverSettlement).findOne({
         where: { driverId, weekStart: startDate },
         lock: { mode: 'pessimistic_write' },
@@ -387,6 +387,36 @@ export class SettlementsService {
       );
       return reabierta;
     });
+
+    /*
+     * Se le dijo que su liquidacion estaba lista y ahora ya no lo esta: es su
+     * dinero, y enterarse mirando el portal por casualidad es peor que no
+     * haberselo dicho nunca. Fuera de la transaccion y en su propio try/catch:
+     * la semana ya esta reabierta.
+     */
+    const chofer = await this.drivers.findOne({
+      where: { id: driverId },
+      select: { id: true, usuarioId: true },
+    });
+    const usuarioId = chofer?.usuarioId;
+    if (usuarioId) {
+      try {
+        await this.notifications.notificar(usuarioId, {
+          titulo: 'Reabrimos tu liquidación',
+          cuerpo: 'Hubo que corregir la semana. Toca para ver el detalle.',
+          url: '/chofer/portal',
+          tag: `liquidacion-${startDate}`,
+          tipo: AVISO_LIQUIDACION,
+        });
+      } catch (err) {
+        this.logger.error(
+          'Error enviando el aviso push de la liquidación reabierta:',
+          err,
+        );
+      }
+    }
+
+    return resultado;
   }
 
   async settleDriver(

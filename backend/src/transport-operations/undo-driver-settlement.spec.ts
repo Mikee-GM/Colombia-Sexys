@@ -22,6 +22,7 @@ describe('SettlementsService undoDriverSettlement', () => {
     const guardar = jest.fn((valor) => Promise.resolve(valor));
     const actualizarViajes = jest.fn().mockResolvedValue(undefined);
     const buscarSettlement = jest.fn().mockResolvedValue(settlement);
+    const notificar = jest.fn().mockResolvedValue(1);
 
     const manager = {
       getRepository: jest.fn((entidad: { name?: string }) =>
@@ -44,9 +45,17 @@ describe('SettlementsService undoDriverSettlement', () => {
       dataSource: {
         transaction: (fn: (m: unknown) => unknown) => fn(manager),
       },
+      // Se le dijo que su liquidacion estaba lista y ahora ya no lo esta: el
+      // aviso es parte de deshacer, no un extra.
+      drivers: {
+        findOne: jest
+          .fn()
+          .mockResolvedValue({ id: 'chofer-1', usuarioId: 'user-chofer' }),
+      },
+      notifications: { notificar },
     });
 
-    return { service, guardar, actualizarViajes };
+    return { service, guardar, actualizarViajes, notificar };
   }
 
   const pagada = {
@@ -128,5 +137,29 @@ describe('SettlementsService undoDriverSettlement', () => {
         'Un motivo suficientemente largo',
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  /*
+   * Se le dijo que su liquidacion estaba lista y ahora ya no lo esta. Es su
+   * dinero: enterarse mirando el portal por casualidad es peor que no haberselo
+   * dicho nunca.
+   */
+  it('le avisa al chofer de que su semana se reabrio', async () => {
+    const { service, notificar } = armar(pagada);
+
+    await service.undoDriverSettlement(
+      'chofer-1',
+      SEMANA,
+      ADMIN,
+      'Faltaba un viaje del sábado',
+    );
+
+    expect(notificar).toHaveBeenCalledWith(
+      'user-chofer',
+      expect.objectContaining({
+        titulo: 'Reabrimos tu liquidación',
+        url: '/chofer/portal',
+      }),
+    );
   });
 });
