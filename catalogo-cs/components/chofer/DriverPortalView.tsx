@@ -7,7 +7,14 @@ import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import AvisosPush from "@/components/ui/AvisosPush";
 import CompartirUbicacion from "@/components/ui/CompartirUbicacion";
-import { registrarMiUbicacion } from "@/lib/actions/driver-portal";
+import ApelarCalificacion from "@/components/ui/ApelarCalificacion";
+import ReportarConducta from "@/components/ui/ReportarConducta";
+import {
+  apelarCalificacion,
+  getCalificacionesApelables,
+  registrarMiUbicacion,
+  reportarConducta,
+} from "@/lib/actions/driver-portal";
 import CerrarSesion from "@/components/ui/CerrarSesion";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
@@ -425,10 +432,8 @@ export default function DriverPortalView({
               ) : (
                 <div className="divide-y divide-white/5">
                   {data.recentTrips.map((trip) => (
-                    <div
-                      key={trip.id}
-                      className="p-4 hover:bg-white/[0.02] transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
+                    <div key={trip.id} className="p-4 hover:bg-white/[0.02] transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-white">
@@ -452,6 +457,18 @@ export default function DriverPortalView({
                         </div>
                       </div>
                     </div>
+
+                    {/* La interaccion de un chofer es el viaje, no el
+                        servicio: es lo que el backend sabe resolver. */}
+                    <div className="mt-3">
+                      <ReportarConducta
+                        servicioId={trip.id}
+                        direction="driver_to_employee"
+                        sujeto="este viaje"
+                        reportar={reportarConducta}
+                      />
+                    </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -462,6 +479,12 @@ export default function DriverPortalView({
         {/* ================= TAB 4: REPUTACIÓN ================= */}
         {activeTab === "reputacion" && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Antes que los numeros: si hay algo que apelar, el plazo corre. */}
+            <ApelarCalificacion
+              cargar={getCalificacionesApelables}
+              apelar={apelarCalificacion}
+                         />
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-[#141721] p-5 rounded-xl border border-white/5 text-center space-y-1">
                 <div className="text-3xl font-extrabold text-amber-300 flex items-center justify-center gap-1">

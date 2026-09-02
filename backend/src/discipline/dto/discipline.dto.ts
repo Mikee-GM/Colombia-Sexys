@@ -64,6 +64,20 @@ export class RevokeSanctionDto {
   @IsString() @MinLength(3) @MaxLength(1000) reason: string;
 }
 
+/**
+ * El motivo con el que alguien apela una calificacion.
+ *
+ * Se exige un minimo real porque quien resuelve la apelacion solo tiene esto
+ * para decidir: un "no estoy de acuerdo" no le sirve de nada, y aceptarlo seria
+ * hacerle perder el tiempo a las dos partes.
+ */
+export class AppealRatingDto {
+  @IsString()
+  @MinLength(15)
+  @MaxLength(2000)
+  reason: string;
+}
+
 export class ResolveAppealDto {
   @IsIn(['upheld', 'overturned'])
   decision: 'upheld' | 'overturned';

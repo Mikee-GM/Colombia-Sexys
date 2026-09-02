@@ -248,7 +248,7 @@ export class LiquidationsService {
     this.validatePeriod(query);
 
     const records = await this.getRecords(
-      { ...query, employeeId: undefined } as LiquidationPeriodQueryDto,
+      { ...query, employeeId: undefined },
       actor,
     );
     if (!records.length) return [];

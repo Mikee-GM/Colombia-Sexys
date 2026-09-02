@@ -133,7 +133,7 @@ export class EmployeeMoneyService {
    */
   async overview(query: LiquidationPeriodQueryDto, actor: Usuarios) {
     const registros = await this.liquidations.getRecords(
-      { ...query, employeeId: undefined } as LiquidationPeriodQueryDto,
+      { ...query, employeeId: undefined },
       actor,
     );
     const anteriores = await this.liquidations.getRecords(

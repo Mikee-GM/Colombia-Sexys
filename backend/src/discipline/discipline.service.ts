@@ -757,6 +757,36 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /**
+   * Las calificaciones que esta persona todavia puede apelar.
+   *
+   * La identidad sale del actor y no de un parametro: si viniera del cliente,
+   * cualquiera podria pedir las de otro. Es la misma razon por la que
+   * `apelarPropia` no acepta un sujeto.
+   */
+  async listarApelablesPropias(actor: Actor) {
+    const identity = await this.identityForActor(actor);
+    if (!identity || identity.type === 'client' || identity.type === 'boss') {
+      throw new ForbiddenException('No tienes calificaciones que apelar');
+    }
+    return this.listOwnAppealableRatings(identity.type, identity.id);
+  }
+
+  /**
+   * Apela una calificacion propia.
+   *
+   * Existia solo detras del boton del chat, asi que quien no usa Telegram no
+   * tenia forma de defenderse de una calificacion baja --y una calificacion
+   * baja alimenta el score de confianza y puede acabar en sancion--.
+   */
+  async apelarPropia(actor: Actor, ratingId: string, reason: string) {
+    const identity = await this.identityForActor(actor);
+    if (!identity || identity.type === 'client' || identity.type === 'boss') {
+      throw new ForbiddenException('No tienes calificaciones que apelar');
+    }
+    return this.appealRating(identity.type, identity.id, ratingId, reason);
+  }
+
   async appealRating(
     subjectType: PersonType,
     subjectId: string,

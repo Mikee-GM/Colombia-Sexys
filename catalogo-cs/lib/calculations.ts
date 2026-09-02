@@ -204,7 +204,7 @@ export function calculateCutReport(
           ? Number(r.porcentaje_empresa_aplicado)
           : 40;
       const valorServicio = Number(r.total_servicio) || 0;
-      let promo = r.promocion ? 300 : 0;
+      const promo = r.promocion ? 300 : 0;
       comisionEmpresaAcumulada += (valorServicio + promo) * (pct / 100);
     });
 

@@ -19,7 +19,11 @@ import { UpdatePortalTripStatusDto } from './dto/portal-trip-status.dto';
 import { AddPortalServiceExtraDto } from './dto/portal-service-extra.dto';
 import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
 import { DisciplineService } from '../discipline/discipline.service';
-import { CreateRatingDto } from '../discipline/dto/discipline.dto';
+import {
+  AppealRatingDto,
+  CreateConductReportDto,
+  CreateRatingDto,
+} from '../discipline/dto/discipline.dto';
 import { ExtendServiceDto } from './dto/extend-service.dto';
 import { PortalUser } from '../auth/decorators/portal-user.decorator';
 import { LocationsService } from '../locations/locations.service';
@@ -283,6 +287,51 @@ export class EmployeePortalController {
    * Solo se admiten las direcciones que salen de ella: no puede calificar en
    * nombre de nadie mas.
    */
+  /**
+   * Las calificaciones bajas que todavia puede apelar.
+   *
+   * Una calificacion de una o dos estrellas alimenta el score de confianza y
+   * puede acabar en sancion, asi que apelarla es su unica defensa. Hasta ahora
+   * solo existia detras de un boton del chat.
+   */
+  @Get('ratings/appealable')
+  apelablesPropias(@PortalUser() userId: string) {
+    return this.disciplineService.listarApelablesPropias({
+      id: userId,
+      rol: 'empleada',
+    });
+  }
+
+  @Post('ratings/:ratingId/appeal')
+  @HttpCode(200)
+  apelar(
+    @PortalUser() userId: string,
+    @Param('ratingId', new ParseUUIDPipe()) ratingId: string,
+    @Body() dto: AppealRatingDto,
+  ) {
+    return this.disciplineService.apelarPropia(
+      { id: userId, rol: 'empleada' },
+      ratingId,
+      dto.reason,
+    );
+  }
+
+  /**
+   * Levanta un reporte de conducta sobre alguien de un servicio suyo.
+   *
+   * Es el mecanismo con el que se acaba bloqueando a un cliente problematico.
+   * `resolveInteraction` comprueba que el servicio sea suyo, asi que aqui no se
+   * repite: hacerlo dos veces invita a que una de las dos se quede atras.
+   */
+  @Post('reports')
+  @HttpCode(201)
+  reportar(@PortalUser() userId: string, @Body() dto: CreateConductReportDto) {
+    return this.disciplineService.createReport(
+      { id: userId, rol: 'empleada' },
+      dto,
+    );
+  }
+
   @Post('ratings')
   @HttpCode(201)
   async calificar(@PortalUser() userId: string, @Body() dto: CreateRatingDto) {

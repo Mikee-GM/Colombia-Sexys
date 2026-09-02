@@ -8,7 +8,14 @@ import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import AvisosPush from "@/components/ui/AvisosPush";
 import CompartirUbicacion from "@/components/ui/CompartirUbicacion";
-import { registrarMiUbicacion } from "@/lib/actions/employee-portal";
+import ApelarCalificacion from "@/components/ui/ApelarCalificacion";
+import ReportarConducta from "@/components/ui/ReportarConducta";
+import {
+  apelarCalificacion,
+  getCalificacionesApelables,
+  registrarMiUbicacion,
+  reportarConducta,
+} from "@/lib/actions/employee-portal";
 import CerrarSesion from "@/components/ui/CerrarSesion";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
@@ -613,10 +620,8 @@ export default function EmployeePortalView({
               ) : (
                 <div className="divide-y divide-white/5">
                   {data.recentServices.map((service) => (
-                    <div
-                      key={service.id}
-                      className="p-4 hover:bg-white/[0.02] transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
+                    <div key={service.id} className="p-4 hover:bg-white/[0.02] transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-white">
@@ -650,6 +655,19 @@ export default function EmployeePortalView({
                         </div>
                       </div>
                     </div>
+
+                    {/* Si el cliente se portó mal, esto es lo que acaba
+                        bloqueándolo. Antes solo se podía desde el chat. */}
+                    <div className="mt-3">
+                      <ReportarConducta
+                        servicioId={service.id}
+                        direction="employee_to_client"
+                        sujeto="al cliente"
+                        reportar={reportarConducta}
+                        token={token}
+                      />
+                    </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -660,6 +678,13 @@ export default function EmployeePortalView({
         {/* ================= TAB 4: REPUTACIÓN Y RESEÑAS ================= */}
         {activeTab === "reputacion" && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Antes que los numeros: si hay algo que apelar, el plazo corre. */}
+            <ApelarCalificacion
+              cargar={getCalificacionesApelables}
+              apelar={apelarCalificacion}
+              token={token}
+            />
+
             {/* Header de reputación */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-[#141721] p-5 rounded-xl border border-white/5 text-center space-y-1 sm:col-span-1">

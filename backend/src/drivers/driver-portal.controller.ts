@@ -11,7 +11,11 @@ import {
 import { DriversService } from './drivers.service';
 import { DriverTripsService } from './driver-trips.service';
 import { DisciplineService } from '../discipline/discipline.service';
-import { CreateRatingDto } from '../discipline/dto/discipline.dto';
+import {
+  AppealRatingDto,
+  CreateConductReportDto,
+  CreateRatingDto,
+} from '../discipline/dto/discipline.dto';
 import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
 import { PortalUser } from '../auth/decorators/portal-user.decorator';
 import { LocationsService } from '../locations/locations.service';
@@ -162,6 +166,50 @@ export class DriverPortalController {
    * La direccion se fija aqui y no se acepta del cuerpo: un chofer solo puede
    * calificar en esa direccion.
    */
+  /**
+   * Las calificaciones bajas que todavia puede apelar.
+   *
+   * Una calificacion de una o dos estrellas alimenta el score de confianza y
+   * puede acabar en sancion, asi que apelarla es su unica defensa. Hasta ahora
+   * solo existia detras de un boton del chat.
+   */
+  @Get('ratings/appealable')
+  apelablesPropias(@PortalUser() userId: string) {
+    return this.disciplineService.listarApelablesPropias({
+      id: userId,
+      rol: 'chofer',
+    });
+  }
+
+  @Post('ratings/:ratingId/appeal')
+  @HttpCode(200)
+  apelar(
+    @PortalUser() userId: string,
+    @Param('ratingId', new ParseUUIDPipe()) ratingId: string,
+    @Body() dto: AppealRatingDto,
+  ) {
+    return this.disciplineService.apelarPropia(
+      { id: userId, rol: 'chofer' },
+      ratingId,
+      dto.reason,
+    );
+  }
+
+  /**
+   * Levanta un reporte de conducta sobre alguien de un viaje suyo.
+   *
+   * `resolveInteraction` comprueba que el servicio sea suyo, asi que aqui no se
+   * repite: hacerlo dos veces invita a que una de las dos se quede atras.
+   */
+  @Post('reports')
+  @HttpCode(201)
+  reportar(@PortalUser() userId: string, @Body() dto: CreateConductReportDto) {
+    return this.disciplineService.createReport(
+      { id: userId, rol: 'chofer' },
+      dto,
+    );
+  }
+
   @Post('ratings')
   @HttpCode(201)
   async calificar(@PortalUser() userId: string, @Body() dto: CreateRatingDto) {

@@ -87,7 +87,7 @@ export class OfficeLiquidationSyncService {
       serviceId: service.id,
       employeeId: service.empleadaId,
       registeredByUserId: service.jefeId,
-      sourceRole: service.jefe.rol as 'admin' | 'jefe',
+      sourceRole: service.jefe.rol,
       occurredAt: service.canceladoAt ?? service.createdAt,
       cancelled: true,
       serviceTotal: 0,

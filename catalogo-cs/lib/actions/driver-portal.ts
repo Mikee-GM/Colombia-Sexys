@@ -4,6 +4,30 @@ import { getApiBaseUrl } from "@/lib/api-server";
 import { getBackendCookieHeader, getCsrfToken } from "@/lib/auth";
 import type { DriverPortalData } from "@/lib/types";
 
+/**
+ * La URL del portal, con el token de la Mini App si lo hay.
+ *
+ * El portal se puede abrir de dos formas: con sesion propia --cookie-- o desde
+ * un enlace de Telegram con token. Estas dos funciones mandan las dos cosas,
+ * asi que quien llama no tiene que saber por cual entro.
+ */
+function portalUrl(path: string, token?: string) {
+  const url = new URL(`${getApiBaseUrl()}${path}`);
+  if (token) url.searchParams.set("token", token);
+  return url.toString();
+}
+
+async function portalHeaders(token?: string) {
+  const cookie = await getBackendCookieHeader();
+  const csrf = await getCsrfToken();
+  const headers: Record<string, string> = {};
+  if (cookie) headers["Cookie"] = cookie;
+  if (csrf) headers["x-csrf-token"] = csrf;
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+}
+
+
 export async function getDriverPortalData(
   token?: string,
 ): Promise<{ success: boolean; data?: DriverPortalData; error?: string }> {
@@ -184,5 +208,118 @@ export async function registrarMiUbicacion(
     // Un envio perdido no se avisa: el siguiente lo corrige.
     console.error("Error al registrar la ubicacion:", error);
     return { success: false };
+  }
+}
+
+/** Una calificacion baja que todavia se puede apelar. */
+export type CalificacionApelable = {
+  id: string;
+  direction: string;
+  stars: number;
+  comment: string | null;
+  createdAt: string;
+};
+
+/**
+ * Las calificaciones bajas que esta persona todavia puede apelar.
+ *
+ * El backend resuelve de quien son a partir de la sesion, nunca de un
+ * parametro: no hay forma de pedir las de otro.
+ */
+export async function getCalificacionesApelables(
+  token?: string,
+): Promise<CalificacionApelable[]> {
+  try {
+    const response = await fetch(portalUrl("/driver-portal/ratings/appealable", token), {
+      method: "GET",
+      cache: "no-store",
+      headers: await portalHeaders(token),
+    });
+    if (!response.ok) return [];
+    return (await response.json()) as CalificacionApelable[];
+  } catch (error) {
+    console.error("Error al leer las calificaciones apelables:", error);
+    return [];
+  }
+}
+
+/**
+ * Apela una calificacion baja.
+ *
+ * Es la unica defensa ante algo que alimenta el score de confianza y puede
+ * acabar en sancion. Solo existia detras de un boton del chat.
+ */
+export async function apelarCalificacion(
+  ratingId: string,
+  reason: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      portalUrl(`/driver-portal/ratings/${ratingId}/appeal`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          ...(await portalHeaders(token)),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return { success: false, error: err.message || "No se pudo apelar" };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al apelar la calificacion:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
+
+/**
+ * Levanta un reporte de conducta sobre la modelo de un viaje suyo.
+ *
+ * Es el mecanismo con el que se acaba bloqueando a un cliente problematico. Si
+ * la unica via es el chat, un incidente se pierde justo cuando mas importa
+ * registrarlo.
+ */
+export async function reportarConducta(
+  input: {
+    direction: string;
+    interactionId: string;
+    category: string;
+    description: string;
+  },
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(portalUrl("/driver-portal/reports", token), {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        ...(await portalHeaders(token)),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo enviar el reporte",
+      };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al reportar:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
   }
 }

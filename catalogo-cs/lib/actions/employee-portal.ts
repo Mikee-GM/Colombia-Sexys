@@ -336,6 +336,118 @@ export async function addServiceExtra(
   }
 }
 
+/** Una calificacion baja que todavia se puede apelar. */
+export type CalificacionApelable = {
+  id: string;
+  direction: string;
+  stars: number;
+  comment: string | null;
+  createdAt: string;
+};
+
+/**
+ * Las calificaciones bajas que esta persona todavia puede apelar.
+ *
+ * El backend resuelve de quien son a partir de la sesion, nunca de un
+ * parametro: no hay forma de pedir las de otra.
+ */
+export async function getCalificacionesApelables(
+  token?: string,
+): Promise<CalificacionApelable[]> {
+  try {
+    const response = await fetch(
+      portalUrl("/employee-portal/ratings/appealable", token),
+      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+    );
+    if (!response.ok) return [];
+    return (await response.json()) as CalificacionApelable[];
+  } catch (error) {
+    console.error("Error al leer las calificaciones apelables:", error);
+    return [];
+  }
+}
+
+/**
+ * Apela una calificacion baja.
+ *
+ * Es la unica defensa ante algo que alimenta el score de confianza y puede
+ * acabar en sancion. Solo existia detras de un boton del chat.
+ */
+export async function apelarCalificacion(
+  ratingId: string,
+  reason: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/ratings/${ratingId}/appeal`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          ...(await portalHeaders(token)),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return { success: false, error: err.message || "No se pudo apelar" };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al apelar la calificacion:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
+
+/**
+ * Levanta un reporte de conducta sobre el cliente o el chofer de un servicio.
+ *
+ * Es el mecanismo con el que se acaba bloqueando a un cliente problematico. Si
+ * la unica via es el chat, un incidente se pierde justo cuando mas importa
+ * registrarlo.
+ */
+export async function reportarConducta(
+  input: {
+    direction: string;
+    interactionId: string;
+    category: string;
+    description: string;
+  },
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(portalUrl("/employee-portal/reports", token), {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        ...(await portalHeaders(token)),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo enviar el reporte",
+      };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al reportar:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
+
 /**
  * Anota donde esta la modelo mientras tiene el portal abierto.
  *

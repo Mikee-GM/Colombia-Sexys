@@ -17,7 +17,7 @@ export class ReorderPhotosDto {
   readonly empleadaId: string;
 
   @ApiProperty({ enum: PHOTO_GALLERIES })
-  @IsIn(PHOTO_GALLERIES as unknown as string[])
+  @IsIn(PHOTO_GALLERIES)
   readonly gallery: PhotoGallery;
 
   /**
@@ -34,13 +34,13 @@ export class ReorderPhotosDto {
 
 export class MovePhotoDto {
   @ApiProperty({ enum: PHOTO_GALLERIES, description: 'Galeria de origen' })
-  @IsIn(PHOTO_GALLERIES as unknown as string[])
+  @IsIn(PHOTO_GALLERIES)
   readonly from: PhotoGallery;
 
   @ApiPropertyOptional({
     enum: PHOTO_GALLERIES,
     description: 'Galeria de destino',
   })
-  @IsIn(PHOTO_GALLERIES as unknown as string[])
+  @IsIn(PHOTO_GALLERIES)
   readonly to: PhotoGallery;
 }

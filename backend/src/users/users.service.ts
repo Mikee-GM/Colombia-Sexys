@@ -88,7 +88,7 @@ export class UsersService {
    */
   private stripSecrets(user: Usuarios): Omit<Usuarios, 'passwordHash'> {
     const { passwordHash: _omitted, ...safe } = user;
-    return safe as Omit<Usuarios, 'passwordHash'>;
+    return safe;
   }
 
   /** Acotado: la tabla de usuarios no tiene por que caber entera en memoria. */
