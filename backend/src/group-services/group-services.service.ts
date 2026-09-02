@@ -1904,12 +1904,67 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       : null;
   }
 
+  /**
+   * El mismo acceso, resuelto por id de usuario en vez de por chat.
+   *
+   * El portal no tiene chat de Telegram: se identifica con la sesion o con un
+   * token de la Mini App, y de los dos sale un id de usuario. Sin esta variante
+   * la responsable de un grupal no podia cerrarlo desde la aplicacion, que es
+   * justo lo que pasaba hasta ahora.
+   */
+  async accesoDeParticipantePorUsuario(
+    serviceId: string,
+    usuarioId: string,
+  ): Promise<{ participant: ServiceParticipant; responsible: boolean } | null> {
+    const participant = await this.participants.findOne({
+      where: {
+        serviceId,
+        status: In(['activa', 'reservada', 'pendiente_pago']),
+        employee: { usuario: { id: usuarioId } },
+      },
+      relations: { employee: { usuario: true } },
+    });
+    return participant
+      ? { participant, responsible: participant.role === 'responsable' }
+      : null;
+  }
+
+  /** Cierra el grupal desde el portal. Mismo camino, otra identidad. */
+  async finishByResponsibleUser(serviceId: string, usuarioId: string) {
+    const access = await this.accesoDeParticipantePorUsuario(
+      serviceId,
+      usuarioId,
+    );
+    if (!access?.responsible)
+      throw new ForbiddenException(
+        'Solamente la responsable puede finalizar el servicio',
+      );
+    return this.cerrarComoResponsable(
+      serviceId,
+      access.participant.employee.usuarioId,
+    );
+  }
+
   async finishByResponsible(serviceId: string, telegramId: string) {
     const access = await this.participantAccess(serviceId, telegramId);
     if (!access?.responsible)
       throw new ForbiddenException(
         'Solamente la responsable puede finalizar el servicio',
       );
+    return this.cerrarComoResponsable(
+      serviceId,
+      access.participant.employee.usuarioId,
+    );
+  }
+
+  /**
+   * El cierre en si, ya con el permiso comprobado.
+   *
+   * Separado de las dos puertas de entrada para que el chat y el portal no
+   * puedan divergir: el saldo pendiente, el estado y los avisos son los mismos
+   * se entre por donde se entre.
+   */
+  private async cerrarComoResponsable(serviceId: string, actorUserId: string) {
     await this.dataSource.transaction(async (manager) => {
       const service = await manager.findOne(Servicios, {
         where: { id: serviceId, serviceType: 'grupal' },
@@ -1977,7 +2032,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         manager.create(ServiceGroupAudit, {
           serviceId,
           requestId: null,
-          actorUserId: access.participant.employee.usuarioId,
+          actorUserId,
           action: 'servicio_finalizado',
           before: null,
           after: {

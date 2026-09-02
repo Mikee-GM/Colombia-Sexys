@@ -1,3 +1,4 @@
+import { GroupServicesModule } from '../group-services/group-services.module';
 import { DisciplineModule } from '../discipline/discipline.module';
 import { LocationsModule } from '../locations/locations.module';
 import { Module, forwardRef } from '@nestjs/common';
@@ -17,6 +18,9 @@ import { ServicesModule } from '../services/services.module';
 
 @Module({
   imports: [
+    // Por el cierre de un grupal desde el portal: lo hace la responsable y
+    // tiene su propio reparto entre participantes.
+    forwardRef(() => GroupServicesModule),
     LocationsModule,
     DisciplineModule,
     TypeOrmModule.forFeature([

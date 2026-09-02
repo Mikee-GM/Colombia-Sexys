@@ -19,6 +19,7 @@ import { UpdatePortalTripStatusDto } from './dto/portal-trip-status.dto';
 import { AddPortalServiceExtraDto } from './dto/portal-service-extra.dto';
 import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
 import { DisciplineService } from '../discipline/discipline.service';
+import { GroupServicesService } from '../group-services/group-services.service';
 import {
   AppealRatingDto,
   CreateConductReportDto,
@@ -46,6 +47,7 @@ export class EmployeePortalController {
     private readonly weeklyContentService: WeeklyContentService,
     private readonly servicesService: ServicesService,
     private readonly disciplineService: DisciplineService,
+    private readonly groupServicesService: GroupServicesService,
     private readonly locationsService: LocationsService,
   ) {}
 
@@ -149,6 +151,22 @@ export class EmployeePortalController {
     @PortalUser() userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
+    /*
+     * Un grupal lo cierra su responsable y por otro camino: el suyo reparte
+     * entre las participantes y cuadra el saldo pendiente. `finishByEmployee`
+     * lo rechaza a proposito, asi que hay que preguntar antes de que rebote.
+     *
+     * Sin esto, la responsable de un grupal se quedaba sin poder cerrarlo desde
+     * la aplicacion: el flujo del chat pedia su id de Telegram.
+     */
+    if (await this.esGrupal(servicioId)) {
+      const cerrado = await this.groupServicesService.finishByResponsibleUser(
+        servicioId,
+        userId,
+      );
+      return { servicioId, grupal: true, resumen: cerrado };
+    }
+
     const cierre = await this.servicesService.finishByEmployee(
       servicioId,
       userId,
@@ -165,6 +183,12 @@ export class EmployeePortalController {
       // Con servicio encadenado no hay regreso que cuadrar: sigue trabajando.
       tieneServicioSiguiente: cierre.hasSuccessor,
     };
+  }
+
+  /** Si el servicio es grupal, que decide por cual de los dos cierres va. */
+  private async esGrupal(servicioId: string): Promise<boolean> {
+    const servicio = await this.servicesService.findOne(servicioId);
+    return servicio?.serviceType === 'grupal';
   }
 
   /**
