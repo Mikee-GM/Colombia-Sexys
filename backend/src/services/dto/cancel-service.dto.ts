@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import {
   CANCELLATION_REASONS,
   type CancellationReason,
@@ -22,4 +28,18 @@ export class CancelServiceDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+}
+
+/**
+ * Por que tuvo que cerrarlo la oficina y no la modelo.
+ *
+ * Se exige un motivo de verdad porque es lo unico que distingue una correccion
+ * legitima de un descuadre dentro de una semana: al cerrar se calculan las
+ * horas facturadas, el total y lo que le toca a ella.
+ */
+export class CerrarPorOficinaDto {
+  @IsString()
+  @MinLength(10)
+  @MaxLength(2000)
+  motivo: string;
 }

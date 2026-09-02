@@ -135,3 +135,24 @@ export async function getDriverSettlements(startDate: string, endDate: string) {
 export async function registerCashPayment(employeeId: string, amount: number, note?: string) { const result = await apiFetch("/transport-operations/cash-payments", { method: "POST", body: JSON.stringify({ employeeId, amount, note }) }); revalidatePath("/admin/transport"); revalidatePath("/admin/dinero"); revalidatePath("/admin/liquidations"); return result; }
 export async function closeCashObligation(id: string) { const result = await apiFetch(`/transport-operations/cash-obligations/${id}/close`, { method: "POST" }); revalidatePath("/admin/transport"); revalidatePath("/admin/dinero"); revalidatePath("/admin/liquidations"); return result; }
 export async function payDriverSettlement(driverId: string, startDate: string, endDate: string) { const result = await apiFetch(`/transport-operations/driver-settlements/${driverId}/pay`, { method: "POST", body: JSON.stringify({ startDate, endDate }) }); revalidatePath("/admin/transport"); return result; }
+
+/**
+ * Reabre una semana ya pagada de un chofer.
+ *
+ * La de la modelo se podia deshacer desde el principio; esta no, y el caso es
+ * el mismo: aparece un viaje que faltaba, o se cerro el periodo equivocado.
+ * Deshacer suelta los viajes para que la siguiente liquidacion los recoja con
+ * el importe corregido.
+ */
+export async function undoDriverSettlement(
+  driverId: string,
+  startDate: string,
+  motivo: string,
+) {
+  const result = await apiFetch(
+    `/transport-operations/driver-settlements/${driverId}/undo`,
+    { method: "POST", body: JSON.stringify({ startDate, motivo }) },
+  );
+  revalidatePath("/admin/transport");
+  return result;
+}

@@ -416,6 +416,36 @@ export class Servicios {
   })
   canceladoAt: Date | null;
 
+  /*
+   * Cerrar un servicio es de la modelo. Cuando no puede --telefono muerto, sin
+   * cobertura, se le olvido-- lo cierra la oficina por ella, y estas tres
+   * columnas distinguen ese cierre del normal. Sin ellas, dentro de una semana
+   * los dos serian identicos, y el reparto del dinero se decide mirando eso.
+   */
+  @Column('uuid', { name: 'cerrado_por_oficina_user_id', nullable: true })
+  @ApiPropertyOptional({
+    description:
+      'Usuario de la oficina que cerró el servicio en nombre de la modelo. Vacío si lo cerró ella',
+  })
+  cerradoPorOficinaUserId: string | null;
+
+  @Column('timestamp with time zone', {
+    name: 'cerrado_por_oficina_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Momento del cierre por la oficina',
+    type: String,
+    format: 'date-time',
+  })
+  cerradoPorOficinaAt: Date | null;
+
+  @Column('text', { name: 'motivo_cierre_oficina', nullable: true })
+  @ApiPropertyOptional({
+    description: 'Por qué tuvo que cerrarlo la oficina y no la modelo',
+  })
+  motivoCierreOficina: string | null;
+
   @Column('uuid', { name: 'servicio_previo_id', nullable: true })
   servicioPrevioId: string | null;
 

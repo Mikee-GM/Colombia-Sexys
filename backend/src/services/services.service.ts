@@ -45,6 +45,7 @@ import { DisciplineService } from '../discipline/discipline.service';
 import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entity';
 import { SaveBankAccountDto } from './dto/bank-account.dto';
 import { CancelServiceDto } from './dto/cancel-service.dto';
+import { UpdateServiceDto } from './dto/update-service.dto';
 import { UploadService } from '../upload/upload.service';
 import { parseSessionKey } from '../telegram/telegram-session.key';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
@@ -1109,7 +1110,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
   async updateForActor(
     id: string,
-    updateData: any,
+    updateData: UpdateServiceDto,
     actor: Usuarios,
   ): Promise<Servicios> {
     const service = await this.findOne(id);
@@ -1124,7 +1125,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return this.update(id, updateData);
   }
 
-  async update(id: string, updateData: any): Promise<Servicios> {
+  async update(id: string, updateData: UpdateServiceDto): Promise<Servicios> {
     await this.serviciosRepository.update(id, updateData);
     const service = await this.findOne(id);
     if (updateData.duracionPactadaHoras !== undefined) {
@@ -1136,8 +1137,37 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return service;
   }
 
+  /**
+   * Borra un servicio que nunca llego a existir de verdad.
+   *
+   * Es la unica operacion del sistema que destruye historial en vez de
+   * marcarlo, y hasta ahora no miraba nada: un `remove()` directo sobre
+   * cualquier servicio, en cualquier estado. Borrar uno finalizado se lleva por
+   * delante la liquidacion de la que forma parte, y sin dejar rastro de que
+   * falta algo.
+   *
+   * Por eso solo se admite sobre lo que todavia no ha ocurrido. Lo que ya paso
+   * se cancela, que deja el motivo, el autor y el momento; el estado
+   * `cancelado` existe justamente para eso.
+   */
   async remove(id: string): Promise<{ deleted: boolean }> {
     const servicio = await this.findOne(id);
+
+    if (!['pendiente', 'agendado'].includes(servicio.estado)) {
+      throw new ConflictException(
+        'Solo se puede borrar un servicio que no ha empezado. Cancélalo en su lugar: así queda el motivo y quién lo hizo.',
+      );
+    }
+
+    const tieneViajes = await this.viajesRepository.exists({
+      where: { servicioId: id },
+    });
+    if (tieneViajes) {
+      throw new ConflictException(
+        'Este servicio ya tiene transporte asignado. Cancélalo en su lugar.',
+      );
+    }
+
     await this.serviciosRepository.remove(servicio);
     return { deleted: true };
   }
@@ -3453,6 +3483,69 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     if (servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('No puedes finalizar este servicio');
     }
+
+    return this.cerrarServicio(servicio);
+  }
+
+  /**
+   * Cierra un servicio en nombre de la modelo, desde la oficina.
+   *
+   * Cerrar es cosa suya, y mientras fue lo unico posible un telefono muerto
+   * dejaba el servicio en curso indefinidamente: ella bloqueada como no
+   * disponible, sin transporte de regreso, sin entrar en la liquidacion y sin
+   * calificaciones. La salida era editar la fila a mano, que lo marcaba cerrado
+   * sin hacer nada de eso --el peor arreglo posible, porque parece que
+   * funciono--.
+   *
+   * Pasa por el mismo `cerrarServicio` que el suyo a proposito: si tuviera un
+   * camino propio, tarde o temprano uno de los dos se quedaria atras. Lo unico
+   * que cambia es que queda anotado quien lo cerro y por que.
+   */
+  async finishByOffice(
+    servicioId: string,
+    actor: Usuarios,
+    motivo: string,
+  ): Promise<FinishByEmployeeResult> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: {
+        cliente: true,
+        empleada: { usuario: true, jefe: true },
+        jefe: true,
+      },
+    });
+
+    if (!servicio) {
+      throw new NotFoundException('Servicio no encontrado');
+    }
+    if (servicio.serviceType === 'grupal') {
+      throw new ConflictException(
+        'Un servicio grupal lo cierra la responsable desde su flujo de grupo',
+      );
+    }
+    this.assertActorCanManageService(servicio, actor);
+
+    // Se marca antes de cerrar: `cerrarServicio` guarda el servicio, asi que
+    // las tres columnas viajan en la misma escritura que el estado.
+    servicio.cerradoPorOficinaUserId = actor.id;
+    servicio.cerradoPorOficinaAt = new Date();
+    servicio.motivoCierreOficina = motivo.trim().slice(0, 2000);
+
+    return this.cerrarServicio(servicio);
+  }
+
+  /**
+   * El cierre en si, ya con el permiso comprobado.
+   *
+   * Aqui viven los efectos que hacen que cerrar signifique algo: liberar a la
+   * modelo, avisar a quien la esperaba, pedir el transporte de regreso, cuadrar
+   * el cobro de un servicio de duracion abierta y pedir la calificacion del
+   * cliente. Por eso las dos puertas --la suya y la de la oficina-- pasan por
+   * la misma.
+   */
+  private async cerrarServicio(
+    servicio: Servicios,
+  ): Promise<FinishByEmployeeResult> {
     if (servicio.estado !== 'en_curso') {
       throw new ConflictException('Este servicio ya no está activo');
     }

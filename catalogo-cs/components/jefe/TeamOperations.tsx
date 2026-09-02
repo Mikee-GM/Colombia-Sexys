@@ -13,6 +13,7 @@ import CreateServiceDialog from "@/components/services/create-service-dialog";
 import ServiceStatusBadge from "@/components/services/service-status-badge";
 import CancelServiceDialog from "@/components/services/cancel-service-dialog";
 import GaleriaFotos from "@/components/erp/galeria-fotos";
+import CerrarPorOficina from "@/components/jefe/CerrarPorOficina";
 import { type CancellationReason } from "@/lib/cancellation-reasons";
 import {
   cancelJefeService,
@@ -461,6 +462,17 @@ function ServiceCard({ service, previous, disabled, onRequestAccept, onRequestEd
         <SecondaryAction onClick={() => onChat(service)} icon={<MessageCircle size={16} />} label="Chat" />
         <SecondaryAction onClick={() => onCancel(service)} disabled={disabled} danger icon={<Ban size={16} />} label="Cancelar" />
       </div>
+
+      {/*
+        Solo sobre uno en curso: es cuando puede quedarse colgado porque a ella
+        se le murio el telefono. Antes de arrancar se cancela, y despues ya esta
+        cerrado.
+      */}
+      {service.estado === "en_curso" && (
+        <div className="mt-2.5">
+          <CerrarPorOficina servicioId={service.id} />
+        </div>
+      )}
 
       {service.estado !== "agendado" && <TransportPanel service={service} onRefresh={onRefresh} />}
     </article>

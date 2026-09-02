@@ -11,6 +11,7 @@ import {
   UseGuards,
   UsePipes,
   ValidationPipe,
+  HttpCode,
 } from '@nestjs/common';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -25,6 +26,7 @@ import {
   DriverReportQueryDto,
   RevertCashPaymentDto,
   SettlementPeriodDto,
+  DeshacerLiquidacionDto,
 } from './dto/settlement.dto';
 import { SettlementsService } from './settlements.service';
 
@@ -119,6 +121,28 @@ export class TransportOperationsController {
       period.startDate,
       period.endDate,
       req.user.id,
+    );
+  }
+  /**
+   * Reabre una semana ya pagada.
+   *
+   * La de la modelo se podia deshacer desde el principio; esta no, y el caso es
+   * el mismo: aparece un viaje que faltaba, o se cerro el periodo equivocado.
+   * Solo admin, porque deshacer mueve dinero.
+   */
+  @Post('driver-settlements/:driverId/undo')
+  @Roles('admin')
+  @HttpCode(200)
+  undoDriverSettlement(
+    @Param('driverId') driverId: string,
+    @Body() dto: DeshacerLiquidacionDto,
+    @Req() req: any,
+  ) {
+    return this.settlements.undoDriverSettlement(
+      driverId,
+      dto.startDate,
+      req.user,
+      dto.motivo,
     );
   }
   @Get('driver-settlements/active-drivers') activeDrivers(

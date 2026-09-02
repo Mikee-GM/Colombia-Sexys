@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, DataSource, In, IsNull, Repository } from 'typeorm';
@@ -321,6 +322,70 @@ export class SettlementsService {
       },
       relations: { chofer: true, servicio: true },
       order: { horaFinViaje: 'ASC' },
+    });
+  }
+
+  /**
+   * Reabre una semana ya pagada de un chofer.
+   *
+   * La liquidacion de una modelo se podia deshacer desde el principio; la del
+   * chofer no, y no hay razon para la asimetria: los dos casos son el mismo
+   * --aparece un viaje que faltaba, o se cerro el periodo equivocado-- y el
+   * numero queda mal sin forma de rehacerlo.
+   *
+   * Deshacer significa soltar los viajes que quedaron colgados de este corte,
+   * para que la siguiente liquidacion vuelva a recogerlos. Las dos mitades van
+   * en la misma transaccion: un corte marcado como pendiente con los viajes aun
+   * enganchados dejaria una semana que nunca se puede volver a cerrar.
+   *
+   * Reservado al admin, igual que el de la modelo: deshacer mueve dinero en la
+   * direccion en la que un error cuesta caro.
+   */
+  async undoDriverSettlement(
+    driverId: string,
+    startDate: string,
+    actor: Usuarios,
+    motivo: string,
+  ) {
+    if (actor.rol !== 'admin') {
+      throw new ForbiddenException(
+        'Solo un administrador puede deshacer la liquidación de un chofer',
+      );
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      const settlement = await manager.getRepository(DriverSettlement).findOne({
+        where: { driverId, weekStart: startDate },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!settlement) {
+        throw new NotFoundException('Esa semana no tiene liquidación');
+      }
+      if (settlement.status !== 'paid') {
+        throw new ConflictException('Esa semana no está pagada');
+      }
+
+      // Los viajes vuelven a quedar libres: es lo que permite que la proxima
+      // liquidacion los recoja con el importe corregido.
+      await manager.getRepository(Viajes).update(
+        { driverSettlementId: settlement.id },
+        {
+          driverSettlementId: null,
+        },
+      );
+
+      const reabierta = await manager.getRepository(DriverSettlement).save({
+        ...settlement,
+        status: 'pending',
+        paidAt: null,
+        paidByUserId: null,
+        updatedAt: new Date(),
+      });
+
+      this.logger.log(
+        `Liquidación del chofer ${driverId} de la semana ${startDate} deshecha por ${actor.id}: ${motivo}`,
+      );
+      return reabierta;
     });
   }
 

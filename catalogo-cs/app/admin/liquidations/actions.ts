@@ -200,3 +200,24 @@ export async function getDriverRankingPositions() {
   const total = kpis.filter((kpi) => kpi.position != null).length;
   return kpis.map((kpi) => ({ id: kpi.id, position: kpi.position, total }));
 }
+
+/**
+ * Reabre una semana ya pagada de un chofer.
+ *
+ * La de la modelo se podia deshacer desde el principio; esta no, y el caso es
+ * el mismo: aparece un viaje que faltaba, o se cerro el periodo equivocado.
+ * Deshacer suelta los viajes para que la siguiente liquidacion los recoja con
+ * el importe corregido.
+ */
+export async function undoDriverSettlement(
+  driverId: string,
+  startDate: string,
+  motivo: string,
+) {
+  const result = await apiFetch(
+    `/transport-operations/driver-settlements/${driverId}/undo`,
+    { method: "POST", body: JSON.stringify({ startDate, motivo }) },
+  );
+  revalidatePath("/admin/liquidations");
+  return result;
+}

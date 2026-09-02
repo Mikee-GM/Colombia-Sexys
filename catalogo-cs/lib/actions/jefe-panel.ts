@@ -140,6 +140,40 @@ export async function refreshJefeServices() {
   return getJefeServices();
 }
 
+/**
+ * Cierra un servicio en nombre de la modelo.
+ *
+ * Para cuando ella no puede: telefono muerto, sin cobertura, o se le olvido.
+ * Sin esto el servicio se queda en curso indefinidamente y ella bloqueada como
+ * no disponible, sin transporte de regreso y sin entrar en la liquidacion.
+ *
+ * El motivo es obligatorio: al cerrar se calculan las horas facturadas y lo que
+ * le toca a ella, asi que dentro de una semana hay que poder distinguir esto de
+ * un cierre normal.
+ */
+export async function cerrarServicioPorOficina(
+  serviceId: string,
+  motivo: string,
+) {
+  try {
+    await assertOwnedService(serviceId);
+    await apiFetch(`/services/${serviceId}/cerrar-por-oficina`, {
+      method: "POST",
+      body: JSON.stringify({ motivo: motivo.trim() }),
+    });
+    return { success: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo cerrar el servicio",
+    };
+  }
+}
+
 export async function cancelJefeService(
   serviceId: string,
   reason: CancellationReason,

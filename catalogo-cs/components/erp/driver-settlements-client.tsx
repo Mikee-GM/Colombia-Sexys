@@ -19,6 +19,7 @@ import {
 } from "@/components/erp/primitives";
 import {
   payDriverSettlement,
+  undoDriverSettlement,
   type DriverTripSettlement,
 } from "@/app/admin/transport/actions";
 import { formatCurrency } from "@/lib/calculations";
@@ -105,6 +106,35 @@ export default function DriverSettlementsClient({
           error instanceof Error
             ? error.message
             : "No fue posible cerrar el corte",
+        );
+      }
+    });
+  };
+
+  /*
+   * Deshacer suelta los viajes que colgaban del corte para que la siguiente
+   * liquidacion vuelva a recogerlos. Se pide el motivo por la misma razon que
+   * en el de la modelo: sin el escrito, dentro de una semana una correccion
+   * legitima es indistinguible de un descuadre.
+   */
+  const handleUndo = (driverId: string) => {
+    const motivo = window
+      .prompt("¿Por qué hay que reabrir esta semana?")
+      ?.trim();
+    if (!motivo) return;
+    if (motivo.length < 10) {
+      toast.error("Escribe un motivo un poco más completo.");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await undoDriverSettlement(driverId, startDate, motivo);
+        toast.success("Semana reabierta. Los viajes vuelven a estar libres.");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "No fue posible reabrir el corte",
         );
       }
     });
@@ -208,7 +238,7 @@ export default function DriverSettlementsClient({
                     )}
                   </Td>
                   <Td className="text-right">
-                    {canSettle && !grupo.settled ? (
+                    {canSettle && !grupo.settled && (
                       <button
                         type="button"
                         disabled={pending}
@@ -217,7 +247,17 @@ export default function DriverSettlementsClient({
                       >
                         Marcar pagado
                       </button>
-                    ) : null}
+                    )}
+                    {canSettle && grupo.settled && (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => handleUndo(grupo.id)}
+                        className="rounded-xl border border-zinc-800 px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500 transition-colors hover:border-zinc-600 hover:text-zinc-300 disabled:opacity-50"
+                      >
+                        Reabrir
+                      </button>
+                    )}
                   </Td>
                 </tr>
               ))

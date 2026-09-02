@@ -14,6 +14,8 @@ import {
   MaxFileSizeValidator,
   FileTypeValidator,
   Query,
+  HttpCode,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ServicesService } from './services.service';
@@ -29,7 +31,10 @@ import {
   CancelledTripCostDto,
   UberStatusDto,
 } from './dto/transport-action.dto';
-import { CancelServiceDto } from './dto/cancel-service.dto';
+import {
+  CancelServiceDto,
+  CerrarPorOficinaDto,
+} from './dto/cancel-service.dto';
 import {
   ApiActionDocs,
   ApiControllerDocs,
@@ -159,7 +164,15 @@ export class ServicesController {
     return this.servicesService.updateForActor(id, updateServiceDto, req.user);
   }
 
+  /**
+   * Solo para lo que nunca llego a ocurrir; el servicio comprueba cual es.
+   *
+   * Reservado al admin porque es la unica operacion que destruye historial en
+   * vez de marcarlo. Cancelar, que es lo que hay que usar en el resto de los
+   * casos, sigue abierto al jefe.
+   */
   @Delete(':id')
+  @Roles('admin')
   @ApiRemoveDocs({ tag: 'services', protected: true })
   remove(@Param('id') id: string) {
     return this.servicesService.remove(id);
@@ -173,6 +186,32 @@ export class ServicesController {
     @Req() req: any,
   ) {
     return this.servicesService.cancel(id, req.user, dto);
+  }
+
+  /**
+   * Cierra un servicio en nombre de la modelo.
+   *
+   * Existe para cuando ella no puede: telefono muerto, sin cobertura, o
+   * simplemente se le olvido. Sin esto el servicio se queda en curso
+   * indefinidamente y ella bloqueada como no disponible.
+   *
+   * Pide motivo y lo deja anotado con quien lo cerro, porque al cerrar se
+   * calculan las horas facturadas y lo que le toca a ella: dentro de una semana
+   * hay que poder distinguir esto de un cierre normal.
+   */
+  @Post(':id/cerrar-por-oficina')
+  @HttpCode(200)
+  @ApiActionDocs(
+    'Cerrar un servicio en nombre de la modelo',
+    true,
+    'ID del servicio',
+  )
+  cerrarPorOficina(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CerrarPorOficinaDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.finishByOffice(id, req.user, dto.motivo);
   }
 
   @Post(':id/aceptar')
