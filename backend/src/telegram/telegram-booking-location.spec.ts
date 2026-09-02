@@ -131,8 +131,11 @@ describe('Refrescos de una ubicación en vivo del cliente', () => {
 
   function nuevaInstanciaDeCliente() {
     const instancia = Object.create(TelegramBookingUpdate.prototype);
-    instancia.userLocationCache = new Map();
-    // Un cliente no es usuario del sistema: no es chofer ni empleada.
+    // Un cliente no es de la casa: `registrarPorTelegram` devuelve null y el
+    // manejador sigue con el flujo del cliente, que es lo que se prueba aqui.
+    instancia.locationsService = {
+      registrarPorTelegram: jest.fn().mockResolvedValue(null),
+    };
     instancia.usuariosRepository = {
       findOne: jest.fn().mockResolvedValue(null),
     };

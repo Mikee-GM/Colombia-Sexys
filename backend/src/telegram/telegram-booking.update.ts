@@ -4,7 +4,6 @@ import {
   Inject,
   forwardRef,
   Logger,
-  BeforeApplicationShutdown,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -21,6 +20,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, ILike } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { RealtimeEventsService } from '../realtime/realtime.service';
+import { LocationsService } from '../locations/locations.service';
 import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
@@ -696,7 +696,7 @@ export function splitForTelegram(
 }
 
 @Update()
-export class TelegramBookingUpdate implements BeforeApplicationShutdown {
+export class TelegramBookingUpdate {
   private readonly logger = new Logger(TelegramBookingUpdate.name);
   /**
    * Fallos seguidos de la IA antes de pasarle el chat al jefe.
@@ -751,20 +751,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       empleada: Empleadas;
     }
   >();
-  private readonly userLocationCache = new Map<
-    string,
-    {
-      id: string;
-      rol: string;
-      name: string;
-      lat: number;
-      lng: number;
-      lastSaved: number;
-      dirty: boolean;
-    }
-  >();
-
-  private readonly locationCleanupInterval: NodeJS.Timeout;
 
   constructor(
     // Bot central. Las alertas a jefes y grupos tienen que salir por aquí:
@@ -812,26 +798,10 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
     private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
     private readonly panelAccessService: PanelAccessService,
+    private readonly locationsService: LocationsService,
     private readonly callbackGuard: TelegramCallbackGuard,
     private readonly manualServiceWizard: TelegramManualServiceWizard,
-  ) {
-    // TTL / Inactivity Cleanup: run every 5 minutes to clean up users inactive for > 1 hour
-    this.locationCleanupInterval = setInterval(() => {
-      const now = Date.now();
-      let cleaned = 0;
-      for (const [key, cached] of this.userLocationCache.entries()) {
-        if (now - cached.lastSaved > 3600000) {
-          this.userLocationCache.delete(key);
-          cleaned++;
-        }
-      }
-      if (cleaned > 0) {
-        this.logger.log(
-          `Inactivity cleanup: removed ${cleaned} inactive users from location cache.`,
-        );
-      }
-    }, 300000);
-  }
+  ) {}
 
   private async createReceiptEvidence(
     ctx: BotContext,
@@ -1110,49 +1080,6 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ctx.from!.id.toString(),
     );
     return true;
-  }
-
-  // Graceful Shutdown Hook: Flush any dirty/unsaved location updates to DB
-  async beforeApplicationShutdown() {
-    if (this.locationCleanupInterval) {
-      clearInterval(this.locationCleanupInterval);
-    }
-    this.logger.log(
-      'Graceful shutdown: flushing dirty locations to database...',
-    );
-    let flushedCount = 0;
-    for (const [telegramId, cached] of this.userLocationCache.entries()) {
-      if (cached.dirty) {
-        try {
-          if (cached.rol === 'chofer') {
-            await this.usuariosRepository.manager.update(Choferes, cached.id, {
-              ubicacionLat: cached.lat,
-              ubicacionLng: cached.lng,
-              ultimaUbicacionAt: new Date(cached.lastSaved),
-            });
-            flushedCount++;
-          } else if (cached.rol === 'empleada') {
-            await this.usuariosRepository.manager.update(Empleadas, cached.id, {
-              ubicacionLat: cached.lat,
-              ubicacionLng: cached.lng,
-              ultimaUbicacionAt: new Date(cached.lastSaved),
-            });
-            flushedCount++;
-          }
-          cached.dirty = false;
-        } catch (err) {
-          this.logger.error(
-            `Error flushing location for telegramId=${telegramId}:`,
-            err,
-          );
-        }
-      }
-    }
-    if (flushedCount > 0) {
-      this.logger.log(
-        `Gracefully flushed ${flushedCount} locations to database.`,
-      );
-    }
   }
 
   // Helper function to calculate distance in meters using Haversine formula
@@ -4627,12 +4554,19 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       ctx.editedMessage || (ctx.update as any).edited_message
     );
 
-    // Check in-memory cache to throttle database operations completely
-    const nowTime = Date.now();
-    const cached = this.userLocationCache.get(telegramId);
     const parsedLat = parseFloat(lat);
     const parsedLng = parseFloat(lng);
 
+    /*
+     * Si quien manda la ubicacion es de la casa, es su posicion de trabajo y no
+     * la direccion de un servicio: se anota y se acaba aqui.
+     *
+     * Todo el trabajo --validar las coordenadas, espaciar las escrituras,
+     * guardar y publicar en el mapa del jefe-- vive en `LocationsService`, que
+     * es el mismo que atiende a los portales. Antes habia dos copias, una por
+     * via, y bastaba tocar una para que la posicion de alguien dependiera de
+     * como la mandaba.
+     */
     if (
       !Number.isFinite(parsedLat) ||
       !Number.isFinite(parsedLng) ||
@@ -4645,191 +4579,35 @@ export class TelegramBookingUpdate implements BeforeApplicationShutdown {
       return;
     }
 
-    if (cached) {
-      const diffMs = nowTime - cached.lastSaved;
-      const distanceMeters = this.getDistanceMeters(
-        cached.lat,
-        cached.lng,
+    let registro: Awaited<
+      ReturnType<LocationsService['registrarPorTelegram']>
+    > = null;
+    try {
+      registro = await this.locationsService.registrarPorTelegram(
+        telegramId,
         parsedLat,
         parsedLng,
       );
-
-      // Throttling: Skip database read/write if within 60s AND has moved less than 50 meters
-      if (diffMs < 60000 && distanceMeters < 50) {
-        if (cached.rol === 'empleada') {
-          await this.usuariosRepository.manager.update(Empleadas, cached.id, {
-            ubicacionLat: parsedLat,
-            ubicacionLng: parsedLng,
-            ultimaUbicacionAt: new Date(),
-          });
-          cached.lat = parsedLat;
-          cached.lng = parsedLng;
-          cached.lastSaved = nowTime;
-          cached.dirty = false;
-          this.realtimeEventsService.emitToJefes({
-            type: 'EMPLOYEE_LOCATION_UPDATE',
-            empleadaId: cached.id,
-            lat: parsedLat,
-            lng: parsedLng,
-          });
-          if (!isEdited) {
-            await ctx.reply(
-              `📍 Ubicación registrada para la empleada: ${cached.name}.`,
-            );
-          }
-          return;
-        }
-
-        // Update ONLY in-memory coordinates in cache
-        cached.lat = parsedLat;
-        cached.lng = parsedLng;
-        cached.dirty = true; // Mark as dirty since cache is ahead of DB
-
-        // Broadcast SSE update immediately using cached/updated details
-        this.realtimeEventsService.emitToJefes({
-          type:
-            cached.rol === 'chofer'
-              ? 'DRIVER_LOCATION_UPDATE'
-              : 'EMPLOYEE_LOCATION_UPDATE',
-          choferId: cached.rol === 'chofer' ? cached.id : undefined,
-          empleadaId: cached.rol === 'empleada' ? cached.id : undefined,
-          lat: parsedLat,
-          lng: parsedLng,
-        });
-        return;
-      }
-
-      // Throttle expired (toca escribir a DB) pero YA está en cache: NO findOne, actualizar DB directo
-      try {
-        if (cached.rol === 'chofer') {
-          await this.usuariosRepository.manager.update(Choferes, cached.id, {
-            ubicacionLat: parsedLat,
-            ubicacionLng: parsedLng,
-            ultimaUbicacionAt: new Date(),
-          });
-          // Update cache details
-          cached.lat = parsedLat;
-          cached.lng = parsedLng;
-          cached.lastSaved = nowTime;
-          cached.dirty = false;
-
-          // Emit real-time event to Jefes/Dashboard
-          this.realtimeEventsService.emitToJefes({
-            type: 'DRIVER_LOCATION_UPDATE',
-            choferId: cached.id,
-            lat: parsedLat,
-            lng: parsedLng,
-          });
-        } else if (cached.rol === 'empleada') {
-          await this.usuariosRepository.manager.update(Empleadas, cached.id, {
-            ubicacionLat: parsedLat,
-            ubicacionLng: parsedLng,
-            ultimaUbicacionAt: new Date(),
-          });
-          // Update cache details
-          cached.lat = parsedLat;
-          cached.lng = parsedLng;
-          cached.lastSaved = nowTime;
-          cached.dirty = false;
-
-          // Emit real-time event to Jefes/Dashboard
-          this.realtimeEventsService.emitToJefes({
-            type: 'EMPLOYEE_LOCATION_UPDATE',
-            empleadaId: cached.id,
-            lat: parsedLat,
-            lng: parsedLng,
-          });
-          if (!isEdited) {
-            await ctx.reply(
-              `📍 Ubicación registrada para la empleada: ${cached.name}.`,
-            );
-          }
-        }
-        return;
-      } catch (err) {
-        this.logger.error(
-          `Error updating location directly for telegramId=${telegramId}:`,
-          err,
-        );
-      }
+    } catch (err) {
+      /*
+       * Un fallo aqui no es culpa de lo que mando: es la base o la red. Se
+       * registra y se sigue como si no fuera de la casa, que es lo unico
+       * sensato --contestarle "coordenadas invalidas" seria mentirle--.
+       */
+      this.logger.error('Error registrando la ubicación del personal:', err);
     }
 
-    // Si cached es undefined: Primera vez que se ve ese telegramId. Sí buscar en DB con relaciones.
-    const user = await this.usuariosRepository.findOne({
-      where: { telegramChatId: telegramId },
-      relations: { choferes: true, empleadas: true },
-    });
-
-    if (user) {
-      if (user.rol === 'chofer' && user.choferes) {
-        user.choferes.ubicacionLat = parsedLat;
-        user.choferes.ubicacionLng = parsedLng;
-        user.choferes.ultimaUbicacionAt = new Date();
-        await this.usuariosRepository.manager.save(user.choferes);
-
-        // Cache user info
-        this.userLocationCache.set(telegramId, {
-          id: user.choferes.id,
-          rol: 'chofer',
-          name: user.choferes.nombre,
-          lat: parsedLat,
-          lng: parsedLng,
-          lastSaved: nowTime,
-          dirty: false,
-        });
-
-        // Emit real-time event to Jefes/Dashboard
-        this.realtimeEventsService.emitToJefes({
-          type: 'DRIVER_LOCATION_UPDATE',
-          choferId: user.choferes.id,
-          lat: user.choferes.ubicacionLat,
-          lng: user.choferes.ubicacionLng,
-        });
-
-        // Solo notificar si no estaba en caché (primera vez) y no está editada
-        if (!isEdited) {
-          await ctx.reply(
-            `📍 Ubicación registrada para el chofer: ${user.choferes.nombre}.`,
-          );
-        }
-        return;
+    if (registro) {
+      // Telegram refresca una ubicacion en vivo con `edited_message` cada pocos
+      // segundos: el pin se mueve, pero acusar recibo cada vez seria el bot
+      // repitiendose durante minutos.
+      if (!isEdited) {
+        const quien = registro.rol === 'chofer' ? 'el chofer' : 'la empleada';
+        await ctx.reply(
+          `Ubicación registrada para ${quien}: ${registro.nombre}.`,
+        );
       }
-
-      if (user.rol === 'empleada' && user.empleadas) {
-        user.empleadas.ubicacionLat = parsedLat;
-        user.empleadas.ubicacionLng = parsedLng;
-        user.empleadas.ultimaUbicacionAt = new Date();
-        await this.usuariosRepository.manager.save(user.empleadas);
-
-        // Cache user info
-        this.userLocationCache.set(telegramId, {
-          id: user.empleadas.id,
-          rol: 'empleada',
-          name: user.empleadas.nombreArtistico,
-          lat: parsedLat,
-          lng: parsedLng,
-          lastSaved: nowTime,
-          dirty: false,
-        });
-
-        // Emit real-time event to Jefes/Dashboard
-        this.realtimeEventsService.emitToJefes({
-          type: 'EMPLOYEE_LOCATION_UPDATE',
-          empleadaId: user.empleadas.id,
-          lat: user.empleadas.ubicacionLat,
-          lng: user.empleadas.ubicacionLng,
-        });
-
-        // Solo notificar si no estaba en caché (primera vez) y no está editada
-        if (!isEdited) {
-          await ctx.reply(
-            `📍 Ubicación registrada para la empleada: ${user.empleadas.nombreArtistico}.`,
-          );
-        }
-        return;
-      }
-    } else {
-      this.logger.log(`No system user found for telegramChatId=${telegramId}`);
+      return;
     }
 
     /*

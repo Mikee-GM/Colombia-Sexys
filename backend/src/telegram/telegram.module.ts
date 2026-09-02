@@ -36,6 +36,7 @@ import { ConversacionesTelegram } from '../telegram-conversations/entities/teleg
 import { AuthorizedBankAccounts } from '../services/entities/authorized-bank-account.entity';
 import { PaymentReceiptValidations } from '../services/entities/payment-receipt-validation.entity';
 import { EmployeeReportsModule } from '../employee-reports/employee-reports.module';
+import { LocationsModule } from '../locations/locations.module';
 import { ExtensionsModule } from '../extensions/extensions.module';
 import { TransportOperationsModule } from '../transport-operations/transport-operations.module';
 import { EmployeeOnboardingModule } from '../employee-onboarding/employee-onboarding.module';
@@ -55,6 +56,7 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
 
 @Module({
   imports: [
+    LocationsModule,
     TypeOrmModule.forFeature([
       Usuarios,
       Clientes,
