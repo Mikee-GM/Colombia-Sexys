@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { LockKeyhole } from "lucide-react";
 import { toast } from "sonner";
 
-import { cerrarServicioPorOficina } from "@/lib/actions/jefe-panel";
 
 /**
  * Cierra un servicio en nombre de la modelo.
@@ -20,6 +19,10 @@ import { cerrarServicioPorOficina } from "@/lib/actions/jefe-panel";
  * Va en dos tiempos y pide el motivo escrito porque al cerrar se calculan las
  * horas facturadas y lo que le toca a ella. Dentro de una semana hay que poder
  * distinguir esto de un cierre normal, y el motivo es lo unico que lo hace.
+ *
+ * La accion la pone quien monta el componente: el panel del jefe comprueba
+ * ademas que el servicio sea de su equipo, y el de admin no. Asi el mismo
+ * formulario sirve en los dos sin saber en cual esta.
  */
 
 /** El minimo que exige el backend. Se avisa antes de mandar, no despues. */
@@ -27,8 +30,13 @@ const MINIMO_MOTIVO = 10;
 
 export default function CerrarPorOficina({
   servicioId,
+  cerrar: cerrarServicio,
 }: {
   servicioId: string;
+  cerrar: (
+    servicioId: string,
+    motivo: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 }) {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
@@ -42,7 +50,7 @@ export default function CerrarPorOficina({
       return;
     }
     startTransition(async () => {
-      const resultado = await cerrarServicioPorOficina(servicioId, texto);
+      const resultado = await cerrarServicio(servicioId, texto);
       if (!resultado.success) {
         toast.error(resultado.error);
         return;

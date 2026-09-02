@@ -24,7 +24,12 @@ import {
   Th,
   type BadgeTone,
 } from "@/components/erp/primitives";
+import AccionesDelServicio from "@/components/erp/acciones-del-servicio";
 import CorregirEstadoViaje from "@/components/erp/corregir-estado-viaje";
+import ReasignarChofer, {
+  type ChoferDisponible,
+} from "@/components/erp/reasignar-chofer";
+import { type ModeloDisponible } from "@/components/services/reasignar-modelo";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { Service, Trip } from "@/lib/types";
@@ -82,7 +87,17 @@ function fechaHora(iso: string | null | undefined) {
   }
 }
 
-export default function ServicioDetalle({ service }: { service: Service }) {
+export default function ServicioDetalle({
+  service,
+  modelos = [],
+  choferes = [],
+}: {
+  service: Service;
+  /** Modelos a las que se puede reasignar. La ficha funciona sin ellas. */
+  modelos?: ModeloDisponible[];
+  /** Choferes a los que se puede pasar un viaje. Igual: opcional. */
+  choferes?: ChoferDisponible[];
+}) {
   const viajes = service.viajes ?? [];
   const pagos = service.pagos ?? [];
   const participantes = service.participantes ?? [];
@@ -167,6 +182,18 @@ export default function ServicioDetalle({ service }: { service: Service }) {
             </Link>
           </>
         }
+      />
+
+      {/*
+        Lo primero despues del encabezado: hasta ahora esta ficha era de solo
+        lectura, y el admin veia mas que nadie pero no podia tocar nada.
+      */}
+      <AccionesDelServicio
+        servicioId={service.id}
+        estado={String(service.estado)}
+        empleadaId={service.empleadaId}
+        etiqueta={service.empleada?.nombreArtistico ?? "este servicio"}
+        modelos={modelos}
       />
 
       {service.estado === "cancelado" ? (
@@ -365,6 +392,12 @@ export default function ServicioDetalle({ service }: { service: Service }) {
                               <CorregirEstadoViaje
                                 tripId={trip.id}
                                 estadoActual={trip.estado}
+                              />
+                              <ReasignarChofer
+                                tripId={trip.id}
+                                estadoActual={trip.estado}
+                                choferActualId={trip.choferId}
+                                choferes={choferes}
                               />
                             </div>
                           )}

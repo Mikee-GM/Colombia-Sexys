@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { UserRoundCog } from "lucide-react";
 import { toast } from "sonner";
 
-import { reasignarEmpleadaDeServicio } from "@/lib/actions/jefe-panel";
 
 /**
  * Mueve un servicio a otra modelo sin cancelarlo.
@@ -18,6 +17,9 @@ import { reasignarEmpleadaDeServicio } from "@/lib/actions/jefe-panel";
  *
  * Solo aparecen las modelos libres. Reasignar a una que ya esta ocupada recrea
  * el problema que se venia a resolver, y el backend lo rechaza igualmente.
+ *
+ * La accion la pone quien monta el componente: el panel del jefe comprueba
+ * ademas que el servicio sea de su equipo, y el de admin no.
  */
 
 /** Lo minimo que exige el backend. Se avisa antes de mandar, no despues. */
@@ -33,11 +35,17 @@ export default function ReasignarModelo({
   servicioId,
   empleadaActualId,
   modelos,
+  reasignar: reasignarServicio,
   onReasignado,
 }: {
   servicioId: string;
   empleadaActualId: string;
   modelos: ModeloDisponible[];
+  reasignar: (
+    servicioId: string,
+    empleadaId: string,
+    motivo: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   onReasignado?: () => void;
 }) {
   const router = useRouter();
@@ -67,11 +75,7 @@ export default function ReasignarModelo({
       return;
     }
     startTransition(async () => {
-      const resultado = await reasignarEmpleadaDeServicio(
-        servicioId,
-        destino,
-        texto,
-      );
+      const resultado = await reasignarServicio(servicioId, destino, texto);
       if (!resultado.success) {
         toast.error(resultado.error);
         return;

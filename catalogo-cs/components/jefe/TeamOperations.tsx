@@ -13,11 +13,13 @@ import CreateServiceDialog from "@/components/services/create-service-dialog";
 import ServiceStatusBadge from "@/components/services/service-status-badge";
 import CancelServiceDialog from "@/components/services/cancel-service-dialog";
 import GaleriaFotos from "@/components/erp/galeria-fotos";
-import CerrarPorOficina from "@/components/jefe/CerrarPorOficina";
-import ReasignarModelo from "@/components/jefe/ReasignarModelo";
+import CerrarPorOficina from "@/components/services/cerrar-por-oficina";
+import ReasignarModelo from "@/components/services/reasignar-modelo";
 import { type CancellationReason } from "@/lib/cancellation-reasons";
 import {
   cancelJefeService,
+  cerrarServicioPorOficina,
+  reasignarEmpleadaDeServicio,
   chooseReturnTransport,
   changeTripTransport,
   confirmUberFare,
@@ -479,6 +481,7 @@ function ServiceCard({ service, previous, employees, disabled, onRequestAccept, 
             servicioId={service.id}
             empleadaActualId={service.empleadaId}
             modelos={employees}
+            reasignar={reasignarEmpleadaDeServicio}
             onReasignado={() => void onRefresh()}
           />
         </div>
@@ -486,7 +489,10 @@ function ServiceCard({ service, previous, employees, disabled, onRequestAccept, 
 
       {service.estado === "en_curso" && (
         <div className="mt-2.5">
-          <CerrarPorOficina servicioId={service.id} />
+          <CerrarPorOficina
+            servicioId={service.id}
+            cerrar={cerrarServicioPorOficina}
+          />
         </div>
       )}
 

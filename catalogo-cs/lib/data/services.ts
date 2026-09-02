@@ -333,3 +333,80 @@ export async function corregirEstadoDeViaje(
     };
   }
 }
+
+/**
+ * Cierra un servicio en nombre de la modelo.
+ *
+ * Para cuando ella no puede: telefono muerto, sin cobertura, o se le olvido.
+ * Sin esto el servicio se queda en curso indefinidamente y ella bloqueada como
+ * no disponible, sin transporte de regreso y sin entrar en la liquidacion.
+ */
+export async function cerrarPorOficinaAction(
+  serviceId: string,
+  motivo: string,
+) {
+  try {
+    await apiFetch(`/services/${serviceId}/cerrar-por-oficina`, {
+      method: "POST",
+      body: JSON.stringify({ motivo: motivo.trim() }),
+    });
+    revalidateAdminViews();
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo cerrar el servicio",
+    };
+  }
+}
+
+/**
+ * Mueve un servicio a otra modelo sin cancelarlo.
+ *
+ * Cancelar y volver a crear pierde la conversacion con el cliente, el historico
+ * y cualquier anticipo. El precio pactado no se recalcula.
+ */
+export async function reasignarEmpleadaAction(
+  serviceId: string,
+  empleadaId: string,
+  motivo: string,
+) {
+  try {
+    await apiFetch(`/services/${serviceId}/reasignar-empleada`, {
+      method: "POST",
+      body: JSON.stringify({ empleadaId, motivo: motivo.trim() }),
+    });
+    revalidateAdminViews();
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo reasignar",
+    };
+  }
+}
+
+/** Mueve un viaje a otro chofer. Solo mientras no haya terminado. */
+export async function reasignarChoferAction(
+  tripId: string,
+  choferId: string,
+  motivo: string,
+) {
+  try {
+    await apiFetch(`/services/trips/${tripId}/reasignar-chofer`, {
+      method: "POST",
+      body: JSON.stringify({ choferId, motivo: motivo.trim() }),
+    });
+    revalidateAdminViews();
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "No se pudo reasignar el viaje",
+    };
+  }
+}
