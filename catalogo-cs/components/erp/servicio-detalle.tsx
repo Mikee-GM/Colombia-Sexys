@@ -24,6 +24,7 @@ import {
   Th,
   type BadgeTone,
 } from "@/components/erp/primitives";
+import CorregirEstadoViaje from "@/components/erp/corregir-estado-viaje";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { Service, Trip } from "@/lib/types";
@@ -350,9 +351,22 @@ export default function ServicioDetalle({ service }: { service: Service }) {
                                 : "Lo asume la casa"}
                             </StatusBadge>
                           ) : (
-                            <StatusBadge tone={TRIP_TONE[trip.estado] ?? "zinc"}>
-                              {trip.estado.replaceAll("_", " ")}
-                            </StatusBadge>
+                            <div className="flex flex-col items-start gap-1.5">
+                              <StatusBadge
+                                tone={TRIP_TONE[trip.estado] ?? "zinc"}
+                              >
+                                {trip.estado.replaceAll("_", " ")}
+                              </StatusBadge>
+                              {/*
+                                Los estados de un viaje solo avanzan y solo los
+                                mueve el chofer: sin esto, un toque equivocado no
+                                tenia arreglo por ningun sitio.
+                              */}
+                              <CorregirEstadoViaje
+                                tripId={trip.id}
+                                estadoActual={trip.estado}
+                              />
+                            </div>
                           )}
                         </Td>
                       </tr>

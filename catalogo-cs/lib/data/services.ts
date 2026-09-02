@@ -301,4 +301,35 @@ export async function createManualServiceAction(payload: any) {
   }
 }
 
-
+/**
+ * Corrige a mano el estado de un viaje.
+ *
+ * Los estados de un viaje solo avanzan y solo los mueve el chofer, asi que un
+ * toque equivocado --marcar "ya recogi" antes de tiempo-- no se podia deshacer
+ * desde ningun sitio, y el resto del flujo seguia adelante con el dato malo.
+ *
+ * No admite finalizar ni cancelar: los dos tienen su propio camino, con su
+ * costo y su liquidacion. Esto solo arregla un dedazo.
+ */
+export async function corregirEstadoDeViaje(
+  tripId: string,
+  estado: "aceptado" | "en_camino" | "llegado" | "en_curso",
+  motivo: string,
+) {
+  try {
+    await apiFetch(`/services/trips/${tripId}/corregir-estado`, {
+      method: "POST",
+      body: JSON.stringify({ estado, motivo: motivo.trim() }),
+    });
+    revalidateAdminViews();
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo corregir el estado del viaje",
+    };
+  }
+}

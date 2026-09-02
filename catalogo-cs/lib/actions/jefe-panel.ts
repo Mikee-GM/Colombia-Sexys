@@ -174,6 +174,35 @@ export async function cerrarServicioPorOficina(
   }
 }
 
+/**
+ * Mueve un servicio a otra modelo sin cancelarlo.
+ *
+ * Cancelar y volver a crear pierde la conversacion con el cliente, el historico
+ * y cualquier anticipo ya registrado. El precio pactado no se recalcula: el
+ * cliente acepto un importe y una reasignacion es un problema de la casa.
+ */
+export async function reasignarEmpleadaDeServicio(
+  serviceId: string,
+  empleadaId: string,
+  motivo: string,
+) {
+  try {
+    await assertOwnedService(serviceId);
+    await apiFetch(`/services/${serviceId}/reasignar-empleada`, {
+      method: "POST",
+      body: JSON.stringify({ empleadaId, motivo: motivo.trim() }),
+    });
+    return { success: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "No se pudo reasignar",
+    };
+  }
+}
+
 export async function cancelJefeService(
   serviceId: string,
   reason: CancellationReason,

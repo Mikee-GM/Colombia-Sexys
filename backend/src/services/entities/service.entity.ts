@@ -446,6 +446,36 @@ export class Servicios {
   })
   motivoCierreOficina: string | null;
 
+  /*
+   * De quien venia el servicio si se reasigno, y por que. Sin esto un servicio
+   * reasignado seria indistinguible de uno que siempre fue de esa modelo, y el
+   * reparto del dinero de la semana se decide mirando quien lo hizo.
+   */
+  @Column('uuid', { name: 'empleada_anterior_id', nullable: true })
+  @ApiPropertyOptional({
+    description: 'Modelo que tenía el servicio antes de reasignarlo',
+  })
+  empleadaAnteriorId: string | null;
+
+  @Column('uuid', { name: 'reasignado_por_user_id', nullable: true })
+  @ApiPropertyOptional({ description: 'Quién hizo la reasignación' })
+  reasignadoPorUserId: string | null;
+
+  @Column('timestamp with time zone', {
+    name: 'reasignado_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Momento de la reasignación',
+    type: String,
+    format: 'date-time',
+  })
+  reasignadoAt: Date | null;
+
+  @Column('text', { name: 'motivo_reasignacion', nullable: true })
+  @ApiPropertyOptional({ description: 'Por qué se cambió de modelo' })
+  motivoReasignacion: string | null;
+
   @Column('uuid', { name: 'servicio_previo_id', nullable: true })
   servicioPrevioId: string | null;
 

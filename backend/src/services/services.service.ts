@@ -1849,6 +1849,267 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Mueve un servicio a otra modelo sin cancelarlo.
+   *
+   * No existia por ninguna via: la unica salida era cancelar y volver a crear,
+   * que pierde la conversacion con el cliente, el historico y cualquier
+   * anticipo ya registrado. Un cambio de ultimo momento --se enferma media hora
+   * antes, con el cliente ya habiendo pagado por transferencia-- obligaba a
+   * devolver y volver a cobrar, o a dejar el dinero descuadrado entre dos
+   * servicios.
+   *
+   * El precio pactado NO se recalcula. Se copio al crear justamente para que un
+   * cambio de tarifa posterior no altere lo ya acordado, y aqui vale lo mismo:
+   * el cliente acepto un importe, puede haberlo pagado, y una reasignacion es
+   * un problema de la casa, no suyo. Si la nueva modelo cobra distinto, eso se
+   * arregla en su liquidacion, no cambiandole el trato al cliente.
+   *
+   * El jefe del servicio tampoco cambia aunque la nueva modelo tenga otro: quien
+   * esta gestionando esto ahora mismo es el que lo tiene abierto en su panel, y
+   * moverselo de las manos a mitad de una urgencia es justo lo contrario de lo
+   * que hace falta.
+   */
+  async reasignarEmpleada(
+    servicioId: string,
+    nuevaEmpleadaId: string,
+    actor: Usuarios,
+    motivo: string,
+  ): Promise<Servicios> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: { empleada: { usuario: true } },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    this.assertActorCanManageService(servicio, actor);
+
+    if (servicio.serviceType === 'grupal') {
+      throw new ConflictException(
+        'Un servicio grupal se reorganiza cambiando sus participantes',
+      );
+    }
+    if (!['pendiente', 'agendado', 'en_curso'].includes(servicio.estado)) {
+      throw new ConflictException(
+        'Solo se puede reasignar un servicio que sigue vivo',
+      );
+    }
+    if (servicio.empleadaId === nuevaEmpleadaId) {
+      throw new ConflictException('El servicio ya es de esa modelo');
+    }
+
+    const nueva = await this.empleadasRepository.findOne({
+      where: { id: nuevaEmpleadaId },
+      relations: { usuario: true },
+    });
+    if (!nueva) throw new NotFoundException('Modelo no encontrada');
+
+    /*
+     * Se exige que este libre. Reasignar a una que ya esta ocupada recrea el
+     * problema que se venia a resolver, y ademas dejaria dos servicios en curso
+     * sobre la misma persona sin que nadie lo decidiera.
+     */
+    if (!puedeAtender(nueva.usuario) || nueva.disponible === false) {
+      throw new ConflictException('Esa modelo no está disponible ahora mismo');
+    }
+
+    const anteriorId = servicio.empleadaId;
+    const anteriorUsuarioId = servicio.empleada?.usuarioId ?? null;
+
+    await this.serviciosRepository.manager.transaction(
+      async (manager: EntityManager) => {
+        await manager.update(Servicios, servicioId, {
+          empleadaId: nuevaEmpleadaId,
+          empleadaAnteriorId: anteriorId,
+          reasignadoPorUserId: actor.id,
+          reasignadoAt: new Date(),
+          motivoReasignacion: motivo.trim().slice(0, 2000),
+        });
+
+        // La anterior queda libre y la nueva ocupada, pero solo si el servicio
+        // ya estaba corriendo: uno pendiente todavia no bloquea a nadie.
+        if (servicio.estado === 'en_curso') {
+          await manager.update(Empleadas, anteriorId, { disponible: true });
+          await manager.update(Empleadas, nuevaEmpleadaId, {
+            disponible: false,
+          });
+        }
+      },
+    );
+
+    await this.avisarDeLaReasignacion(
+      servicio,
+      anteriorUsuarioId,
+      nueva.usuarioId,
+    );
+
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'service_reassigned',
+      servicioId,
+      empleadaAnteriorId: anteriorId,
+      empleadaId: nuevaEmpleadaId,
+    });
+
+    return this.findOne(servicioId);
+  }
+
+  /**
+   * Les dice a las dos modelos que el servicio cambio de manos.
+   *
+   * Nivel 1 para las dos: una deja de tener que ir y la otra tiene que salir
+   * ya. En su propio try/catch, que la reasignacion ya esta hecha.
+   *
+   * Al cliente no se le avisa desde aqui a proposito: esta hablando por chat con
+   * la modelo anterior y lo que hay que decirle depende de que se le prometio.
+   * Eso lo lleva quien reasigno, que es quien conoce el caso.
+   */
+  private async avisarDeLaReasignacion(
+    servicio: Servicios,
+    anteriorUsuarioId: string | null,
+    nuevaUsuarioId: string | null,
+  ): Promise<void> {
+    await this.avisar(anteriorUsuarioId, {
+      titulo: 'Ya no tienes este servicio',
+      cuerpo: 'Se reasignó a otra compañera. No tienes que ir.',
+      url: '/empleada/portal',
+      tag: `reasignado-${servicio.id}`,
+      requireInteraction: true,
+    });
+
+    await this.avisar(nuevaUsuarioId, {
+      titulo: 'Te asignaron un servicio',
+      cuerpo: 'Toca para ver los detalles.',
+      url: '/empleada/portal',
+      tag: `reasignado-${servicio.id}`,
+      requireInteraction: true,
+    });
+  }
+
+  /**
+   * Mueve un viaje a otro chofer.
+   *
+   * Mismo caso que la modelo: el chofer asignado no aparece, se le averia el
+   * coche o simplemente no responde, y hasta ahora la unica salida era cancelar
+   * el viaje --con lo que arrastra en el costo y en la liquidacion-- para
+   * volver a despacharlo.
+   *
+   * Solo sobre viajes que no han terminado. Uno finalizado ya se pago o esta a
+   * punto de entrar en un corte, y cambiarle el chofer moveria dinero de una
+   * semana a otra sin que nadie lo decidiera.
+   */
+  async reasignarChofer(
+    viajeId: string,
+    nuevoChoferId: string,
+    actor: Usuarios,
+    motivo: string,
+  ): Promise<Viajes> {
+    const viaje = await this.viajesRepository.findOne({
+      where: { id: viajeId },
+      relations: { chofer: { usuario: true }, servicio: true },
+    });
+    if (!viaje) throw new NotFoundException('Viaje no encontrado');
+    if (viaje.servicio) {
+      this.assertActorCanManageService(viaje.servicio, actor);
+    }
+
+    if (['finalizado', 'cancelado'].includes(viaje.estado)) {
+      throw new ConflictException('Ese viaje ya está cerrado');
+    }
+    if (viaje.choferId === nuevoChoferId) {
+      throw new ConflictException('El viaje ya es de ese chofer');
+    }
+
+    const nuevo = await this.choferesRepository.findOne({
+      where: { id: nuevoChoferId },
+      relations: { usuario: true },
+    });
+    if (!nuevo) throw new NotFoundException('Chofer no encontrado');
+
+    const anteriorId = viaje.choferId;
+    const anteriorUsuarioId = viaje.chofer?.usuarioId ?? null;
+
+    await this.viajesRepository.update(viajeId, {
+      choferId: nuevoChoferId,
+      choferAnteriorId: anteriorId,
+      corregidoPorUserId: actor.id,
+      corregidoAt: new Date(),
+      motivoCorreccion: motivo.trim().slice(0, 2000),
+      // Vuelve a 'aceptado': el nuevo no ha salido todavia, y dejar el estado
+      // anterior le atribuiria un avance que no hizo.
+      estado: 'aceptado',
+    });
+
+    await this.avisar(anteriorUsuarioId, {
+      titulo: 'Ya no tienes este viaje',
+      cuerpo: 'Se reasignó a otro chofer.',
+      url: '/chofer/portal',
+      tag: `reasignado-${viajeId}`,
+      requireInteraction: true,
+    });
+    await this.avisar(nuevo.usuarioId, {
+      titulo: 'Te asignaron un viaje',
+      cuerpo: 'Toca para ver los detalles.',
+      url: '/chofer/portal',
+      tag: `reasignado-${viajeId}`,
+      requireInteraction: true,
+    });
+
+    return (
+      (await this.viajesRepository.findOne({ where: { id: viajeId } })) ?? viaje
+    );
+  }
+
+  /**
+   * Corrige a mano el estado de un viaje.
+   *
+   * Los estados de un viaje solo avanzan, y solo los mueve el chofer. Un toque
+   * equivocado --marcar "ya recogi" antes de tiempo-- no se podia deshacer
+   * desde ningun sitio, y el resto del flujo sigue adelante con el dato malo.
+   *
+   * Deliberadamente estrecha: no sirve para operar el viaje, sino para arreglar
+   * un dedazo. Por eso no admite los dos estados terminales --finalizar y
+   * cancelar tienen sus propios caminos, con su costo y su liquidacion-- ni se
+   * puede usar sobre un viaje ya cerrado.
+   */
+  async corregirEstadoDeViaje(
+    viajeId: string,
+    estado: 'aceptado' | 'en_camino' | 'llegado' | 'en_curso',
+    actor: Usuarios,
+    motivo: string,
+  ): Promise<Viajes> {
+    const viaje = await this.viajesRepository.findOne({
+      where: { id: viajeId },
+      relations: { servicio: true },
+    });
+    if (!viaje) throw new NotFoundException('Viaje no encontrado');
+    if (viaje.servicio) {
+      this.assertActorCanManageService(viaje.servicio, actor);
+    }
+
+    if (['finalizado', 'cancelado'].includes(viaje.estado)) {
+      throw new ConflictException(
+        'Ese viaje ya está cerrado. Finalizar y cancelar tienen su propio camino.',
+      );
+    }
+    if (viaje.estado === estado) {
+      throw new ConflictException('El viaje ya está en ese estado');
+    }
+
+    await this.viajesRepository.update(viajeId, {
+      estado,
+      corregidoPorUserId: actor.id,
+      corregidoAt: new Date(),
+      motivoCorreccion: motivo.trim().slice(0, 2000),
+    });
+
+    this.logger.log(
+      `Estado del viaje ${viajeId} corregido a "${estado}" por ${actor.id}: ${motivo}`,
+    );
+
+    return (
+      (await this.viajesRepository.findOne({ where: { id: viajeId } })) ?? viaje
+    );
+  }
+
   async extendByEmployee(
     servicioId: string,
     actorUserId: string,

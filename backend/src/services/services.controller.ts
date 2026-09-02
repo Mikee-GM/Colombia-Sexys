@@ -34,6 +34,9 @@ import {
 import {
   CancelServiceDto,
   CerrarPorOficinaDto,
+  CorregirEstadoViajeDto,
+  ReasignarChoferDto,
+  ReasignarEmpleadaDto,
 } from './dto/cancel-service.dto';
 import {
   ApiActionDocs,
@@ -212,6 +215,70 @@ export class ServicesController {
     @Req() req: any,
   ) {
     return this.servicesService.finishByOffice(id, req.user, dto.motivo);
+  }
+
+  /**
+   * Mueve el servicio a otra modelo sin cancelarlo.
+   *
+   * Cancelar y volver a crear pierde la conversacion con el cliente, el
+   * historico y cualquier anticipo. El precio pactado no se recalcula: el
+   * cliente acepto un importe y una reasignacion es un problema de la casa.
+   */
+  @Post(':id/reasignar-empleada')
+  @HttpCode(200)
+  @ApiActionDocs('Reasignar un servicio a otra modelo', true, 'ID del servicio')
+  reasignarEmpleada(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReasignarEmpleadaDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.reasignarEmpleada(
+      id,
+      dto.empleadaId,
+      req.user,
+      dto.motivo,
+    );
+  }
+
+  /** Mueve el viaje a otro chofer. Solo mientras no haya terminado. */
+  @Post('trips/:tripId/reasignar-chofer')
+  @HttpCode(200)
+  @ApiActionDocs('Reasignar un viaje a otro chofer', true, 'ID del viaje')
+  reasignarChofer(
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Body() dto: ReasignarChoferDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.reasignarChofer(
+      tripId,
+      dto.choferId,
+      req.user,
+      dto.motivo,
+    );
+  }
+
+  /**
+   * Corrige a mano el estado de un viaje.
+   *
+   * Los estados solo avanzan y solo los mueve el chofer, asi que un toque
+   * equivocado no tenia arreglo. Reservado al admin: no es para operar el
+   * viaje, es para deshacer un dedazo.
+   */
+  @Post('trips/:tripId/corregir-estado')
+  @Roles('admin')
+  @HttpCode(200)
+  @ApiActionDocs('Corregir el estado de un viaje', true, 'ID del viaje')
+  corregirEstadoDeViaje(
+    @Param('tripId', ParseUUIDPipe) tripId: string,
+    @Body() dto: CorregirEstadoViajeDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.corregirEstadoDeViaje(
+      tripId,
+      dto.estado,
+      req.user,
+      dto.motivo,
+    );
   }
 
   @Post(':id/aceptar')

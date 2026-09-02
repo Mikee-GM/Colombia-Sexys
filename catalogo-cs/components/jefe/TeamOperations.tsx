@@ -14,6 +14,7 @@ import ServiceStatusBadge from "@/components/services/service-status-badge";
 import CancelServiceDialog from "@/components/services/cancel-service-dialog";
 import GaleriaFotos from "@/components/erp/galeria-fotos";
 import CerrarPorOficina from "@/components/jefe/CerrarPorOficina";
+import ReasignarModelo from "@/components/jefe/ReasignarModelo";
 import { type CancellationReason } from "@/lib/cancellation-reasons";
 import {
   cancelJefeService,
@@ -272,7 +273,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     {tab === "equipo" ? <section>
       <label className="mb-4 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-3.5 text-sm text-white outline-none placeholder:text-zinc-600" /></label>
       <EmployeeList employees={visibleEmployees} disabled={pending} onToggle={toggleAvailability} onOpen={(employee) => setDetalleEmpleadaId(employee.id)} />
-    </section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />}
+    </section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList employees={employees} services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />}
 
     {chatService && <ChatPanel service={chatService} messages={messages} setMessages={setMessages} onClose={() => setChatService(null)} />}
     {acceptingService && <AcceptServiceDialog service={acceptingService} previousService={services.find((item) => item.id === acceptingService.servicioPrevioId)} disabled={pending} onClose={() => setAcceptingService(null)} onAccept={(transport, notes) => decide(acceptingService, "aceptar", transport, notes)} />}
@@ -389,12 +390,12 @@ function CashDeliveryPanel({ summary, pending, run }: { summary: CashObligationS
   );
 }
 
-function ServiceList({ services, allServices, active, disabled, onDecide, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { services: Service[]; allServices: Service[]; active: boolean; disabled: boolean; onDecide: (service: Service, decision: "aceptar" | "rechazar", transport?: "chofer" | "uber", bossNotes?: string) => void; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
+function ServiceList({ services, allServices, employees, active, disabled, onDecide, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { services: Service[]; allServices: Service[]; employees: Employee[]; active: boolean; disabled: boolean; onDecide: (service: Service, decision: "aceptar" | "rechazar", transport?: "chofer" | "uber", bossNotes?: string) => void; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   if (!services.length) return <div className="rounded-2xl border border-dashed border-zinc-800 py-20 text-center text-sm text-zinc-500">No hay servicios en esta sección.</div>;
   // Un servicio cerrado se consulta, no se opera: el historial es una lista
   // para repasar y solo despliega el detalle el que se toca.
   if (!active) return <HistoryList services={services} onChat={onChat} />;
-  return <div className="space-y-3">{services.map((service) => <ServiceCard key={service.id} service={service} previous={allServices.find((item) => item.id === service.servicioPrevioId)} disabled={disabled} onRequestAccept={onRequestAccept} onRequestEdit={onRequestEdit} onCancel={onCancel} onChat={onChat} onRefresh={onRefresh} />)}</div>;
+  return <div className="space-y-3">{services.map((service) => <ServiceCard key={service.id} service={service} previous={allServices.find((item) => item.id === service.servicioPrevioId)} employees={employees} disabled={disabled} onRequestAccept={onRequestAccept} onRequestEdit={onRequestEdit} onCancel={onCancel} onChat={onChat} onRefresh={onRefresh} />)}</div>;
 }
 
 /**
@@ -406,7 +407,7 @@ function ServiceList({ services, allServices, active, disabled, onDecide, onRequ
  * segun lo que midieran los textos, cosa que en una pantalla estrecha pasaba
  * siempre.
  */
-function ServiceCard({ service, previous, disabled, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { service: Service; previous?: Service; disabled: boolean; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
+function ServiceCard({ service, previous, employees, disabled, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { service: Service; previous?: Service; employees: Employee[]; disabled: boolean; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   const programado = service.tipoAgenda === "programado";
   const pendiente = service.estado === "pendiente";
 
@@ -468,6 +469,21 @@ function ServiceCard({ service, previous, disabled, onRequestAccept, onRequestEd
         se le murio el telefono. Antes de arrancar se cancela, y despues ya esta
         cerrado.
       */}
+      {/*
+        Reasignar va antes que cerrar: cuando algo se tuerce, lo primero es
+        intentar que el servicio siga en pie con otra persona.
+      */}
+      {["pendiente", "agendado", "en_curso"].includes(service.estado) && (
+        <div className="mt-2.5">
+          <ReasignarModelo
+            servicioId={service.id}
+            empleadaActualId={service.empleadaId}
+            modelos={employees}
+            onReasignado={() => void onRefresh()}
+          />
+        </div>
+      )}
+
       {service.estado === "en_curso" && (
         <div className="mt-2.5">
           <CerrarPorOficina servicioId={service.id} />

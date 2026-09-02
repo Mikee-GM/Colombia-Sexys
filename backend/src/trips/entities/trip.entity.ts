@@ -138,6 +138,34 @@ export class Viajes {
     | 'rechazado'
     | 'cancelado';
 
+  /*
+   * Las correcciones a mano sobre un viaje: de que chofer venia si se reasigno,
+   * y quien toco su estado. Los estados de un viaje solo avanzan, asi que sin
+   * esto un toque equivocado --marcar "ya recogi" antes de tiempo-- no tenia
+   * arreglo por ningun sitio.
+   */
+  @Column('uuid', { name: 'chofer_anterior_id', nullable: true })
+  @ApiPropertyOptional({
+    description: 'Chofer que tenía el viaje antes de reasignarlo',
+  })
+  choferAnteriorId: string | null;
+
+  @Column('uuid', { name: 'corregido_por_user_id', nullable: true })
+  @ApiPropertyOptional({ description: 'Quién corrigió el viaje a mano' })
+  corregidoPorUserId: string | null;
+
+  @Column('timestamp with time zone', { name: 'corregido_at', nullable: true })
+  @ApiPropertyOptional({
+    description: 'Momento de la corrección manual',
+    type: String,
+    format: 'date-time',
+  })
+  corregidoAt: Date | null;
+
+  @Column('text', { name: 'motivo_correccion', nullable: true })
+  @ApiPropertyOptional({ description: 'Por qué hubo que corregirlo a mano' })
+  motivoCorreccion: string | null;
+
   @Column('character varying', {
     name: 'proveedor_transporte',
     length: 50,
