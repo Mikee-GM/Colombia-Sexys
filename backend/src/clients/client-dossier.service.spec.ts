@@ -90,11 +90,22 @@ describe('ClientDossierService', () => {
       query: jest.fn((sql: string) => Promise.resolve(respuestas()(sql))),
     };
     discipline = { getActiveSanction: jest.fn().mockResolvedValue(null) };
-    service = new ClientDossierService(
-      clientes as any,
-      dataSource as any,
-      discipline as any,
-    );
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
+     * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
+     * Los campos inicializados de la clase entran como dobles porque
+     * `Object.create` no los ejecuta.
+     */
+    service = Object.create(
+      ClientDossierService.prototype,
+    ) as ClientDossierService;
+    Object.assign(service, {
+      clientes,
+      dataSource,
+      discipline,
+    });
   });
 
   it('falla claro cuando el cliente no existe', async () => {

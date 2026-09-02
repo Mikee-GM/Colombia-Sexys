@@ -50,11 +50,22 @@ describe('EmployeeReportsService', () => {
         .fn()
         .mockResolvedValue({ id: 'report-1', bossId: 'boss-2' }),
     };
-    const service = new EmployeeReportsService(
-      reports as any,
-      {} as any,
-      {} as any,
-    );
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
+     * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
+     * Los campos inicializados de la clase entran como dobles porque
+     * `Object.create` no los ejecuta.
+     */
+    const service = Object.create(
+      EmployeeReportsService.prototype,
+    ) as EmployeeReportsService;
+    Object.assign(service, {
+      reports,
+      history: {},
+      dataSource: {},
+    });
     await expect(
       service.findOne('report-1', { id: 'boss-1', rol: 'jefe' } as any),
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -73,11 +84,22 @@ describe('EmployeeReportsService', () => {
         },
       ]),
     };
-    const service = new EmployeeReportsService(
-      {} as any,
-      {} as any,
-      dataSource as any,
-    );
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
+     * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
+     * Los campos inicializados de la clase entran como dobles porque
+     * `Object.create` no los ejecuta.
+     */
+    const service = Object.create(
+      EmployeeReportsService.prototype,
+    ) as EmployeeReportsService;
+    Object.assign(service, {
+      reports: {},
+      history: {},
+      dataSource,
+    });
     const [metric] = await service.tolerance({ rol: 'admin' } as any);
     expect(metric.reportsOverTolerance).toBe(true);
     expect(metric.extensionsOverTolerance).toBe(true);

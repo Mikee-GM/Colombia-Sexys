@@ -19,24 +19,49 @@ describe('TelegramAuthUpdate deep links', () => {
       startDirectGroupSession: jest.fn().mockResolvedValue(undefined),
       startHireSession: jest.fn().mockResolvedValue(undefined),
     };
-    const update = new TelegramAuthUpdate(
-      {} as any, // linkAttempts
-      usuariosRepository as any,
-      clientesRepository as any,
-      {} as any, // empleadasRepository
-      {} as any, // serviciosRepository
-      {} as any, // viajesRepository
-      {} as any, // authService
-      {} as any, // panelAccessService
-      {} as any, // telegramService
-      bookingUpdate as any, // telegramBookingUpdate
-      {} as any, // telegramOnboardingService
-      {} as any, // groupServicesService
-      {} as any, // uploadService
-      {} as any, // weeklyContentService
-      {} as any, // candidateScreeningService
-      {} as any, // disciplineService
-    );
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
+     * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
+     * Los campos inicializados de la clase entran como dobles porque
+     * `Object.create` no los ejecuta.
+     */
+    const update = Object.create(
+      TelegramAuthUpdate.prototype,
+    ) as TelegramAuthUpdate;
+    Object.assign(update, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      linkAttempts: {},
+      // linkAttempts
+      usuariosRepository,
+      clientesRepository,
+      empleadasRepository: {},
+      // empleadasRepository
+      serviciosRepository: {},
+      // serviciosRepository
+      viajesRepository: {},
+      // viajesRepository
+      authService: {},
+      // authService
+      panelAccessService: {},
+      // panelAccessService
+      telegramService: {},
+      // telegramService
+      telegramBookingUpdate: bookingUpdate,
+      // telegramBookingUpdate
+      telegramOnboardingService: {},
+      // telegramOnboardingService
+      groupServicesService: {},
+      // groupServicesService
+      uploadService: {},
+      // uploadService
+      weeklyContentService: {},
+      // weeklyContentService
+      candidateScreeningService: {},
+      // candidateScreeningService
+      disciplineService: {},
+    });
     const ctx = {
       from: { id: 123, first_name: 'Nuevo', last_name: 'Cliente' },
       message: { text: '/start servicio_grupal' },

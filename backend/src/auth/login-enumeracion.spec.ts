@@ -38,12 +38,22 @@ describe('AuthService.login: no se puede averiguar quién tiene cuenta', () => {
       }),
       update: jest.fn().mockResolvedValue(undefined),
     };
-    service = new AuthService(
-      usuarios as never,
-      { manager: {} } as never,
-      {} as never,
-      { getOrThrow: () => 'secreto-de-prueba' } as never,
-    );
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
+     * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
+     * Los campos inicializados de la clase entran como dobles porque
+     * `Object.create` no los ejecuta.
+     */
+    service = Object.create(AuthService.prototype) as AuthService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      usuariosRepository: usuarios,
+      sessionsRepository: { manager: {} },
+      jwtService: {},
+      configService: { getOrThrow: () => 'secreto-de-prueba' },
+    });
     advertencias = [];
     jest
       .spyOn(service['logger'], 'warn')

@@ -1,17 +1,28 @@
 import { EmployeeOnboardingService } from './employee-onboarding.service';
 
 describe('EmployeeOnboardingService', () => {
-  const service = new EmployeeOnboardingService(
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-    {} as never,
-  );
+  /*
+   * Se construye por nombre y no con `new`.
+   *
+   * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
+   * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
+   * Los campos inicializados de la clase entran como dobles porque
+   * `Object.create` no los ejecuta.
+   */
+  const service = Object.create(
+    EmployeeOnboardingService.prototype,
+  ) as EmployeeOnboardingService;
+  Object.assign(service, {
+    regulationRepository: {},
+    questionRepository: {},
+    optionRepository: {},
+    onboardingRepository: {},
+    attemptRepository: {},
+    answerRepository: {},
+    employeeRepository: {},
+    userRepository: {},
+    dataSource: {},
+  });
 
   describe('calculateTrustScore', () => {
     it.each([

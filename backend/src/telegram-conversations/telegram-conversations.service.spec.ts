@@ -23,12 +23,23 @@ describe('TelegramConversationsService', () => {
   const services = { findOne: jest.fn() };
   const bot = { telegram: { sendMessage: jest.fn() } };
   const realtime = { emitToBoss: jest.fn(), emitToBosses: jest.fn() };
-  const subject = new TelegramConversationsService(
-    conversations as any,
-    services as any,
-    bot as any,
-    realtime as any,
-  );
+  /*
+   * Se construye por nombre y no con `new`.
+   *
+   * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
+   * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
+   * Los campos inicializados de la clase entran como dobles porque
+   * `Object.create` no los ejecuta.
+   */
+  const subject = Object.create(
+    TelegramConversationsService.prototype,
+  ) as TelegramConversationsService;
+  Object.assign(subject, {
+    conversationsRepository: conversations,
+    servicesRepository: services,
+    bot,
+    realtimeEvents: realtime,
+  });
 
   beforeEach(() => jest.clearAllMocks());
 

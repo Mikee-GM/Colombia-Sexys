@@ -87,12 +87,22 @@ describe('AuthService.refresh', () => {
       ),
     } as unknown as JwtService;
 
-    const service = new AuthService(
-      {} as Repository<Usuarios>,
-      rootSessions,
-      jwt,
-      { getOrThrow: () => 'secreto-de-prueba' } as never,
-    );
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
+     * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
+     * Los campos inicializados de la clase entran como dobles porque
+     * `Object.create` no los ejecuta.
+     */
+    const service = Object.create(AuthService.prototype) as AuthService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      usuariosRepository: {} as Repository<Usuarios>,
+      sessionsRepository: rootSessions,
+      jwtService: jwt,
+      configService: { getOrThrow: () => 'secreto-de-prueba' },
+    });
     return { service, store, revokeAll, full };
   }
 
@@ -211,12 +221,22 @@ describe('AuthService.purgeStaleSessions', () => {
     for (const borradas of lotes) {
       query.mockResolvedValueOnce([[], borradas]);
     }
-    const service = new AuthService(
-      {} as unknown as Repository<Usuarios>,
-      { query } as unknown as Repository<AuthSession>,
-      {} as unknown as JwtService,
-      { getOrThrow: () => 'secreto-de-prueba' } as never,
-    );
+    /*
+     * Se construye por nombre y no con `new`.
+     *
+     * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
+     * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
+     * Los campos inicializados de la clase entran como dobles porque
+     * `Object.create` no los ejecuta.
+     */
+    const service = Object.create(AuthService.prototype) as AuthService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      usuariosRepository: {} as unknown as Repository<Usuarios>,
+      sessionsRepository: { query } as unknown as Repository<AuthSession>,
+      jwtService: {} as unknown as JwtService,
+      configService: { getOrThrow: () => 'secreto-de-prueba' },
+    });
     return { service, query };
   }
 
