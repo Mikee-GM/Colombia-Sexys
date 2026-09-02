@@ -235,10 +235,6 @@ Definidas en `catalogo-cs/AGENTS.md` (cargado por `catalogo-cs/CLAUDE.md`):
 - Mobile-first, scroll natural (sin snap-scroll).
 - Reutilizar componentes genéricos antes de crear variantes.
 
-Nota: la sección "Arquitectura" de `catalogo-cs/AGENTS.md` está desactualizada
-(menciona Firebase Firestore y Firebase Auth). La persistencia y la
-autenticación reales son PostgreSQL y JWT en el backend NestJS.
-
 ## Reglas detalladas por área
 
 - `backend/.agents/rules/backend-rules.md` — NestJS, DTOs, errores, seguridad,

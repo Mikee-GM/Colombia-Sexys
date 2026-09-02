@@ -43,7 +43,16 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **Framework:** Next.js (App Router) + React + TypeScript
 - **Estilos:** Tailwind CSS 4
 - **Animaciones:** Framer Motion
-- **Base de datos:** Firebase Firestore (datos de modelos)
-- **Almacenamiento de imagenes:** Cloudflare R2 (via API Routes de Next.js)
-- **Autenticacion admin:** Firebase Auth
 - **Notificaciones:** Sonner
+
+Este paquete **no habla con ninguna base de datos**. Toda la persistencia, la
+autenticacion y la subida de archivos viven en el backend NestJS
+(PostgreSQL + TypeORM, JWT en cookies firmadas, Cloudflare R2). El navegador
+tampoco habla directo con NestJS: `middleware.ts` reescribe `/api/*` hacia
+`BACKEND_API_URL`, y en el servidor `lib/api-server.ts#apiFetch` reenvia las
+cookies y el `x-csrf-token`.
+
+`BACKEND_API_URL` es exclusivamente de servidor. Nunca la expongas al cliente.
+
+Hubo una etapa con Firebase Firestore y Firebase Auth. Se elimino: si encuentras
+codigo o documentacion que los mencione, es residuo, no una via alternativa.
