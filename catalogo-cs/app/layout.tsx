@@ -1,6 +1,28 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cinzel, Montserrat } from "next/font/google";
 import "./globals.css";
+
+/**
+ * `viewportFit: "cover"` es lo que hace que existan las variables
+ * `env(safe-area-inset-*)`.
+ *
+ * Sin esta declaracion Next emite el viewport por defecto, que no la lleva, y
+ * entonces `env(safe-area-inset-bottom)` vale 0 en todos los navegadores. Las
+ * barras de navegacion inferiores de los paneles reservan su hueco con
+ * `pb-[max(...,env(safe-area-inset-bottom))]`, asi que ese calculo se quedaba
+ * siempre en el minimo: en un iPhone, con el panel instalado en la pantalla de
+ * inicio, los iconos quedaban pisados por el indicador de inicio y parecia que
+ * la barra no cabia en la pantalla.
+ *
+ * `themeColor` pinta de negro la franja del sistema, que sin el sale blanca y
+ * rompe el fondo negro de la marca.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#000000",
+};
 
 // Autoalojadas por next/font: sin peticion a fonts.googleapis.com, con
 // preload y metricas de fallback ajustadas para no provocar CLS.

@@ -369,16 +369,16 @@ export default function OnboardingClient({
               value={busqueda}
               onChange={(event) => setBusqueda(event.target.value)}
               placeholder="Buscar candidata"
-              className="w-[240px] rounded-xl border border-zinc-800 bg-black px-3.5 py-2.5 text-[13px] text-zinc-200 outline-none placeholder:text-zinc-500 focus:border-[#C5A55A]"
+              className="w-full rounded-xl border border-zinc-800 bg-black px-3.5 py-2.5 text-[13px] text-zinc-200 outline-none placeholder:text-zinc-500 focus:border-[#C5A55A] sm:w-[240px]"
             />
 
-            <div className="flex items-center gap-0.5 rounded-xl border border-zinc-800 bg-zinc-950 p-[3px]">
+            <div className="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950 p-[3px] no-scrollbar">
               {filtros.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => setFiltro(item.id)}
-                  className={`rounded-[9px] px-3.5 py-[7px] text-xs font-semibold transition-colors ${
+                  className={`shrink-0 whitespace-nowrap rounded-[9px] px-3.5 py-[7px] text-xs font-semibold transition-colors ${
                     filtro === item.id
                       ? "bg-[#C5A55A] text-black"
                       : "text-zinc-400 hover:text-white"

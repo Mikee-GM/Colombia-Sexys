@@ -30,8 +30,18 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
     router.replace("/admin");
   }
 
+  /*
+   * `min-h-dvh` en vez de `min-h-screen`.
+   *
+   * `min-h-screen` son 100vh, que en iOS miden la ventana CON la barra del
+   * navegador retraida y no cambian al mostrarse u ocultarse. La pagina queda
+   * entonces mas alta que lo que de verdad se ve, y la barra inferior --que se
+   * posiciona contra ese viewport-- aparece flotando por encima del borde en
+   * vez de pegada abajo: es el "de la nada se sube". La unidad dinamica sigue
+   * al viewport real.
+   */
   return (
-    <div className="min-h-screen bg-black font-body text-white md:flex">
+    <div className="min-h-dvh bg-black font-body text-white md:flex">
       <SessionKeeper />
       {/* El panel tambien se instala en el telefono, y alli una version vieja
           puede quedarse cargada dias. */}
@@ -57,7 +67,13 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
           <LogOut size={15} /> Cerrar sesión
         </button>
       </aside>
-      <div className="min-w-0 flex-1 pb-28 md:pb-0">
+      {/*
+        El hueco que deja el contenido para la barra tiene que incluir el
+        indicador de inicio del iPhone. Con `pb-28` a secas, ahora que
+        `env(safe-area-inset-bottom)` si tiene valor, la barra crece y volvia a
+        tapar el final de la pagina.
+      */}
+      <div className="min-w-0 flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
         {/* En movil no habia ni marca ni salida fuera de la barra inferior.
             Esta cabecera da sitio a las dos y libera la sexta celda. */}
         <header className="flex items-center justify-between border-b border-zinc-800 bg-[#050505] px-4 py-2.5 md:hidden">

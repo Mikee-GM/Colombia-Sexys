@@ -153,3 +153,37 @@ input[type="number"]::-webkit-inner-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+/*
+ * Leaflet dentro de su propia capa.
+ *
+ * Leaflet reparte z-index altos entre sus paneles (400) y sus controles (1000),
+ * medidos contra la pagina entera. Las barras de navegacion inferiores de los
+ * paneles estan en z-50, asi que el mapa y sus botones de zoom se pintaban por
+ * encima de ellas: en el movil, el final del mapa tapaba la barra.
+ *
+ * Con `position: relative` y un `z-index` propio, el contenedor abre un
+ * contexto de apilamiento: todo lo que Leaflet coloca dentro queda encerrado
+ * ahi y ya no puede competir con el resto de la interfaz.
+ */
+.leaflet-container {
+  position: relative;
+  z-index: 0;
+  /* Sin esto el mapa desborda su tarjeta en pantallas estrechas. */
+  max-width: 100%;
+}
+
+/*
+ * Barra desplazable sin barra visible.
+ *
+ * La clase ya se usaba en las pestañas del portal de la empleada y en los
+ * grupos de filtros, pero no estaba definida en ningun sitio: no hacia nada, y
+ * en movil aparecia una barra de desplazamiento sobre el contenido.
+ */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

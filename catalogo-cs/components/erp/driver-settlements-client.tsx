@@ -188,7 +188,7 @@ export default function DriverSettlementsClient({
             value={busqueda}
             onChange={(event) => setBusqueda(event.target.value)}
             placeholder="Buscar chofer"
-            className="w-[240px] rounded-xl border border-zinc-800 bg-black px-3.5 py-2.5 text-[13px] text-zinc-200 outline-none placeholder:text-zinc-500 focus:border-[#C5A55A]"
+            className="w-full rounded-xl border border-zinc-800 bg-black px-3.5 py-2.5 text-[13px] text-zinc-200 outline-none placeholder:text-zinc-500 focus:border-[#C5A55A] sm:w-[240px]"
           />
         }
       >

@@ -45,8 +45,16 @@ export function Panel({
         className,
       )}
     >
+      {/*
+        En movil el titulo y su accion van uno debajo del otro.
+        Compartiendo fila, la accion --que suele llevar un buscador de ancho
+        fijo y un grupo de filtros-- no cedia nada y el titulo se quedaba con
+        unos pocos pixeles: "Reportes de conducta" se partia en una palabra por
+        linea y los filtros se salian de la pantalla. A partir de `sm` vuelven a
+        la misma fila, que es donde si caben.
+      */}
       {title ? (
-        <div className="flex items-center justify-between gap-4 border-b border-zinc-800 px-5 py-[18px]">
+        <div className="flex flex-col gap-3 border-b border-zinc-800 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-[18px]">
           <div className="min-w-0">
             <h2 className="font-heading text-base font-semibold tracking-[0.04em] text-zinc-200">
               {title}
@@ -57,7 +65,9 @@ export function Panel({
             ) : null}
           </div>
 
-          {action ? <div className="shrink-0">{action}</div> : null}
+          {action ? (
+            <div className="w-full sm:w-auto sm:shrink-0">{action}</div>
+          ) : null}
         </div>
       ) : null}
 
