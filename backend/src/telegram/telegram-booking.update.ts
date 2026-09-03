@@ -46,7 +46,9 @@ import {
   clientAskedForOtherModels,
   clientAskedForOwnPhotos,
   clientEndorsedTrioModel,
+  detectArrivalTimeQuestion,
   detectBotProbe,
+  pickArrivalTimeReply,
   detectProhibitedRequest,
   looksLikeAssistantRegister,
   MAX_CATALOG_PHOTO_SENDS_PER_SESSION,
@@ -165,6 +167,15 @@ interface SessionData {
   comprobanteAdelantadoFileId?: string;
   /** Servicio pendiente de cobro final (duración indefinida por transferencia). */
   servicioCobroFinalId?: string;
+  /**
+   * Servicio ya creado que espera el comprobante de la transferencia.
+   *
+   * La reserva se cierra --y el jefe se entera-- en cuanto estan las horas, el
+   * pago y la ubicacion; el comprobante llega despues. Guardar el id aqui es lo
+   * que permite que la foto se enganche a ESE servicio en vez de dar de alta
+   * uno nuevo.
+   */
+  servicioPendienteComprobanteId?: string;
   groupIntentClarificationPending?: boolean;
   /** Fotos exclusivas ya enviadas en esta conversación (tope antiabuso). */
   fotosExclusivasEnviadas?: number;
@@ -218,6 +229,24 @@ interface SessionData {
    * intentar. Solo cuando fallan varios seguidos se entrega el chat al jefe.
    */
   fallosIaSeguidos?: number;
+  /**
+   * Instante en que se abrio esta contratacion con la modelo actual.
+   *
+   * Volver al catalogo y pulsar "contratar" otra vez borraba la sesion entera,
+   * asi que el cliente que reentraba media hora despues perdia las horas, el
+   * pago y la ubicacion que ya habia dado, y su historial quedaba partido en
+   * hilos paralelos que nadie podia leer juntos. Con esto se distingue el
+   * reingreso reciente --que continua-- del que ya esta rancio.
+   */
+  hireStartedAt?: string;
+  /**
+   * Veces seguidas que la IA ha aplazado una respuesta ("te aviso en un
+   * momentico") sin que nada la cumpla.
+   *
+   * La promesa no tiene ningun mecanismo detras: si se repite, la conversacion
+   * esta atascada y hay que pasarsela a una persona.
+   */
+  aplazamientosSeguidos?: number;
   bossThreadId?: string;
   bossGroupId?: string;
   trioSelectedEmployeeId?: string;
@@ -741,6 +770,25 @@ export class TelegramBookingUpdate {
    */
   private static readonly VENTANA_HABITACION_MS = 10 * 60 * 1000;
 
+  /**
+   * Cuanto vale una contratacion abierta si el cliente vuelve a entrar por el
+   * catalogo con la misma modelo.
+   *
+   * Dentro de este plazo se retoma lo negociado en vez de empezar de cero; mas
+   * alla, la disponibilidad y el animo del cliente ya no son los mismos y
+   * conviene arrancar limpio.
+   */
+  private static readonly VENTANA_REINGRESO_MS = 6 * 60 * 60 * 1000;
+
+  /**
+   * Aplazamientos seguidos de la IA antes de pasarle la conversacion al jefe.
+   *
+   * "Te aviso en un momentico" es una promesa que nada cumple: no hay ningun
+   * mecanismo que vuelva a escribirle al cliente. Repetida, es una conversacion
+   * atascada, y atascada es igual a perdida.
+   */
+  private static readonly MAX_APLAZAMIENTOS_SEGUIDOS = 2;
+
   private readonly clientMessageBuffers = new Map<
     string,
     {
@@ -888,6 +936,71 @@ export class TelegramBookingUpdate {
   }
 
   /**
+   * Engancha un comprobante ya validado al servicio que lo estaba esperando.
+   *
+   * Cuando la reserva se cierra antes de cobrar, el servicio ya existe y el
+   * jefe ya lo tiene delante: la foto que llega despues no debe dar de alta uno
+   * nuevo, solo levantar la marca de pago pendiente y avisar en el mismo hilo
+   * donde el jefe esta decidiendo.
+   *
+   * Devuelve `false` si el servicio ya no esta o ya no espera comprobante, para
+   * que quien llama siga por el camino de siempre.
+   */
+  private async registrarComprobanteEnServicio(
+    servicioId: string,
+    validationId: string,
+  ): Promise<boolean> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: { empleada: true, cliente: true },
+    });
+    if (!servicio) return false;
+    if (['cancelado', 'finalizado'].includes(servicio.estado)) return false;
+
+    servicio.comprobantePendiente = false;
+    await this.serviciosRepository.save(servicio);
+    await this.paymentReceiptValidationsRepository
+      .update(validationId, { servicioId })
+      .catch((err) =>
+        this.logger.error(
+          `No se pudo enlazar el comprobante ${validationId} al servicio ${servicioId}:`,
+          err,
+        ),
+      );
+
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'service_updated',
+      data: servicio,
+    });
+
+    try {
+      const jefe = servicio.empleada
+        ? await this.findAssignedJefe(servicio.empleada)
+        : null;
+      const destino = jefe?.grupoTelegramId || jefe?.telegramChatId;
+      if (destino) {
+        await this.bot.telegram.sendMessage(
+          destino,
+          `Pago recibido: el cliente ${servicio.cliente?.nombreTelegram || ''} ya mandó el comprobante de este servicio y quedó verificado.`.replace(
+            /\s+/g,
+            ' ',
+          ),
+          servicio.telegramThreadId
+            ? { message_thread_id: Number(servicio.telegramThreadId) }
+            : {},
+        );
+      }
+    } catch (err) {
+      // El comprobante ya quedo registrado; que el aviso falle no lo deshace.
+      this.logger.warn(
+        `No se pudo avisar al jefe del comprobante del servicio ${servicioId}:`,
+        err,
+      );
+    }
+    return true;
+  }
+
+  /**
    * Aviso al jefe de que una empleada acaba de reportar a un cliente.
    *
    * El reporte solo emitia un evento en tiempo real al panel: si en ese momento
@@ -990,11 +1103,159 @@ export class TelegramBookingUpdate {
     return jefe;
   }
 
+  /**
+   * Da de alta la reserva aunque el comprobante todavia no haya llegado.
+   *
+   * El pago por transferencia era una condicion para que el servicio EXISTIERA:
+   * `finalizeBooking` --el unico sitio que avisa al jefe-- se llamaba despues
+   * de validar la foto. Como el cliente habitual contesta "cuando llegues
+   * transfiero", la reserva se quedaba en un limbo: los tres datos cerrados, el
+   * cliente esperando, y ni el jefe ni nadie enterandose de que existia.
+   *
+   * Ahora el servicio nace aqui, marcado con `comprobantePendiente`, y el cobro
+   * pasa a ser una condicion para DESPACHARLO. Quien decide si la empleada sale
+   * antes de que entre el dinero es el jefe, que para eso recibe la ficha con
+   * el aviso en la primera linea.
+   *
+   * Es idempotente: si la reserva ya se cerro, no crea una segunda.
+   */
+  private async cerrarReservaEsperandoComprobante(
+    ctx: BotContext,
+  ): Promise<void> {
+    const session = ctx.session;
+    if (!session || session.servicioPendienteComprobanteId) return;
+    if (
+      !session.locationLat ||
+      !session.locationLng ||
+      !session.empleadaId ||
+      !session.metodoPago ||
+      (!session.duracionPactadaHoras && !session.duracionIndefinida)
+    ) {
+      return;
+    }
+
+    const telegramId = ctx.from?.id?.toString();
+    if (!telegramId) return;
+
+    const [client, employee] = await Promise.all([
+      this.clientesRepository.findOne({
+        where: { telegramChatId: telegramId },
+      }),
+      this.empleadasRepository.findOne({
+        where: { id: session.empleadaId },
+        relations: { usuario: true, jefe: true },
+      }),
+    ]);
+    if (!client || !employee) return;
+
+    const servicio = await this.finalizeBooking(
+      ctx,
+      client,
+      employee,
+      session.duracionPactadaHoras ?? 1,
+      session.metodoPago,
+      session.locationLat,
+      session.locationLng,
+      session.locationNotas || null,
+      telegramId,
+      undefined,
+      undefined,
+      { esperaComprobante: true },
+    );
+
+    /*
+     * `finalizeBooking` ya deja el id en la sesion cuando quien cierra es el
+     * propio cliente. Se repite aqui por si el contexto no era el suyo: sin
+     * este id, la foto que llegue despues daria de alta un segundo servicio.
+     */
+    if (servicio && ctx.session) {
+      ctx.session.servicioPendienteComprobanteId = servicio.id;
+    }
+  }
+
+  /**
+   * El cliente cambia de metodo cuando la reserva ya esta cerrada.
+   *
+   * Ocurre en el paso del comprobante: el bot ofrece "cambiar a efectivo" y el
+   * cliente tambien puede escribirlo. Antes de que la reserva se cerrara sin
+   * cobrar, ahi no habia servicio y crear uno era lo correcto; ahora ya existe,
+   * asi que crear otro dejaria al cliente con dos reservas y a la empleada
+   * doblemente apartada. Se cambia el que hay.
+   */
+  private async cambiarPagoDeReservaCerrada(
+    ctx: BotContext,
+    servicioId: string,
+    method: 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto',
+  ): Promise<boolean> {
+    const telegramId = ctx.from?.id?.toString();
+    if (!telegramId) return false;
+
+    // `mixto` no lo admite el cambio por parte del cliente: sigue su camino.
+    if (method === 'mixto') return false;
+
+    try {
+      await this.servicesService.changePaymentMethodByClient(
+        servicioId,
+        telegramId,
+        method,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `No se pudo cambiar el pago del servicio ${servicioId}:`,
+        err,
+      );
+      return false;
+    }
+
+    const session = ctx.session;
+    if (method === 'transferencia') {
+      if (session) session.step = 'AWAITING_PAYMENT_RECEIPT';
+      const bankDetails = await this.servicesService.bankTransferDetails();
+      const aviso = `*Cuentas disponibles para transferencia*\n\n${bankDetails}\n\nMándame una *FOTO* del comprobante cuando lo tengas.`;
+      await ctx.reply(aviso, { parse_mode: 'Markdown' });
+      await this.registrarMensajeDelFlujo(ctx, aviso);
+      return true;
+    }
+
+    /*
+     * Con efectivo o tarjeta ya no hay comprobante que esperar: se levanta la
+     * marca para que el jefe no siga viendo la reserva como impagada.
+     */
+    await this.serviciosRepository
+      .update(servicioId, { comprobantePendiente: false })
+      .catch((err) =>
+        this.logger.warn(
+          `No se pudo quitar la marca de comprobante del servicio ${servicioId}:`,
+          err,
+        ),
+      );
+    if (session) {
+      session.step = undefined;
+      session.servicioPendienteComprobanteId = undefined;
+    }
+    const aviso = `Listo mor, entonces quedamos en ${method}. Ya no me mandes comprobante.`;
+    await ctx.reply(aviso);
+    await this.registrarMensajeDelFlujo(ctx, aviso);
+    return true;
+  }
+
   private async applyDraftPaymentMethod(
     ctx: BotContext,
     method: 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto',
   ): Promise<boolean> {
     const session = ctx.session;
+
+    // Con la reserva ya cerrada, esto es un cambio de metodo, no una reserva
+    // nueva: crear otra duplicaria el servicio.
+    if (session?.servicioPendienteComprobanteId) {
+      const cambiado = await this.cambiarPagoDeReservaCerrada(
+        ctx,
+        session.servicioPendienteComprobanteId,
+        method,
+      );
+      if (cambiado) return true;
+    }
+
     if (
       !session?.locationLat ||
       !session.locationLng ||
@@ -1036,26 +1297,30 @@ export class TelegramBookingUpdate {
     if (method === 'transferencia') {
       session.step = 'AWAITING_PAYMENT_RECEIPT';
       if (await this.aprovecharComprobanteAdelantado(ctx)) return true;
+      // Sin comprobante a mano, la reserva se cierra igual: el jefe tiene que
+      // enterarse aunque el cliente no vuelva a escribir nunca.
+      await this.cerrarReservaEsperandoComprobante(ctx);
       const bankDetails = await this.servicesService.bankTransferDetails();
-      await ctx.reply(
-        `*Cuentas disponibles para transferencia*\n\n${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante para verificar el pago.`,
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback('Cambiar a efectivo', 'pago_efectivo'),
-              Markup.button.callback('Cambiar a tarjeta', 'pago_tarjeta'),
-            ],
-          ]),
-        },
-      );
+      const pedirComprobante = `*Cuentas disponibles para transferencia*\n\n${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante para verificar el pago.`;
+      await ctx.reply(pedirComprobante, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('Cambiar a efectivo', 'pago_efectivo'),
+            Markup.button.callback('Cambiar a tarjeta', 'pago_tarjeta'),
+          ],
+        ]),
+      });
+      await this.registrarMensajeDelFlujo(ctx, pedirComprobante);
       return true;
     }
     if (method === 'mixto') {
       session.step = 'AWAITING_MIXED_TRANSFER_AMOUNT';
-      await ctx.reply(
-        '¿Cuánto deseas pagar por transferencia bancaria? Ingresa el monto (solo números). El resto, junto con el transporte, se pagará en efectivo.',
-      );
+      await this.cerrarReservaEsperandoComprobante(ctx);
+      const pedirMonto =
+        '¿Cuánto deseas pagar por transferencia bancaria? Ingresa el monto (solo números). El resto, junto con el transporte, se pagará en efectivo.';
+      await ctx.reply(pedirMonto);
+      await this.registrarMensajeDelFlujo(ctx, pedirMonto);
       return true;
     }
     const [client, employee] = await Promise.all([
@@ -1898,12 +2163,67 @@ export class TelegramBookingUpdate {
       return;
     }
 
-    // Cada contratación debe comenzar sin datos residuales de servicios,
-    // calificaciones o conversaciones anteriores.
+    /*
+     * Reentrar desde el catalogo no puede borrar lo ya negociado.
+     *
+     * Aqui se llega tanto desde el boton "contratar" como desde el enlace
+     * `/start` de la web, y la sesion se reseteaba siempre. Un cliente que
+     * volvia al catalogo media hora despues --por mirar fotos, por dudar,
+     * porque se le fue el hilo-- perdia las horas, el metodo de pago y la
+     * ubicacion que ya habia dado, y la modelo lo saludaba otra vez con su
+     * tarifa como si no se hubieran hablado nunca. Encima cada reentrada abria
+     * un `bookingSessionId` nuevo, asi que su historial quedaba partido en
+     * hilos paralelos que nadie podia leer juntos ni entender.
+     *
+     * Solo se continua si es la MISMA modelo y la contratacion es reciente. Al
+     * cambiar de modelo, o pasado el plazo, se empieza de cero como antes.
+     */
+    const sesionPrevia = ctx.session as SessionData | undefined;
+    const abiertaHace = sesionPrevia?.hireStartedAt
+      ? Date.now() - new Date(sesionPrevia.hireStartedAt).getTime()
+      : Number.POSITIVE_INFINITY;
+    const mismaContratacion =
+      sesionPrevia?.empleadaId === empleadaId &&
+      Boolean(sesionPrevia?.bookingSessionId) &&
+      abiertaHace < TelegramBookingUpdate.VENTANA_REINGRESO_MS;
+
+    /*
+     * Con la reserva ya cerrada esperando comprobante el servicio existe y el
+     * jefe lo tiene delante: resetear aqui haria que la foto que llegue despues
+     * diera de alta un segundo servicio y dejara a la empleada doblemente
+     * reservada.
+     */
+    if (mismaContratacion && sesionPrevia?.servicioPendienteComprobanteId) {
+      const enCurso =
+        'Ya tenemos apartado lo tuyo mi amor, seguimos con eso mismo.';
+      await ctx.reply(enCurso);
+      await this.registrarMensajeDelFlujo(ctx, enCurso);
+      return;
+    }
+
+    if (mismaContratacion && !activeService && sesionPrevia) {
+      sesionPrevia.step = 'CHAT_CON_EMPLEADA';
+      sesionPrevia.selectedEmployeeBusy = false;
+      sesionPrevia.waitingForBusyChoice = false;
+      sesionPrevia.hireStartedAt = new Date().toISOString();
+
+      const retomar = 'Aquí sigo, mi amor, seguimos donde quedamos.';
+      await ctx.reply(retomar);
+      await this.recordDraftConversation(ctx, 'ia', retomar);
+      const historial = trimChatHistory(sesionPrevia.chatHistory || []);
+      historial.push({ role: 'model', parts: [{ text: retomar }] });
+      sesionPrevia.chatHistory = historial;
+      await this.persistSession(ctx);
+      return;
+    }
+
+    // Contratación nueva: sin datos residuales de servicios, calificaciones o
+    // conversaciones anteriores.
     ctx.session = {
       step: 'CHAT_CON_EMPLEADA',
       empleadaId,
       bookingSessionId: randomUUID(),
+      hireStartedAt: new Date().toISOString(),
       selectedEmployeeBusy: Boolean(activeService),
       waitingForBusyChoice: Boolean(activeService),
     };
@@ -2242,31 +2562,50 @@ export class TelegramBookingUpdate {
     }
 
     const metodo = metodoPago;
+
+    /*
+     * Con la reserva ya cerrada esto es un cambio de metodo --el cliente pulso
+     * "cambiar a efectivo" en el paso del comprobante--, no una reserva nueva.
+     * Seguir de largo llamaria a `finalizeBooking` y crearia un segundo
+     * servicio para la misma cita.
+     */
+    if (session.servicioPendienteComprobanteId) {
+      const cambiado = await this.cambiarPagoDeReservaCerrada(
+        ctx,
+        session.servicioPendienteComprobanteId,
+        metodo,
+      );
+      if (cambiado) return;
+    }
+
     const bankDetails = await this.servicesService.bankTransferDetails();
 
     if (metodo === 'transferencia') {
       session.step = 'AWAITING_PAYMENT_RECEIPT';
       if (await this.aprovecharComprobanteAdelantado(ctx)) return;
-      await ctx.reply(
-        `${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante de transferencia para verificar el pago.`,
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback('Cambiar a efectivo', 'pago_efectivo'),
-              Markup.button.callback('Cambiar a tarjeta', 'pago_tarjeta'),
-            ],
-          ]),
-        },
-      );
+      // La reserva se cierra ya, con el comprobante marcado como pendiente.
+      await this.cerrarReservaEsperandoComprobante(ctx);
+      const pedirComprobante = `${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante de transferencia para verificar el pago.`;
+      await ctx.reply(pedirComprobante, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('Cambiar a efectivo', 'pago_efectivo'),
+            Markup.button.callback('Cambiar a tarjeta', 'pago_tarjeta'),
+          ],
+        ]),
+      });
+      await this.registrarMensajeDelFlujo(ctx, pedirComprobante);
       return;
     }
 
     if (metodo === 'mixto') {
       session.step = 'AWAITING_MIXED_TRANSFER_AMOUNT';
-      await ctx.reply(
-        '¿Cuánto deseas pagar por transferencia bancaria? Ingresa el monto (solo números). El resto, junto con el transporte, se pagará en efectivo.',
-      );
+      await this.cerrarReservaEsperandoComprobante(ctx);
+      const pedirMonto =
+        '¿Cuánto deseas pagar por transferencia bancaria? Ingresa el monto (solo números). El resto, junto con el transporte, se pagará en efectivo.';
+      await ctx.reply(pedirMonto);
+      await this.registrarMensajeDelFlujo(ctx, pedirMonto);
       return;
     }
 
@@ -3534,6 +3873,13 @@ export class TelegramBookingUpdate {
                  * historial de la conversación.
                  */
                 reserva: this.datosDeReservaDeSesion(ctx.session),
+                /*
+                 * Si la reserva ya se cerro esperando el comprobante, el
+                 * servicio existe y el jefe lo tiene delante: al aprobar hay
+                 * que levantarle la marca de pago pendiente, no crear otro.
+                 */
+                servicioExistenteId:
+                  ctx.session.servicioPendienteComprobanteId ?? null,
               }
             : null,
         },
@@ -3544,9 +3890,10 @@ export class TelegramBookingUpdate {
         .catch(() => {});
 
       if (receipt.needsManualReview) {
-        await ctx.reply(
-          'Ya me llegó tu comprobante mi amor, lo estoy revisando y te confirmo en un ratico.',
-        );
+        const enRevision =
+          'Ya me llegó tu comprobante mi amor, lo estoy revisando y te confirmo en un ratico.';
+        await ctx.reply(enRevision);
+        await this.registrarMensajeDelFlujo(ctx, enRevision);
         if (jefe) {
           const caption =
             `Comprobante en revisión manual\n\n` +
@@ -3588,13 +3935,38 @@ export class TelegramBookingUpdate {
           ctx.session.comprobanteEnviado = false;
           ctx.session.comprobanteValidationId = undefined;
         }
-        await ctx.reply(
-          `⚠️ Problema con el comprobante:\n\n${receipt.reason || 'El comprobante no parece ser válido.'}\n\nPor favor intenta enviar otro o avísanos si necesitas ayuda.`,
-        );
+        const problema = `⚠️ Problema con el comprobante:\n\n${receipt.reason || 'El comprobante no parece ser válido.'}\n\nPor favor intenta enviar otro o avísanos si necesitas ayuda.`;
+        await ctx.reply(problema);
+        await this.registrarMensajeDelFlujo(ctx, problema);
         return;
       }
 
       await ctx.reply('✅ ¡Comprobante verificado correctamente!');
+      await this.registrarMensajeDelFlujo(
+        ctx,
+        '✅ ¡Comprobante verificado correctamente!',
+      );
+
+      /*
+       * La reserva ya suele estar cerrada a estas alturas: se cierra al elegir
+       * transferencia, sin esperar la foto. Entonces esto solo levanta la marca
+       * de pago pendiente. Solo se crea el servicio aqui si por lo que sea no
+       * llego a cerrarse antes.
+       */
+      const servicioEnEspera = ctx.session?.servicioPendienteComprobanteId;
+      if (
+        servicioEnEspera &&
+        (await this.registrarComprobanteEnServicio(
+          servicioEnEspera,
+          validation.id,
+        ))
+      ) {
+        if (ctx.session) {
+          ctx.session.servicioPendienteComprobanteId = undefined;
+          ctx.session.step = undefined;
+        }
+        return;
+      }
 
       await this.finalizeBooking(
         ctx,
@@ -4867,6 +5239,7 @@ export class TelegramBookingUpdate {
           ],
         ]),
       });
+      await this.registrarMensajeDelFlujo(ctx, priceMsg);
       return;
     } catch (bookingErr) {
       this.logger.error(
@@ -4920,7 +5293,15 @@ export class TelegramBookingUpdate {
      * aprobar un comprobante hay que pasarlos, porque su sesion no es esta.
      */
     datosReserva?: DatosDeReserva,
+    /**
+     * `esperaComprobante` cierra la reserva sin tener aun el comprobante de la
+     * transferencia: el servicio nace, el jefe lo ve, y la foto se engancha
+     * despues. Sin esto, un cliente que dice "cuando llegues transfiero"
+     * dejaba la reserva sin existir y sin que nadie se enterara.
+     */
+    opciones?: { esperaComprobante?: boolean },
   ): Promise<Servicios | undefined> {
+    const esperaComprobante = Boolean(opciones?.esperaComprobante);
     try {
       const reserva = datosReserva ?? this.datosDeReservaDeSesion(ctx.session);
       const escapeMd = (text: string): string =>
@@ -4972,6 +5353,7 @@ export class TelegramBookingUpdate {
         estado: 'pendiente',
         notas: combinedNotes,
         clienteTelegramId: telegramId,
+        comprobantePendiente: esperaComprobante,
         iaActiva: false,
         presetLocationId: reserva.presetLocationId,
         locationNameSnapshot: reserva.locationNameSnapshot,
@@ -5010,6 +5392,9 @@ export class TelegramBookingUpdate {
           (isProgramado
             ? `📅 *SOLICITUD DE CITA PROGRAMADA*\n\n`
             : `📋 *Información del Servicio:*\n\n`) +
+          (esperaComprobante
+            ? `⚠️ *PAGO PENDIENTE:* el cliente eligió transferencia y todavía NO ha mandado el comprobante. Tú decides si se despacha antes de que llegue.\n\n`
+            : '') +
           `• *Cliente:* ${clientName} (ID: ${telegramId})\n` +
           `• *Empleada:* ${empleada.nombreArtistico}\n` +
           (isProgramado && fechaProgFormatted
@@ -5218,13 +5603,27 @@ export class TelegramBookingUpdate {
       msgExito += `*Método de pago:* ${metodoPago.toUpperCase()}\n\n`;
       // Nunca damos el servicio por aceptado: eso solo lo confirma la
       // autorización posterior.
-      msgExito += `¿Todo correcto mor? Déjame checar los últimos detallitos y en un momentico te confirmo por aquí 😘`;
+      msgExito += esperaComprobante
+        ? `¿Todo correcto mor? Déjame checar los últimos detallitos. Ahorita te paso los datos por si quieres ir adelantando la transferencia 😘`
+        : `¿Todo correcto mor? Déjame checar los últimos detallitos y en un momentico te confirmo por aquí 😘`;
 
       const msg = await ctx.telegram.sendMessage(telegramId, msgExito, {
         ...Markup.removeKeyboard(),
       });
       await this.recordConversation(nuevoServicio, 'ia', msgExito);
-      if (ctx.from?.id.toString() === telegramId) ctx.session = {};
+      /*
+       * La sesion se limpia porque a partir de aqui manda el servicio. La
+       * excepcion es la reserva que aun espera comprobante: la foto llega
+       * despues y hace falta lo que la sesion sabe --el paso, el monto, la
+       * ubicacion-- para engancharla a ESTE servicio en vez de crear otro.
+       */
+      if (ctx.from?.id.toString() === telegramId) {
+        if (esperaComprobante && ctx.session) {
+          ctx.session.servicioPendienteComprobanteId = nuevoServicio.id;
+        } else {
+          ctx.session = {};
+        }
+      }
 
       // Acumulamos en memoria
       nuevoServicio.telegramClienteMensajeId = msg.message_id.toString();
@@ -5320,6 +5719,7 @@ export class TelegramBookingUpdate {
           locationNotas: string | null;
           telegramId: string;
           reserva?: DatosDeReserva;
+          servicioExistenteId?: string | null;
         }
       | undefined;
 
@@ -5330,6 +5730,30 @@ export class TelegramBookingUpdate {
 
     validation.estado = 'APROBADO';
     await this.paymentReceiptValidationsRepository.save(validation);
+
+    /*
+     * La reserva pudo cerrarse antes de cobrar: entonces el servicio ya existe
+     * y aprobar el comprobante solo le levanta la marca de pago pendiente.
+     * Crear otro aqui dejaria al cliente con dos servicios y a la empleada
+     * doblemente reservada.
+     */
+    if (draft.servicioExistenteId) {
+      const enganchado = await this.registrarComprobanteEnServicio(
+        draft.servicioExistenteId,
+        validation.id,
+      );
+      if (enganchado) {
+        if (validation.chatId) {
+          await ctx.telegram
+            .sendMessage(
+              validation.chatId,
+              '✅ ¡Tu comprobante quedó verificado! Ya seguimos con todo.',
+            )
+            .catch(() => undefined);
+        }
+        return;
+      }
+    }
 
     const [client, empleada] = await Promise.all([
       this.clientesRepository.findOne({ where: { id: draft.clientId } }),
@@ -5929,9 +6353,9 @@ export class TelegramBookingUpdate {
       }
       ctx.session.mixedTransferAmount = amount;
       ctx.session.step = 'AWAITING_PAYMENT_RECEIPT';
-      await ctx.reply(
-        `${await this.servicesService.bankTransferDetails()}\n\nEnvía una FOTO del comprobante por $${amount.toFixed(2)}. El resto y el transporte se pagarán en efectivo.`,
-      );
+      const pedirMixto = `${await this.servicesService.bankTransferDetails()}\n\nEnvía una FOTO del comprobante por $${amount.toFixed(2)}. El resto y el transporte se pagarán en efectivo.`;
+      await ctx.reply(pedirMixto);
+      await this.registrarMensajeDelFlujo(ctx, pedirMixto);
       return;
     }
     if (ctx.session?.step === 'AWAITING_UBER_FARE') {
@@ -7076,6 +7500,53 @@ export class TelegramBookingUpdate {
   }
 
   /**
+   * Deja en el historial un mensaje que el bot manda por su cuenta.
+   *
+   * Solo se registraba lo que redactaba la IA. Todo lo que el flujo contesta
+   * por su cuenta --las cuentas bancarias, la peticion del comprobante, el
+   * desglose del precio, la pregunta del monto mixto-- salia por `ctx.reply` a
+   * secas y no quedaba en ningun sitio. En el panel la conversacion parecia
+   * cortarse de golpe justo donde el bot habia seguido hablando, de modo que
+   * quien revisaba estos hilos para entender por que se cayo una reserva
+   * estaba mirando una version incompleta de lo que paso.
+   *
+   * Si la reserva ya se cerro esperando comprobante, el mensaje se cuelga del
+   * servicio; si no, del borrador.
+   */
+  private async registrarMensajeDelFlujo(
+    ctx: BotContext,
+    mensaje: string,
+  ): Promise<void> {
+    const servicioId = ctx.session?.servicioPendienteComprobanteId;
+    if (!servicioId) {
+      await this.recordDraftConversation(ctx, 'ia', mensaje);
+      return;
+    }
+
+    const telegramId = ctx.from?.id?.toString();
+    if (!telegramId || !mensaje.trim()) return;
+    try {
+      const client = await this.clientesRepository.findOne({
+        where: { telegramChatId: telegramId },
+      });
+      if (!client) return;
+      await this.conversationsRepository.save(
+        this.conversationsRepository.create({
+          clienteId: client.id,
+          servicioId,
+          bookingSessionId: ctx.session?.bookingSessionId ?? null,
+          emisor: 'ia',
+          mensaje,
+          iaActiva: false,
+        }),
+      );
+    } catch (err) {
+      // El historial es para poder auditar, no para bloquear la conversacion.
+      this.logger.warn('No se pudo registrar un mensaje del flujo:', err);
+    }
+  }
+
+  /**
    * Persiste la sesión actual del cliente para que las acciones disparadas
    * desde otros chats (jefe, empleada) vean el estado más reciente.
    */
@@ -7305,6 +7776,40 @@ export class TelegramBookingUpdate {
         return;
       }
 
+      /*
+       * "¿En cuánto llegas?" no tiene respuesta que el personaje pueda dar: el
+       * transporte no se asigna hasta que el jefe acepta. El prompt lo resolvia
+       * dando largas, y dar largas dos veces es como se pierde a un cliente que
+       * ya decidio comprar. Se contesta una vez con una frase estable --que no
+       * insinua que haya alguien mas detras, como si hacia la del prompt-- y a
+       * la segunda contesta una persona.
+       */
+      if (detectArrivalTimeQuestion(userMessage)) {
+        const aplazamientos = (session.aplazamientosSeguidos ?? 0) + 1;
+        session.aplazamientosSeguidos = aplazamientos;
+
+        if (
+          aplazamientos >= TelegramBookingUpdate.MAX_APLAZAMIENTOS_SEGUIDOS
+        ) {
+          await this.entregarConversacionAlJefe(
+            ctx,
+            empleada,
+            'El cliente insiste en saber cuánto falta para que llegue la empleada y la IA no puede darle esa respuesta.',
+          );
+          return;
+        }
+
+        const respuesta = pickArrivalTimeReply(session.ultimoDesvio);
+        session.ultimoDesvio = respuesta;
+        const historialEta = trimChatHistory(session.chatHistory || []);
+        historialEta.push({ role: 'user', parts: [{ text: userMessage }] });
+        historialEta.push({ role: 'model', parts: [{ text: respuesta }] });
+        session.chatHistory = historialEta;
+        await this.sendDelayedReply(ctx, respuesta);
+        await this.recordDraftConversation(ctx, 'ia', respuesta);
+        return;
+      }
+
       const normalizedAnswer = userMessage.toLowerCase();
       if (session.groupIntentClarificationPending) {
         if (
@@ -7503,8 +8008,24 @@ export class TelegramBookingUpdate {
 
       const tieneFotosExclusivas = await this.tieneFotosExclusivas(empleada.id);
 
+      /*
+       * Con la ubicacion ya confirmada, callarse el dato que falta es perder al
+       * cliente: el que ya mando el pin --o el que escribe desde el motel-- ya
+       * decidio, y las reglas antipresion, pensadas para cuando todavia esta
+       * dudando, lo dejaban esperando indefinidamente.
+       */
+      const ubicacionYaConfirmada = this.hasConfirmedLocation(session);
+      const faltaPorCerrar: 'horas' | 'pago' | null = !ubicacionYaConfirmada
+        ? null
+        : !session.duracionPactadaHoras && !session.duracionIndefinida
+          ? 'horas'
+          : !session.metodoPago
+            ? 'pago'
+            : null;
+
       const generalPrompt = getHireSystemPrompt({
         nombreArtistico: empleada.nombreArtistico,
+        faltaPorCerrar,
         precioBaseHora:
           session.trioCombinedRatePerHour ?? empleada.precioBaseHora,
         descripcion: empleada.descripcion,
@@ -7983,17 +8504,46 @@ export class TelegramBookingUpdate {
     await this.handleAIFailureAndTransferToBoss(ctx, empleada, error);
   }
 
+  /**
+   * Pasa la conversacion a una persona por un atasco de la charla, no por un
+   * fallo tecnico.
+   *
+   * Habia traspaso al jefe cuando la IA fallaba varias veces seguidas, pero
+   * nada cuando la conversacion se atascaba estando la IA perfectamente sana:
+   * el cliente preguntaba tres veces lo mismo, recibia tres largas distintas y
+   * se iba. Y el caso mas caro era el mas silencioso: un cliente que ya estaba
+   * en el motel esperando, tratado como si estuviera haciendo conversacion.
+   */
+  private async entregarConversacionAlJefe(
+    ctx: BotContext,
+    empleada: Empleadas | null | undefined,
+    motivo: string,
+  ): Promise<void> {
+    this.logger.warn(
+      `Conversacion de ${ctx.from?.id} entregada al jefe por atasco: ${motivo}`,
+    );
+    await this.handleAIFailureAndTransferToBoss(ctx, empleada, undefined, motivo);
+  }
+
   private async handleAIFailureAndTransferToBoss(
     ctx: BotContext,
     empleada?: Empleadas | null,
     error?: any,
+    /**
+     * Por que se entrega el chat. Sin esto el jefe recibia siempre la misma
+     * alerta y no sabia si tenia delante una caida del proveedor o a un cliente
+     * esperando una respuesta concreta.
+     */
+    motivo?: string,
   ): Promise<void> {
-    this.logger.error('IA failure triggered boss takeover:', error);
+    if (!motivo) this.logger.error('IA failure triggered boss takeover:', error);
 
     // Mensaje natural al cliente sin mencionar bots ni IA
-    const naturalFallback = empleada?.nombreArtistico
-      ? `¡Hola papi! Soy *${empleada.nombreArtistico}*, dame un momentico y ya te sigo respondiendo 😘`
-      : 'Hola amor, dame un momentico y ya te sigo atendiendo 😘';
+    const naturalFallback = motivo
+      ? 'Dame un momentico mor, ya te confirmo por aquí mismo.'
+      : empleada?.nombreArtistico
+        ? `¡Hola papi! Soy *${empleada.nombreArtistico}*, dame un momentico y ya te sigo respondiendo 😘`
+        : 'Hola amor, dame un momentico y ya te sigo atendiendo 😘';
     await this.sendDelayedReply(ctx, naturalFallback);
     await this.recordDraftConversation(ctx, 'ia', naturalFallback);
 
@@ -8073,6 +8623,7 @@ export class TelegramBookingUpdate {
 
       const alertMsg =
         `🚨 *Control del Chat Transferido al Jefe*\n\n` +
+        (motivo ? `• *Motivo:* ${motivo}\n` : '') +
         `• *Cliente:* ${clientName} (ID: \`${telegramId}\`)\n` +
         (empleada
           ? `• *Empleada de interés:* ${empleada.nombreArtistico}\n`

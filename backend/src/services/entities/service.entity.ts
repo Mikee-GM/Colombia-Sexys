@@ -536,6 +536,26 @@ export class Servicios {
   })
   cobroFinalPendiente: boolean;
 
+  /**
+   * El servicio ya existe y el jefe ya lo tiene delante, pero el cliente aun
+   * no ha mandado el comprobante de la transferencia.
+   *
+   * Antes el servicio no se creaba hasta tener el comprobante, asi que un
+   * "cuando llegues transfiero" dejaba la reserva sin dueno y sin rastro. El
+   * cobro es ahora una condicion para despachar, no para existir: quien decide
+   * si se manda a la empleada con el pago pendiente es el jefe.
+   */
+  @Column('boolean', {
+    name: 'comprobante_pendiente',
+    default: false,
+  })
+  @ApiProperty({
+    description:
+      'La reserva se cerró por transferencia y todavía falta el comprobante del cliente',
+    default: false,
+  })
+  comprobantePendiente: boolean;
+
   @Column('boolean', {
     name: 'notificacion_previa_enviada',
     default: false,

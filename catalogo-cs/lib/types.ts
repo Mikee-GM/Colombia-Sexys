@@ -113,6 +113,12 @@ export type Service = {
   clienteId: string;
   jefeId: string;
   metodoPago: "efectivo" | "tarjeta" | "transferencia" | "mixto";
+  /**
+   * La reserva se cerró por transferencia y el cliente todavía no ha mandado
+   * el comprobante. El servicio existe y se puede autorizar: el cobro es una
+   * condición para despacharlo, no para que exista.
+   */
+  comprobantePendiente?: boolean;
   duracionPactadaHoras: string;
   duracionFinalHoras: string | null;
   ubicacionClienteLat: string;

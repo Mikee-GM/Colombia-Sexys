@@ -3,12 +3,14 @@ import {
   clientAskedForOtherModels,
   clientAskedForOwnPhotos,
   clientEndorsedTrioModel,
+  detectArrivalTimeQuestion,
   detectBotProbe,
   detectProhibitedRequest,
   IN_CHARACTER_DEFLECTIONS,
   looksLikeAssistantRegister,
   MAX_CLIENT_MESSAGE_CHARS,
   MAX_HISTORY_MESSAGES,
+  pickArrivalTimeReply,
   pickDeflection,
   sanitizeAiReply,
   stripControlMarkers,
@@ -200,5 +202,48 @@ describe('corroboración de las marcas', () => {
     expect(
       clientEndorsedTrioModel(['¿cuánto cobras la hora?'], 'Valentina'),
     ).toBe(false);
+  });
+});
+
+/*
+ * La pregunta que mas conversaciones cerradas tumbo: el cliente ya habia
+ * decidido comprar, pregunto tres veces cuanto faltaba, recibio tres evasivas
+ * distintas y se fue. Detectarla permite contestar una vez y pasarle el chat a
+ * una persona a la segunda, en vez de seguir dando largas.
+ */
+describe('detectArrivalTimeQuestion', () => {
+  it('reconoce las formas en que se pregunta cuanto falta para llegar', () => {
+    expect(detectArrivalTimeQuestion('En cuánto tiempo llegarías bb ?')).toBe(
+      true,
+    );
+    expect(detectArrivalTimeQuestion('Mmm bueno, en cuánto tiempo llegarías amor')).toBe(
+      true,
+    );
+    expect(detectArrivalTimeQuestion('cuanto te tardas mor')).toBe(true);
+    expect(detectArrivalTimeQuestion('¿a qué hora llegas?')).toBe(true);
+    expect(detectArrivalTimeQuestion('ya vienes?')).toBe(true);
+  });
+
+  it('reconoce la reinsistencia corta que sigue a la primera evasiva', () => {
+    expect(detectArrivalTimeQuestion('Masomenos bb ?')).toBe(true);
+    expect(detectArrivalTimeQuestion('aprox?')).toBe(true);
+  });
+
+  it('no confunde la duracion del servicio con la hora de llegada', () => {
+    expect(detectArrivalTimeQuestion('sería 1 hora para majestic ahorita bb')).toBe(
+      false,
+    );
+    expect(detectArrivalTimeQuestion('cuánto cobras la hora')).toBe(false);
+    expect(detectArrivalTimeQuestion('quiero 2 horas')).toBe(false);
+  });
+
+  it('la respuesta nunca insinua que se lo confirme otra persona', () => {
+    for (const respuesta of [
+      pickArrivalTimeReply(),
+      pickArrivalTimeReply(),
+      pickArrivalTimeReply(),
+    ]) {
+      expect(respuesta).not.toMatch(/me lo confirman|me avisan|me lo checan/i);
+    }
   });
 });

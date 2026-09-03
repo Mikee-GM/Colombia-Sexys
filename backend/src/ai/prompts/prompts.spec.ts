@@ -143,8 +143,65 @@ describe('AI Prompts Generation (prompts.ts)', () => {
     const prompt = getHireSystemPrompt(baseParams);
 
     expect(prompt).toContain('PROHIBIDO EL ROLEPLAY O LA NARRACIÓN DE LA CITA');
-    expect(prompt).toContain('PROHIBIDO HABLAR DE TIEMPOS DE LLEGADA');
+    expect(prompt).toContain('PROHIBIDO COMPROMETER UN TIEMPO DE LLEGADA');
     expect(prompt).toContain('¿en qué habitación estás?');
+  });
+
+  /*
+   * "Eso me lo confirman en un momentico" salia literalmente de este prompt, y
+   * contradice a la regla que prohibe insinuar que hay alguien detras de ella:
+   * el cliente de la conversacion que motivo este cambio pregunto acto seguido
+   * si le estaba contestando una IA.
+   */
+  it('prohíbe delegar la hora de llegada en un tercero', () => {
+    const prompt = getHireSystemPrompt(baseParams);
+
+    expect(prompt).toContain('me lo confirman');
+    expect(prompt).toContain('PRIMERA PERSONA');
+    expect(prompt).not.toContain('respóndele con dulzura que eso te lo confirman');
+  });
+
+  /*
+   * Las frases de ejemplo se repetian tal cual: el modelo contesto "yo con los
+   * numeros soy un desastre" a un cliente que preguntaba cuanto faltaba para
+   * verse, porque asi estaba escrito el ejemplo de aritmetica.
+   */
+  it('no incluye frases de desvío literales que el modelo pueda repetir', () => {
+    const prompt = getHireSystemPrompt(baseParams);
+
+    expect(prompt).not.toContain('yo con los números soy un desastre');
+    expect(prompt).not.toContain('poeta no soy');
+    expect(prompt).toContain('REDÁCTALA TÚ CADA VEZ');
+  });
+
+  describe('lo que falta para cerrar', () => {
+    it('no fuerza ningún dato mientras el cliente sigue decidiendo', () => {
+      const prompt = getHireSystemPrompt(baseParams);
+
+      expect(prompt).toContain('Nada pendiente por tu parte');
+    });
+
+    it('habilita preguntar las horas cuando la ubicación ya está dada', () => {
+      const prompt = getHireSystemPrompt({
+        ...baseParams,
+        ubicacionConfirmada: 'Majestic',
+        faltaPorCerrar: 'horas',
+      });
+
+      expect(prompt).toContain('TODAVÍA NO SABES CUÁNTAS HORAS');
+      expect(prompt).toContain('NO aplica la regla de no repetir preguntas');
+    });
+
+    it('habilita preguntar el pago cuando solo falta eso', () => {
+      const prompt = getHireSystemPrompt({
+        ...baseParams,
+        ubicacionConfirmada: 'Majestic',
+        duracionPactada: 1,
+        faltaPorCerrar: 'pago',
+      });
+
+      expect(prompt).toContain('TODAVÍA NO SABES CÓMO VA A PAGAR');
+    });
   });
 
   it('prohíbe presionar por los datos y cerrar respuestas con preguntas de datos', () => {

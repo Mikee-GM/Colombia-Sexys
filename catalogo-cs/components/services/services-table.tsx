@@ -169,6 +169,16 @@ export default function ServicesTable({ initialServices = [] }: Props) {
                       <p className="text-[10px] text-zinc-500 uppercase">
                         {service.metodoPago}
                       </p>
+                      {/*
+                        La reserva se cierra sin esperar al comprobante para que
+                        el jefe la vea; a cambio, tiene que verse de un vistazo
+                        cuáles siguen sin cobrar.
+                      */}
+                      {service.comprobantePendiente && (
+                        <span className="mt-1 inline-block rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-300">
+                          Sin comprobante
+                        </span>
+                      )}
                     </td>
 
                     <td className="p-4">

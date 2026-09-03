@@ -137,6 +137,55 @@ export function detectBotProbe(message: string): boolean {
   return BOT_PROBE_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
+const ARRIVAL_TIME_PATTERNS: RegExp[] = [
+  /\ben cuanto( tiempo)? (llegas|llegarias|vienes|vendrias|estas aqui|sales)\b/,
+  /\bcuanto (tiempo )?(tardas|te tardas|tarda|demoras|te demoras|falta)\b/,
+  /\ba que hora (llegas|vienes|estarias|sales)\b/,
+  /\bcuando (llegas|vienes|sales|estarias)\b/,
+  /\bcuanto (me )?(falta|queda) para que llegues\b/,
+  /\bya (vienes|saliste|vas a salir|estas en camino|venias)\b/,
+  /\bcomo cuanto (tiempo|te tardas|tardas)\b/,
+  // Reinsistencias cortas: "masomenos bb?", "aprox?", "un aproximado".
+  /^(mas o menos|masomenos|aproximadamente|aprox|un aproximado|como cuanto)\b/,
+];
+
+/**
+ * El cliente esta preguntando cuanto falta para que la modelo llegue.
+ *
+ * Es la pregunta que mas conversaciones cerradas ha tumbado: el personaje tiene
+ * prohibido dar un tiempo de llegada --y con razon, porque nadie ha asignado
+ * todavia el transporte-- asi que el modelo la esquiva, el cliente insiste y la
+ * charla se muere en tres evasivas seguidas. Detectarla aqui permite contestar
+ * una vez con una frase estable y, si vuelve, pasarle la conversacion a una
+ * persona en vez de seguir dando largas.
+ */
+export function detectArrivalTimeQuestion(message: string): boolean {
+  const normalized = normalizeForMatch(message);
+  return ARRIVAL_TIME_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/**
+ * Respuesta a la primera pregunta por el tiempo de llegada.
+ *
+ * No promete una hora --eso sigue dependiendo de que el jefe acepte y asigne el
+ * transporte-- pero tampoco se escuda en que "se lo confirman", que era la
+ * formula que traia el prompt: sugiere que hay alguien mas detras y es
+ * exactamente lo que delata al personaje. Habla en primera persona y deja claro
+ * que el aviso llega por aqui mismo.
+ */
+export const ARRIVAL_TIME_REPLIES: string[] = [
+  'Estoy cuadrando cómo me voy para allá, mor. En cuanto lo tenga te escribo por aquí mismo.',
+  'Déjame ver cómo me muevo hasta allá, papi, y te digo por aquí en un ratico.',
+  'Ando viendo el tema del traslado, amor. Apenas lo tenga claro te aviso por acá.',
+];
+
+export function pickArrivalTimeReply(previous?: string | null): string {
+  const options = ARRIVAL_TIME_REPLIES.filter(
+    (option) => option !== previous,
+  );
+  return options[Math.floor(Math.random() * options.length)];
+}
+
 /**
  * Desvios en personaje. Nunca dicen que no pueden hablar de algo: una negativa
  * con forma de politica de contenido delata al bot tanto como decir "soy una IA".
