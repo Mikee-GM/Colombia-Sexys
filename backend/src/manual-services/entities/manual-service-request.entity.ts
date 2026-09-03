@@ -9,6 +9,18 @@ import { ColumnNumericTransformer } from '../../common/transformers/column-numer
 export type EstadoSolicitudManual = 'pendiente' | 'aprobada' | 'rechazada';
 
 /**
+ * Por que la empleada pide el registro.
+ *
+ * `pasado`: el servicio ya ocurrio y hay que dejarlo asentado para que entre al
+ * corte. Nace ya finalizado.
+ *
+ * `inmediato`: acaba de cuadrar un cliente por su cuenta y necesita que el jefe
+ * le abra el servicio ANTES de hacerlo, para que corra con su transporte y su
+ * cierre normales. Nace pendiente de autorizacion, como cualquier reserva.
+ */
+export type TipoSolicitudManual = 'pasado' | 'inmediato';
+
+/**
  * Un servicio que ocurrio fuera del sistema y hay que dejar registrado.
  *
  * Lo pide la empleada desde su chat y lo autoriza su jefe. Vive en su propia
@@ -28,6 +40,18 @@ export class SolicitudServicioManual {
   })
   @ApiProperty({ description: 'Id' })
   id: string;
+
+  @Column('character varying', {
+    name: 'tipo',
+    length: 20,
+    default: 'pasado',
+  })
+  @ApiProperty({
+    description: 'Si el servicio ya ocurrió o está por hacerse',
+    enum: ['pasado', 'inmediato'],
+    example: 'pasado',
+  })
+  tipo: TipoSolicitudManual;
 
   @Column('uuid', { name: 'empleada_id' })
   @ApiProperty({ description: 'Empleada que lo registra' })

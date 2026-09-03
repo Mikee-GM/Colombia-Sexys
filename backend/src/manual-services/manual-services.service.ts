@@ -20,9 +20,23 @@ import { OfficeLiquidationSyncService } from '../liquidations/office-liquidation
 import { CreateManualServiceRequestDto } from './dto/create-manual-service-request.dto';
 import { describeError } from '../common/errors/error-message';
 import { roundMoney } from '../common/money';
+import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 
 /** Cuanto hacia atras se admite registrar un servicio ya ocurrido. */
 const ANTIGUEDAD_MAXIMA_DIAS = 60;
+
+/** Cuanto hacia delante se admite agendar uno que la empleada acaba de cuadrar. */
+const ANTICIPACION_MAXIMA_DIAS = 7;
+const ANTICIPACION_MAXIMA_MS = ANTICIPACION_MAXIMA_DIAS * 24 * 60 * 60 * 1000;
+
+/**
+ * Holgura hacia atras para un servicio inmediato.
+ *
+ * Quien pone "ahora mismo" y tarda en rellenar el resto del formulario manda
+ * una hora ya vencida por unos minutos. Rechazarsela seria exigirle que adivine
+ * cuanto va a tardar en escribir.
+ */
+const MARGEN_PASADO_INMEDIATO_MS = 30 * 60 * 1000;
 
 @Injectable()
 export class ManualServicesService {
@@ -42,6 +56,7 @@ export class ManualServicesService {
     private readonly realtime: RealtimeEventsService,
     private readonly notifications: NotificationsService,
     private readonly liquidationSync: OfficeLiquidationSyncService,
+    private readonly transportOperations: TransportOperationsService,
   ) {}
 
   /**
@@ -88,21 +103,45 @@ export class ManualServicesService {
       throw new ForbiddenException('No se encontró tu perfil de empleada');
     }
 
+    const tipo = dto.tipo ?? 'pasado';
     const fechaServicio = new Date(dto.fechaServicio);
     if (Number.isNaN(fechaServicio.getTime())) {
       throw new BadRequestException('La fecha del servicio no es válida');
     }
-    if (fechaServicio.getTime() > Date.now()) {
-      throw new BadRequestException(
-        'No se puede registrar un servicio que todavía no ha ocurrido',
-      );
-    }
-    const antiguedadDias =
-      (Date.now() - fechaServicio.getTime()) / (24 * 60 * 60 * 1000);
-    if (antiguedadDias > ANTIGUEDAD_MAXIMA_DIAS) {
-      throw new BadRequestException(
-        `Solo se pueden registrar servicios de los últimos ${ANTIGUEDAD_MAXIMA_DIAS} días`,
-      );
+
+    /*
+     * Las dos direcciones del tiempo son excluyentes, y confundirlas es lo peor
+     * que puede pasar aqui: un servicio "pasado" con fecha futura entraria al
+     * corte por dinero que nadie ha cobrado, y uno "inmediato" fechado la
+     * semana pasada mandaria a la empleada a una cita que ya no existe.
+     */
+    if (tipo === 'pasado') {
+      if (fechaServicio.getTime() > Date.now()) {
+        throw new BadRequestException(
+          'No se puede registrar un servicio que todavía no ha ocurrido',
+        );
+      }
+      const antiguedadDias =
+        (Date.now() - fechaServicio.getTime()) / (24 * 60 * 60 * 1000);
+      if (antiguedadDias > ANTIGUEDAD_MAXIMA_DIAS) {
+        throw new BadRequestException(
+          `Solo se pueden registrar servicios de los últimos ${ANTIGUEDAD_MAXIMA_DIAS} días`,
+        );
+      }
+    } else {
+      // Un margen corto hacia atras absorbe el reloj del telefono y el rato que
+      // tarda en rellenar el formulario; hacia delante, la misma ventana de
+      // agenda que admite el flujo de reservas.
+      if (fechaServicio.getTime() < Date.now() - MARGEN_PASADO_INMEDIATO_MS) {
+        throw new BadRequestException(
+          'Para un servicio que aún no haces, la hora no puede estar en el pasado',
+        );
+      }
+      if (fechaServicio.getTime() > Date.now() + ANTICIPACION_MAXIMA_MS) {
+        throw new BadRequestException(
+          `Solo se pueden agendar servicios dentro de los próximos ${ANTICIPACION_MAXIMA_DIAS} días`,
+        );
+      }
     }
     if (dto.duracionHoras <= 0 || dto.duracionHoras > 24) {
       throw new BadRequestException(
@@ -122,6 +161,7 @@ export class ManualServicesService {
     const jefe = await this.jefeQueAutoriza(empleada);
     const solicitud = await this.solicitudes.save(
       this.solicitudes.create({
+        tipo,
         empleadaId: empleada.id,
         jefeId: jefe.id,
         clienteId: dto.clienteId ?? null,
@@ -143,6 +183,40 @@ export class ManualServicesService {
       data: { solicitudId: solicitud.id, empleadaId: empleada.id },
     });
     return this.buscarOFallar(solicitud.id);
+  }
+
+  /**
+   * Lo que hace falta para que el formulario venga relleno.
+   *
+   * La empleada rellena esto desde el telefono, muchas veces con el cliente
+   * delante: cada dato que tenga que teclear a mano es una via de que la
+   * solicitud llegue al jefe incompleta o mal. Con su tarifa se calcula solo el
+   * monto en cuanto elige las horas, y con los moteles habituales elige el
+   * lugar de una lista en vez de escribirlo.
+   */
+  async opcionesParaEmpleada(empleadaUserId: string): Promise<{
+    empleada: { id: string; nombreArtistico: string; precioBaseHora: number };
+    ubicaciones: string[];
+  }> {
+    const empleada = await this.empleadas.findOne({
+      where: { usuarioId: empleadaUserId },
+    });
+    if (!empleada) {
+      throw new ForbiddenException('No se encontró tu perfil de empleada');
+    }
+    const ubicaciones = await this.transportOperations
+      .activeLocations()
+      .catch(() => []);
+    return {
+      empleada: {
+        id: empleada.id,
+        nombreArtistico: empleada.nombreArtistico,
+        precioBaseHora: Number(empleada.precioBaseHora),
+      },
+      ubicaciones: ubicaciones.map((lugar) =>
+        lugar.address ? `${lugar.name} (${lugar.address})` : lugar.name,
+      ),
+    };
   }
 
   async buscarOFallar(id: string): Promise<SolicitudServicioManual> {
@@ -235,13 +309,21 @@ export class ManualServicesService {
     );
     await this.solicitudes.update(id, { servicioId: servicio.id });
 
-    await this.liquidationSync
-      .syncOfficeRecord(servicio.id)
-      .catch((error: unknown) =>
-        this.logger.error(
-          `El servicio manual ${servicio.id} se creó, pero no se pudo sincronizar su liquidación: ${describeError(error)}`,
-        ),
-      );
+    /*
+     * Solo el que ya ocurrio entra al corte al aprobarse. El que todavia no se
+     * hace nace en `pendiente` y liquidara cuando se cierre, por el mismo
+     * camino que cualquier otro servicio: sincronizarlo aqui apuntaria un
+     * ingreso que nadie ha cobrado.
+     */
+    if (solicitud.tipo !== 'inmediato') {
+      await this.liquidationSync
+        .syncOfficeRecord(servicio.id)
+        .catch((error: unknown) =>
+          this.logger.error(
+            `El servicio manual ${servicio.id} se creó, pero no se pudo sincronizar su liquidación: ${describeError(error)}`,
+          ),
+        );
+    }
 
     this.realtime.emitToJefes({
       type: 'manual_service_approved',
@@ -255,9 +337,18 @@ export class ManualServicesService {
     if (solicitud.empleada?.usuarioId) {
       try {
         await this.notifications.notificar(solicitud.empleada.usuarioId, {
-          titulo: 'Aprobaron tu registro',
-          cuerpo: 'El servicio que registraste a mano quedó aprobado.',
-          url: '/empleada/portal',
+          titulo:
+            solicitud.tipo === 'inmediato'
+              ? 'Te autorizaron el servicio'
+              : 'Aprobaron tu registro',
+          cuerpo:
+            solicitud.tipo === 'inmediato'
+              ? 'El servicio que cuadraste ya está autorizado y te aparece en tu portal.'
+              : 'El servicio que registraste a mano quedó aprobado.',
+          url:
+            solicitud.tipo === 'inmediato'
+              ? '/empleada/servicio'
+              : '/empleada/portal',
           tag: `registro-${id}`,
           tipo: AVISO_REGISTRO_APROBADO,
         });
@@ -339,6 +430,7 @@ export class ManualServicesService {
     const fin = new Date(
       solicitud.fechaServicio.getTime() + horas * 60 * 60 * 1000,
     );
+    const esInmediato = solicitud.tipo === 'inmediato';
 
     /*
      * Las coordenadas son obligatorias en `servicios` y aqui no hubo pin. Se
@@ -356,10 +448,8 @@ export class ManualServicesService {
         clienteNombreLibre: solicitud.clienteNombreLibre,
         jefeId: solicitud.jefeId,
         registroManual: true,
-        estado: 'finalizado',
         metodoPago: solicitud.metodoPago,
         duracionPactadaHoras: horas,
-        duracionFinalHoras: horas,
         precioBaseHoraPactado: roundMoney(
           Number(solicitud.montoCobrado) / (horas || 1),
         ),
@@ -367,17 +457,40 @@ export class ManualServicesService {
         ubicacionClienteLng: lng,
         customerTransportCharge: 0,
         totalTransporte: 0,
-        horaInicioServicio: solicitud.fechaServicio,
-        horaFinServicio: fin,
         iaActiva: false,
-        estadoLiquidacion: 'transporte_pendiente',
+        /*
+         * El que ya ocurrio nace cerrado y con la liquidacion abierta, como si
+         * lo hubiera finalizado la empleada: no hay viaje que cuadrar, pero el
+         * dinero tiene que entrar al corte.
+         *
+         * El que todavia no se hace nace igual que cualquier reserva --en
+         * `pendiente`, con su hora estimada-- para que siga el camino normal:
+         * transporte, inicio, cierre y cobro. Darlo por finalizado meteria en
+         * el corte un dinero que aun no ha cobrado nadie.
+         */
+        ...(esInmediato
+          ? {
+              estado: 'pendiente' as const,
+              horaInicioEstimada: solicitud.fechaServicio,
+              tipoAgenda: 'programado' as const,
+              fechaProgramada: solicitud.fechaServicio,
+            }
+          : {
+              estado: 'finalizado' as const,
+              duracionFinalHoras: horas,
+              horaInicioServicio: solicitud.fechaServicio,
+              horaFinServicio: fin,
+              estadoLiquidacion: 'transporte_pendiente' as const,
+            }),
         notas: [
-          '[Registro manual: el servicio ocurrió fuera del sistema]',
+          esInmediato
+            ? '[Registro manual: la empleada cuadró este servicio por su cuenta]'
+            : '[Registro manual: el servicio ocurrió fuera del sistema]',
           solicitud.ubicacion ? `Lugar: ${solicitud.ubicacion}` : null,
           solicitud.clienteNombreLibre
             ? `Cliente: ${solicitud.clienteNombreLibre}`
             : null,
-          `Motivo: ${solicitud.motivo}`,
+          `${esInmediato ? 'Cómo lo consiguió' : 'Motivo'}: ${solicitud.motivo}`,
           `Autorizado por: ${aprobadaPorUserId}`,
         ]
           .filter(Boolean)

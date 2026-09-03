@@ -86,12 +86,12 @@ export default function AjustesDeAvisos() {
   if (!tipos || tipos.length === 0) return null;
 
   return (
-    <div className="mt-4 border-t border-zinc-800 pt-4">
-      <h3 className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
-        Que avisos recibes
-      </h3>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+        Qué avisos recibes
+      </h2>
       <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-        Lo urgente llega siempre. Aqui solo estan los avisos que puedes apagar,
+        Lo urgente llega siempre. Aquí solo están los avisos que puedes apagar,
         y el ajuste vale para todos tus dispositivos.
       </p>
 

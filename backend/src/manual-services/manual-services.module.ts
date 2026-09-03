@@ -10,6 +10,7 @@ import { ManualServicesService } from './manual-services.service';
 import { ManualServicesController } from './manual-services.controller';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { LiquidationsModule } from '../liquidations/liquidations.module';
+import { TransportOperationsModule } from '../transport-operations/transport-operations.module';
 
 @Module({
   imports: [
@@ -23,6 +24,8 @@ import { LiquidationsModule } from '../liquidations/liquidations.module';
     ]),
     RealtimeModule,
     LiquidationsModule,
+    // Los moteles habituales rellenan el desplegable de lugar del formulario.
+    TransportOperationsModule,
   ],
   controllers: [ManualServicesController],
   providers: [ManualServicesService],

@@ -10,8 +10,22 @@ import {
   MinLength,
 } from 'class-validator';
 
-/** Lo que hay que saber de un servicio que ocurrio fuera del sistema. */
+/** Lo que hay que saber de un servicio que se cuadro fuera del sistema. */
 export class CreateManualServiceRequestDto {
+  /**
+   * Sin `tipo` la solicitud se entiende como `pasado`, que es lo unico que
+   * existia antes: asi los clientes viejos siguen funcionando igual.
+   */
+  @ApiPropertyOptional({
+    description:
+      'Si el servicio ya ocurrió (pasado) o la empleada acaba de cuadrarlo y aún no lo hace (inmediato)',
+    enum: ['pasado', 'inmediato'],
+    default: 'pasado',
+  })
+  @IsIn(['pasado', 'inmediato'])
+  @IsOptional()
+  readonly tipo?: 'pasado' | 'inmediato';
+
   @ApiPropertyOptional({ description: 'Cliente registrado, si se identifica' })
   @IsUUID()
   @IsOptional()

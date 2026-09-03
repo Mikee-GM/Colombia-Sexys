@@ -38,9 +38,25 @@ export class ManualServicesController {
     return this.service.listar(req.user, estado);
   }
 
+  /**
+   * Va antes de `:id` a proposito: con el orden inverso, Nest resolveria
+   * `/opciones` contra la ruta con parametro y respondería un 400 por uuid.
+   */
+  @Get('opciones')
+  @Roles('empleada')
+  @ApiOperation({
+    summary: 'Datos para autocompletar el formulario de la empleada',
+  })
+  options(@Req() req: any) {
+    return this.service.opcionesParaEmpleada(req.user.id);
+  }
+
   @Post()
   @Roles('empleada')
-  @ApiOperation({ summary: 'Pedir que se registre un servicio ya ocurrido' })
+  @ApiOperation({
+    summary:
+      'Pedir que se registre un servicio ya ocurrido o uno recién cuadrado',
+  })
   create(@Body() dto: CreateManualServiceRequestDto, @Req() req: any) {
     return this.service.crear(req.user.id, dto);
   }

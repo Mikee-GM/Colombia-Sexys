@@ -5,7 +5,6 @@ import type { DriverPortalData } from "@/lib/types";
 import { formatCurrency as formatCurrencyMXN } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
-import AvisosPush from "@/components/ui/AvisosPush";
 import CompartirUbicacion from "@/components/ui/CompartirUbicacion";
 import ApelarCalificacion from "@/components/ui/ApelarCalificacion";
 import ReportarConducta from "@/components/ui/ReportarConducta";
@@ -29,13 +28,9 @@ type TabType = "resumen" | "ranking" | "viajes" | "reputacion";
 
 import ViajeAhora from "@/components/chofer/ViajeAhora";
 import OfertaDeViaje from "@/components/chofer/OfertaDeViaje";
-import { BarChart3, Car, Star, Trophy } from "lucide-react";
-
-const ZONA_LABEL: Record<string, string> = {
-  montecarlo: "Montecarlo",
-  majestic: "Majestic",
-  domicilio: "Domicilio",
-};
+import Link from "next/link";
+import { ArrowRight, BarChart3, Bell, Car, Star, Trophy } from "lucide-react";
+import { ZONA_LABEL } from "@/components/chofer/zonas";
 
 export default function DriverPortalView({
   initialData,
@@ -137,7 +132,15 @@ export default function DriverPortalView({
         {/* Solo con sesion propia: quien entra con el enlace del bot no tiene
             sesion que cerrar. */}
         {workShift !== undefined && workShift !== null && (
-          <div className="max-w-4xl mx-auto mt-2 flex justify-end">
+          <div className="max-w-4xl mx-auto mt-2 flex items-center justify-end gap-2">
+            <Link
+              href="/chofer/ajustes"
+              aria-label="Configurar avisos"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
+            >
+              <Bell size={14} />
+              Avisos
+            </Link>
             <CerrarSesion />
           </div>
         )}
@@ -177,9 +180,19 @@ export default function DriverPortalView({
           <OfertaDeViaje key={oferta.id} oferta={oferta} />
         ))}
         <ViajeAhora viaje={data.activeTrip} zonaLabel={ZONA_LABEL} />
-        {/* Solo tiene sentido con sesion propia: un enlace con token no
-            identifica el dispositivo, y la suscripcion es por dispositivo. */}
-        {workShift !== undefined && workShift !== null && <AvisosPush />}
+        {/*
+          El viaje sigue asomando aqui, pero se trabaja en `/chofer/servicio`:
+          alli no compite con las ganancias ni con el historial.
+        */}
+        {data.activeTrip && (
+          <Link
+            href="/chofer/servicio"
+            className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-4 py-3.5 text-sm font-bold uppercase tracking-wider text-emerald-300 transition-colors hover:bg-emerald-500 hover:text-black"
+          >
+            Abrir mi viaje
+            <ArrowRight size={16} />
+          </Link>
+        )}
         {/* Mientras esta pantalla siga abierta, el panel la ve en el mapa: es
             lo que evita tener que mandar la ubicacion por Telegram. */}
         {workShift !== undefined && workShift !== null && (

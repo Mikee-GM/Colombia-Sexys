@@ -141,7 +141,17 @@ export async function middleware(request: NextRequest) {
    * token, porque una URL con credencial acaba en el historial del telefono,
    * en los registros del proxy y en la cabecera Referer de cualquier recurso.
    */
-  if (pathname === "/empleada/portal" || pathname === "/chofer/portal") {
+  /*
+   * La pantalla del servicio en curso entra aqui tambien: es a donde apuntan
+   * los avisos que se mandan durante un servicio, y sin el canje un enlace con
+   * token aterrizaria sin sesion.
+   */
+  if (
+    pathname === "/empleada/portal" ||
+    pathname === "/chofer/portal" ||
+    pathname === "/empleada/servicio" ||
+    pathname === "/chofer/servicio"
+  ) {
     const tokenDePortal = request.nextUrl.searchParams.get("token");
     if (tokenDePortal && !request.cookies.has(ACCESS_COOKIE)) {
       const canjeadas = await canjearTokenDePortal(request, tokenDePortal);
@@ -309,6 +319,25 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
+/*
+ * Las pantallas nuevas de cada portal --el servicio en curso y los ajustes de
+ * avisos-- se enumeran una a una, igual que los portales.
+ *
+ * No se usa `/empleada/:path*` porque el bloque de canje de token de arriba
+ * distingue rutas exactas, y ampliarlo a comodin haria pasar por el canje a
+ * pantallas que no lo necesitan. La autorizacion de verdad la hace el backend;
+ * esto solo evita que quien no tiene sesion aterrice en una pagina rota.
+ */
 export const config = {
-  matcher: ["/api/:path*", "/admin/:path*", "/jefe/:path*", "/empleada/portal", "/chofer/portal"],
+  matcher: [
+    "/api/:path*",
+    "/admin/:path*",
+    "/jefe/:path*",
+    "/empleada/portal",
+    "/empleada/servicio",
+    "/empleada/ajustes",
+    "/chofer/portal",
+    "/chofer/servicio",
+    "/chofer/ajustes",
+  ],
 };

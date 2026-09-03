@@ -127,6 +127,13 @@ describe('ManualServicesService', () => {
       // Los avisos push no intervienen en aprobar un registro.
       notifications: { notificar: jest.fn().mockResolvedValue(0) },
       liquidationSync,
+      transportOperations: {
+        activeLocations: jest
+          .fn()
+          .mockResolvedValue([
+            { name: 'Motel Luna', address: 'Av. Principal 1' },
+          ]),
+      },
     });
   });
 
@@ -265,6 +272,202 @@ describe('ManualServicesService', () => {
         }),
       );
       expect(servicios.save).not.toHaveBeenCalled();
+    });
+  });
+});
+
+/*
+ * El segundo motivo por el que una empleada pide un registro: acaba de cuadrar
+ * un cliente por su cuenta y necesita que el jefe le abra el servicio ANTES de
+ * hacerlo. Confundirlo con el registro a posteriori tiene consecuencias de
+ * dinero, asi que las dos direcciones del tiempo se comprueban por separado.
+ */
+describe('ManualServicesService con solicitudes inmediatas', () => {
+  let solicitudes: any;
+  let servicios: any;
+  let liquidationSync: any;
+  let service: ManualServicesService;
+
+  const DENTRO_DE_UNA_HORA = new Date(
+    Date.now() + 60 * 60 * 1000,
+  ).toISOString();
+
+  const datos = (extra: Record<string, unknown> = {}) => ({
+    tipo: 'inmediato' as const,
+    fechaServicio: DENTRO_DE_UNA_HORA,
+    duracionHoras: 2,
+    metodoPago: 'efectivo' as const,
+    montoCobrado: 2400,
+    motivo: 'Cliente conocido que me escribio directo',
+    ...extra,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const updateBuilder = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    solicitudes = {
+      create: jest.fn((data: unknown) => data),
+      save: jest.fn((data: any) => Promise.resolve({ ...data, id: 'sol-1' })),
+      findOne: jest.fn().mockResolvedValue({
+        id: 'sol-1',
+        tipo: 'inmediato',
+        estado: 'pendiente',
+        empleadaId: 'emp-1',
+        jefeId: 'jefe-1',
+        clienteId: null,
+        clienteNombreLibre: 'Carlos',
+        fechaServicio: new Date(DENTRO_DE_UNA_HORA),
+        duracionHoras: 2,
+        metodoPago: 'efectivo',
+        montoCobrado: 2400,
+        ubicacion: 'Motel Luna',
+        motivo: 'Cliente conocido',
+        empleada: {
+          id: 'emp-1',
+          jefeId: 'jefe-1',
+          usuarioId: 'user-emp',
+          ubicacionLat: 19.4,
+          ubicacionLng: -99.1,
+        },
+      }),
+      update: jest.fn(),
+      createQueryBuilder: jest.fn(() => updateBuilder),
+    };
+    servicios = {
+      create: jest.fn((data: unknown) => data),
+      save: jest.fn((data: any) => Promise.resolve({ ...data, id: 'srv-1' })),
+      findOne: jest.fn().mockResolvedValue({ id: 'srv-1' }),
+    };
+    liquidationSync = {
+      syncOfficeRecord: jest.fn().mockResolvedValue(undefined),
+    };
+
+    service = Object.create(
+      ManualServicesService.prototype,
+    ) as ManualServicesService;
+    Object.assign(service, {
+      logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
+      solicitudes,
+      empleadas: {
+        findOne: jest.fn().mockResolvedValue({
+          id: 'emp-1',
+          usuarioId: 'user-emp',
+          jefeId: 'jefe-1',
+          jefeSecundarioId: null,
+          nombreArtistico: 'Lola',
+          precioBaseHora: 1200,
+          ubicacionLat: 19.4,
+          ubicacionLng: -99.1,
+        }),
+        findOneOrFail: jest.fn(),
+      },
+      usuarios: {
+        findOne: jest
+          .fn()
+          .mockResolvedValue({ id: 'jefe-1', rol: 'jefe', activo: true }),
+      },
+      clientes: { findOne: jest.fn() },
+      servicios,
+      realtime: {
+        emitToBoss: jest.fn(),
+        emitToJefes: jest.fn(),
+        emitToEmployee: jest.fn(),
+      },
+      notifications: { notificar: jest.fn().mockResolvedValue(0) },
+      liquidationSync,
+      transportOperations: {
+        activeLocations: jest
+          .fn()
+          .mockResolvedValue([
+            { name: 'Motel Luna', address: 'Av. Principal 1' },
+          ]),
+      },
+    });
+  });
+
+  describe('crear', () => {
+    it('acepta una hora futura, que en un registro a posteriori se rechaza', async () => {
+      await service.crear('user-emp', datos());
+
+      expect(solicitudes.create).toHaveBeenCalledWith(
+        expect.objectContaining({ tipo: 'inmediato' }),
+      );
+    });
+
+    it('rechaza una hora ya pasada: la empleada no puede salir al pasado', async () => {
+      const anteayer = new Date(
+        Date.now() - 2 * 24 * 60 * 60 * 1000,
+      ).toISOString();
+
+      await expect(
+        service.crear('user-emp', datos({ fechaServicio: anteayer })),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rechaza agendar mas alla de la ventana de una semana', async () => {
+      const dentroDeUnMes = new Date(
+        Date.now() + 30 * 24 * 60 * 60 * 1000,
+      ).toISOString();
+
+      await expect(
+        service.crear('user-emp', datos({ fechaServicio: dentroDeUnMes })),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('sin tipo se comporta como el registro a posteriori de siempre', async () => {
+      const anteayer = new Date(
+        Date.now() - 2 * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      const { tipo: _omitido, ...sinTipo } = datos({
+        fechaServicio: anteayer,
+      });
+
+      await service.crear('user-emp', sinTipo);
+
+      expect(solicitudes.create).toHaveBeenCalledWith(
+        expect.objectContaining({ tipo: 'pasado' }),
+      );
+    });
+  });
+
+  describe('aprobar', () => {
+    it('crea un servicio pendiente, no uno ya cerrado', async () => {
+      await service.aprobar('sol-1', 'jefe-1');
+
+      expect(servicios.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          estado: 'pendiente',
+          registroManual: true,
+          tipoAgenda: 'programado',
+        }),
+      );
+      const creado = servicios.create.mock.calls[0][0];
+      expect(creado.horaFinServicio).toBeUndefined();
+      expect(creado.duracionFinalHoras).toBeUndefined();
+    });
+
+    /*
+     * Es el error caro: darlo por finalizado meteria en el corte un dinero que
+     * todavia no ha cobrado nadie. Liquida al cerrarse, como cualquier otro.
+     */
+    it('no lo mete en el corte al aprobarlo', async () => {
+      await service.aprobar('sol-1', 'jefe-1');
+
+      expect(liquidationSync.syncOfficeRecord).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('opcionesParaEmpleada', () => {
+    it('devuelve su tarifa y sus moteles para autocompletar el formulario', async () => {
+      const opciones = await service.opcionesParaEmpleada('user-emp');
+
+      expect(opciones.empleada.precioBaseHora).toBe(1200);
+      expect(opciones.ubicaciones).toEqual(['Motel Luna (Av. Principal 1)']);
     });
   });
 });

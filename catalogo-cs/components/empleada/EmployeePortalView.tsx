@@ -6,7 +6,6 @@ import type { EmployeePortalData } from "@/lib/types";
 import { formatCurrency as formatCurrencyMXN } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
-import AvisosPush from "@/components/ui/AvisosPush";
 import CompartirUbicacion from "@/components/ui/CompartirUbicacion";
 import ApelarCalificacion from "@/components/ui/ApelarCalificacion";
 import ReportarConducta from "@/components/ui/ReportarConducta";
@@ -24,7 +23,9 @@ import SubirFotosSemanales, {
   AvisoFotosSemanales,
 } from "@/components/empleada/FotosSemanales";
 import ServicioAhora from "@/components/empleada/ServicioAhora";
-import { BarChart3, Camera, ClipboardList, Star, Trophy } from "lucide-react";
+import SolicitarServicio from "@/components/empleada/SolicitarServicio";
+import Link from "next/link";
+import { BarChart3, Bell, Camera, ClipboardList, Star, Trophy } from "lucide-react";
 
 interface EmployeePortalViewProps {
   initialData: EmployeePortalData;
@@ -146,7 +147,19 @@ export default function EmployeePortalView({
             </div>
             {/* Solo con sesion propia: quien entra con el enlace del bot no
                 tiene sesion que cerrar. */}
-            {workShift !== undefined && workShift !== null && <CerrarSesion />}
+            {workShift !== undefined && workShift !== null && (
+              <>
+                <Link
+              href="/empleada/ajustes"
+              aria-label="Configurar avisos"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
+            >
+              <Bell size={14} />
+              Avisos
+            </Link>
+                <CerrarSesion />
+              </>
+            )}
           </div>
         </div>
 
@@ -176,15 +189,23 @@ export default function EmployeePortalView({
       </header>
 
       {/* MAIN CONTENT CONTAINER */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-6">
+      {/* El hueco de abajo es para que el boton flotante no tape el final del
+          contenido, y cuenta con el indicador de inicio del iPhone. */}
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-6 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
         {/* Lo primero, en cualquier pestaña: qué hay ahora y qué se puede hacer. */}
         {/* Sin esto la pantalla se queda con los datos del primer
             render: lo que autoriza el jefe no llegaba nunca. */}
         <ActualizarEnVivo canal="empleada" />
-        <ServicioAhora servicio={data.activeService} token={token} />
-        {/* Solo tiene sentido con sesion propia: un enlace con token no
-            identifica el dispositivo, y la suscripcion es por dispositivo. */}
-        {workShift !== undefined && workShift !== null && <AvisosPush />}
+        {/*
+          El servicio sigue asomando aqui --es lo primero que hay que ver al
+          abrir-- pero su sitio de trabajo es `/empleada/servicio`, donde no
+          compite con las ganancias ni con el ranking.
+        */}
+        <ServicioAhora
+          servicio={data.activeService}
+          token={token}
+          enlaceAPantallaPropia
+        />
         {/* Mientras esta pantalla siga abierta, el panel la ve en el mapa: es
             lo que evita tener que mandar la ubicacion por Telegram. */}
         {workShift !== undefined && workShift !== null && (
@@ -839,6 +860,14 @@ export default function EmployeePortalView({
           </div>
         )}
       </main>
+
+      {/*
+        Fuera de <main> y de las pestañas: cuadrar un cliente por su cuenta no
+        pasa dentro de ninguna seccion concreta, asi que el boton acompaña a
+        toda la pantalla. Solo con sesion propia, porque el enlace de un solo
+        uso del bot no permite crear nada.
+      */}
+      {workShift !== undefined && workShift !== null && <SolicitarServicio />}
 
       {/* FOOTER */}
       <footer className="mt-auto border-t border-white/5 py-4 text-center text-[11px] text-gray-500">

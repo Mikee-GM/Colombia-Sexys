@@ -4,10 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell, BellOff, BellRing, Send, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { pedirConSesion } from "@/lib/client-fetch";
-import AjustesDeAvisos from "@/components/ui/AjustesDeAvisos";
 
 /**
  * Activacion de los avisos push del panel, dispositivo por dispositivo.
+ *
+ * Vive en la pagina de ajustes de cada panel, no en la pantalla principal:
+ * antes se pintaba arriba del todo en el portal de la empleada, en el del
+ * chofer y en el del jefe, y como la suscripcion es por dispositivo la tarjeta
+ * reaparecia en cada telefono nuevo, compitiendo con lo operativo justo cuando
+ * hay un servicio en marcha. Los interruptores de que avisos se reciben, que
+ * son de la cuenta y no del aparato, viven al lado en `AjustesDeAvisos`.
  *
  * Existe porque un mensaje de Telegram que llega a un chat silenciado no avisa
  * a nadie: el aviso push lo lanza el sistema operativo y no depende de que la
@@ -248,7 +254,6 @@ export default function AvisosPush() {
             </div>
           )}
 
-          {estado === "activo" && <AjustesDeAvisos />}
         </div>
       </div>
     </div>

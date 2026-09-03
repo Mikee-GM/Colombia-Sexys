@@ -909,6 +909,12 @@ export type StaffOnboarding = ApiUser & {
  */
 export interface SolicitudServicioManual {
   id: string;
+  /**
+   * `pasado`: ya ocurrio y solo falta asentarlo para el corte.
+   * `inmediato`: la empleada lo acaba de cuadrar y espera autorizacion para
+   * hacerlo, asi que al aprobarlo nace un servicio pendiente, no uno cerrado.
+   */
+  tipo: "pasado" | "inmediato";
   empleadaId: string;
   jefeId: string;
   clienteId: string | null;

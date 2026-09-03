@@ -138,9 +138,26 @@ export default function SolicitudesListado({
                   Solicitada el {fechaHora(solicitud.createdAt)}
                 </p>
               </div>
-              <span className="rounded-full border border-zinc-800 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-zinc-400">
-                {solicitud.estado}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {/*
+                  Los dos tipos se resuelven distinto y hay que distinguirlos de
+                  un vistazo: el que ya ocurrio solo se asienta para el corte,
+                  el que aun no se hace deja a una empleada esperando para
+                  salir. Ese va marcado en dorado.
+                */}
+                {solicitud.tipo === "inmediato" ? (
+                  <span className="rounded-full border border-[#C5A55A] bg-[#C5A55A]/15 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-[#E8D5A3]">
+                    Aun no lo hace
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-zinc-800 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                    Ya ocurrio
+                  </span>
+                )}
+                <span className="rounded-full border border-zinc-800 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-zinc-400">
+                  {solicitud.estado}
+                </span>
+              </div>
             </div>
 
             <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-4">
@@ -156,7 +173,7 @@ export default function SolicitudesListado({
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">
-                  Cuando fue
+                  {solicitud.tipo === "inmediato" ? "Para cuando" : "Cuando fue"}
                 </dt>
                 <dd className="mt-0.5 text-zinc-200">
                   {fechaHora(solicitud.fechaServicio)}
@@ -194,7 +211,9 @@ export default function SolicitudesListado({
 
             <p className="mt-3 rounded-xl border border-zinc-900 bg-black/40 px-4 py-3 text-sm text-zinc-300">
               <span className="block text-[10px] uppercase tracking-[0.14em] text-zinc-500">
-                Por que no paso por el sistema
+                {solicitud.tipo === "inmediato"
+                  ? "Como consiguio el cliente"
+                  : "Por que no paso por el sistema"}
               </span>
               {solicitud.motivo}
             </p>

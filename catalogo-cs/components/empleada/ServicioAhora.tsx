@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import {
+  ArrowRight,
   CalendarClock,
   CheckCircle2,
   Clock3,
@@ -34,9 +36,19 @@ import type { EmployeePortalActiveService } from "@/lib/types";
 export default function ServicioAhora({
   servicio,
   token,
+  enlaceAPantallaPropia = false,
 }: {
   servicio: EmployeePortalActiveService | null;
   token?: string;
+  /**
+   * En el portal se muestra solo el resumen y un acceso a `/empleada/servicio`.
+   *
+   * Los botones de trabajo --finalizar, extender, cobrar un extra, pedir
+   * prorroga-- viven en esa pantalla, sin las ganancias, el ranking ni las
+   * fotos alrededor. Aqui abajo se sigue viendo que hay un servicio, que es lo
+   * que no puede faltar al abrir la aplicacion.
+   */
+  enlaceAPantallaPropia?: boolean;
 }) {
   if (!servicio) {
     return (
@@ -103,7 +115,7 @@ export default function ServicioAhora({
           donde mirarla. Se abre a tamaño completo porque los datos van escritos
           pequeño dentro de la imagen.
         */}
-        {servicio.transporte?.uberScreenshotUrl && (
+        {!enlaceAPantallaPropia && servicio.transporte?.uberScreenshotUrl && (
           <a
             href={servicio.transporte.uberScreenshotUrl}
             target="_blank"
@@ -123,12 +135,22 @@ export default function ServicioAhora({
           </a>
         )}
 
+        {enlaceAPantallaPropia && (
+          <Link
+            href="/empleada/servicio"
+            className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-4 py-3.5 text-sm font-bold uppercase tracking-wider text-emerald-300 transition-colors hover:bg-emerald-500 hover:text-black"
+          >
+            Abrir mi servicio
+            <ArrowRight size={16} />
+          </Link>
+        )}
+
         {/*
           Los botones del chat de Telegram siguen valiendo: esto es una segunda
           via, no un reemplazo, y el estado que decide cual mostrar sale del
           propio viaje, asi que las dos se mantienen sincronizadas solas.
         */}
-        {servicio.transporte && (
+        {!enlaceAPantallaPropia && servicio.transporte && (
           <AccionesDelViaje transporte={servicio.transporte} token={token} />
         )}
 
@@ -138,7 +160,7 @@ export default function ServicioAhora({
           empezado, lo que se alarga es el servicio, y para eso esta el boton de
           abajo.
         */}
-        {!enCurso && (
+        {!enlaceAPantallaPropia && !enCurso && (
           <PedirProrroga
             servicioId={servicio.id}
             prorrogasUsadas={servicio.prorrogasUsadas ?? 0}
@@ -147,7 +169,7 @@ export default function ServicioAhora({
         )}
 
         {/* Extras y cierre: solo sobre un servicio ya arrancado. */}
-        {enCurso && (
+        {!enlaceAPantallaPropia && enCurso && (
           <>
             <AgregarExtra servicioId={servicio.id} token={token} />
             {/* Extender va antes de finalizar: el orden es el de lo que ocurre
