@@ -180,9 +180,7 @@ export const ARRIVAL_TIME_REPLIES: string[] = [
 ];
 
 export function pickArrivalTimeReply(previous?: string | null): string {
-  const options = ARRIVAL_TIME_REPLIES.filter(
-    (option) => option !== previous,
-  );
+  const options = ARRIVAL_TIME_REPLIES.filter((option) => option !== previous);
   return options[Math.floor(Math.random() * options.length)];
 }
 

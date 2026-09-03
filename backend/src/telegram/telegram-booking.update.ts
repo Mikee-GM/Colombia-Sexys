@@ -7788,9 +7788,7 @@ export class TelegramBookingUpdate {
         const aplazamientos = (session.aplazamientosSeguidos ?? 0) + 1;
         session.aplazamientosSeguidos = aplazamientos;
 
-        if (
-          aplazamientos >= TelegramBookingUpdate.MAX_APLAZAMIENTOS_SEGUIDOS
-        ) {
+        if (aplazamientos >= TelegramBookingUpdate.MAX_APLAZAMIENTOS_SEGUIDOS) {
           await this.entregarConversacionAlJefe(
             ctx,
             empleada,
@@ -8522,7 +8520,12 @@ export class TelegramBookingUpdate {
     this.logger.warn(
       `Conversacion de ${ctx.from?.id} entregada al jefe por atasco: ${motivo}`,
     );
-    await this.handleAIFailureAndTransferToBoss(ctx, empleada, undefined, motivo);
+    await this.handleAIFailureAndTransferToBoss(
+      ctx,
+      empleada,
+      undefined,
+      motivo,
+    );
   }
 
   private async handleAIFailureAndTransferToBoss(
@@ -8536,7 +8539,8 @@ export class TelegramBookingUpdate {
      */
     motivo?: string,
   ): Promise<void> {
-    if (!motivo) this.logger.error('IA failure triggered boss takeover:', error);
+    if (!motivo)
+      this.logger.error('IA failure triggered boss takeover:', error);
 
     // Mensaje natural al cliente sin mencionar bots ni IA
     const naturalFallback = motivo

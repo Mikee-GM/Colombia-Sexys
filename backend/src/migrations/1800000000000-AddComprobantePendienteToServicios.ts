@@ -15,9 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * condicion para que el servicio exista y pasa a ser una condicion para
  * despacharlo, que es una decision del jefe y no del silencio.
  */
-export class AddComprobantePendienteToServicios1800000000000
-  implements MigrationInterface
-{
+export class AddComprobantePendienteToServicios1800000000000 implements MigrationInterface {
   name = 'AddComprobantePendienteToServicios1800000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

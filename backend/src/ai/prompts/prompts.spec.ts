@@ -158,7 +158,9 @@ describe('AI Prompts Generation (prompts.ts)', () => {
 
     expect(prompt).toContain('me lo confirman');
     expect(prompt).toContain('PRIMERA PERSONA');
-    expect(prompt).not.toContain('respóndele con dulzura que eso te lo confirman');
+    expect(prompt).not.toContain(
+      'respóndele con dulzura que eso te lo confirman',
+    );
   });
 
   /*

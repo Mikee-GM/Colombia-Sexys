@@ -216,9 +216,9 @@ describe('detectArrivalTimeQuestion', () => {
     expect(detectArrivalTimeQuestion('En cuánto tiempo llegarías bb ?')).toBe(
       true,
     );
-    expect(detectArrivalTimeQuestion('Mmm bueno, en cuánto tiempo llegarías amor')).toBe(
-      true,
-    );
+    expect(
+      detectArrivalTimeQuestion('Mmm bueno, en cuánto tiempo llegarías amor'),
+    ).toBe(true);
     expect(detectArrivalTimeQuestion('cuanto te tardas mor')).toBe(true);
     expect(detectArrivalTimeQuestion('¿a qué hora llegas?')).toBe(true);
     expect(detectArrivalTimeQuestion('ya vienes?')).toBe(true);
@@ -230,9 +230,9 @@ describe('detectArrivalTimeQuestion', () => {
   });
 
   it('no confunde la duracion del servicio con la hora de llegada', () => {
-    expect(detectArrivalTimeQuestion('sería 1 hora para majestic ahorita bb')).toBe(
-      false,
-    );
+    expect(
+      detectArrivalTimeQuestion('sería 1 hora para majestic ahorita bb'),
+    ).toBe(false);
     expect(detectArrivalTimeQuestion('cuánto cobras la hora')).toBe(false);
     expect(detectArrivalTimeQuestion('quiero 2 horas')).toBe(false);
   });

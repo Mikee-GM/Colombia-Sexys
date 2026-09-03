@@ -88,9 +88,7 @@ describe('TelegramBookingUpdate.applyDraftPaymentMethod con transferencia', () =
 
   beforeEach(() => {
     update = Object.create(TelegramBookingUpdate.prototype);
-    update.aprovecharComprobanteAdelantado = jest
-      .fn()
-      .mockResolvedValue(false);
+    update.aprovecharComprobanteAdelantado = jest.fn().mockResolvedValue(false);
     update.cerrarReservaEsperandoComprobante = jest
       .fn()
       .mockResolvedValue(undefined);
@@ -256,10 +254,9 @@ describe('TelegramBookingUpdate.registrarComprobanteEnServicio', () => {
 
     expect(servicio.comprobantePendiente).toBe(false);
     expect(update.serviciosRepository.save).toHaveBeenCalledWith(servicio);
-    expect(update.paymentReceiptValidationsRepository.update).toHaveBeenCalledWith(
-      'val-1',
-      { servicioId: 'srv-1' },
-    );
+    expect(
+      update.paymentReceiptValidationsRepository.update,
+    ).toHaveBeenCalledWith('val-1', { servicioId: 'srv-1' });
   });
 
   it('avisa al jefe en el hilo del servicio', async () => {
