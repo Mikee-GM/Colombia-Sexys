@@ -14,7 +14,14 @@ export type PresetLocation = {
   sortOrder: number;
 };
 
-export type TransportConfiguration = {
+export type CoverageArea = {
+  coverageCity: string;
+  coverageCenterLat: number;
+  coverageCenterLng: number;
+  coverageRadiusKm: number;
+};
+
+export type TransportConfiguration = CoverageArea & {
   externalLocationFee: number;
   locations: PresetLocation[];
 };
@@ -32,6 +39,22 @@ export async function updateTransportFee(externalLocationFee: number) {
   const result = await apiFetch("/transport-operations/configuration", {
     method: "PATCH",
     body: JSON.stringify({ externalLocationFee }),
+  });
+  revalidatePath("/admin/transport");
+  return result;
+}
+
+/**
+ * Cambia el area que se atiende.
+ *
+ * No es una preferencia de visualizacion: fuera de ese circulo el bot rechaza
+ * el pin del cliente y no le cotiza nada, asi que mover el radio decide a
+ * quien se le puede vender.
+ */
+export async function updateCoverageArea(input: CoverageArea) {
+  const result = await apiFetch("/transport-operations/configuration/coverage", {
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
   revalidatePath("/admin/transport");
   return result;

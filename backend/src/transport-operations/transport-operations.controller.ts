@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import {
   SavePresetLocationDto,
+  UpdateCoverageAreaDto,
   UpdateTransportSettingDto,
 } from './dto/transport-operation.dto';
 import { TransportOperationsService } from './transport-operations.service';
@@ -47,6 +48,26 @@ export class TransportOperationsController {
     @Req() req: any,
   ) {
     return this.service.updateFee(dto.externalLocationFee, req.user.id);
+  }
+  /*
+   * La cobertura va por su propio endpoint y no dentro del PATCH de la tarifa:
+   * son dos ajustes con consecuencias distintas --uno cambia cuanto se cobra,
+   * el otro a quien se le puede vender-- y meterlos en el mismo cuerpo obligaba
+   * a mandar los dos para tocar uno.
+   */
+  @Patch('configuration/coverage') updateCoverage(
+    @Body() dto: UpdateCoverageAreaDto,
+    @Req() req: any,
+  ) {
+    return this.service.updateCoverage(
+      {
+        ciudad: dto.coverageCity.trim(),
+        centroLat: dto.coverageCenterLat,
+        centroLng: dto.coverageCenterLng,
+        radioKm: dto.coverageRadiusKm,
+      },
+      req.user.id,
+    );
   }
   @Get('locations/active')
   @Roles('admin', 'jefe')

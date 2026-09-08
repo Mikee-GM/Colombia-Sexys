@@ -42,12 +42,18 @@ import {
   SENTIMENT_SYSTEM_PROMPT,
 } from '../ai/prompts/prompts';
 import {
+  aperturasRecientes,
   capClientMessage,
   clientAskedForOtherModels,
   clientAskedForOwnPhotos,
   clientEndorsedTrioModel,
+  detectaClienteEnFuga,
+  detectaInseguridad,
   detectArrivalTimeQuestion,
   detectBotProbe,
+  extrasYaCotizados,
+  limitarEmojis,
+  MENSAJES_ENTRE_EMOJIS,
   pickArrivalTimeReply,
   detectProhibitedRequest,
   looksLikeAssistantRegister,
@@ -75,6 +81,7 @@ import { TransportOperationsService } from '../transport-operations/transport-op
 import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
 import { describeError } from '../common/errors/error-message';
+import { kilometrosEntre, metrosEntre } from '../common/geo';
 import { TelegramCallbackGuard } from './telegram-callback-guard';
 import {
   RegistroManualEnCurso,
@@ -143,6 +150,20 @@ interface SessionData {
   locationNameSnapshot?: string;
   locationAddressSnapshot?: string;
   customerTransportCharge?: number;
+  /**
+   * El cliente mando un pin fuera del area que se atiende.
+   *
+   * Sin esta marca la IA volvia a pedirle la ubicacion en el turno siguiente,
+   * porque para ella la ubicacion seguia sin estar definida: el cliente ya
+   * habia oido que no se llega hasta alla y aun asi se le pedia el pin otra vez.
+   */
+  fueraDeCobertura?: boolean;
+  /**
+   * Mensajes que lleva la modelo sin usar un emoji. Sostiene la cadencia entre
+   * turnos: sin este contador cada respuesta se juzga sola y todas acaban
+   * llevando carita.
+   */
+  mensajesDesdeUltimoEmoji?: number;
   chatHistory?: { role: 'user' | 'model'; parts: { text: string }[] }[];
   bookingSessionId?: string;
   selectedEmployeeBusy?: boolean;
@@ -1347,28 +1368,154 @@ export class TelegramBookingUpdate {
     return true;
   }
 
-  // Helper function to calculate distance in meters using Haversine formula
+  /** Distancia en metros entre dos puntos. */
   private getDistanceMeters(
     lat1: number,
     lon1: number,
     lat2: number,
     lon2: number,
   ): number {
-    const R = 6371e3; // Earth radius in meters
-    const phi1 = (lat1 * Math.PI) / 180;
-    const phi2 = (lat2 * Math.PI) / 180;
-    const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
-    const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+    return metrosEntre(lat1, lon1, lat2, lon2);
+  }
 
-    const a =
-      Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-      Math.cos(phi1) *
-        Math.cos(phi2) *
-        Math.sin(deltaLambda / 2) *
-        Math.sin(deltaLambda / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  /**
+   * Comprueba si un pin del cliente cae dentro del area que se atiende.
+   *
+   * Devuelve `null` cuando esta dentro --o cuando no hay area configurada, que
+   * `coverageArea()` distingue a proposito de "sin limite"-- y los datos del
+   * rechazo cuando esta fuera. La decision se toma SOLO con las coordenadas:
+   * el nombre que el cliente escriba no sirve para esto, porque "Durango" puede
+   * ser un estado, una ciudad de otro estado o una calle de aqui al lado.
+   */
+  private async ubicacionFueraDeCobertura(
+    lat: number,
+    lng: number,
+  ): Promise<{ ciudad: string; distanciaKm: number } | null> {
+    let area: Awaited<ReturnType<TransportOperationsService['coverageArea']>> =
+      null;
+    try {
+      area = await this.transportOperations.coverageArea();
+    } catch (err) {
+      this.logger.error(
+        'No se pudo leer el área de cobertura; se acepta el pin sin comprobarla:',
+        err,
+      );
+      return null;
+    }
+    if (!area) {
+      this.logger.warn(
+        'No hay área de cobertura configurada: el pin se acepta sin comprobarla.',
+      );
+      return null;
+    }
 
-    return R * c; // in meters
+    const distanciaKm = kilometrosEntre(
+      area.centroLat,
+      area.centroLng,
+      lat,
+      lng,
+    );
+    if (distanciaKm <= area.radioKm) return null;
+    return { ciudad: area.ciudad, distanciaKm };
+  }
+
+  /**
+   * Contesta a un pin que queda fuera de zona y corta ahi la contratacion.
+   *
+   * No se guarda la ubicacion ni se cotiza nada: el desglose de precio que
+   * venia despues --tarifa mas transporte-- era una oferta que nadie podia
+   * cumplir. El personaje dice de frente en que ciudad atiende, porque
+   * esconderlo es justo lo que dejaba a un cliente de otro estado avanzar hasta
+   * el metodo de pago.
+   */
+  private async rechazarUbicacionFueraDeCobertura(
+    ctx: BotContext,
+    rechazo: { ciudad: string; distanciaKm: number },
+  ): Promise<void> {
+    const respuesta =
+      `Ay mor, ahí sí no llego: yo atiendo solo en ${rechazo.ciudad} y sus alrededores, ` +
+      `y tú me saliste bien lejitos. Si algún día te das la vuelta por acá me escribes y nos vemos rico.`;
+
+    if (ctx.session) {
+      ctx.session.fueraDeCobertura = true;
+      // El teclado de "Compartir mi Ubicación" sobra: mandar otro pin de alla
+      // no va a cambiar la respuesta.
+      ctx.session.quitarTecladoPendiente = true;
+      const history = trimChatHistory(ctx.session.chatHistory || []);
+      history.push({ role: 'model', parts: [{ text: respuesta }] });
+      ctx.session.chatHistory = history;
+    }
+
+    this.logger.warn(
+      `Pin fuera de cobertura (${rechazo.distanciaKm.toFixed(1)} km del centro de ${rechazo.ciudad}); no se cotiza el servicio.`,
+    );
+
+    await this.sendDelayedReply(ctx, respuesta);
+    await this.recordDraftConversation(ctx, 'ia', respuesta);
+    await this.persistSession(ctx);
+  }
+
+  /**
+   * Aviso de los extras que el cliente ya habló y que NO van en el total.
+   *
+   * El desglose final decia "en total serian $3,000" a un cliente que habia
+   * dicho dos veces que lo que principalmente queria era un extra de $1,500.
+   * Iba a llegar al motel esperando pagar tres mil y le iban a cobrar cuatro
+   * mil quinientos: la discusion estaba servida, y ademas delante de la
+   * empleada, que no habia tenido nada que ver.
+   *
+   * El extra no se suma al total a proposito. Nada de esto se cierra por chat
+   * --depende de la higiene y de la quimica, y para eso existe el flujo de
+   * anadir extras ya en el servicio--, asi que meterlo en la cuenta seria
+   * prometer algo que la modelo tiene prohibido prometer. Lo que hacia falta no
+   * era cobrarlo antes, era decir que existe y que va aparte.
+   */
+  private async avisoDeExtrasPendientes(
+    session: SessionData | undefined,
+    empleadaId: string,
+    formatoMoneda: Intl.NumberFormat,
+    escapeMd: (texto: string) => string,
+  ): Promise<string> {
+    const historial = session?.chatHistory;
+    if (!historial || historial.length === 0) return '';
+
+    let extras: ExtrasCatalogo[];
+    try {
+      extras = await this.extrasCatalogoRepository.find({
+        where: { empleadaId, activo: true },
+      });
+    } catch (err) {
+      // Sin la lista no hay aviso, pero tampoco se tumba la cotizacion: el
+      // cliente prefiere un total sin nota al pie que ningun total.
+      this.logger.warn(
+        'No se pudieron leer los extras para avisar de lo que va aparte:',
+        err,
+      );
+      return '';
+    }
+    if (extras.length === 0) return '';
+
+    const enJuego = extrasYaCotizados(
+      historial,
+      extras.map((e) => e.nombre),
+    );
+    if (enJuego.length === 0) return '';
+
+    const enJuegoCompletos = extras.filter((extra) =>
+      enJuego.includes(extra.nombre),
+    );
+    const detalle = enJuegoCompletos
+      .map(
+        (extra) =>
+          `${escapeMd(extra.nombre)} (${formatoMoneda.format(Number(extra.precio))})`,
+      )
+      .join(' y ');
+    const van = enJuegoCompletos.length === 1 ? 'va' : 'van';
+
+    return (
+      `\n\nEso sí mor, ${detalle} ${van} aparte y no ${van === 'va' ? 'está' : 'están'} ` +
+      `dentro de ese total: eso se cuadra allá contigo, si hay buena química y vienes bien aseadito.`
+    );
   }
 
   async getGroqResponse(
@@ -1400,9 +1547,32 @@ export class TelegramBookingUpdate {
           'La IA respondio con tono de asistente; se sustituye por un desvio en personaje.',
         );
       }
-      return deflection;
+      return this.aplicarCadenciaDeEmojis(deflection, session);
     }
-    return cleaned;
+    return this.aplicarCadenciaDeEmojis(cleaned, session);
+  }
+
+  /**
+   * Aplica la cadencia de emojis sobre lo que sale hacia el cliente.
+   *
+   * El prompt pide "maximo 1 emoji cada 2 o 3 mensajes" desde siempre y el
+   * modelo lo incumple sin excepcion: en una conversacion real de veinticinco
+   * turnos salio una carita en los veinticinco, y siempre la misma. Es de lo
+   * que mas lo delata, asi que se resuelve como los enlaces y los telefonos:
+   * aqui, donde no depende de que el modelo colabore.
+   *
+   * El contador vive en la sesion para que la cuenta sobreviva entre mensajes.
+   */
+  private aplicarCadenciaDeEmojis(
+    texto: string,
+    session?: SessionData,
+  ): string {
+    if (!session) return texto;
+    const desdeElUltimo =
+      session.mensajesDesdeUltimoEmoji ?? MENSAJES_ENTRE_EMOJIS;
+    const { texto: ajustado, llevaEmoji } = limitarEmojis(texto, desdeElUltimo);
+    session.mensajesDesdeUltimoEmoji = llevaEmoji ? 0 : desdeElUltimo + 1;
+    return ajustado;
   }
 
   /** Desvio en personaje, sin gastar una llamada al modelo. */
@@ -1411,8 +1581,11 @@ export class TelegramBookingUpdate {
     session: SessionData,
     userMessage: string,
   ): Promise<void> {
-    const deflection = pickDeflection(session.ultimoDesvio);
-    session.ultimoDesvio = deflection;
+    const elegido = pickDeflection(session.ultimoDesvio);
+    session.ultimoDesvio = elegido;
+    // Los desvios enlatados tambien llevan carita: si no entraran en la cuenta,
+    // la cadencia se rompe justo en las conversaciones donde mas se usan.
+    const deflection = this.aplicarCadenciaDeEmojis(elegido, session);
     const history = trimChatHistory(session.chatHistory || []);
     history.push({ role: 'user', parts: [{ text: userMessage }] });
     history.push({ role: 'model', parts: [{ text: deflection }] });
@@ -2266,15 +2439,21 @@ export class TelegramBookingUpdate {
       return;
     }
 
-    const [empleadaExtras, presetLocations, busySchedules, transportFee] =
-      await Promise.all([
-        this.extrasCatalogoRepository.find({
-          where: { empleadaId: empleada.id, activo: true },
-        }),
-        this.transportOperations.activeLocations(),
-        this.getEmployeeBusySchedules(empleada.id),
-        this.transportOperations.externalLocationFee().catch(() => 0),
-      ]);
+    const [
+      empleadaExtras,
+      presetLocations,
+      busySchedules,
+      transportFee,
+      coverageArea,
+    ] = await Promise.all([
+      this.extrasCatalogoRepository.find({
+        where: { empleadaId: empleada.id, activo: true },
+      }),
+      this.transportOperations.activeLocations(),
+      this.getEmployeeBusySchedules(empleada.id),
+      this.transportOperations.externalLocationFee().catch(() => 0),
+      this.transportOperations.coverageArea().catch(() => null),
+    ]);
 
     const allLinkedIds = Array.from(
       new Set(
@@ -2345,6 +2524,7 @@ export class TelegramBookingUpdate {
       ),
       costoTransporteExterno: transportFee,
       ubicacionesPreestablecidas: ubicacionesData,
+      ciudadOperacion: coverageArea?.ciudad ?? null,
       fechaHoraActual: new Date().toLocaleString(APP_LOCALE, {
         timeZone: APP_TIME_ZONE,
       }),
@@ -4983,7 +5163,34 @@ export class TelegramBookingUpdate {
     }
 
     /*
-     * De aqui para abajo empieza el flujo del cliente, y este manejador tambien
+     * De aqui en adelante el pin es de un cliente, asi que lo primero es si
+     * cae dentro de la zona que se atiende. Va antes que todo lo demas --antes
+     * de guardarlo, de resolver el cargo de transporte y de cotizar-- porque
+     * fuera de zona no hay nada que cotizar: lo que salia era una oferta que
+     * nadie podia cumplir.
+     *
+     * El pin de un motel propio (`selectedLocation`) no se comprueba: sale de
+     * nuestra propia tabla y esta dentro por definicion.
+     */
+    const rechazoCobertura = selectedLocation
+      ? null
+      : await this.ubicacionFueraDeCobertura(parsedLat, parsedLng);
+    if (rechazoCobertura) {
+      // Una ubicacion en vivo manda un refresco cada pocos segundos: contestar
+      // a cada uno seria repetirle el mismo rechazo durante minutos.
+      if (isEdited) return;
+      await this.recordDraftConversation(
+        ctx,
+        'cliente',
+        notasUbicacion ||
+          `Ubicación compartida: ${parsedLat.toFixed(6)}, ${parsedLng.toFixed(6)}`,
+      );
+      await this.rechazarUbicacionFueraDeCobertura(ctx, rechazoCobertura);
+      return;
+    }
+
+    /*
+     * Este manejador tambien
      * recibe los `edited_message` con los que Telegram refresca una ubicacion
      * en vivo: llegan cada pocos segundos mientras dura el envio.
      *
@@ -5069,6 +5276,8 @@ export class TelegramBookingUpdate {
       ctx.session.locationLat = lat;
       ctx.session.locationLng = lng;
       ctx.session.locationNotas = notasUbicacion;
+      // Este pin si entra en zona: si el anterior no entraba, deja de importar.
+      ctx.session.fueraDeCobertura = false;
 
       // Si el pin no vino de un lugar preestablecido, revisamos si coincide con
       // alguno de los moteles habituales (para no cobrarle transporte de más);
@@ -5212,6 +5421,16 @@ export class TelegramBookingUpdate {
       } else {
         priceMsg = `Por ${horasTexto}${conQuien} serían *${formatoMoneda.format(totalBase)}* en total, sin costo extra de transporte mor.`;
       }
+
+      // Lo que se habló y no entra en ese total. Va pegado al desglose, que es
+      // el único momento en el que el cliente hace la cuenta de lo que va a
+      // sacar de la cartera.
+      priceMsg += await this.avisoDeExtrasPendientes(
+        ctx.session,
+        empleadaId,
+        formatoMoneda,
+        escapeMd,
+      );
 
       if (ctx.session.metodoPago) {
         const metodoPrevio = ctx.session.metodoPago;
@@ -7890,15 +8109,21 @@ export class TelegramBookingUpdate {
       const history = trimChatHistory(session.chatHistory || []);
       history.push({ role: 'user', parts: [{ text: userMessage }] });
 
-      const [empleadaExtras, presetLocations, busySchedules, transportFee] =
-        await Promise.all([
-          this.extrasCatalogoRepository.find({
-            where: { empleadaId: empleada.id, activo: true },
-          }),
-          this.transportOperations.activeLocations(),
-          this.getEmployeeBusySchedules(empleada.id),
-          this.transportOperations.externalLocationFee().catch(() => 0),
-        ]);
+      const [
+        empleadaExtras,
+        presetLocations,
+        busySchedules,
+        transportFee,
+        coverageArea,
+      ] = await Promise.all([
+        this.extrasCatalogoRepository.find({
+          where: { empleadaId: empleada.id, activo: true },
+        }),
+        this.transportOperations.activeLocations(),
+        this.getEmployeeBusySchedules(empleada.id),
+        this.transportOperations.externalLocationFee().catch(() => 0),
+        this.transportOperations.coverageArea().catch(() => null),
+      ]);
 
       const allLinkedIds = Array.from(
         new Set(
@@ -8013,13 +8238,25 @@ export class TelegramBookingUpdate {
        * dudando, lo dejaban esperando indefinidamente.
        */
       const ubicacionYaConfirmada = this.hasConfirmedLocation(session);
-      const faltaPorCerrar: 'horas' | 'pago' | null = !ubicacionYaConfirmada
+      const datoQueFalta: 'horas' | 'pago' | null = !ubicacionYaConfirmada
         ? null
         : !session.duracionPactadaHoras && !session.duracionIndefinida
           ? 'horas'
           : !session.metodoPago
             ? 'pago'
             : null;
+
+      /*
+       * Dos instrucciones contradictorias en el mismo prompt no las resuelve el
+       * modelo, las promedia. "Preguntale las horas" y "no le preguntes nada"
+       * no pueden viajar juntas, y quien manda es el momento: a una confesion o
+       * a una despedida no se les contesta con la pregunta que falta, por mucho
+       * que falte. Se le pregunta al turno siguiente.
+       */
+      const clienteInseguro = detectaInseguridad(userMessage);
+      const clienteSeEstaYendo = detectaClienteEnFuga(userMessage);
+      const faltaPorCerrar =
+        clienteInseguro || clienteSeEstaYendo ? null : datoQueFalta;
 
       const generalPrompt = getHireSystemPrompt({
         nombreArtistico: empleada.nombreArtistico,
@@ -8038,6 +8275,17 @@ export class TelegramBookingUpdate {
         otrasModelosDisponibles,
         trioConfirmado,
         ubicacionesPreestablecidas: ubicacionesData,
+        ciudadOperacion: coverageArea?.ciudad ?? null,
+        clienteFueraDeCobertura: Boolean(session.fueraDeCobertura),
+        clienteInseguro,
+        clienteSeEstaYendo,
+        // Lo que ya dijo, para que el modelo pueda no repetirlo: cada turno le
+        // llega sin memoria de en que se ha convertido su propia conversacion.
+        aperturasRecientes: aperturasRecientes(history),
+        extrasYaCotizados: extrasYaCotizados(
+          history,
+          extrasData.map((e) => e.nombre),
+        ),
         costoTransporteExterno: transportFee,
         duracionPactada: session.duracionPactadaHoras,
         duracionIndefinida: session.duracionIndefinida,

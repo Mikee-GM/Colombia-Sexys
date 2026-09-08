@@ -51,6 +51,7 @@ describe('TelegramBookingUpdate.startHireSession al reentrar', () => {
     update.transportOperations = {
       activeLocations: jest.fn().mockResolvedValue([]),
       externalLocationFee: jest.fn().mockResolvedValue(0),
+      coverageArea: jest.fn().mockResolvedValue(null),
     };
     update.getEmployeeBusySchedules = jest.fn().mockResolvedValue([]);
     update.getAvailableTrioEmployees = jest.fn().mockResolvedValue([]);

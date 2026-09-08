@@ -69,7 +69,11 @@ describe('AI Prompts Generation (prompts.ts)', () => {
       'PROHIBIDO PACTAR O CONFIRMAR UBICACIONES POR TEXTO O LENGUAJE NATURAL',
     );
     expect(prompt).toContain('UBICACIÓN EN PIN');
-    expect(prompt).toContain('NO CONOCES ESE LUGAR');
+    expect(prompt).toContain('no ubicas bien ese sitio');
+    // La regla del pin es para direcciones y locales. Decir "no conozco" de una
+    // ciudad delataba al personaje --nadie ignora en qué ciudad vive-- y encima
+    // le pedía el pin a alguien que estaba a seiscientos kilómetros.
+    expect(prompt).toContain('NUNCA PARA UNA CIUDAD O UN ESTADO');
   });
 
   it('deja de pedir la ubicación cuando el cliente ya la envió', () => {

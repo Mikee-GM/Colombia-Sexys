@@ -74,9 +74,16 @@ const PROHIBITED_PATTERNS: { category: ProhibitedCategory; test: RegExp }[] = [
     test: /\b(menor(es)? de edad|menorcita|menorcitas|adolescente|quinceaner[ao]|lolita|preadolescente|impuber|nin[ao]s? de \d{1,2})\b/,
   },
   {
-    // "de 16 anos", "tiene 15 anitos": cualquier edad por debajo de 18.
+    /*
+     * "de 16 anos", "tiene 15 anitos": cualquier edad por debajo de 18.
+     *
+     * Los prefijos `con` y `un/una` estaban de mas y convertian en denuncia
+     * cualquier frase con una cifra pequena y la palabra anos: "ando con 2 anos
+     * sin salir" acusaba al cliente de pedir una menor, con aviso al jefe
+     * incluido.
+     */
     category: 'menores',
-    test: /\b(de|tiene|tienen|con|una?)\s+(1[0-7]|[1-9])\s*(anos|anitos|anitas)\b/,
+    test: /\b(de|tiene|tienen|tenga|tengan)\s+(1[0-7]|[1-9])\s*(anos|anitos|anitas)\b/,
   },
   {
     category: 'drogas',
@@ -88,7 +95,23 @@ const PROHIBITED_PATTERNS: { category: ProhibitedCategory; test: RegExp }[] = [
   },
   {
     category: 'sin_consentimiento',
-    test: /\b(violar|violarla|forzarla|forzar a|a la fuerza|sin que se de cuenta|drogarla|dormida|inconsciente|secuestrar|amarrarla sin|sin su consentimiento)\b/,
+    test: /\b(violar|violarla|forzarla|forzar a|a la fuerza|sin que se de cuenta|drogarla|drogarte|dormirla|dormirte|inconsciente|secuestrar|amarrarla sin|sin su consentimiento)\b/,
+  },
+  {
+    /*
+     * Estar dormida es un estado, no una peticion. Suelto en la lista anterior,
+     * "perdon, estabas dormida?" --a medianoche, que es cuando escribe la mitad
+     * de los clientes-- se contestaba con un "asi no, conmigo eso no va a pasar
+     * nunca" y una alerta al jefe. Lo que hay que detectar es la intencion de
+     * aprovecharlo, y esa siempre viene con su verbo.
+     */
+    category: 'sin_consentimiento',
+    test: /\bque\s+(llegue|llegues|venga|vengas|este|estes|estuviera|estuvieras|se quede|te quedes)\s+(dormida|dormido|desmayada|inconsciente)\b/,
+  },
+  {
+    // La otra forma de pedir lo mismo: aprovechar que lo esta.
+    category: 'sin_consentimiento',
+    test: /\b(aprovech\w+|mientras|cuando)\b[^.]{0,25}\b(dormida|desmayada|inconsciente)\b/,
   },
 ];
 
@@ -107,25 +130,53 @@ export function detectProhibitedRequest(
   return null;
 }
 
-const BOT_PROBE_PATTERNS: RegExp[] = [
-  // Intentos de sacarla del personaje o de leer las instrucciones.
+/**
+ * Sondas que siempre lo son: sacarla del personaje, leerle las instrucciones o
+ * preguntarle por el modelo que la mueve. Ninguna excusa las exime.
+ *
+ * `llama` va con numero a proposito ("llama 3", "meta-llama"). Suelto atrapaba
+ * el verbo llamar --"como te llama", "se llama Valentina", "ya me llama mi
+ * jefe"-- y a ese cliente se le contestaba con una frase enlatada sobre que se
+ * le enreda la cabeza, sin que su mensaje llegara nunca al modelo.
+ */
+const JAILBREAK_PATTERNS: RegExp[] = [
   /\bignora (todas |las |tus )?(instrucciones|reglas|indicaciones)/,
   /\b(system ?prompt|prompt del sistema|tus instrucciones|tu prompt)\b/,
   /\bmodo (desarrollador|dios|dan)\b|\bjailbreak\b/,
   /\bactua como\b|\bhaz de cuenta que eres\b|\bfinge ser\b/,
   /\beres (una |un )?(ia|inteligencia artificial|bot|robot|chatbot|asistente|maquina|programa)\b/,
-  /\b(chat ?gpt|openai|grok|claude|gemini|llama|modelo de lenguaje)\b/,
+  /\b(chat ?gpt|openai|grok|claude|gemini|modelo de lenguaje)\b/,
+  /\b(meta[- ]?)?llama\s*\d/,
   /\b(repite|repiteme|dime|muestrame|escribe) (exactamente|tal cual|literal)\b/,
-  // Tareas: que sepa resolverlas es justo lo que la delata.
+];
+
+/**
+ * Tareas que la delatarian por saber resolverlas. A diferencia de las
+ * anteriores, estas SI ceden ante una pregunta sobre el servicio: un cliente
+ * que pregunta "cuanto es en total" esta comprando, no sondeando.
+ */
+const TASK_PATTERNS: RegExp[] = [
   /\btraduce(me)?\b|\btraduccion de\b/,
   /\bescribe(me)? (un|una) (poema|ensayo|carta|codigo|cuento|programa|script)\b/,
   /\bresume(me)?\b|\bhazme un resumen\b/,
-  /\bcalcula(me)?\b|\bcuanto es\b|\bcuanto da\b/,
+  /\bcalcula(me)?\b/,
   /\bcodigo (en )?(python|javascript|java|c\+\+|html)\b/,
   /\breceta de\b|\bcomo se hace\b.*\bpastel\b/,
-  // Aritmetica suelta: "3847*2913", "234 + 981".
-  /\d{2,}\s*[*x×/+]\s*\d{2,}/,
+  /\b(raiz cuadrada|derivada|integral|factorial|logaritmo)\b/,
+  // Aritmetica de sonda: "3847*2913". El signo + y las cifras cortas quedan
+  // fuera porque "2500 + 500" es el cliente sumando su propia cotizacion.
+  /\d{3,}\s*[*x×/]\s*\d{2,}/,
 ];
+
+/**
+ * Lo que es su trabajo. El prompt ya se lo dice ("una pregunta sobre el
+ * servicio NO se desvia nunca"), pero la barrera determinista corre ANTES que
+ * el modelo, asi que tenia que saberlo tambien: `cuanto es` estaba en la lista
+ * de sondas y se tragaba "cuanto es la hora" y "cuanto es en total", que es la
+ * pregunta de compra mas frecuente que existe.
+ */
+const SERVICE_TOPIC_PATTERN =
+  /\b(tarifa|precio|precios|costo|cuesta|vale|total|hora|horas|horita|ratico|extra|extras|transporte|traslado|pago|pagar|efectivo|tarjeta|transferencia|anticipo|deposito|motel|moteles|ubicacion|direccion|servicio|servicios|cita)\b/;
 
 /**
  * Sondas clasicas para detectar que del otro lado hay una IA. Se responden con
@@ -134,7 +185,11 @@ const BOT_PROBE_PATTERNS: RegExp[] = [
  */
 export function detectBotProbe(message: string): boolean {
   const normalized = normalizeForMatch(message);
-  return BOT_PROBE_PATTERNS.some((pattern) => pattern.test(normalized));
+  if (JAILBREAK_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+  if (SERVICE_TOPIC_PATTERN.test(normalized)) return false;
+  return TASK_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 const ARRIVAL_TIME_PATTERNS: RegExp[] = [
@@ -312,4 +367,175 @@ export function clientEndorsedTrioModel(
       AFFIRMATIVE_PATTERN.test(normalized)
     );
   });
+}
+
+/**
+ * Cada cuantos mensajes de la modelo se permite un emoji.
+ *
+ * El prompt ya lo pedia ("maximo 1 emoji cada 2 o 3 mensajes") y el modelo lo
+ * ignoraba: en una conversacion real de veinticinco turnos salio un emoji en
+ * los veinticinco. Como con los enlaces y los telefonos, lo que el prompt
+ * promete pero no puede garantizar se aplica aqui.
+ */
+export const MENSAJES_ENTRE_EMOJIS = 3;
+
+/**
+ * Un emoji, entero y contado como uno solo.
+ *
+ * `Extended_Pictographic` cubre las caritas, los gestos y los simbolos, y a eso
+ * se le anaden el tono de piel, el selector de variacion y las uniones de ancho
+ * cero. Van en secuencia y no dentro de una clase de caracteres a proposito:
+ * una familia o una mujer pelirroja son varios puntos de codigo unidos, y en
+ * una clase se contarian como varios emojis y se podrian partir por la mitad.
+ */
+const EMOJI_PATTERN =
+  /(?:\p{Extended_Pictographic}|[0-9#*]️?⃣)(?:[\u{1F3FB}-\u{1F3FF}]|️)*(?:‍\p{Extended_Pictographic}(?:[\u{1F3FB}-\u{1F3FF}]|️)*)*/gu;
+
+/** Deja el texto sin espacios dobles ni espacios colgando antes de un signo. */
+function recomponerEspacios(texto: string): string {
+  return texto
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/\s+\n/g, '\n')
+    .trim();
+}
+
+export function contarEmojis(texto: string): number {
+  return (texto.match(EMOJI_PATTERN) || []).length;
+}
+
+/**
+ * Recorta los emojis de una respuesta segun la cadencia.
+ *
+ * `mensajesDesdeElUltimo` es cuantos mensajes lleva la modelo sin usar ninguno.
+ * Si todavia no toca, la respuesta sale limpia; si toca, se queda UNO --el
+ * primero, que es donde el modelo suele poner el que de verdad acompana- y se
+ * quitan los demas.
+ */
+export function limitarEmojis(
+  texto: string,
+  mensajesDesdeElUltimo: number,
+): { texto: string; llevaEmoji: boolean } {
+  if (contarEmojis(texto) === 0) {
+    return { texto, llevaEmoji: false };
+  }
+
+  const tocaEmoji = mensajesDesdeElUltimo >= MENSAJES_ENTRE_EMOJIS - 1;
+  let conservados = 0;
+  const limpio = texto.replace(EMOJI_PATTERN, (match) => {
+    if (tocaEmoji && conservados === 0) {
+      conservados += 1;
+      return match;
+    }
+    return ' ';
+  });
+
+  const resultado = recomponerEspacios(limpio);
+  // Un mensaje que era solo un emoji se quedaria vacio: mejor dejarlo pasar
+  // entero que mandar una respuesta en blanco.
+  if (!resultado) return { texto, llevaEmoji: true };
+  return { texto: resultado, llevaEmoji: conservados > 0 };
+}
+
+/**
+ * La apertura de un mensaje: el vocativo con el que arranca.
+ *
+ * "Ay mi vida, dime dónde prefieres" → "ay mi vida". Sirve para darse cuenta de
+ * que la modelo lleva quince mensajes empezando igual, que es lo que la delata
+ * incluso cuando el resto de la frase cambia.
+ */
+export function aperturaDeMensaje(texto: string): string | null {
+  const corte = texto.trim().match(/^([^,.!?\n]{2,28})[,.!?\n]/);
+  if (!corte) return null;
+  const apertura = normalizeForMatch(corte[1]).trim();
+  // Una apertura util tiene a lo sumo cuatro palabras ("ay mi vida", "uy mor").
+  if (!apertura || apertura.split(/\s+/).length > 4) return null;
+  return apertura;
+}
+
+/** Aperturas que la modelo ya gastó, de la más reciente hacia atrás. */
+export function aperturasRecientes(
+  historial: { role: 'user' | 'model'; parts: { text: string }[] }[],
+  max = 4,
+): string[] {
+  const vistas: string[] = [];
+  for (let i = historial.length - 1; i >= 0 && vistas.length < max; i -= 1) {
+    const turno = historial[i];
+    if (turno.role !== 'model') continue;
+    const apertura = aperturaDeMensaje(turno.parts?.[0]?.text ?? '');
+    if (apertura && !vistas.includes(apertura)) vistas.push(apertura);
+  }
+  return vistas;
+}
+
+/**
+ * Extras cuyo precio la modelo ya solto en esta conversacion.
+ *
+ * En la conversacion que motivo esto, el precio del oral se repitio tres veces
+ * --con su condicion de higiene entera-- despues de que el cliente ya lo
+ * hubiera aceptado. Repetir una tarifa que nadie ha vuelto a preguntar suena a
+ * bucle de robot y, peor, a que se le esta regateando.
+ */
+export function extrasYaCotizados(
+  historial: { role: 'user' | 'model'; parts: { text: string }[] }[],
+  nombresDeExtras: string[],
+): string[] {
+  const dichoPorElla = historial
+    .filter((turno) => turno.role === 'model')
+    .map((turno) => normalizeForMatch(turno.parts?.[0]?.text ?? ''))
+    .join(' ');
+  if (!dichoPorElla) return [];
+  return nombresDeExtras.filter((nombre) => {
+    const normalizado = normalizeForMatch(nombre).trim();
+    return normalizado.length > 2 && dichoPorElla.includes(normalizado);
+  });
+}
+
+const INSEGURIDAD_PATTERNS: RegExp[] = [
+  /\bmi primera vez\b|\bes la primera vez que\b|\bnunca (lo )?he (estado|hecho|ido)\b/,
+  /\bprimerizo\b|\bsoy virgen\b|\bno tengo experiencia\b|\bsoy inexperto\b/,
+  /\b(estoy|ando|me siento) (un poco |algo |medio )?(nervioso|nerviosa|apenado|penoso)\b/,
+  /\bme da (pena|cosa|nervios|verguenza)\b|\bque pena contigo\b/,
+  /\bno se (bien )?(como|que) (funciona|se hace|hacerle)\b/,
+  /\b(soy|estoy) precoz\b|\bduro poco\b|\bse me baja\b|\btermino rapido\b/,
+];
+
+/**
+ * El cliente esta confesando una inseguridad: que es su primera vez, que esta
+ * nervioso, que dura poco.
+ *
+ * Es el momento mas fragil de toda la conversacion y el prompt ya lo trataba
+ * con cuidado --nada de burlas, nada de usarlo para vender horas-- pero la
+ * modelo remataba igual con "¿cuantas horas te gustaria?". Contestar a una
+ * confesion con una pregunta comercial la convierte en un cobro, y el cliente
+ * lo nota. Detectarlo aqui permite prohibir esa pregunta en ese turno concreto.
+ */
+export function detectaInseguridad(message: string): boolean {
+  const normalized = normalizeForMatch(message);
+  return INSEGURIDAD_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+const CLIENTE_EN_FUGA_PATTERNS: RegExp[] = [
+  /\bni\s?modo\b/,
+  /\bsera (en |para )?(la |otra |otro )?(proxima|ocasion|dia|vez)\b/,
+  /\botro dia (sera|te escribo|nos vemos|hablamos)\b/,
+  /\bque ganas tenia\b|\bcon las ganas que tenia\b/,
+  /\b(que|una) lastima\b/,
+  /\bmejor lo dejamos\b|\blo dejamos (asi|hasta aqui|para despues|para otro dia)\b/,
+  /\bgracias de (todos modos|todas formas|todas maneras)\b/,
+  /\bentonces (no se puede|nada|nada que hacer)\b/,
+];
+
+/**
+ * El cliente se esta despidiendo sin comprar.
+ *
+ * "Que ganas tenia de verte", en pasado, es un cliente que ya se rindio. En la
+ * conversacion que motivo esto la modelo contesto "yo tambien con ganas de
+ * verte rico" y siguio como si nada: nadie se entero de que la venta se estaba
+ * cayendo en ese mismo mensaje. No se detecta por el sentimiento general, sino
+ * por estas formulas de resignacion, que son casi siempre las mismas.
+ */
+export function detectaClienteEnFuga(message: string): boolean {
+  const normalized = normalizeForMatch(message);
+  return CLIENTE_EN_FUGA_PATTERNS.some((pattern) => pattern.test(normalized));
 }

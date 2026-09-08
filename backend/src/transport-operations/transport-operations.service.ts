@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SavePresetLocationDto } from './dto/transport-operation.dto';
@@ -16,10 +16,20 @@ import { TransportSetting } from './entities/transport-setting.entity';
  */
 const CACHE_TTL_MS = 60_000;
 
+/** El unico sitio donde se atiende, con su centro y su radio. */
+export interface CoverageArea {
+  ciudad: string;
+  centroLat: number;
+  centroLng: number;
+  radioKm: number;
+}
+
 @Injectable()
 export class TransportOperationsService {
   private locationsCache?: { at: number; value: PresetServiceLocation[] };
   private feeCache?: { at: number; value: number };
+  private coverageCache?: { at: number; value: CoverageArea };
+  private readonly logger = new Logger(TransportOperationsService.name);
 
   constructor(
     @InjectRepository(TransportSetting)
@@ -32,6 +42,7 @@ export class TransportOperationsService {
   private invalidateCache(): void {
     this.locationsCache = undefined;
     this.feeCache = undefined;
+    this.coverageCache = undefined;
   }
 
   async getConfiguration() {
@@ -72,6 +83,78 @@ export class TransportOperationsService {
     const value = Number(setting?.externalLocationFee ?? 0);
     this.feeCache = { at: Date.now(), value };
     return value;
+  }
+
+  /**
+   * El area que se atiende. `null` significa "no se pudo saber", nunca "no hay
+   * limite": la diferencia importa porque quien pregunta decide con ella.
+   *
+   * Devolver `null` ante una fila ausente o un radio absurdo deja pasar el pin.
+   * Es a proposito: un corte de base rechazando ubicaciones perderia clientes
+   * buenos para siempre, mientras que un servicio fuera de zona que se cuele
+   * todavia tiene que pasar por la aceptacion de un jefe, que lo vera. El error
+   * se registra para que no quede en silencio.
+   */
+  async coverageArea(): Promise<CoverageArea | null> {
+    const cached = this.coverageCache;
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.value;
+
+    const setting = await this.settings.findOne({
+      where: { id: 1 },
+      select: {
+        id: true,
+        coverageCity: true,
+        coverageCenterLat: true,
+        coverageCenterLng: true,
+        coverageRadiusKm: true,
+      },
+    });
+    if (!setting) return null;
+
+    const value: CoverageArea = {
+      ciudad: setting.coverageCity,
+      centroLat: Number(setting.coverageCenterLat),
+      centroLng: Number(setting.coverageCenterLng),
+      radioKm: Number(setting.coverageRadiusKm),
+    };
+    if (
+      !Number.isFinite(value.centroLat) ||
+      !Number.isFinite(value.centroLng) ||
+      !Number.isFinite(value.radioKm) ||
+      value.radioKm <= 0
+    ) {
+      return null;
+    }
+
+    this.coverageCache = { at: Date.now(), value };
+    return value;
+  }
+
+  /**
+   * Cambia el área que se atiende.
+   *
+   * Se registra en el log a proposito, y con los valores viejos y nuevos: es
+   * el ajuste que decide en silencio a que clientes se les rechaza el pin, y si
+   * alguien lo mueve por error nadie se entera mirando los servicios --lo que
+   * se ve es que dejan de entrar, que es justo lo que no deja rastro--.
+   */
+  async updateCoverage(area: CoverageArea, actorId: string) {
+    const anterior = await this.coverageArea();
+    await this.settings.update(1, {
+      coverageCity: area.ciudad,
+      coverageCenterLat: area.centroLat,
+      coverageCenterLng: area.centroLng,
+      coverageRadiusKm: area.radioKm,
+      updatedByUserId: actorId,
+      updatedAt: new Date(),
+    });
+    this.invalidateCache();
+    this.logger.log(
+      `Área de cobertura actualizada por ${actorId}: ` +
+        `${anterior ? `${anterior.ciudad} ${anterior.radioKm} km` : 'sin configurar'} → ` +
+        `${area.ciudad} ${area.radioKm} km (${area.centroLat}, ${area.centroLng}).`,
+    );
+    return this.settings.findOneByOrFail({ id: 1 });
   }
 
   async updateFee(externalLocationFee: number, actorId: string) {
