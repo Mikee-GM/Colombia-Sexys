@@ -29,6 +29,7 @@ import {
 } from "@/lib/actions/jefe-panel";
 import type { ConversationMessage, Employee, GroupServiceRequest, Trip } from "@/lib/types";
 import { formatCurrency } from "@/lib/calculations";
+import { comprimirCaptura } from "@/lib/comprimir-imagen";
 
 const LocationMap = dynamic(
   () => import("@/components/admin/transport-location-map"),
@@ -1443,10 +1444,14 @@ function UberScreenshotUpload({
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (!file) return;
-          const formData = new FormData();
-          formData.append("tripId", trip.id);
-          formData.append("file", file);
-          run(() => uploadUberScreenshot(formData), "Captura enviada");
+          run(async () => {
+            // Una captura de un movil moderno pesa mas de lo que admite el
+            // servidor: se comprime antes de mandarla.
+            const formData = new FormData();
+            formData.append("tripId", trip.id);
+            formData.append("file", await comprimirCaptura(file));
+            return uploadUberScreenshot(formData);
+          }, "Captura enviada");
           if (inputRef.current) inputRef.current.value = "";
         }}
       />

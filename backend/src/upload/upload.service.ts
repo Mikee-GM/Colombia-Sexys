@@ -26,8 +26,18 @@ export type UploadedFilePayload = {
   size?: number;
 };
 
-/** Tope de las subidas del panel. Se aplica tambien en el FileInterceptor. */
-export const UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+/**
+ * Tope de las subidas del panel. Se aplica tambien en el FileInterceptor.
+ *
+ * Veinte megas y no diez: una captura de pantalla de un movil reciente pasa de
+ * los catorce, y quien sube la captura de su viaje se encontraba con que el
+ * servidor la rechazaba. El cliente comprime antes de mandar
+ * (`lib/comprimir-imagen.ts`), asi que lo normal es que llegue alrededor de un
+ * mega; este numero es el margen para lo que entre sin pasar por ahi --el bot
+ * de Telegram, una version vieja de la aplicacion instalada-- no el tamaño que
+ * se espera.
+ */
+export const UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 
 /**
  * Unicos hosts desde los que se descarga evidencia. `uploadEvidenceFromUrl`

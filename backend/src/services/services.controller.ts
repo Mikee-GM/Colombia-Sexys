@@ -16,8 +16,10 @@ import {
   Query,
   HttpCode,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { UPLOAD_MAX_BYTES } from '../upload/upload.service';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -321,12 +323,29 @@ export class ServicesController {
   @UseInterceptors(FileInterceptor('file'))
   uploadUberScreenshot(
     @Param('tripId') tripId: string,
+    /*
+     * El limite es el mismo que el del resto de las subidas, no uno propio.
+     *
+     * Aqui habia un 5 MB suelto, la mitad de lo que admitia todo lo demas, y
+     * una captura de pantalla de un movil reciente lo pasa sin despeinarse. El
+     * mensaje tambien iba en ingles y con el tamaño en bytes --"Validation
+     * failed (current file size is 14429472...)"-- que no le dice nada a quien
+     * solo queria subir la captura de su viaje.
+     */
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
+          new MaxFileSizeValidator({ maxSize: UPLOAD_MAX_BYTES }),
           new FileTypeValidator({ fileType: /^image\// }),
         ],
+        exceptionFactory: (error) =>
+          new BadRequestException(
+            error.includes('expected type')
+              ? 'El archivo tiene que ser una imagen.'
+              : `La imagen supera el límite de ${Math.floor(
+                  UPLOAD_MAX_BYTES / (1024 * 1024),
+                )} MB. Vuelve a intentarlo desde el panel, que la reduce sola.`,
+          ),
       }),
     )
     file: any,

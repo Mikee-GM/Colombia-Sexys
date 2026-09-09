@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { uploadUberScreenshot } from "@/lib/actions/jefe-panel";
+import { comprimirCaptura } from "@/lib/comprimir-imagen";
 
 export default function UberScreenshotUploader({
   tripId,
@@ -17,9 +18,11 @@ export default function UberScreenshotUploader({
   async function handleFile(file: File) {
     setUploading(true);
     try {
+      // Una captura de un movil moderno pesa mas de lo que admite el servidor.
+      const comprimida = await comprimirCaptura(file);
       const formData = new FormData();
       formData.append("tripId", tripId);
-      formData.append("file", file);
+      formData.append("file", comprimida);
       const result = await uploadUberScreenshot(formData);
       if (!result.success) {
         toast.error(result.error);

@@ -39,6 +39,7 @@ import {
   updateServiceAction,
   uploadUberScreenshotAction,
 } from "@/lib/data/services";
+import { comprimirCaptura } from "@/lib/comprimir-imagen";
 import CancelServiceDialog from "./cancel-service-dialog";
 import {
   CANCELLATION_REASON_LABEL,
@@ -914,9 +915,11 @@ function AdminTripCard({
     if (!file) return;
     setUploadingScreenshot(true);
     try {
+      // Una captura de un movil moderno pesa mas de lo que admite el servidor.
+      const comprimida = await comprimirCaptura(file);
       const formData = new FormData();
       formData.append("tripId", trip.id);
-      formData.append("file", file);
+      formData.append("file", comprimida);
       const res = await uploadUberScreenshotAction(formData);
       if (!res.success) {
         throw new Error(res.error || "Error al subir la captura");

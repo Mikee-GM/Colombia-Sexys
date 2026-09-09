@@ -9,6 +9,7 @@ import {
   uploadMyWeeklyPhotos,
 } from "@/lib/actions/employee-portal";
 import { formatCurrency } from "@/lib/calculations";
+import { comprimirFoto } from "@/lib/comprimir-imagen";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type {
   EmployeeWeeklyContent,
@@ -213,10 +214,19 @@ export default function SubirFotosSemanales({
   const subir = () => {
     if (seleccion.length === 0) return;
 
-    const formData = new FormData();
-    for (const foto of seleccion) formData.append("fotos", foto);
-
     startTransition(async () => {
+      /*
+       * Se comprimen antes de mandarlas.
+       *
+       * Doce fotos de un movil moderno son mas de cien megas: se rechazaban por
+       * tamaño una a una, y las que pasaban se llevaban por delante los datos
+       * de quien las manda desde la calle.
+       */
+      const formData = new FormData();
+      for (const foto of seleccion) {
+        formData.append("fotos", await comprimirFoto(foto));
+      }
+
       const resultado = await uploadMyWeeklyPhotos(formData, token);
 
       if (!resultado.success) {
