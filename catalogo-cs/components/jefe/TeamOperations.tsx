@@ -150,6 +150,32 @@ export default function TeamOperations({ initialEmployees, initialServices, init
           );
           if (payload.type === "heartbeat") return;
 
+          /*
+            El avance del traslado se dice, no solo se recarga.
+
+            Este evento ya llegaba y refrescaba las tablas, pero en silencio: el
+            jefe tenia que estar mirando la pantalla y notar que una fila habia
+            cambiado. Son los dos momentos en los que necesita enterarse de que
+            el traslado va bien. Solo lo que marca la modelo: las otras dos
+            acciones del mismo evento las pulsa el propio jefe.
+          */
+          if (payload.type === "trip_status_updated") {
+            const { action, tripType, employeeName } = payload.data ?? {};
+            if (action === "employee_en_route" || action === "employee_arrived") {
+              const quien = employeeName ?? "Una empleada";
+              const vuelta = tripType === "regreso";
+              toast.info(
+                action === "employee_arrived"
+                  ? vuelta
+                    ? `${quien} llegó a su casa`
+                    : `${quien} llegó al punto`
+                  : vuelta
+                    ? `${quien} ya va de regreso`
+                    : `${quien} ya va en camino`,
+              );
+            }
+          }
+
           if (payload.type === "chat_message") {
             const message = payload.data as ConversationMessage;
             if (chatServiceRef.current?.id === message.servicioId) {

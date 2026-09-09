@@ -758,6 +758,45 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Los clientes a los que la modelo todavía no ha calificado.
+   *
+   * La calificación del cliente ya existía como endpoint y como botón del chat,
+   * pero en el portal no había forma de llegar a ella: no se le ofrecía nunca,
+   * así que en la práctica no se usaba. Sin ese dato el historial de un cliente
+   * problemático se queda vacío justo para quien tiene que decidir si vuelve a
+   * atenderlo.
+   *
+   * La ventana de siete días es deliberada: pasada una semana ya no se acuerda
+   * de cómo fue, y una nota puesta por inercia vale menos que ninguna.
+   */
+  async listarClientesPorCalificar(actor: Actor) {
+    const identity = await this.identityForActor(actor);
+    if (!identity || identity.type !== 'employee') {
+      throw new ForbiddenException('No tienes clientes que calificar');
+    }
+    return this.dataSource.query(
+      `SELECT s.id            AS "servicioId",
+              s.hora_fin_servicio AS "fecha",
+              c.nombre_telegram   AS "clienteNombre"
+       FROM servicios s
+       JOIN clientes c ON c.id = s.cliente_id
+       WHERE s.empleada_id = $1
+         AND s.estado = 'finalizado'
+         AND s.cliente_id IS NOT NULL
+         AND s.hora_fin_servicio > now() - interval '7 days'
+         AND NOT EXISTS (
+           SELECT 1 FROM interaction_ratings r
+           WHERE r.direction = 'employee_to_client'
+             AND r.service_id = s.id
+             AND r.employee_id = $1
+         )
+       ORDER BY s.hora_fin_servicio DESC
+       LIMIT 5`,
+      [identity.id],
+    );
+  }
+
+  /**
    * Las calificaciones que esta persona todavia puede apelar.
    *
    * La identidad sale del actor y no de un parametro: si viniera del cliente,

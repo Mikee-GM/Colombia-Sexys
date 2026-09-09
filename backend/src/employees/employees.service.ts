@@ -29,6 +29,37 @@ import { EmployeeCashObligation } from '../transport-operations/entities/employe
 export class EmployeesService {
   private readonly logger = new Logger(EmployeesService.name);
 
+  /**
+   * Estados en los que un viaje todavía tiene algo pendiente por hacer.
+   *
+   * Fuera quedan `finalizado`, `rechazado` y `cancelado`, que son los tres
+   * finales: sobre ellos ya no hay ningún botón que la modelo pueda pulsar.
+   */
+  private static readonly VIAJE_ABIERTO = new Set([
+    'notificado',
+    'aceptado',
+    'en_camino',
+    'llegado',
+    'en_curso',
+  ]);
+
+  /**
+   * El viaje de vuelta que todavía no ha terminado, si lo hay.
+   *
+   * Es lo que decide que un servicio ya finalizado siga saliendo en el portal:
+   * mientras exista, a la modelo le queda por marcar que subió al coche y que
+   * llegó a su casa.
+   */
+  private regresoPendiente(servicio: Servicios) {
+    return (
+      (servicio.viajes || []).find(
+        (viaje) =>
+          viaje.tipo === 'regreso' &&
+          EmployeesService.VIAJE_ABIERTO.has(viaje.estado),
+      ) ?? null
+    );
+  }
+
   constructor(
     @InjectRepository(Empleadas)
     private readonly empleadasRepository: Repository<Empleadas>,
@@ -1035,12 +1066,23 @@ export class EmployeesService {
       }
     }
 
-    // 3. Active / Next Service
+    /*
+     * 3. Active / Next Service
+     *
+     * El viaje de regreso mantiene vivo el servicio aunque ya este finalizado.
+     * Antes esta lista solo miraba los tres estados de trabajo, asi que en
+     * cuanto la modelo finalizaba el servicio la tarjeta desaparecia de su
+     * portal --y con ella los botones del traslado--: se quedaba sin forma de
+     * marcar que ya iba en el Uber de vuelta ni que habia llegado a su casa,
+     * que es justo cuando esos dos avisos importan. El servicio no esta cerrado
+     * de verdad hasta que ese viaje termina.
+     */
     const activeOrUpcoming = services.find(
       (s) =>
         s.estado === 'en_curso' ||
         s.estado === 'agendado' ||
-        s.estado === 'pendiente',
+        s.estado === 'pendiente' ||
+        (s.estado === 'finalizado' && this.regresoPendiente(s) !== null),
     );
 
     let activeServiceDto: EmployeePortalActiveService | null = null;
@@ -1057,7 +1099,24 @@ export class EmployeesService {
       const estimatedNet =
         Math.round((totalBase * 0.6 + totalExtras) * 100) / 100;
 
-      const activeTrip = activeOrUpcoming.viajes?.[0];
+      /*
+       * Que viaje enseña la tarjeta.
+       *
+       * `viajes[0]` era el primero que devolviera la consulta, sin orden
+       * definido: con la ida y el regreso en la misma fila podia enseñar el
+       * traslado de venida --ya terminado-- mientras el de vuelta estaba en
+       * marcha, y los botones del portal salian del viaje equivocado. Manda la
+       * fase en la que esta el servicio: si ya finalizo, el regreso; si no, el
+       * viaje que siga abierto.
+       */
+      const activeTrip =
+        (activeOrUpcoming.estado === 'finalizado'
+          ? this.regresoPendiente(activeOrUpcoming)
+          : null) ??
+        (activeOrUpcoming.viajes || []).find((v) =>
+          EmployeesService.VIAJE_ABIERTO.has(v.estado),
+        ) ??
+        activeOrUpcoming.viajes?.[0];
       const startTime = activeOrUpcoming.horaInicioServicio
         ? new Date(activeOrUpcoming.horaInicioServicio)
         : null;

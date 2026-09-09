@@ -28,18 +28,35 @@ export default function AccionesDelViaje({
   const [enviando, startTransition] = useTransition();
 
   /*
-   * `aceptado` es el viaje asignado que aun no arranca, y `en_curso` el que ya
-   * va de camino. En cualquier otro estado no hay nada que marcar: o todavia se
-   * esta buscando transporte, o el viaje ya termino.
+   * Que le queda por marcar.
+   *
+   * El viaje asignado que aun no arranca puede estar en tres estados, no en
+   * uno: el jefe lo mueve por su lado --marca el Uber en camino y luego que
+   * llego-- y aqui solo se aceptaba `aceptado`. Justo despues del mensaje que
+   * le dice "cuando subas, presiona Ya estoy en el Uber", el boton del portal
+   * desaparecia y solo le quedaba el de Telegram. El backend admite los tres
+   * desde siempre; era esta pantalla la que se quedaba corta.
+   *
+   * En cualquier otro estado no hay nada que marcar: o todavia se esta
+   * buscando transporte, o el viaje ya termino.
    */
-  const siguiente =
-    transporte.estado === "aceptado"
-      ? ("en_camino" as const)
-      : transporte.estado === "en_curso"
-        ? ("llegue" as const)
-        : null;
+  const siguiente = ["aceptado", "en_camino", "llegado"].includes(
+    transporte.estado,
+  )
+    ? ("en_camino" as const)
+    : transporte.estado === "en_curso"
+      ? ("llegue" as const)
+      : null;
 
   if (!siguiente) return null;
+
+  // El viaje de vuelta es otra cosa que la ida y se dice con otras palabras:
+  // no "voy en camino" al cliente, sino que ya subio al coche de regreso.
+  const deRegreso = transporte.tipo === "regreso";
+  const textoEnCamino = deRegreso
+    ? "Ya estoy en el Uber de regreso"
+    : "Ya voy en camino";
+  const textoLlegue = deRegreso ? "Ya llegué a mi casa" : "Ya llegué";
 
   const marcar = () => {
     setError(null);
@@ -70,12 +87,12 @@ export default function AccionesDelViaje({
         {siguiente === "en_camino" ? (
           <>
             <Navigation className="h-3.5 w-3.5" />
-            {enviando ? "Registrando" : "Ya voy en camino"}
+            {enviando ? "Registrando" : textoEnCamino}
           </>
         ) : (
           <>
             <MapPin className="h-3.5 w-3.5" />
-            {enviando ? "Registrando" : "Ya llegue"}
+            {enviando ? "Registrando" : textoLlegue}
           </>
         )}
       </button>

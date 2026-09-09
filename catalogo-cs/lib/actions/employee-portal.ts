@@ -574,3 +574,71 @@ export async function extenderMiServicio(
     };
   }
 }
+
+/** Un servicio ya terminado cuyo cliente sigue sin calificar. */
+export type ClientePorCalificar = {
+  servicioId: string;
+  fecha: string | null;
+  clienteNombre: string | null;
+};
+
+/**
+ * Los clientes de sus servicios recientes que aun no ha calificado.
+ *
+ * La calificacion del cliente existia como endpoint y como boton del chat, pero
+ * el portal no tenia de donde sacar que servicio calificar, asi que la opcion
+ * no aparecia por ningun lado y en la practica no se usaba.
+ */
+export async function getClientesPorCalificar(
+  token?: string,
+): Promise<ClientePorCalificar[]> {
+  try {
+    const response = await fetch(
+      portalUrl("/employee-portal/ratings/pending-clients", token),
+      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+    );
+    if (!response.ok) return [];
+    return (await response.json()) as ClientePorCalificar[];
+  } catch (error) {
+    console.error("Error al leer los clientes por calificar:", error);
+    return [];
+  }
+}
+
+/** Deja la valoracion de la modelo sobre el cliente de uno de sus servicios. */
+export async function calificarCliente(
+  input: { servicioId: string; stars: number; comment?: string },
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(portalUrl("/employee-portal/ratings", token), {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        ...(await portalHeaders(token)),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        direction: "employee_to_client",
+        interactionId: input.servicioId,
+        stars: input.stars,
+        ...(input.comment?.trim() ? { comment: input.comment.trim() } : {}),
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo enviar la calificacion",
+      };
+    }
+    revalidatePath("/empleada/portal");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al calificar al cliente:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}

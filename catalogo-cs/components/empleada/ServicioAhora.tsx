@@ -62,18 +62,32 @@ export default function ServicioAhora({
   }
 
   const enCurso = servicio.estado === "en_curso";
+  /*
+   * La vuelta a casa.
+   *
+   * El servicio ya esta finalizado pero sigue aqui porque le queda el traslado
+   * de regreso por marcar. No es trabajo: no se piden extras, no se extiende y
+   * no se vuelve a finalizar. Lo unico que queda son los dos botones del
+   * viaje.
+   */
+  const enRegreso =
+    servicio.estado === "finalizado" && servicio.transporte?.tipo === "regreso";
 
   return (
     <section className="overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-black shadow-lg">
       <header className="flex items-center justify-between gap-3 border-b border-emerald-500/20 px-4 py-3">
         <span className="flex items-center gap-2">
-          <span className={`h-2.5 w-2.5 rounded-full bg-emerald-400 ${enCurso ? "animate-pulse" : ""}`} />
+          <span className={`h-2.5 w-2.5 rounded-full bg-emerald-400 ${enCurso || enRegreso ? "animate-pulse" : ""}`} />
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-            {enCurso ? "Servicio en curso" : "Servicio asignado"}
+            {enRegreso
+              ? "Tu regreso"
+              : enCurso
+                ? "Servicio en curso"
+                : "Servicio asignado"}
           </span>
         </span>
         <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
-          {servicio.estado.replaceAll("_", " ")}
+          {enRegreso ? "de vuelta" : servicio.estado.replaceAll("_", " ")}
         </span>
       </header>
 
@@ -160,7 +174,7 @@ export default function ServicioAhora({
           empezado, lo que se alarga es el servicio, y para eso esta el boton de
           abajo.
         */}
-        {!enlaceAPantallaPropia && !enCurso && (
+        {!enlaceAPantallaPropia && !enCurso && !enRegreso && (
           <PedirProrroga
             servicioId={servicio.id}
             prorrogasUsadas={servicio.prorrogasUsadas ?? 0}

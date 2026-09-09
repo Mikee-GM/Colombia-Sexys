@@ -22,6 +22,7 @@ import type { WeeklyPhotoSubmissionItem } from "@/lib/types";
 import SubirFotosSemanales, {
   AvisoFotosSemanales,
 } from "@/components/empleada/FotosSemanales";
+import CalificarCliente from "@/components/empleada/CalificarCliente";
 import ServicioAhora from "@/components/empleada/ServicioAhora";
 import SolicitarServicio from "@/components/empleada/SolicitarServicio";
 import Link from "next/link";
@@ -240,6 +241,13 @@ export default function EmployeePortalView({
         {workShift !== undefined && workShift !== null && (
           <CompartirUbicacion registrar={registrarMiUbicacion} token={token} />
         )}
+        {/*
+          Va aqui arriba, fuera de las pestañas, por el mismo motivo que el
+          servicio: es algo que hay que hacer, no algo que se consulta, y
+          escondido en una pestaña no se hacia nunca. Se dibuja solo los dias
+          que hay algo pendiente.
+        */}
+        <CalificarCliente token={token} />
         {/* ================= TAB 1: RESUMEN Y FINANZAS ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">

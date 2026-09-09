@@ -69,6 +69,12 @@ export const AVISOS_OPCIONALES: TipoDeAviso[] = [
     roles: ['jefe', 'admin'],
   },
   {
+    tipo: 'trip_status_updated',
+    titulo: 'Avance del traslado',
+    descripcion: 'Una modelo marca que ya va en el coche o que ya llego.',
+    roles: ['jefe', 'admin'],
+  },
+  {
     tipo: AVISO_SANCION,
     titulo: 'Sanciones y multas',
     descripcion: 'Se te aplica una multa o una sancion.',

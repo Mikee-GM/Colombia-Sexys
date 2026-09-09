@@ -3937,6 +3937,22 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     // y cerrar desde el portal recogen la valoracion igual.
     await this.pedirCalificacionDelCliente(servicio);
 
+    /*
+     * Y la del otro lado, que faltaba.
+     *
+     * Al cliente se le pedia su valoracion desde siempre; a la modelo, nunca.
+     * El resultado es que el expediente de un cliente problematico llegaba
+     * vacio a quien tiene que decidir si se le vuelve a atender. Va sin `tipo`
+     * --no se puede apagar-- porque es el unico momento en el que se acuerda de
+     * como fue, y sin nota no hay expediente.
+     */
+    await this.avisar(servicio.empleada?.usuarioId, {
+      titulo: 'Califica a tu cliente',
+      cuerpo: 'Terminaste un servicio. Toca para dejar tu valoración.',
+      url: '/empleada/portal',
+      tag: `calificar-cliente-${servicio.id}`,
+    });
+
     return {
       servicio: servicioConTotal,
       clienteNombre: servicio.cliente?.nombreTelegram ?? null,
@@ -5292,6 +5308,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         action,
         state: resultingState,
         tripType: trip.tipo,
+        // El panel lo necesita para decir de quien habla el aviso. En el push
+        // no va: ese se lee en la pantalla de bloqueo, a la vista de quien
+        // pase, y ahi los nombres no salen nunca.
+        employeeName: trip.servicio.empleada?.nombreArtistico ?? null,
       },
     });
   }

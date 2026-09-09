@@ -3,10 +3,20 @@ import { RealtimeEventsService } from '../realtime/realtime.service';
 import type { RealtimeMessage } from '../realtime/realtime.bus';
 import { NotificationsService } from './notifications.service';
 
+/**
+ * Un texto del aviso, fijo o derivado del evento.
+ *
+ * Casi todos los avisos dicen siempre lo mismo, pero hay eventos que llevan
+ * dentro varios sucesos distintos --`trip_status_updated` vale igual para "va
+ * en camino" que para "ya llegó"-- y un texto unico ahi no le dice al jefe lo
+ * que ha pasado.
+ */
+type Texto = string | ((evento: Record<string, unknown>) => string);
+
 /** Como se describe un aviso derivado de un evento del sistema. */
 type AvisoDeEvento = {
-  titulo: string;
-  cuerpo: string;
+  titulo: Texto;
+  cuerpo: Texto;
   url: string;
   /** Prefijo del `tag`, para que dos avisos del mismo asunto no se apilen. */
   asunto: string;
@@ -76,7 +86,53 @@ const AVISOS_DEL_JEFE: Record<string, AvisoDeEvento> = {
     url: '/jefe',
     asunto: 'cancelado',
   },
+  /*
+   * Los dos avisos del traslado que la modelo marca ella misma.
+   *
+   * El evento ya se emitia y el panel se refrescaba con el, pero en silencio:
+   * el jefe tenia que estar mirando la pantalla y darse cuenta de que una fila
+   * habia cambiado. Fuera del panel no le llegaba nada, y son los dos momentos
+   * en los que necesita saber si el traslado va bien.
+   *
+   * Solo lo que marca ella: las otras dos acciones del mismo evento --el Uber
+   * en camino y el Uber ya llegó-- las hace el propio jefe, y avisarle de lo
+   * que acaba de pulsar seria ruido.
+   */
+  trip_status_updated: {
+    titulo: (evento) =>
+      accionDelViaje(evento) === 'employee_arrived'
+        ? 'Llegada confirmada'
+        : 'Traslado en marcha',
+    cuerpo: (evento) => {
+      const vuelta = datosDelEvento(evento).tripType === 'regreso';
+      return accionDelViaje(evento) === 'employee_arrived'
+        ? vuelta
+          ? 'Una empleada llegó a su casa. Toca para verlo.'
+          : 'Una empleada llegó al punto. Toca para verlo.'
+        : vuelta
+          ? 'Una empleada ya va de regreso. Toca para verlo.'
+          : 'Una empleada ya va en camino. Toca para verlo.';
+    },
+    url: '/jefe',
+    asunto: 'traslado',
+    soloSi: (evento) =>
+      accionDelViaje(evento) === 'employee_en_route' ||
+      accionDelViaje(evento) === 'employee_arrived',
+  },
 };
+
+function datosDelEvento(evento: Record<string, unknown>): {
+  action?: string;
+  tripType?: string;
+} {
+  return (
+    (evento.data as { action?: string; tripType?: string } | undefined) ?? {}
+  );
+}
+
+function accionDelViaje(evento: Record<string, unknown>): string | undefined {
+  return datosDelEvento(evento).action;
+}
 
 /**
  * Convierte eventos del sistema en avisos push.
@@ -126,9 +182,10 @@ export class NotificationsBridge implements OnModuleInit {
     }
 
     try {
+      const evento = message.event as Record<string, unknown>;
       await this.notifications.notificar(message.key, {
-        titulo: aviso.titulo,
-        cuerpo: aviso.cuerpo,
+        titulo: this.resolver(aviso.titulo, evento),
+        cuerpo: this.resolver(aviso.cuerpo, evento),
         url: aviso.url,
         tag: `${aviso.asunto}-${this.referencia(message.event)}`,
         tipo,
@@ -136,6 +193,11 @@ export class NotificationsBridge implements OnModuleInit {
     } catch (err) {
       this.logger.error(`Error avisando del evento ${tipo}:`, err);
     }
+  }
+
+  /** El texto del aviso, ya sea fijo o derivado del evento. */
+  private resolver(texto: Texto, evento: Record<string, unknown>): string {
+    return typeof texto === 'function' ? texto(evento) : texto;
   }
 
   /**

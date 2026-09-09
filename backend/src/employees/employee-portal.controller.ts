@@ -356,6 +356,20 @@ export class EmployeePortalController {
     );
   }
 
+  /**
+   * Los clientes de sus servicios recientes que aún no ha calificado.
+   *
+   * El endpoint de calificar ya existía, pero el portal no tenía de dónde sacar
+   * qué servicio calificar, así que la opción no aparecía por ningún lado.
+   */
+  @Get('ratings/pending-clients')
+  clientesPorCalificar(@PortalUser() userId: string) {
+    return this.disciplineService.listarClientesPorCalificar({
+      id: userId,
+      rol: 'empleada',
+    });
+  }
+
   @Post('ratings')
   @HttpCode(201)
   async calificar(@PortalUser() userId: string, @Body() dto: CreateRatingDto) {
