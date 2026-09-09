@@ -64,6 +64,7 @@ import {
   PROHIBITED_REPLIES,
   sanitizeAiReply,
   stripControlMarkers,
+  stripFrontDeskOffer,
   trimChatHistory,
   TRIO_REQUEST_COOLDOWN_MS,
   type ProhibitedCategory,
@@ -1538,7 +1539,21 @@ export class TelegramBookingUpdate {
    * al bot tanto como decir que es una IA.
    */
   private dressAiReply(responseText: string, session?: SessionData): string {
-    const cleaned = sanitizeAiReply(responseText || '');
+    /*
+     * El ofrecimiento de mostrador se quita aqui, no se le pide al modelo que
+     * no lo escriba. El prompt ya le decia que el saludo era "solo" tarifa y
+     * disponibilidad, y aun asi el primer mensaje de una conversacion real
+     * terminaba en "¿en que te puedo ayudar?": es la coletilla mas automatica
+     * que existe y el modelo la pone sola. Se resuelve como los enlaces, los
+     * telefonos y la cadencia de emojis, donde no depende de que colabore.
+     */
+    const saneado = sanitizeAiReply(responseText || '');
+    const cleaned = stripFrontDeskOffer(saneado);
+    if (cleaned !== saneado) {
+      this.logger.warn(
+        'La IA ofrecio ayuda como un mostrador; se quita esa frase del mensaje.',
+      );
+    }
     if (!cleaned || looksLikeAssistantRegister(cleaned)) {
       const deflection = pickDeflection(session?.ultimoDesvio);
       if (session) session.ultimoDesvio = deflection;
@@ -2878,6 +2893,166 @@ export class TelegramBookingUpdate {
       session?.locationNotas ||
       'Pin de ubicación enviado por el cliente'
     );
+  }
+
+  /**
+   * Busca entre los moteles activos el que nombra la marca `[DATA]`.
+   *
+   * Coincide en los dos sentidos porque el modelo tanto puede devolver el
+   * nombre corto ("Montecarlo" de "Motel Montecarlo") como añadirle palabras.
+   */
+  private async buscarUbicacionPorNombre(nombre: unknown) {
+    if (typeof nombre !== 'string' || !nombre.trim()) return null;
+    const buscado = nombre.toLowerCase().trim();
+    const activas = await this.transportOperations.activeLocations();
+    return (
+      activas.find(
+        (loc) =>
+          loc.name.toLowerCase().includes(buscado) ||
+          buscado.includes(loc.name.toLowerCase().trim()),
+      ) || null
+    );
+  }
+
+  /**
+   * Busca el motel que el propio cliente nombró en la conversación.
+   *
+   * Aquí no sirve la búsqueda de arriba, que compara un nombre contra otro:
+   * lo que se recorre son frases enteras del cliente. Hacen falta dos cosas.
+   *
+   * Una, quedarse con las palabras que distinguen al motel: en la base están
+   * guardados como "Motel Montecarlo" y el cliente escribe "Montecarlo" a
+   * secas, así que exigir el nombre completo no encontraría nada.
+   *
+   * Y dos, que esas palabras aparezcan enteras. Sin eso, un motel llamado
+   * "Real" se daría por elegido en un "de verdad realmente me interesa".
+   *
+   * Los mensajes llegan del más reciente al más antiguo: si el cliente cambió
+   * de opinión, vale el último que dijo.
+   */
+  private static readonly PALABRAS_GENERICAS_DE_LUGAR = new Set([
+    'motel',
+    'hotel',
+    'moteles',
+    'suites',
+    'suite',
+    'villa',
+    'villas',
+  ]);
+
+  private async buscarUbicacionMencionadaPorElCliente(textos: string[]) {
+    const normalizar = (texto: string): string =>
+      texto
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '')
+        .toLowerCase()
+        .trim();
+
+    const candidatos = textos.map(normalizar).filter(Boolean);
+    if (!candidatos.length) return null;
+
+    const contienePalabra = (texto: string, palabra: string): boolean => {
+      const escapada = palabra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(
+        `(^|[^\\p{L}\\p{N}])${escapada}([^\\p{L}\\p{N}]|$)`,
+        'u',
+      ).test(texto);
+    };
+
+    const activas = await this.transportOperations.activeLocations();
+    const conSusPalabras = activas.map((loc) => ({
+      loc,
+      palabras: normalizar(loc.name)
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter(
+          (palabra) =>
+            palabra.length >= 4 &&
+            !TelegramBookingUpdate.PALABRAS_GENERICAS_DE_LUGAR.has(palabra),
+        ),
+    }));
+
+    for (const texto of candidatos) {
+      const encontrada = conSusPalabras.find(
+        ({ palabras }) =>
+          palabras.length > 0 &&
+          palabras.every((palabra) => contienePalabra(texto, palabra)),
+      );
+      if (encontrada) return encontrada.loc;
+    }
+    return null;
+  }
+
+  /**
+   * Cierra la contratación en cuanto la sesión tiene todo lo que hace falta.
+   *
+   * Antes esto vivía dentro del bloque que interpreta la marca `[DATA]`, así
+   * que el cierre entero dependía de que el modelo se acordara de escribirla.
+   * Cuando no lo hacía --y no lo hace siempre-- el turno terminaba con un "te
+   * aviso en un momentico cómo nos organizamos" y ahí se acababa todo: el
+   * servicio no nacía, el jefe no recibía ninguna autorización que dar y el
+   * cliente se quedaba esperando una organización que nadie estaba
+   * organizando. Los datos ya estaban en la sesión --los ponen los extractores
+   * deterministas que corren en cada mensaje, antes de llamar a la IA--; lo
+   * único que faltaba era la marca.
+   *
+   * Devuelve si se hizo cargo del turno.
+   */
+  private async cerrarContratacionSiEstaCompleta(
+    ctx: BotContext,
+    session: SessionData,
+    history: NonNullable<SessionData['chatHistory']>,
+    cleanText: string,
+    ubicacionCandidata: Awaited<
+      ReturnType<TelegramBookingUpdate['buscarUbicacionPorNombre']>
+    >,
+  ): Promise<boolean> {
+    if (
+      !(session.duracionPactadaHoras || session.duracionIndefinida) ||
+      !session.metodoPago
+    ) {
+      return false;
+    }
+
+    history.push({ role: 'model', parts: [{ text: cleanText }] });
+    session.chatHistory = history;
+
+    // Si el cliente ya mandó su pin antes, no se le vuelve a pedir:
+    // se continúa directo con el cierre de la contratación.
+    if (this.hasConfirmedLocation(session)) {
+      session.step = 'AWAITING_LOCATION';
+      if (cleanText) {
+        await this.sendDelayedReply(ctx, cleanText);
+        await this.recordDraftConversation(ctx, 'ia', cleanText);
+      }
+      await this.applyDraftPaymentMethod(ctx, session.metodoPago);
+      return true;
+    }
+
+    session.step = 'AWAITING_LOCATION';
+
+    if (ubicacionCandidata) {
+      await this.sendDelayedReply(ctx, cleanText);
+      await this.recordDraftConversation(ctx, 'ia', cleanText);
+
+      session.presetLocationId = ubicacionCandidata.id;
+      session.locationNameSnapshot = ubicacionCandidata.name;
+      session.locationAddressSnapshot = ubicacionCandidata.address;
+      session.customerTransportCharge = 0;
+
+      await this.onLocation(ctx, {
+        latitude: Number(ubicacionCandidata.latitude),
+        longitude: Number(ubicacionCandidata.longitude),
+        title: ubicacionCandidata.name,
+        address: ubicacionCandidata.address,
+      });
+      return true;
+    }
+
+    const askLocation =
+      cleanText || 'Mándame tu ubicación en pin con el botón de abajo, mor.';
+    await this.replyWithServiceLocationOptions(ctx, askLocation);
+    await this.recordDraftConversation(ctx, 'ia', askLocation);
+    return true;
   }
 
   /**
@@ -7405,9 +7580,47 @@ export class TelegramBookingUpdate {
      */
     if (await this.ofrecerAlternativasTrasRechazo(ctx, telegramId)) return;
 
-    await ctx.reply(
-      `Hola ${client.nombreTelegram || 'Cliente'}. ` +
-        `Ya recibí tu mensaje. En un ratico te respondemos por aquí mismo.`,
+    /*
+     * Aqui no hay nada abierto: ni servicio, ni conversacion con una modelo,
+     * ni rechazo reciente que explicar. El "en un ratico te respondemos por
+     * aqui mismo" era un camino muerto: nadie iba a escribirle, porque no hay
+     * ninguna conversacion en la que contestarle. Lo unico que le sirve es el
+     * catalogo, que es de donde sale el enlace que abre la charla con una
+     * modelo concreta.
+     */
+    await ctx.reply(this.mensajeSinConversacionAbierta(client));
+  }
+
+  /**
+   * Lo que se le dice a quien escribe sin tener nada abierto.
+   *
+   * Va sin `parse_mode` a proposito: el nombre que trae Telegram es texto
+   * ajeno y un guion bajo suelto rompe el Markdown, con lo que Telegram
+   * rechaza el mensaje entero y el cliente no recibe nada. En texto plano
+   * Telegram ya convierte la direccion en enlace pulsable.
+   */
+  private mensajeSinConversacionAbierta(client: Clientes): string {
+    const nombre = client.nombreTelegram || 'Cliente';
+    const web = this.configService.get<string>('WEB_URL');
+
+    if (!web) {
+      /*
+       * `WEB_URL` es obligatoria en el esquema de Joi, asi que esto no deberia
+       * pasar; si pasa, mas vale decir algo util que mandar un enlace vacio.
+       */
+      this.logger.error(
+        'Sin WEB_URL: al cliente no se le puede dar el enlace del catalogo.',
+      );
+      return (
+        `Hola ${nombre}. Ahora mismo no tienes ninguna conversación abierta con nosotros. ` +
+        `Escríbenos de nuevo en un momento y te atendemos.`
+      );
+    }
+
+    return (
+      `Hola ${nombre}. Para contratar a una de nuestras chicas, entra al catálogo y elige ` +
+      `con quién quieres hablar: desde ahí se abre la conversación directamente.\n\n` +
+      `${web}`
     );
   }
 
@@ -8593,65 +8806,16 @@ export class TelegramBookingUpdate {
 
             /* Se cierra en cuanto estan los dos datos, los diera el turno que los diera. */
             if (
-              (session.duracionPactadaHoras || session.duracionIndefinida) &&
-              session.metodoPago
+              await this.cerrarContratacionSiEstaCompleta(
+                ctx,
+                session,
+                history,
+                cleanText,
+                await this.buscarUbicacionPorNombre(
+                  parsedData.ubicacionPreestablecida,
+                ),
+              )
             ) {
-              history.push({ role: 'model', parts: [{ text: cleanText }] });
-              session.chatHistory = history;
-
-              // Si el cliente ya mandó su pin antes, no se le vuelve a pedir:
-              // se continúa directo con el cierre de la contratación.
-              if (this.hasConfirmedLocation(session)) {
-                session.step = 'AWAITING_LOCATION';
-                if (cleanText) {
-                  await this.sendDelayedReply(ctx, cleanText);
-                  await this.recordDraftConversation(ctx, 'ia', cleanText);
-                }
-                await this.applyDraftPaymentMethod(ctx, session.metodoPago);
-                return;
-              }
-
-              session.step = 'AWAITING_LOCATION';
-              const presetName = parsedData.ubicacionPreestablecida;
-              let matchedLocation: any = null;
-              if (presetName && typeof presetName === 'string') {
-                const activeLocs =
-                  await this.transportOperations.activeLocations();
-                matchedLocation =
-                  activeLocs.find(
-                    (loc) =>
-                      loc.name
-                        .toLowerCase()
-                        .includes(presetName.toLowerCase().trim()) ||
-                      presetName
-                        .toLowerCase()
-                        .includes(loc.name.toLowerCase().trim()),
-                  ) || null;
-              }
-
-              if (matchedLocation) {
-                await this.sendDelayedReply(ctx, cleanText);
-                await this.recordDraftConversation(ctx, 'ia', cleanText);
-
-                session.presetLocationId = matchedLocation.id;
-                session.locationNameSnapshot = matchedLocation.name;
-                session.locationAddressSnapshot = matchedLocation.address;
-                session.customerTransportCharge = 0;
-
-                await this.onLocation(ctx, {
-                  latitude: Number(matchedLocation.latitude),
-                  longitude: Number(matchedLocation.longitude),
-                  title: matchedLocation.name,
-                  address: matchedLocation.address,
-                });
-                return;
-              }
-
-              const askLocation =
-                cleanText ||
-                'Mándame tu ubicación en pin con el botón de abajo, mor.';
-              await this.replyWithServiceLocationOptions(ctx, askLocation);
-              await this.recordDraftConversation(ctx, 'ia', askLocation);
               return;
             }
           } catch (jsonErr) {
@@ -8660,6 +8824,33 @@ export class TelegramBookingUpdate {
               jsonErr,
             );
           }
+        }
+
+        /*
+         * La red de seguridad: cerrar aunque no venga la marca.
+         *
+         * Si la sesion ya tiene duracion y forma de pago, la contratacion esta
+         * lista para cerrarse aunque el modelo no haya escrito `[DATA]`. Sin
+         * esto, ese turno terminaba en una respuesta suelta y la reserva moria
+         * ahi: ningun servicio, ningun aviso al jefe, ningun resumen al
+         * cliente. El motel se busca en lo que dijo el cliente, no en lo que
+         * dijo el modelo, porque aqui no hay marca de la que fiarse.
+         */
+        if (
+          await this.cerrarContratacionSiEstaCompleta(
+            ctx,
+            session,
+            history,
+            cleanText,
+            await this.buscarUbicacionMencionadaPorElCliente(
+              history
+                .filter((turno) => turno.role === 'user')
+                .map((turno) => turno.parts[0]?.text || '')
+                .reverse(),
+            ),
+          )
+        ) {
+          return;
         }
 
         history.push({ role: 'model', parts: [{ text: cleanText }] });

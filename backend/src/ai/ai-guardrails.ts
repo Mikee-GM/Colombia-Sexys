@@ -298,6 +298,58 @@ export function looksLikeAssistantRegister(reply: string): boolean {
   );
 }
 
+/**
+ * El ofrecimiento de mostrador: "¿en qué te puedo ayudar?".
+ *
+ * No es una respuesta de asistente de las de arriba --no hay negativa ni
+ * politica de contenido-- y por eso pasaba entera: el primer mensaje que ve
+ * todo cliente nuevo terminaba con la formula exacta de un call center. Delata
+ * al personaje tanto como decir "soy una IA", porque una chica que le escribe
+ * a alguien no le ofrece asistencia: le habla.
+ *
+ * Aqui no se descarta la respuesta entera, como en el registro de asistente,
+ * porque el saludo lleva ademas la tarifa y la disponibilidad, que si sirven.
+ * Se quita solo esa frase.
+ *
+ * Los acentos van opcionales porque esto corre sobre el texto que sale hacia
+ * el cliente, no sobre la version normalizada.
+ */
+const FRONT_DESK_PATTERNS: RegExp[] = [
+  /¿?\s*\b(?:en\s+qu[eé]|c[oó]mo|con\s+qu[eé])\s+(?:te|le|los?|las?)\s+(?:puedo|podr[ií]a|puedo\s+yo)\s+(?:ayudar|servir|atender|colaborar|apoyar)\b[^.!?\n]*[?!.]?/gi,
+  /\b(?:estoy|quedo|me\s+pongo)\s+(?:aqu[ií]\s+)?(?:para|a)\s+(?:servirte|ayudarte|atenderte|tus\s+[oó]rdenes)\b[^.!?\n]*[?!.]?/gi,
+  /¿?\s*\ben\s+qu[eé]\s+(?:te|le)\s+(?:ayudo|sirvo|atiendo)\b[^.!?\n]*[?!.]?/gi,
+  /\ba\s+tus\s+[oó]rdenes\b[^.!?\n]*[?!.]?/gi,
+];
+
+/**
+ * Quita el ofrecimiento de mostrador y deja el resto del mensaje en pie.
+ *
+ * La limpieza posterior es la parte que importa: al arrancar la frase del
+ * final queda colgando la coma que la unia al resto ("...por $2500 la hora,
+ * 😊"), y eso se lee peor que la frase original.
+ */
+export function stripFrontDeskOffer(reply: string): string {
+  let limpio = reply;
+  for (const pattern of FRONT_DESK_PATTERNS) {
+    limpio = limpio.replace(pattern, ' ');
+  }
+  if (limpio === reply) return reply;
+
+  return (
+    limpio
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\s+([.!?,;])/g, '$1')
+      // La coma se va, pero el espacio que la seguia se queda: sin esto la
+      // frase acababa pegada al emoji ("...la hora😊").
+      .replace(
+        /([,;])(\s*)(?=$|[)\]]|\p{Extended_Pictographic})/gu,
+        (_coincidencia, _signo, espacios: string) => (espacios ? ' ' : ''),
+      )
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  );
+}
+
 const URL_PATTERN = /\b(?:https?:\/\/|www\.|t\.me\/)\S+/gi;
 const HANDLE_PATTERN = /(^|\s)@[A-Za-z0-9_]{3,}/g;
 const PHONE_PATTERN = /\+?\d[\d\s().-]{6,}\d/g;
