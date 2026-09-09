@@ -11,6 +11,7 @@ import {
   Sparkles,
   User,
   X,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -370,7 +371,7 @@ export default function CreateServiceDialog({
                 >
                   {(Array.isArray(employees) ? employees : []).map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.nombreArtistico} - ${emp.precioBaseHora}/hr {emp.disponible ? "(🟢 Disponible)" : "(🔴 Ocupada)"}
+                      {emp.nombreArtistico} - ${emp.precioBaseHora}/hr {emp.disponible ? "(Disponible)" : "(Ocupada)"}
                     </option>
                   ))}
                 </select>
@@ -516,7 +517,7 @@ export default function CreateServiceDialog({
                   >
                     {(Array.isArray(locations) ? locations : []).map((loc) => (
                       <option key={loc.id} value={loc.id}>
-                        🏨 {loc.name} {loc.address ? `(${loc.address})` : ""}
+                        {loc.name} {loc.address ? `(${loc.address})` : ""}
                       </option>
                     ))}
                   </select>
@@ -561,24 +562,26 @@ export default function CreateServiceDialog({
                   <button
                     type="button"
                     onClick={() => setAgendaType("inmediato")}
-                    className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
                       agendaType === "inmediato"
                         ? "bg-[#C5A55A] text-zinc-950 border-[#C5A55A]"
                         : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700"
                     }`}
                   >
-                    ⚡ Inmediato (Para Ya)
+                    <Zap size={13} />
+                    Inmediato (Para Ya)
                   </button>
                   <button
                     type="button"
                     onClick={() => setAgendaType("programado")}
-                    className={`py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 text-xs font-bold rounded-xl border transition-all ${
                       agendaType === "programado"
                         ? "bg-[#C5A55A] text-zinc-950 border-[#C5A55A]"
                         : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700"
                     }`}
                   >
-                    📅 Cita Programada
+                    <Calendar size={13} />
+                    Cita Programada
                   </button>
                 </div>
 

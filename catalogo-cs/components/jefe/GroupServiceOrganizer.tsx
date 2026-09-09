@@ -974,7 +974,7 @@ function ActiveGroupEditor({
               return (
                 <a key={`deeplink-${trip.id}`} href={deeplink} target="_blank" rel="noopener noreferrer" className={buttonClass}>
                   <Smartphone size={14} className="mr-1 inline" />
-                  📱 Pedir Uber ({trip.tipo})
+                  Pedir Uber ({trip.tipo})
                   <ExternalLink size={12} className="ml-1 inline" />
                 </a>
               );

@@ -29,7 +29,7 @@ type TabType = "resumen" | "ranking" | "viajes" | "reputacion";
 import ViajeAhora from "@/components/chofer/ViajeAhora";
 import OfertaDeViaje from "@/components/chofer/OfertaDeViaje";
 import Link from "next/link";
-import { ArrowRight, BarChart3, Bell, Car, Star, Trophy } from "lucide-react";
+import { ArrowRight, Banknote, BarChart3, Bell, Car, Crown, Star, Trophy } from "lucide-react";
 import { ZONA_LABEL } from "@/components/chofer/zonas";
 
 export default function DriverPortalView({
@@ -84,22 +84,28 @@ export default function DriverPortalView({
   return (
     <div className="min-h-screen bg-[#0B0D13] text-gray-100 flex flex-col font-sans selection:bg-[#C5A55A]/30">
       {/* HEADER / HERO BAR */}
-      <header className="sticky top-0 z-30 bg-[#0B0D13]/90 backdrop-blur-md border-b border-white/10 px-4 py-3 sm:px-6">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      {/* Igual que en el portal de la empleada: la barra de estado del
+          telefono se pinta encima de la pagina y hay que dejarle su hueco. */}
+      <header className="sticky top-0 z-30 bg-[#0B0D13]/90 backdrop-blur-md border-b border-white/10 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-6">
+        {/* Ver la nota del portal de la empleada: sin `min-w-0` a la
+            izquierda y `shrink-0` a la derecha, el nombre y el ranking se
+            montaban uno encima del otro en pantallas estrechas. */}
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-[#C5A55A] shadow-md shadow-[#C5A55A]/20 bg-gray-800 shrink-0 flex items-center justify-center text-lg text-gray-400 font-bold">
               {data.profile.nombre.charAt(0)}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-white tracking-wide">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <h1 className="truncate text-base sm:text-lg font-bold text-white tracking-wide">
                   {data.profile.nombre}
                 </h1>
-                <span className="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#C5A55A]/20 text-[#E8D5A3] border border-[#C5A55A]/30">
+                <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#C5A55A]/20 text-[#E8D5A3] border border-[#C5A55A]/30">
                   Chofer
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              {/* El vehiculo baja de linea en lugar de desbordar. */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400">
                 <span className="flex items-center gap-1">
                   <span
                     className={`w-2 h-2 rounded-full ${
@@ -118,12 +124,13 @@ export default function DriverPortalView({
             </div>
           </div>
 
-          <div className="text-right">
+          <div className="shrink-0 text-right">
             <div className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">
               Ranking
             </div>
             <div className="text-sm sm:text-base font-bold text-[#E8D5A3] flex items-center justify-end gap-1">
-              <span>🏆 #{data.ranking.myPosition}</span>
+              <Trophy size={15} />
+              <span>#{data.ranking.myPosition}</span>
               <span className="text-xs text-gray-500 font-normal">/ {data.ranking.totalDrivers}</span>
             </div>
           </div>
@@ -263,7 +270,7 @@ export default function DriverPortalView({
               <div className="bg-[#141721] p-5 rounded-xl border border-white/5 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>🚗</span> Vehículo registrado
+                    <Car size={15} /> Vehículo registrado
                   </h3>
                 </div>
                 {vehiculoResumen ? (
@@ -289,7 +296,7 @@ export default function DriverPortalView({
               <div className="bg-[#141721] p-5 rounded-xl border border-white/5 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>💵</span> Liquidación semanal
+                    <Banknote size={15} /> Liquidación semanal
                   </h3>
                   <span
                     className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
@@ -317,8 +324,8 @@ export default function DriverPortalView({
 
             <div className="bg-[#141721] p-5 rounded-xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-[#C5A55A]/20 border border-[#C5A55A]/40 flex items-center justify-center text-2xl">
-                  🏆
+                <div className="w-12 h-12 rounded-full bg-[#C5A55A]/20 border border-[#C5A55A]/40 flex items-center justify-center text-[#E8D5A3]">
+                  <Trophy size={22} />
                 </div>
                 <div>
                   <div className="text-sm font-bold text-white">
@@ -343,8 +350,8 @@ export default function DriverPortalView({
         {activeTab === "ranking" && (
           <div className="space-y-6 animate-fadeIn">
             <div className="p-6 rounded-2xl bg-gradient-to-br from-[#1E1B15] via-[#141721] to-black border border-[#C5A55A]/30 shadow-xl text-center space-y-3">
-              <div className="inline-block p-3 rounded-full bg-[#C5A55A]/10 border border-[#C5A55A]/30 text-3xl">
-                👑
+              <div className="inline-block p-3 rounded-full bg-[#C5A55A]/10 border border-[#C5A55A]/30 text-[#E8D5A3]">
+                <Crown size={26} />
               </div>
               <h2 className="text-lg sm:text-xl font-bold text-white">
                 Tabla de Clasificación de Choferes
@@ -367,15 +374,9 @@ export default function DriverPortalView({
               </div>
               <div className="divide-y divide-white/5">
                 {data.ranking.leaderboard.map((entry) => {
+                  // Las tres primeras posiciones se distinguen en dorado,
+                  // no con medallas de emoji.
                   const isTop3 = entry.position <= 3;
-                  const medal =
-                    entry.position === 1
-                      ? "🥇"
-                      : entry.position === 2
-                        ? "🥈"
-                        : entry.position === 3
-                          ? "🥉"
-                          : `#${entry.position}`;
 
                   return (
                     <div
@@ -388,9 +389,9 @@ export default function DriverPortalView({
                     >
                       <div className="flex items-center gap-3 w-16">
                         <span
-                          className={`text-sm font-bold ${isTop3 ? "text-base" : "text-gray-400"}`}
+                          className={`text-sm font-bold ${isTop3 ? "text-[#E8D5A3]" : "text-gray-400"}`}
                         >
-                          {medal}
+                          #{entry.position}
                         </span>
                       </div>
 

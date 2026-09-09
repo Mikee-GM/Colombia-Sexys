@@ -37,7 +37,8 @@ export default async function ChoferServicioPage({ searchParams }: PageProps) {
 
   return (
     <div className="min-h-dvh bg-[#0B0D13] text-gray-100">
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0B0D13]/90 px-4 py-3 backdrop-blur-md">
+      {/* El hueco de arriba incluye la barra de estado del telefono. */}
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0B0D13]/90 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-md">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
           <Link
             href="/chofer/portal"

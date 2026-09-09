@@ -5,6 +5,7 @@ import DriverShiftsPanel from "@/components/admin/driver-shifts-panel";
 import type { OffDutyPerson } from "@/lib/actions/work-shift";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { Ban } from "lucide-react";
 import {
   getChoferesAction,
   createChoferAction,
@@ -416,7 +417,8 @@ export default function ChoferesDashboard({
                       )}
                       {chofer.sancionada && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-red-950/80 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-400">
-                          ⛔ Sancionado
+                          <Ban size={11} />
+                          Sancionado
                         </span>
                       )}
                     </div>

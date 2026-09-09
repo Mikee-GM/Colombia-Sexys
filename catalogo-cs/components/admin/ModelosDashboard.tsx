@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { AlertTriangle, Ban, Camera } from "lucide-react";
 import {
   getModelosAction as getModelos,
   deleteModeloAction as deleteModelo,
@@ -120,8 +121,9 @@ export default function ModelosDashboard({
         )}
         {modelo.sancionada ? (
           <div className="absolute top-2 left-2 bg-red-950/90 px-3 py-1.5 border border-red-500/80 rounded-lg shadow-lg flex items-center gap-1.5">
+            <Ban size={13} className="text-red-300" />
             <span className="text-xs text-red-300 font-bold tracking-widest uppercase">
-              ⛔ Sancionada
+              Sancionada
             </span>
           </div>
         ) : modelo.availabilityStatus === "inactiva" || modelo.catalogoActivo === false ? (
@@ -150,16 +152,18 @@ export default function ModelosDashboard({
             </span>
           </div>
           {Number(modelo.pendingWeeklyPhotosCount) > 0 && (
-            <div className="bg-emerald-950/90 border border-emerald-500/80 px-2.5 py-1 rounded-lg shadow-lg animate-pulse">
+            <div className="flex items-center gap-1.5 bg-emerald-950/90 border border-emerald-500/80 px-2.5 py-1 rounded-lg shadow-lg animate-pulse">
+              <Camera size={12} className="text-emerald-300" />
               <span className="text-xs text-emerald-300 font-bold uppercase tracking-wider">
-                📸 {modelo.pendingWeeklyPhotosCount} por validar
+                {modelo.pendingWeeklyPhotosCount} por validar
               </span>
             </div>
           )}
           {modelo.weeklyContentStatus === "atrasado" && Number(modelo.pendingWeeklyPhotosCount || 0) === 0 && (
-            <div className="bg-red-950/90 border border-red-500/80 px-2.5 py-1 rounded-lg shadow-lg">
+            <div className="flex items-center gap-1.5 bg-red-950/90 border border-red-500/80 px-2.5 py-1 rounded-lg shadow-lg">
+              <AlertTriangle size={12} className="text-red-300" />
               <span className="text-xs text-red-300 font-bold uppercase tracking-wider">
-                ⚠️ Fotos atrasadas
+                Fotos atrasadas
               </span>
             </div>
           )}

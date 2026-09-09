@@ -19,7 +19,7 @@ export default async function EmpleadaAjustesPage() {
   if (!sesion) redirect("/admin");
 
   return (
-    <div className="min-h-dvh bg-[#0B0D13] p-4 text-gray-100 sm:p-6">
+    <div className="min-h-dvh bg-[#0B0D13] p-4 pt-[calc(1rem+env(safe-area-inset-top))] text-gray-100 sm:p-6 sm:pt-[calc(1.5rem+env(safe-area-inset-top))]">
       <PaginaDeAvisos volverA="/empleada/portal" volverTexto="Mi portal" />
       <Toaster theme="dark" position="bottom-right" richColors />
     </div>

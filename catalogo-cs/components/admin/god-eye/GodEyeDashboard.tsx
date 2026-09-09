@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Award,
   Banknote,
+  Bot,
   Briefcase,
   Calendar,
   Camera,
@@ -238,7 +239,7 @@ export function getServiceAlerts(srv: any): ServiceAlert[] {
   if (srv.calificacion != null && Number(srv.calificacion) <= 2) {
     alerts.push({
       id: "low_rating",
-      label: `Queja (${srv.calificacion}⭐)`,
+      label: `Queja (${srv.calificacion}★)`,
       severity: "critical",
       icon: AlertTriangle,
       description: `El cliente dejó una calificación de ${srv.calificacion}/5 estrellas.`,
@@ -616,7 +617,7 @@ export default function GodEyeDashboard({
         </div>
       )}
 
-      {/* 🟢 BARRA SUPERIOR: KPIs EN TIEMPO REAL */}
+      {/* BARRA SUPERIOR: KPIs EN TIEMPO REAL */}
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-6">
         <Link
           href="/admin/services"
@@ -711,7 +712,7 @@ export default function GodEyeDashboard({
             {metrics.recentNegativeRatings}
           </p>
           <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
-            ⭐ 1-2 estrellas →
+            1-2 estrellas →
           </span>
         </Link>
 
@@ -853,7 +854,7 @@ export default function GodEyeDashboard({
         </div>
       )}
 
-      {/* 🚀 BOTÓN REFRESH RÁPIDO */}
+      {/* BOTÓN REFRESH RÁPIDO */}
       <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3.5">
         <div className="flex items-center gap-3">
           <div className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500">
@@ -875,7 +876,7 @@ export default function GodEyeDashboard({
         </button>
       </div>
 
-      {/* 🎛️ FILA 1: ACTORES DEL SISTEMA (IZQUIERDA) & EXPEDIENTE 360° (DERECHA) */}
+      {/* FILA 1: ACTORES DEL SISTEMA (IZQUIERDA) & EXPEDIENTE 360° (DERECHA) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* COLUMNA 1: 1. ACTORES DEL SISTEMA (4 Cols) */}
         <div className="flex flex-col lg:col-span-4 xl:col-span-4">
@@ -1207,7 +1208,7 @@ export default function GodEyeDashboard({
                             title={`Promedio de valoraciones hechas por clientes`}
                           >
                             <Users className="h-3.5 w-3.5 text-[#C5A55A]" />
-                            Clientes: ⭐ {dossier.ratingsSummary?.client.average ?? 5.0} ({dossier.ratingsSummary?.client.count ?? 0})
+                            Clientes: ★ {dossier.ratingsSummary?.client.average ?? 5.0} ({dossier.ratingsSummary?.client.count ?? 0})
                           </span>
                         )}
 
@@ -1218,7 +1219,7 @@ export default function GodEyeDashboard({
                             title={`Promedio de valoraciones hechas por choferes de traslado`}
                           >
                             <Car className="h-3.5 w-3.5 text-blue-400" />
-                            Choferes: ⭐ {dossier.ratingsSummary?.driver.average ?? 5.0} ({dossier.ratingsSummary?.driver.count ?? 0})
+                            Choferes: ★ {dossier.ratingsSummary?.driver.average ?? 5.0} ({dossier.ratingsSummary?.driver.count ?? 0})
                           </span>
                         )}
 
@@ -1480,7 +1481,7 @@ export default function GodEyeDashboard({
                                           </span>
                                           {s.viajes.map((v: any, idx: number) => (
                                             <p key={idx} className="text-zinc-200 text-xs font-medium">
-                                              🚗 <span className="text-amber-400 capitalize font-semibold">{v.tipo}:</span>{" "}
+                                              <span className="text-amber-400 capitalize font-semibold">{v.tipo}:</span>{" "}
                                               {v.choferNombre || "Uber"}
                                               {v.vehiculoModelo ? ` (${v.vehiculoModelo})` : ""}{" "}
                                               · ${v.tarifa || 0} ·{" "}
@@ -1847,7 +1848,7 @@ export default function GodEyeDashboard({
                                 >
                                   <div className="flex items-center justify-between">
                                     <span className="font-bold text-white">
-                                      🏆 {c.titulo}
+                                      {c.titulo}
                                     </span>
                                     <span className="rounded-md bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 text-xs font-bold text-amber-300">
                                       +{c.puntos} pts
@@ -1891,29 +1892,29 @@ export default function GodEyeDashboard({
                               </div>
                               <div className="mt-2.5 flex items-baseline gap-2">
                                 <span className="text-2xl font-extrabold text-amber-400">
-                                  ⭐ {dossier.ratingsSummary.client.average}
+                                  ★ {dossier.ratingsSummary.client.average}
                                 </span>
                                 <span className="text-xs text-zinc-400">/ 5.0</span>
                               </div>
                               <div className="mt-2 flex flex-col gap-1 text-[11px] text-zinc-400">
                                 <div className="flex items-center justify-between">
-                                  <span>5 ⭐</span>
+                                  <span>5 ★</span>
                                   <span className="font-semibold text-zinc-200">{dossier.ratingsSummary.client.stars_5}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span>4 ⭐</span>
+                                  <span>4 ★</span>
                                   <span className="font-semibold text-zinc-200">{dossier.ratingsSummary.client.stars_4}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span>3 ⭐</span>
+                                  <span>3 ★</span>
                                   <span className="font-semibold text-zinc-200">{dossier.ratingsSummary.client.stars_3}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span>2 ⭐</span>
+                                  <span>2 ★</span>
                                   <span className="font-semibold text-zinc-200">{dossier.ratingsSummary.client.stars_2}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span>1 ⭐</span>
+                                  <span>1 ★</span>
                                   <span className="font-semibold text-red-400">{dossier.ratingsSummary.client.stars_1}</span>
                                 </div>
                               </div>
@@ -1934,29 +1935,29 @@ export default function GodEyeDashboard({
                               </div>
                               <div className="mt-2.5 flex items-baseline gap-2">
                                 <span className="text-2xl font-extrabold text-blue-400">
-                                  ⭐ {dossier.ratingsSummary.driver.average}
+                                  ★ {dossier.ratingsSummary.driver.average}
                                 </span>
                                 <span className="text-xs text-zinc-400">/ 5.0</span>
                               </div>
                               <div className="mt-2 flex flex-col gap-1 text-[11px] text-zinc-400">
                                 <div className="flex items-center justify-between">
-                                  <span>5 ⭐</span>
+                                  <span>5 ★</span>
                                   <span className="font-semibold text-zinc-200">{dossier.ratingsSummary.driver.stars_5}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span>4 ⭐</span>
+                                  <span>4 ★</span>
                                   <span className="font-semibold text-zinc-200">{dossier.ratingsSummary.driver.stars_4}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span>3 ⭐</span>
+                                  <span>3 ★</span>
                                   <span className="font-semibold text-zinc-200">{dossier.ratingsSummary.driver.stars_3}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span>2 ⭐</span>
+                                  <span>2 ★</span>
                                   <span className="font-semibold text-zinc-200">{dossier.ratingsSummary.driver.stars_2}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span>1 ⭐</span>
+                                  <span>1 ★</span>
                                   <span className="font-semibold text-red-400">{dossier.ratingsSummary.driver.stars_1}</span>
                                 </div>
                               </div>
@@ -2026,7 +2027,7 @@ export default function GodEyeDashboard({
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-2">
                                         <span className="font-bold text-amber-400 text-base">
-                                          {"⭐".repeat(r.stars)}
+                                          {"★".repeat(r.stars)}
                                         </span>
                                         <span className="text-xs font-bold text-zinc-300">
                                           ({r.stars}/5)
@@ -2039,9 +2040,9 @@ export default function GodEyeDashboard({
                                           }`}
                                       >
                                         {r.direction === "client_to_employee"
-                                          ? "👤 Cliente"
+                                          ? "Cliente"
                                           : r.direction === "driver_to_employee"
-                                            ? "🚗 Chofer"
+                                            ? "Chofer"
                                             : r.direction}
                                       </span>
                                     </div>
@@ -2166,7 +2167,7 @@ export default function GodEyeDashboard({
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-bold text-amber-400 text-base">
-                                  {"⭐".repeat(r.stars)}
+                                  {"★".repeat(r.stars)}
                                 </span>
                                 <span className="text-xs text-zinc-400 font-semibold">
                                   {r.direction}
@@ -2279,7 +2280,7 @@ export default function GodEyeDashboard({
         </div>
       </div>
 
-      {/* 🎛️ FILA 2: SERVICIOS & DIAGNÓSTICO (IZQUIERDA) & INTERCEPTOR DE CHAT (DERECHA) */}
+      {/* FILA 2: SERVICIOS & DIAGNÓSTICO (IZQUIERDA) & INTERCEPTOR DE CHAT (DERECHA) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* COLUMNA IZQUIERDA: 2. SERVICIOS & TRIANGULACIÓN + DIAGNÓSTICO CAUSAL (6 Cols) */}
         <div className="flex flex-col gap-6 lg:col-span-6 xl:col-span-6">
@@ -2303,12 +2304,13 @@ export default function GodEyeDashboard({
                 <button
                   type="button"
                   onClick={() => setActiveServiceFilter("alerts")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${activeServiceFilter === "alerts"
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${activeServiceFilter === "alerts"
                     ? "bg-amber-500 text-black shadow"
                     : "text-amber-400/90 hover:text-amber-300"
                     }`}
                 >
-                  ⚠️ Alertas (
+                  <AlertTriangle size={12} />
+                  Alertas (
                   {
                     overview.activeServices.filter(
                       (s) => getServiceAlerts(s).length > 0,
@@ -2319,12 +2321,13 @@ export default function GodEyeDashboard({
                 <button
                   type="button"
                   onClick={() => setActiveServiceFilter("clean")}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${activeServiceFilter === "clean"
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${activeServiceFilter === "clean"
                     ? "bg-emerald-500 text-black shadow"
                     : "text-emerald-400/90 hover:text-emerald-300"
                     }`}
                 >
-                  ✅ Normales (
+                  <CheckCircle2 size={12} />
+                  Normales (
                   {
                     overview.activeServices.filter(
                       (s) => getServiceAlerts(s).length === 0,
@@ -2373,12 +2376,13 @@ export default function GodEyeDashboard({
 
                         <div className="flex items-center gap-2 shrink-0">
                           <span
-                            className={`rounded-lg px-2 py-0.5 text-[11px] font-bold ${srv.iaActiva
+                            className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-bold ${srv.iaActiva
                               ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                               : "bg-red-500/20 text-red-300 border border-red-500/30"
                               }`}
                           >
-                            {srv.iaActiva ? "🤖 IA ON" : "🛑 IA OFF"}
+                            <Bot size={11} />
+                            {srv.iaActiva ? "IA ON" : "IA OFF"}
                           </span>
                           {/* Botón rápido para abrir modal de gestión */}
                           <button
@@ -2416,7 +2420,7 @@ export default function GodEyeDashboard({
               ) : (
                 <p className="text-sm text-zinc-500 text-center py-6">
                   {activeServiceFilter === "alerts"
-                    ? "🎉 ¡Excelente! No hay servicios activos con alertas o problemas."
+                    ? "No hay servicios activos con alertas o problemas."
                     : activeServiceFilter === "clean"
                       ? "No hay servicios sin alertas activas."
                       : "No hay servicios activos en curso en este momento."}
@@ -2637,7 +2641,7 @@ export default function GodEyeDashboard({
         </div>
       </div>
 
-      {/* ⚖️ FILA 3: BANDEJA DE APELACIONES & RESOLUCIÓN (ANCHO COMPLETO) */}
+      {/* FILA 3: BANDEJA DE APELACIONES & RESOLUCIÓN (ANCHO COMPLETO) */}
       <div className="rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-2xl">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3.5">
           <div className="flex items-center gap-2.5">
@@ -2661,7 +2665,7 @@ export default function GodEyeDashboard({
                 <div>
                   <div className="flex items-center justify-between">
                     <span className="font-extrabold text-amber-400 text-base">
-                      {"⭐".repeat(app.stars)} ({app.direction})
+                      {"★".repeat(app.stars)} ({app.direction})
                     </span>
                     <span className="text-xs text-zinc-400 font-medium">
                       {new Date(app.createdAt).toLocaleDateString()}
@@ -2706,7 +2710,7 @@ export default function GodEyeDashboard({
         </div>
       </div>
 
-      {/* 🛑 MODAL DE SANCIÓN DIRECTA */}
+      {/* MODAL DE SANCIÓN DIRECTA */}
       {showSanctionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl">
@@ -2832,7 +2836,7 @@ export default function GodEyeDashboard({
         </div>
       )}
 
-      {/* 🟢 MODAL DE REVOCACIÓN DE SANCIÓN */}
+      {/* MODAL DE REVOCACIÓN DE SANCIÓN */}
       {showRevokeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl">
@@ -2911,7 +2915,7 @@ export default function GodEyeDashboard({
         </div>
       )}
 
-      {/* 📋 MODAL DE DETALLE COMPLETO DE SANCIÓN */}
+      {/* MODAL DE DETALLE COMPLETO DE SANCIÓN */}
       {selectedSanctionDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
@@ -3107,7 +3111,7 @@ export default function GodEyeDashboard({
         </div>
       )}
 
-      {/* 🚀 MODAL INTERACTIVO DE DETALLE Y GESTIÓN DE SERVICIO */}
+      {/* MODAL INTERACTIVO DE DETALLE Y GESTIÓN DE SERVICIO */}
       {managingService && (
         <ServiceDetailDialog
           service={managingService}

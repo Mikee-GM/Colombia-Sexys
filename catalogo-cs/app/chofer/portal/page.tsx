@@ -4,6 +4,7 @@ import DriverPortalView from "@/components/chofer/DriverPortalView";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyWorkShift } from "@/lib/actions/work-shift";
+import { AlertTriangle } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Mi Portal -- Colombia Sexys",
@@ -46,16 +47,16 @@ export default async function DriverPortalPage({ searchParams }: PageProps) {
   if (!result.success || !result.data) {
     return (
       <div className="min-h-screen bg-[#0d0f12] text-white flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-3xl mb-4">
-          ⚠️
+        <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 mb-4">
+          <AlertTriangle size={28} />
         </div>
         <h1 className="text-xl font-bold text-red-400 mb-2">Acceso No Disponible</h1>
         <p className="text-sm text-gray-400 max-w-md mb-6">
           {result.error ||
-            "El enlace de acceso ha expirado o no es válido. Por favor, solicita un nuevo acceso desde el botón '🚚 Mi Portal' en tu bot de Telegram."}
+            "El enlace de acceso ha expirado o no es válido. Por favor, solicita un nuevo acceso desde el botón 'Mi Portal' en tu bot de Telegram."}
         </p>
         <div className="text-xs text-gray-600 bg-white/5 px-4 py-2 rounded-lg border border-white/5">
-          Abre tu chat de Telegram y presiona el botón 🚚 Mi Portal
+          Abre tu chat de Telegram y presiona el botón Mi Portal
         </div>
       </div>
     );

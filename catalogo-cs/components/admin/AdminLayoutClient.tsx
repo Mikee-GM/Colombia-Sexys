@@ -163,7 +163,9 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
     <div className="flex min-h-screen bg-black text-white font-body overflow-hidden">
       <SessionKeeper />
       {/* Sidebar Desktop */}
-      <aside className="w-64 border-r border-zinc-800/80 bg-[#050505] flex flex-col hidden md:flex shrink-0">
+      {/* En tableta instalada la barra de estado tambien se pinta encima
+          de la pagina, y sin este hueco tapaba el logo del menu lateral. */}
+      <aside className="w-64 border-r border-zinc-800/80 bg-[#050505] flex flex-col hidden md:flex shrink-0 pt-[env(safe-area-inset-top)]">
         <div className="p-6 border-b border-zinc-800/80 flex flex-col items-center">
           <div className="w-12 h-12 relative mb-3">
             <Image src="/logo-icono.webp" alt="Logo" fill sizes="48px" className="object-contain" />
@@ -234,7 +236,11 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
       </aside>
 
       {/* Mobile Navbar */}
-      <div className="md:hidden fixed top-0 inset-x-0 h-16 border-b border-zinc-800 bg-[#050505]/95 backdrop-blur-md z-40 flex items-center justify-between px-4">
+      {/* La barra va pegada al borde de la pantalla, que con la app
+          instalada queda por debajo de la hora y la bateria del sistema.
+          Crece lo que mida esa franja y la reserva como relleno, para que
+          el boton del menu quede siempre dentro de la zona pulsable. */}
+      <div className="md:hidden fixed top-0 inset-x-0 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] border-b border-zinc-800 bg-[#050505]/95 backdrop-blur-md z-40 flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 relative">
             <Image src="/logo-icono.webp" alt="Logo" fill sizes="48px" className="object-contain" />
@@ -259,7 +265,7 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="md:hidden fixed top-16 inset-x-0 bg-[#080808] border-b border-zinc-800 z-30 py-5 px-4 flex flex-col gap-5 shadow-2xl max-h-[calc(100vh-4rem)] overflow-y-auto"
+            className="md:hidden fixed top-[calc(4rem+env(safe-area-inset-top))] inset-x-0 bg-[#080808] border-b border-zinc-800 z-30 py-5 px-4 flex flex-col gap-5 shadow-2xl max-h-[calc(100dvh-4rem-env(safe-area-inset-top))] overflow-y-auto"
           >
             {navGroups.map((group) => (
               <div key={group.title} className="flex flex-col gap-1.5">
@@ -318,7 +324,7 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto bg-black pt-16 md:pt-0">
+      <main className="flex-1 overflow-y-auto bg-black pt-[calc(4rem+env(safe-area-inset-top))] md:pt-0">
         <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
           {children}
         </div>

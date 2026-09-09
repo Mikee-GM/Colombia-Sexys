@@ -25,7 +25,20 @@ import SubirFotosSemanales, {
 import ServicioAhora from "@/components/empleada/ServicioAhora";
 import SolicitarServicio from "@/components/empleada/SolicitarServicio";
 import Link from "next/link";
-import { BarChart3, Bell, Camera, ClipboardList, Star, Trophy } from "lucide-react";
+import {
+  AlertTriangle,
+  Banknote,
+  BarChart3,
+  Bell,
+  Camera,
+  Check,
+  ClipboardList,
+  Clock,
+  Crown,
+  Info,
+  Star,
+  Trophy,
+} from "lucide-react";
 
 interface EmployeePortalViewProps {
   initialData: EmployeePortalData;
@@ -84,9 +97,18 @@ export default function EmployeePortalView({
   return (
     <div className="min-h-screen bg-[#0B0D13] text-gray-100 flex flex-col font-sans selection:bg-[#C5A55A]/30">
       {/* HEADER / HERO BAR */}
-      <header className="sticky top-0 z-30 bg-[#0B0D13]/90 backdrop-blur-md border-b border-white/10 px-4 py-3 sm:px-6">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      {/* Con la app instalada en la pantalla de inicio la pagina empieza
+          debajo de la barra de estado del telefono, asi que el relleno de
+          arriba tiene que sumar ese hueco: sin el, la hora y la bateria
+          del sistema pisaban el nombre, Avisos y Cerrar sesion, y no se
+          podian pulsar. */}
+      <header className="sticky top-0 z-30 bg-[#0B0D13]/90 backdrop-blur-md border-b border-white/10 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-6">
+        {/* `min-w-0` en la columna de la izquierda y `shrink-0` en la de
+            la derecha: sin eso, en un telefono estrecho el nombre no cede
+            ancho, empuja al ranking y los dos bloques se montaban uno
+            encima del otro. */}
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-[#C5A55A] shadow-md shadow-[#C5A55A]/20 bg-gray-800 shrink-0">
               {data.profile.fotoPerfilUrl ? (
                 <Image
@@ -102,16 +124,18 @@ export default function EmployeePortalView({
                 </div>
               )}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-white tracking-wide">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <h1 className="truncate text-base sm:text-lg font-bold text-white tracking-wide">
                   {data.profile.nombreArtistico}
                 </h1>
-                <span className="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#C5A55A]/20 text-[#E8D5A3] border border-[#C5A55A]/30">
+                <span className="shrink-0 whitespace-nowrap text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-[#C5A55A]/20 text-[#E8D5A3] border border-[#C5A55A]/30">
                   Modelo VIP
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              {/* Los datos de la fila de abajo pasan a la siguiente linea
+                  en lugar de desbordar la cabecera. */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400">
                 <span className="flex items-center gap-1">
                   <span
                     className={`w-2 h-2 rounded-full ${
@@ -126,7 +150,7 @@ export default function EmployeePortalView({
                   <>
                     <span>•</span>
                     <span className="text-amber-300 font-semibold flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                      <span>💵</span> Debe: {formatCurrency(data.cashDelivery?.totalPending || 0)}
+                      <Banknote size={13} /> Debe: {formatCurrency(data.cashDelivery?.totalPending || 0)}
                     </span>
                   </>
                 )}
@@ -134,9 +158,11 @@ export default function EmployeePortalView({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <div className="text-right">
-              <div className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">
+              {/* El rotulo solo cabe a partir de tableta; en el telefono
+                  la copa y el puesto ya se entienden solos. */}
+              <div className="hidden text-[11px] uppercase tracking-wider text-gray-400 font-medium sm:block">
                 Ranking Global
               </div>
               <div className="text-sm sm:text-base font-bold text-[#E8D5A3] flex items-center justify-end gap-1">
@@ -149,14 +175,17 @@ export default function EmployeePortalView({
                 tiene sesion que cerrar. */}
             {workShift !== undefined && workShift !== null && (
               <>
+                {/* En el telefono queda solo la campana, con su etiqueta
+                    accesible: la palabra no cabia y empujaba el boton de
+                    salir fuera de la pantalla. */}
                 <Link
-              href="/empleada/ajustes"
-              aria-label="Configurar avisos"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
-            >
-              <Bell size={14} />
-              Avisos
-            </Link>
+                  href="/empleada/ajustes"
+                  aria-label="Configurar avisos"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A] sm:px-3"
+                >
+                  <Bell size={14} />
+                  <span className="hidden sm:inline">Avisos</span>
+                </Link>
                 <CerrarSesion />
               </>
             )}
@@ -317,13 +346,13 @@ export default function EmployeePortalView({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 ${
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                       (data.cashDelivery?.totalPending || 0) > 0
                         ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                         : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                     }`}
                   >
-                    💵
+                    <Banknote size={19} />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
@@ -370,7 +399,7 @@ export default function EmployeePortalView({
               {/* Alerta de montos provisionales si aplica */}
               {data.cashDelivery?.hasProvisional && (
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
-                  <span>ℹ️</span>
+                  <Info size={14} className="shrink-0" />
                   <span>
                     Hay servicios con deducciones de transporte en estado provisional, en espera de confirmación de Uber por tu jefe.
                   </span>
@@ -447,7 +476,7 @@ export default function EmployeePortalView({
               <div className="bg-[#141721] p-5 rounded-xl border border-white/5 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>💵</span> Esquema de Ganancias
+                    <Banknote size={15} /> Esquema de Ganancias
                   </h3>
                   <span className="text-xs px-2 py-0.5 rounded bg-[#C5A55A]/20 text-[#E8D5A3] font-semibold">
                     {data.earnings.percentageRate}% Neto
@@ -468,10 +497,10 @@ export default function EmployeePortalView({
               <div className="bg-[#141721] p-5 rounded-xl border border-white/5 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>📸</span> Contenido Semanal
+                    <Camera size={15} /> Contenido Semanal
                   </h3>
                   <span
-                    className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
+                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-semibold ${
                       data.profile.weeklyContentStatus === "al_dia"
                         ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                         : data.profile.weeklyContentStatus === "pendiente_revision"
@@ -479,11 +508,19 @@ export default function EmployeePortalView({
                           : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                     }`}
                   >
-                    {data.profile.weeklyContentStatus === "al_dia"
-                      ? "✓ Al Día"
-                      : data.profile.weeklyContentStatus === "pendiente_revision"
-                        ? "⏳ En Revisión"
-                        : "⚠️ Fotos Atrasadas"}
+                    {data.profile.weeklyContentStatus === "al_dia" ? (
+                      <>
+                        <Check size={12} /> Al Día
+                      </>
+                    ) : data.profile.weeklyContentStatus === "pendiente_revision" ? (
+                      <>
+                        <Clock size={12} /> En Revisión
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle size={12} /> Fotos Atrasadas
+                      </>
+                    )}
                   </span>
                 </div>
                 {/*
@@ -508,8 +545,8 @@ export default function EmployeePortalView({
             {/* MINI RANKING HIGHLIGHT */}
             <div className="bg-[#141721] p-5 rounded-xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-[#C5A55A]/20 border border-[#C5A55A]/40 flex items-center justify-center text-2xl">
-                  🏆
+                <div className="w-12 h-12 rounded-full bg-[#C5A55A]/20 border border-[#C5A55A]/40 flex items-center justify-center text-[#E8D5A3]">
+                  <Trophy size={22} />
                 </div>
                 <div>
                   <div className="text-sm font-bold text-white">
@@ -535,8 +572,8 @@ export default function EmployeePortalView({
           <div className="space-y-6 animate-fadeIn">
             {/* Banner de motivación */}
             <div className="p-6 rounded-2xl bg-gradient-to-br from-[#1E1B15] via-[#141721] to-black border border-[#C5A55A]/30 shadow-xl text-center space-y-3">
-              <div className="inline-block p-3 rounded-full bg-[#C5A55A]/10 border border-[#C5A55A]/30 text-3xl">
-                👑
+              <div className="inline-block p-3 rounded-full bg-[#C5A55A]/10 border border-[#C5A55A]/30 text-[#E8D5A3]">
+                <Crown size={26} />
               </div>
               <h2 className="text-lg sm:text-xl font-bold text-white">
                 Tabla de Clasificación Global
@@ -560,15 +597,9 @@ export default function EmployeePortalView({
               </div>
               <div className="divide-y divide-white/5">
                 {data.ranking.leaderboard.map((entry) => {
+                  // Las tres primeras posiciones se distinguen en dorado,
+                  // no con medallas de emoji.
                   const isTop3 = entry.position <= 3;
-                  const medal =
-                    entry.position === 1
-                      ? "🥇"
-                      : entry.position === 2
-                        ? "🥈"
-                        : entry.position === 3
-                          ? "🥉"
-                          : `#${entry.position}`;
 
                   return (
                     <div
@@ -582,10 +613,10 @@ export default function EmployeePortalView({
                       <div className="flex items-center gap-3 w-16">
                         <span
                           className={`text-sm font-bold ${
-                            isTop3 ? "text-base" : "text-gray-400"
+                            isTop3 ? "text-[#E8D5A3]" : "text-gray-400"
                           }`}
                         >
-                          {medal}
+                          #{entry.position}
                         </span>
                       </div>
 

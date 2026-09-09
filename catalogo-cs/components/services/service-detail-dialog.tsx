@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Ban,
+  Calendar,
   Camera,
   Car,
   Check,
@@ -252,8 +253,9 @@ export default function ServiceDetailDialog({
               </span>
               <ServiceStatusBadge status={service.estado} />
               {service.tipoAgenda === "programado" && (
-                <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-300">
-                  📅 Cita Programada
+                <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-300">
+                  <Calendar size={11} />
+                  Cita Programada
                 </span>
               )}
             </div>

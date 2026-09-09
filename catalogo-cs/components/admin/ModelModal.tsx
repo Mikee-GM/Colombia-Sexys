@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import imageCompression from "browser-image-compression";
+import { Ban, Globe, Lock } from "lucide-react";
 import type { Modelo, ModeloPayload } from "@/types";
 
 import {
@@ -622,23 +623,26 @@ export default function ModelModal({
                           <button
                             type="button"
                             onClick={() => handleReviewSubmission(sub.id, "aprobar_publica")}
-                            className="w-full bg-emerald-600/90 hover:bg-emerald-600 text-white font-bold text-[10px] uppercase tracking-wider py-2 rounded transition-colors"
+                            className="w-full flex items-center justify-center gap-1.5 bg-emerald-600/90 hover:bg-emerald-600 text-white font-bold text-[10px] uppercase tracking-wider py-2 rounded transition-colors"
                           >
-                            🟢 Aprobar al Catálogo Público
+                            <Globe size={12} />
+                            Aprobar al Catálogo Público
                           </button>
                           <button
                             type="button"
                             onClick={() => handleReviewSubmission(sub.id, "aprobar_privada")}
-                            className="w-full bg-[#C5A55A]/20 hover:bg-[#C5A55A]/30 text-[#E8D5A3] border border-[#C5A55A]/50 font-bold text-[10px] uppercase tracking-wider py-2 rounded transition-colors"
+                            className="w-full flex items-center justify-center gap-1.5 bg-[#C5A55A]/20 hover:bg-[#C5A55A]/30 text-[#E8D5A3] border border-[#C5A55A]/50 font-bold text-[10px] uppercase tracking-wider py-2 rounded transition-colors"
                           >
-                            🔒 Aprobar como Exclusiva
+                            <Lock size={12} />
+                            Aprobar como Exclusiva
                           </button>
                           <button
                             type="button"
                             onClick={() => setPorRechazar(sub.id)}
-                            className="w-full bg-red-950/40 hover:bg-red-900/60 text-red-400 font-bold text-[10px] uppercase tracking-wider py-1.5 rounded transition-colors"
+                            className="w-full flex items-center justify-center gap-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 font-bold text-[10px] uppercase tracking-wider py-1.5 rounded transition-colors"
                           >
-                            🔴 Rechazar
+                            <Ban size={12} />
+                            Rechazar
                           </button>
                         </div>
                       ) : (

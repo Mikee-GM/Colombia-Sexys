@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Bot, X } from "lucide-react";
 import { useAI } from "./ai-provider";
 import AIMessage from "./ai-message";
 
@@ -46,9 +46,14 @@ export default function AIChatPanel() {
       className="
       text-xl
       font-bold
+
+      flex
+      items-center
+      gap-2
       "
      >
-      🤖 Asistente IA
+      <Bot size={20} />
+      Asistente IA
      </h2>
 
      <p

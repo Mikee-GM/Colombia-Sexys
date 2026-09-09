@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Eye, Plus, Search } from "lucide-react";
+import { Calendar, Eye, Plus, Search } from "lucide-react";
 import ServiceStatusBadge from "./service-status-badge";
 import ServiceDetailDialog from "./service-detail-dialog";
 import CreateServiceDialog from "./create-service-dialog";
@@ -185,8 +185,9 @@ export default function ServicesTable({ initialServices = [] }: Props) {
                       <div className="flex items-center gap-1.5">
                         <ServiceStatusBadge status={service.estado} />
                         {service.tipoAgenda === "programado" && (
-                          <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-purple-300">
-                            📅 Cita
+                          <span className="inline-flex items-center gap-1 rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-purple-300">
+                            <Calendar size={10} />
+                            Cita
                           </span>
                         )}
                       </div>
