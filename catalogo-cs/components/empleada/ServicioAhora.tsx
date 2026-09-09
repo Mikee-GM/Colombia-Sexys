@@ -70,8 +70,11 @@ export default function ServicioAhora({
    * no se vuelve a finalizar. Lo unico que queda son los dos botones del
    * viaje.
    */
-  const enRegreso =
-    servicio.estado === "finalizado" && servicio.transporte?.tipo === "regreso";
+  const enRegreso = servicio.estado === "finalizado";
+  // El viaje de vuelta tarda un momento en quedar pedido. Antes la tarjeta
+  // desaparecia en ese hueco y volvia a aparecer sola despues, y desde fuera
+  // parecia que el servicio se habia perdido.
+  const esperandoTransporte = enRegreso && !servicio.transporte;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-black shadow-lg">
@@ -108,6 +111,13 @@ export default function ServicioAhora({
             {formatCurrency(servicio.gananciaEstimada)}
           </span>
         </p>
+
+        {esperandoTransporte && (
+          <p className="rounded-lg border border-[#C5A55A]/25 bg-[#C5A55A]/5 px-3 py-2 text-center text-[11px] text-[#E8D5A3]">
+            Estamos cuadrando tu transporte de regreso. En cuanto esté, aquí
+            mismo marcas que ya vas en camino.
+          </p>
+        )}
 
         {servicio.transporte && (
           <p className="rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-center text-[11px] text-gray-300">

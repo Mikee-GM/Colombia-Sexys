@@ -60,6 +60,49 @@ export class EmployeesService {
     );
   }
 
+  /**
+   * Cuánto sigue en pantalla un servicio cerrado que nunca llegó a tener
+   * transporte de vuelta.
+   *
+   * Sin este tope, un regreso que falle al crearse dejaría la tarjeta clavada
+   * para siempre, sin nada que pulsar dentro.
+   */
+  private static readonly HORAS_TRAS_CERRAR = 12;
+
+  /**
+   * El regreso todavía no está cerrado.
+   *
+   * Es lo que sostiene la tarjeta del portal desde que finaliza el servicio
+   * hasta que la modelo marca que llegó a su casa, en un solo tramo continuo.
+   * La primera versión pedía que ya existiera el viaje de vuelta, y ahí había
+   * un hueco: entre finalizar y que el transporte quedara pedido, la tarjeta
+   * desaparecía y volvía a aparecer sola un rato después. Desde fuera parecía
+   * que el servicio se había perdido.
+   *
+   * El final es `horaLlegadaCasa`, que es lo que se escribe cuando confirma la
+   * llegada, venga por Uber o por chofer propio.
+   */
+  private regresoSinCerrar(servicio: Servicios): boolean {
+    if (servicio.horaLlegadaCasa) return false;
+    if (this.regresoPendiente(servicio)) return true;
+
+    // Un regreso ya terminado sin `horaLlegadaCasa` es un servicio antiguo:
+    // tampoco hay nada que pulsar.
+    const viajes = servicio.viajes || [];
+    if (viajes.some((v) => v.tipo === 'regreso' && v.estado === 'finalizado')) {
+      return false;
+    }
+
+    // Aún no hay viaje de vuelta: se está pidiendo. Se mantiene un rato.
+    const fin = servicio.horaFinServicio
+      ? new Date(servicio.horaFinServicio).getTime()
+      : null;
+    if (!fin) return false;
+    return (
+      Date.now() - fin < EmployeesService.HORAS_TRAS_CERRAR * 60 * 60 * 1000
+    );
+  }
+
   constructor(
     @InjectRepository(Empleadas)
     private readonly empleadasRepository: Repository<Empleadas>,
@@ -1082,7 +1125,7 @@ export class EmployeesService {
         s.estado === 'en_curso' ||
         s.estado === 'agendado' ||
         s.estado === 'pendiente' ||
-        (s.estado === 'finalizado' && this.regresoPendiente(s) !== null),
+        (s.estado === 'finalizado' && this.regresoSinCerrar(s)),
     );
 
     let activeServiceDto: EmployeePortalActiveService | null = null;
@@ -1110,13 +1153,14 @@ export class EmployeesService {
        * viaje que siga abierto.
        */
       const activeTrip =
-        (activeOrUpcoming.estado === 'finalizado'
-          ? this.regresoPendiente(activeOrUpcoming)
-          : null) ??
-        (activeOrUpcoming.viajes || []).find((v) =>
-          EmployeesService.VIAJE_ABIERTO.has(v.estado),
-        ) ??
-        activeOrUpcoming.viajes?.[0];
+        activeOrUpcoming.estado === 'finalizado'
+          ? // Cerrado el servicio, el único viaje que le queda por tocar es el
+            // de vuelta. Si todavía no existe no se manda ninguno: enseñarle
+            // el de ida, que ya terminó, solo confunde.
+            this.regresoPendiente(activeOrUpcoming)
+          : ((activeOrUpcoming.viajes || []).find((v) =>
+              EmployeesService.VIAJE_ABIERTO.has(v.estado),
+            ) ?? activeOrUpcoming.viajes?.[0]);
       const startTime = activeOrUpcoming.horaInicioServicio
         ? new Date(activeOrUpcoming.horaInicioServicio)
         : null;
