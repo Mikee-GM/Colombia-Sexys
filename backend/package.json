@@ -32,7 +32,10 @@
     "db:clean:prod:run": "node dist/scripts/limpiar-base-datos.js --confirmar",
     "db:demo": "corepack pnpm build && node dist/scripts/sembrar-datos-demo.js",
     "db:demo:run": "corepack pnpm build && node dist/scripts/sembrar-datos-demo.js --confirmar",
-    "db:demo:limpiar": "corepack pnpm build && node dist/scripts/sembrar-datos-demo.js --limpiar --confirmar"
+    "db:demo:limpiar": "corepack pnpm build && node dist/scripts/sembrar-datos-demo.js --limpiar --confirmar",
+    "db:demo:prod": "node dist/scripts/sembrar-datos-demo.js",
+    "db:demo:prod:run": "node dist/scripts/sembrar-datos-demo.js --confirmar --en-produccion",
+    "db:demo:prod:limpiar": "node dist/scripts/sembrar-datos-demo.js --limpiar --confirmar --en-produccion"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",

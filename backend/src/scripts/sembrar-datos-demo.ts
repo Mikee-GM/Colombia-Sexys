@@ -39,9 +39,19 @@
  *   node dist/scripts/sembrar-datos-demo.js --confirmar   # Siembra de verdad
  *   node dist/scripts/sembrar-datos-demo.js --limpiar --confirmar   # Borra lo sembrado
  *
- * NO CORRE EN PRODUCCIÓN. Con `NODE_ENV=production` aborta sin conectarse
- * siquiera: es un script que escribe datos falsos y no existe ninguna razón
- * legítima para ejecutarlo contra la base real.
+ * EN PRODUCCIÓN HACE FALTA UNA BANDERA MÁS. Con `NODE_ENV=production` no basta
+ * con `--confirmar`: hay que añadir `--en-produccion`. Son dos banderas que
+ * nadie teclea por inercia, y ninguna viene puesta en los scripts de desarrollo.
+ *
+ *   node dist/scripts/sembrar-datos-demo.js --confirmar --en-produccion
+ *
+ * El ensayo sí corre en producción sin banderas, porque no se conecta ni
+ * escribe nada. Antes de tocar la base, el script imprime a qué servidor y a
+ * qué base va a escribir: esa línea es la que hay que leer antes de seguir.
+ *
+ * El día que la operación sea real y haya datos de clientes de verdad, esto
+ * deja de tener sentido: lo que hay que hacer entonces es volver a abortar en
+ * cuanto `NODE_ENV` sea `production`, en `main()`.
  */
 
 import { AppDataSource } from '../data-source';
@@ -2276,16 +2286,60 @@ async function informeDeColumnasVacias(qr: QueryRunner): Promise<void> {
   }
 }
 
+/**
+ * A qué servidor y a qué base apunta la conexión, sin la contraseña.
+ *
+ * Se lee de la configuración, no de una conexión abierta, para poder imprimirlo
+ * también en el ensayo, que no se conecta. Es la única protección real contra
+ * sembrar en la base equivocada: las banderas dicen que quieres escribir, esta
+ * línea dice dónde.
+ */
+function describirDestino(): string {
+  const conexion = AppDataSource.options as {
+    host?: string;
+    port?: number;
+    database?: string;
+    username?: string;
+  };
+  const entorno = process.env.NODE_ENV || 'sin NODE_ENV';
+  return `${conexion.username ?? '?'}@${conexion.host ?? '?'}:${conexion.port ?? '?'}/${String(conexion.database ?? '?')} (${entorno})`;
+}
+
 async function main(): Promise<void> {
-  if (process.env.NODE_ENV === 'production') {
+  const ejecutar = process.argv.includes('--confirmar');
+  const soloLimpiar = process.argv.includes('--limpiar');
+  const enProduccion = process.env.NODE_ENV === 'production';
+  const produccionAsumida = process.argv.includes('--en-produccion');
+
+  /*
+   * La puerta de produccion.
+   *
+   * Antes esto abortaba en seco en cuanto NODE_ENV era 'production'. Mientras
+   * el sistema no esta en manos de nadie, sembrar la operacion contra la base
+   * desplegada es la unica forma de recorrer el panel de produccion con datos
+   * dentro, asi que la puerta se abre; pero no de par en par. Hace falta
+   * escribir `--en-produccion` ademas de `--confirmar`: dos banderas que no
+   * salen por inercia ni por historial de la shell.
+   *
+   * El ensayo no pasa por aqui a proposito: no se conecta ni escribe, y poder
+   * lanzarlo en produccion sin banderas es justamente lo que permite mirar
+   * antes de tocar.
+   */
+  if (enProduccion && ejecutar && !produccionAsumida) {
     console.error(
-      'ABORTADO: este script escribe datos de demostración y no debe correr en producción.',
+      'ABORTADO: NODE_ENV=production y este script escribe datos de demostracion.',
+    );
+    console.error('');
+    console.error(
+      'Si de verdad quieres sembrarlos en la base de produccion, repite el comando',
+    );
+    console.error('anadiendo --en-produccion:');
+    console.error('');
+    console.error(
+      `  node dist/scripts/sembrar-datos-demo.js${soloLimpiar ? ' --limpiar' : ''} --confirmar --en-produccion`,
     );
     process.exit(1);
   }
-
-  const ejecutar = process.argv.includes('--confirmar');
-  const soloLimpiar = process.argv.includes('--limpiar');
 
   console.log(
     '===============================================================',
@@ -2303,7 +2357,15 @@ async function main(): Promise<void> {
     `Modo:   ${ejecutar ? '>>> EJECUCION REAL <<<' : '*** ENSAYO / DRY RUN (sin cambios) ***'}`,
   );
   console.log(`Marca:  todos los ids empiezan por "${PREFIJO}-"`);
+  console.log(`Base:   ${describirDestino()}`);
   console.log('');
+
+  if (enProduccion && ejecutar) {
+    console.log(
+      '>>> Esto es la base de PRODUCCION. Lee la linea de arriba antes de seguir.',
+    );
+    console.log('');
+  }
 
   if (!ejecutar) {
     console.log(
