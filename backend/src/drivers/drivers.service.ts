@@ -7,6 +7,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
+import {
+  explicarFaltaDeChoferes,
+  type ContextoDelReparto,
+} from './diagnostico-de-reparto';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { Choferes } from './entities/driver.entity';
@@ -302,39 +306,8 @@ export class DriversService {
    * ubicacion, que todos cerraron su jornada o que quedaron marcados como
    * ocupados por viajes que nunca se cerraron.
    */
-  private async logWhyNoDriversAvailable(): Promise<void> {
-    try {
-      const [conteo]: Array<Record<string, string>> =
-        await this.dataSource.query(
-          `SELECT
-             COUNT(*)::int AS total,
-             COUNT(*) FILTER (WHERE u.activo)::int AS activos,
-             COUNT(*) FILTER (WHERE u.activo AND u.en_jornada)::int AS en_jornada,
-             COUNT(*) FILTER (WHERE u.activo AND u.en_jornada AND c.disponible)::int AS disponibles,
-             COUNT(*) FILTER (WHERE u.activo AND u.en_jornada AND c.disponible
-                              AND u.telegram_chat_id IS NOT NULL)::int AS con_telegram,
-             COUNT(*) FILTER (WHERE u.activo AND u.en_jornada AND c.disponible
-                              AND u.telegram_chat_id IS NOT NULL
-                              AND c.ubicacion_lat IS NOT NULL
-                              AND c.ubicacion_lng IS NOT NULL)::int AS con_ubicacion
-           FROM choferes c
-           JOIN usuarios u ON u.id = c.usuario_id`,
-        );
-
-      this.logger.warn(
-        'Sin choferes para el reparto. De ' +
-          `${conteo.total} choferes: ${conteo.activos} con cuenta activa, ` +
-          `${conteo.en_jornada} dentro de su jornada, ` +
-          `${conteo.disponibles} no ocupados, ` +
-          `${conteo.con_telegram} con Telegram vinculado, ` +
-          `${conteo.con_ubicacion} con ubicacion registrada. ` +
-          'El primer numero que cae a cero es la causa.',
-      );
-    } catch (error: unknown) {
-      this.logger.warn(
-        `Sin choferes para el reparto y no se pudo diagnosticar por que: ${String(error)}`,
-      );
-    }
+  async explicarFaltaDeChoferes(contexto?: ContextoDelReparto): Promise<void> {
+    await explicarFaltaDeChoferes(this.dataSource, this.logger, contexto);
   }
 
   async findAvailableDriversOrderByDistance(
@@ -373,7 +346,7 @@ export class DriversService {
       // tienen que cumplirse a la vez y cualquiera de ellas deja la lista
       // vacia. Se cuenta cuantos choferes falla cada una para poder arreglar la
       // que toca en vez de adivinar.
-      await this.logWhyNoDriversAvailable();
+      await this.explicarFaltaDeChoferes();
     }
 
     return result.entities.map((entity, index) => {

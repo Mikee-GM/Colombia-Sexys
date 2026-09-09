@@ -42,6 +42,8 @@ import {
   estimateTravelMinutes,
 } from './service-scheduling';
 import { DisciplineService } from '../discipline/discipline.service';
+import { explicarFaltaDeChoferes } from '../drivers/diagnostico-de-reparto';
+import { momentoDeTurno, sqlTurnoVigente } from '../drivers/turno-vigente';
 import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entity';
 import { SaveBankAccountDto } from './dto/bank-account.dto';
 import { CancelServiceDto } from './dto/cancel-service.dto';
@@ -2809,41 +2811,20 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       )`,
     );
 
-    // Turnos: un chofer sin ningún turno asignado sigue elegible siempre (compatibilidad
-    // con choferes que no usan el sistema de turnos). Uno que sí tiene turnos asignados
-    // solo es elegible si ahora mismo está dentro de uno de sus turnos activos.
-    const nowInMexicoCity = new Date(
-      new Date().toLocaleString('en-US', { timeZone: APP_TIME_ZONE }),
-    );
-    const currentDow = nowInMexicoCity.getDay();
-    const yesterdayDow = (currentDow + 6) % 7;
-    const currentTime = `${String(nowInMexicoCity.getHours()).padStart(2, '0')}:${String(
-      nowInMexicoCity.getMinutes(),
-    ).padStart(2, '0')}`;
+    /*
+     * Turnos: un chofer sin ningún turno asignado sigue elegible siempre
+     * (compatibilidad con quien no usa el sistema de turnos). Uno que sí tiene
+     * turnos asignados solo es elegible si ahora mismo está dentro de uno de
+     * ellos.
+     *
+     * La condición sale de `turno-vigente.ts` en vez de estar escrita aquí: el
+     * diagnóstico de "no hay choferes disponibles" tiene que aplicar
+     * exactamente la misma, y con dos copias la del diagnóstico acabaría
+     * mintiendo sobre lo que hace esta.
+     */
+    const { currentTime, currentDow, yesterdayDow } = momentoDeTurno();
     query
-      .andWhere(
-        `(
-          NOT EXISTS (SELECT 1 FROM driver_shift_assignments dsa WHERE dsa.driver_id = chofer.id)
-          OR EXISTS (
-            SELECT 1 FROM driver_shift_assignments dsa
-            JOIN driver_shifts ds ON ds.id = dsa.shift_id
-            WHERE dsa.driver_id = chofer.id
-              AND ds.active = true
-              AND (
-                (ds.starts_at <= ds.ends_at
-                  AND :currentTime BETWEEN ds.starts_at AND ds.ends_at
-                  AND :currentDow = ANY(ds.days_of_week))
-                OR
-                (ds.starts_at > ds.ends_at
-                  AND (
-                    (:currentTime >= ds.starts_at AND :currentDow = ANY(ds.days_of_week))
-                    OR
-                    (:currentTime <= ds.ends_at AND :yesterdayDow = ANY(ds.days_of_week))
-                  ))
-              )
-          )
-        )`,
-      )
+      .andWhere(sqlTurnoVigente('chofer'))
       .setParameter('currentTime', currentTime)
       .setParameter('currentDow', currentDow)
       .setParameter('yesterdayDow', yesterdayDow);
@@ -2885,9 +2866,19 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       .getRawAndEntities();
 
     if (result.entities.length === 0) {
-      this.logger.log(
-        `[dispatchViaje] No hay choferes disponibles para el viaje ${viajeId}.`,
-      );
+      /*
+       * El desglose se pide aqui, que es el camino por el que de verdad se
+       * reparte.
+       *
+       * Existia desde antes, pero colgaba de `findAvailableDriversOrderByDistance`,
+       * que es otra puerta: cuando el reparto real no encontraba a nadie, en el
+       * registro solo quedaba "No hay choferes disponibles" y habia que ir a la
+       * base a mirar cual de las nueve condiciones fallaba.
+       */
+      await explicarFaltaDeChoferes(this.choferesRepository, this.logger, {
+        choferesYaNotificados: notificadosIds,
+        viajeId,
+      });
       await this.notifyNoDriversAvailable(viaje);
       return;
     }
