@@ -36,7 +36,19 @@ const METODOS = [
   { id: "mixto", label: "Mixto" },
 ] as const;
 
+/**
+ * Los atajos, no la lista completa.
+ *
+ * Son las duraciones que más se repiten y ahorran teclear, pero durante un
+ * tiempo fueron lo único que se podía elegir: quien cuadraba cinco horas, o
+ * una hora y media, tenía que conformarse con el botón más cercano y el importe
+ * salía mal. El campo libre de al lado es el que manda.
+ */
 const DURACIONES = [1, 2, 3, 4, 6, 8, 12];
+
+/** Los mismos límites que valida el backend. */
+const HORAS_MINIMO = 0.5;
+const HORAS_MAXIMO = 24;
 
 /**
  * `datetime-local` no entiende zonas: quiere `YYYY-MM-DDTHH:mm` en hora local.
@@ -64,6 +76,13 @@ export default function SolicitarServicio() {
   const [tipo, setTipo] = useState<Tipo>("inmediato");
   const [cuando, setCuando] = useState(ahoraParaInput);
   const [duracion, setDuracion] = useState(1);
+  /*
+   * El campo libre se abre solo cuando ella lo pide. Los atajos siguen siendo
+   * lo primero que ve --cubren la mayoría de los casos-- y el input aparece
+   * debajo en cuanto ninguno le sirve.
+   */
+  const [horasLibres, setHorasLibres] = useState(false);
+  const [horasTexto, setHorasTexto] = useState("");
   const [metodo, setMetodo] = useState<string>("efectivo");
   const [monto, setMonto] = useState("");
   const [montoTocado, setMontoTocado] = useState(false);
@@ -102,6 +121,19 @@ export default function SolicitarServicio() {
   }, []);
 
   const enviar = useCallback(async () => {
+    // Se comprueba aquí y no solo con los atributos del input: el teclado
+    // numérico del móvil deja escribir cosas que `min` y `max` no frenan, y el
+    // backend rechazaría la solicitud con un mensaje que no dice qué corregir.
+    if (
+      !Number.isFinite(duracion) ||
+      duracion < HORAS_MINIMO ||
+      duracion > HORAS_MAXIMO
+    ) {
+      toast.error(
+        `Las horas tienen que estar entre ${HORAS_MINIMO} y ${HORAS_MAXIMO}.`,
+      );
+      return;
+    }
     const montoNumero = Number(monto);
     if (!Number.isFinite(montoNumero) || montoNumero <= 0) {
       toast.error("Escribe cuánto se cobra.");
@@ -125,7 +157,8 @@ export default function SolicitarServicio() {
           tipo,
           // El input da hora local; el backend la quiere en ISO.
           fechaServicio: new Date(cuando).toISOString(),
-          duracionHoras: duracion,
+          // La columna es `numeric(4,2)`: mas decimales los rechaza el backend.
+          duracionHoras: Math.round(duracion * 100) / 100,
           metodoPago: metodo,
           montoCobrado: montoNumero,
           clienteNombreLibre: cliente.trim() || undefined,
@@ -239,13 +272,57 @@ export default function SolicitarServicio() {
               {DURACIONES.map((horas) => (
                 <Opcion
                   key={horas}
-                  activa={duracion === horas}
-                  onClick={() => setDuracion(horas)}
+                  activa={!horasLibres && duracion === horas}
+                  onClick={() => {
+                    setHorasLibres(false);
+                    setDuracion(horas);
+                  }}
                   titulo={`${horas} h`}
                   compacta
                 />
               ))}
+              <Opcion
+                activa={horasLibres}
+                onClick={() => {
+                  setHorasLibres(true);
+                  // Arranca con lo que ya estuviera elegido: casi siempre solo
+                  // hay que retocarlo, no escribirlo entero.
+                  setHorasTexto(String(duracion));
+                }}
+                titulo="Otras"
+                compacta
+              />
             </div>
+
+            {horasLibres && (
+              <div className="mt-2 space-y-1.5">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  autoFocus
+                  min={HORAS_MINIMO}
+                  max={HORAS_MAXIMO}
+                  step={0.5}
+                  value={horasTexto}
+                  onChange={(evento) => {
+                    const texto = evento.target.value;
+                    setHorasTexto(texto);
+                    const valor = Number(texto);
+                    // El estado solo se mueve con un número válido; el aviso de
+                    // abajo se encarga de lo que no lo es, y al enviar se
+                    // vuelve a comprobar.
+                    if (Number.isFinite(valor) && valor > 0) setDuracion(valor);
+                  }}
+                  placeholder="Por ejemplo, 5 o 1.5"
+                  aria-label="Horas del servicio"
+                  className="w-full rounded-xl border border-white/10 bg-black px-3.5 py-3 text-sm text-gray-100 outline-none focus:border-[#C5A55A]"
+                />
+                <p className="text-[11px] text-gray-500">
+                  Entre {HORAS_MINIMO} y {HORAS_MAXIMO} horas. Puedes usar
+                  medias horas.
+                </p>
+              </div>
+            )}
           </Campo>
 
           <Campo etiqueta="¿Cómo paga?">

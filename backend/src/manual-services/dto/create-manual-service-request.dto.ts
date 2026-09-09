@@ -6,7 +6,9 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -43,9 +45,21 @@ export class CreateManualServiceRequestDto {
   @IsString()
   readonly fechaServicio: string;
 
+  /**
+   * Las horas del servicio, ahora que la modelo puede escribirlas a mano.
+   *
+   * Antes solo llegaban las de una lista cerrada de botones, asi que bastaba
+   * con `@IsNumber()`. Con el campo libre entra lo que ella teclee, y un cero,
+   * un negativo o un 500 crearian un servicio con un importe absurdo que el
+   * jefe tendria que cazar a ojo. El maximo son 24 horas --un dia-- y el minimo
+   * media, que es lo mas corto que se cuadra. La columna es `numeric(4,2)`, de
+   * modo que los decimales caben.
+   */
   @ApiProperty({ description: 'Duracion en horas', example: 2 })
   @Type(() => Number)
-  @IsNumber()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.5)
+  @Max(24)
   readonly duracionHoras: number;
 
   @ApiProperty({ description: 'Metodo de pago', example: 'efectivo' })
