@@ -213,28 +213,76 @@ export class DriversService {
     return chofer;
   }
 
+  /**
+   * Un chofer vive repartido en dos tablas, y la edicion no lo sabia.
+   *
+   * `email`, `password` y `telegramChatId` son de `usuarios`; el nombre, el
+   * telefono, la disponibilidad, la ubicacion y el vehiculo son de `choferes`.
+   * El DTO los trae todos juntos --es un `PartialType` del de creacion, que si
+   * escribe en las dos-- y aqui se metia el objeto entero en
+   * `choferesRepository.update`. Cambiar la contraseña reventaba con un 500,
+   * porque `password` no es una columna de `choferes`; el correo y el chat de
+   * Telegram, lo mismo.
+   *
+   * La contraseña, ademas, nunca se guarda tal cual: se hashea igual que al
+   * crear el chofer.
+   */
   async update(
     id: string,
     updateDriverDto: UpdateDriverDto,
   ): Promise<Choferes> {
-    await this.findOne(id);
+    const chofer = await this.findOne(id);
 
-    // Actualizar campos
-    const updateData: any = { ...updateDriverDto };
+    const { email, password, telegramChatId, ...camposDelChofer } =
+      updateDriverDto;
+
+    const datosDelChofer: Record<string, unknown> = { ...camposDelChofer };
     if (updateDriverDto.ubicacionLat !== undefined) {
-      updateData.ubicacionLat =
+      datosDelChofer.ubicacionLat =
         updateDriverDto.ubicacionLat !== null
           ? Number(updateDriverDto.ubicacionLat)
           : null;
     }
     if (updateDriverDto.ubicacionLng !== undefined) {
-      updateData.ubicacionLng =
+      datosDelChofer.ubicacionLng =
         updateDriverDto.ubicacionLng !== null
           ? Number(updateDriverDto.ubicacionLng)
           : null;
     }
 
-    await this.choferesRepository.update(id, updateData);
+    const datosDelUsuario: Record<string, unknown> = {};
+    if (email !== undefined) {
+      const normalizado = email.trim().toLowerCase();
+      // Un correo repetido lo rechazaria la base con un 500 ilegible; aqui se
+      // convierte en un mensaje que dice cual es el problema.
+      const enUso = await this.usuariosRepository.findOne({
+        where: { email: normalizado },
+      });
+      if (enUso && enUso.id !== chofer.usuarioId) {
+        throw new ConflictException(
+          `El correo electrónico ${normalizado} ya está registrado`,
+        );
+      }
+      datosDelUsuario.email = normalizado;
+    }
+    if (password !== undefined && password.trim()) {
+      const salt = await bcrypt.genSalt(10);
+      datosDelUsuario.passwordHash = await bcrypt.hash(password, salt);
+    }
+    if (telegramChatId !== undefined) {
+      datosDelUsuario.telegramChatId = telegramChatId || null;
+    }
+
+    // Las dos tablas se tocan juntas: si el correo falla no puede quedarse el
+    // nombre cambiado a medias.
+    await this.dataSource.transaction(async (manager) => {
+      if (Object.keys(datosDelChofer).length > 0) {
+        await manager.update(Choferes, id, datosDelChofer);
+      }
+      if (Object.keys(datosDelUsuario).length > 0) {
+        await manager.update(Usuarios, chofer.usuarioId, datosDelUsuario);
+      }
+    });
 
     return await this.findOne(id);
   }

@@ -17,6 +17,7 @@ export async function getChoferesAction(): Promise<
     vehiculoColor?: string;
     vehiculoPlaca?: string;
     trustScore?: number | null;
+    disponible: boolean;
   }[]
 > {
   try {
@@ -39,6 +40,7 @@ export async function getChoferesAction(): Promise<
       vehiculoColor: d.vehiculoColor || "",
       vehiculoPlaca: d.vehiculoPlaca || "",
       trustScore: trustScores[d.usuarioId] ?? null,
+      disponible: Boolean(d.disponible),
     }));
   } catch (error) {
     if (isRedirectError(error)) throw error;
@@ -90,6 +92,39 @@ export async function createChoferAction(
   } catch (error: any) {
     if (isRedirectError(error)) throw error;
     console.error("createChoferAction error:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
+
+/**
+ * Marca al chofer como disponible o no disponible desde el panel de admin.
+ *
+ * La disponibilidad decide si entra en el reparto de viajes, pero solo se podia
+ * mover desde su propio portal: cuando alguien se quedaba marcado como ocupado
+ * por un viaje que nunca se cerro, no habia forma de sacarlo de ahi sin tocar la
+ * base a mano.
+ *
+ * Va aparte de `updateChoferAction` a proposito: esa manda el formulario
+ * entero, y usarla para un interruptor obligaria a acarrear el nombre, el
+ * correo y el vehiculo en cada toque.
+ */
+export async function setChoferDisponibilidadAction(
+  id: string,
+  disponible: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await apiFetch(`/drivers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ disponible }),
+      authenticated: true,
+    });
+    return { success: true };
+  } catch (error: any) {
+    if (isRedirectError(error)) throw error;
+    console.error("setChoferDisponibilidadAction error:", error);
     return {
       success: false,
       error: error.message || "Error de conexion con el servidor",

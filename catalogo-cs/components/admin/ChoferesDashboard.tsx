@@ -10,6 +10,7 @@ import {
   getChoferesAction,
   createChoferAction,
   deleteChoferAction,
+  setChoferDisponibilidadAction,
   updateChoferAction,
 } from "@/lib/actions/choferes";
 import TelegramOtpButton from "@/components/erp/telegram-otp-button";
@@ -32,6 +33,7 @@ interface Chofer {
   vehiculoColor?: string;
   vehiculoPlaca?: string;
   trustScore?: number | null;
+  disponible: boolean;
 }
 
 const formatPhoneNumber = (value: string): string => {
@@ -155,6 +157,36 @@ export default function ChoferesDashboard({
     } finally {
       setSaving(false);
     }
+  };
+
+  /**
+   * Cambia la disponibilidad del chofer sin abrir el formulario entero.
+   *
+   * La lista se actualiza antes de que conteste el servidor y se revierte si
+   * falla: un interruptor que tarda medio segundo en moverse invita a pulsarlo
+   * dos veces.
+   */
+  const cambiarDisponibilidad = async (chofer: Chofer, disponible: boolean) => {
+    setChoferes((actuales) =>
+      actuales.map((item) =>
+        item.id === chofer.id ? { ...item, disponible } : item,
+      ),
+    );
+    const res = await setChoferDisponibilidadAction(chofer.id, disponible);
+    if (!res.success) {
+      setChoferes((actuales) =>
+        actuales.map((item) =>
+          item.id === chofer.id ? { ...item, disponible: !disponible } : item,
+        ),
+      );
+      toast.error(res.error || "No se pudo cambiar la disponibilidad");
+      return;
+    }
+    toast.success(
+      disponible
+        ? `${chofer.nombre} queda disponible`
+        : `${chofer.nombre} queda no disponible`,
+    );
   };
 
   const handleDeleteChofer = async (chofer: Chofer) => {
@@ -394,6 +426,9 @@ export default function ChoferesDashboard({
                   Correo Electrónico
                 </th>
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
+                  Disponible
+                </th>
+                <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
                   Confiabilidad
                 </th>
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
@@ -428,6 +463,12 @@ export default function ChoferesDashboard({
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-zinc-300">
                     {chofer.email}
+                  </td>
+                  <td className="px-6 py-4">
+                    <InterruptorDisponible
+                      chofer={chofer}
+                      onCambio={cambiarDisponibilidad}
+                    />
                   </td>
                   <td className="px-6 py-4">
                     <ReliabilityRating score={chofer.trustScore} compact />
@@ -474,5 +515,51 @@ export default function ChoferesDashboard({
         onOpenChange={(open) => !open && setSelectedEvaluationUser(null)}
       />
     </div>
+  );
+}
+
+/**
+ * El interruptor de disponibilidad de una fila.
+ *
+ * Se saca a su propio componente para que cada fila tenga su estado de "estoy
+ * guardando" sin que un toque bloquee la tabla entera.
+ */
+function InterruptorDisponible({
+  chofer,
+  onCambio,
+}: {
+  chofer: Chofer;
+  onCambio: (chofer: Chofer, disponible: boolean) => Promise<void>;
+}) {
+  const [guardando, setGuardando] = useState(false);
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={chofer.disponible}
+      aria-label={`Disponibilidad de ${chofer.nombre}`}
+      disabled={guardando}
+      onClick={async () => {
+        setGuardando(true);
+        try {
+          await onCambio(chofer, !chofer.disponible);
+        } finally {
+          setGuardando(false);
+        }
+      }}
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors disabled:opacity-50 ${
+        chofer.disponible
+          ? "border-emerald-500/40 bg-emerald-950/60 text-emerald-400 hover:border-emerald-400"
+          : "border-zinc-700 bg-zinc-900/60 text-zinc-500 hover:border-zinc-500"
+      }`}
+    >
+      <span
+        className={`h-2 w-2 rounded-full ${
+          chofer.disponible ? "bg-emerald-400" : "bg-zinc-600"
+        }`}
+      />
+      {chofer.disponible ? "Disponible" : "No disponible"}
+    </button>
   );
 }
