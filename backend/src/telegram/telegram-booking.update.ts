@@ -3052,40 +3052,71 @@ export class TelegramBookingUpdate {
       return false;
     }
 
-    history.push({ role: 'model', parts: [{ text: cleanText }] });
     session.chatHistory = history;
+
+    /*
+     * La respuesta suelta de la IA solo se manda si no va a salir el resumen.
+     *
+     * Cuando la reserva se cierra en este mismo turno, el resumen del servicio
+     * sale inmediatamente despues y dice lo mismo pero con los datos. El
+     * cliente recibia dos mensajes casi identicos seguidos: "dejame checar los
+     * detalles y te confirmo en un momentico" y, un minuto despues, "dejame
+     * checar los ultimos detallitos y en un momentico te confirmo por aqui".
+     *
+     * Tampoco entra al historial cuando no se envia: el modelo no puede quedarse
+     * creyendo que dijo algo que el cliente nunca vio.
+     */
+    const responderConElTextoDeLaIa = async () => {
+      if (!cleanText) return;
+      history.push({ role: 'model', parts: [{ text: cleanText }] });
+      await this.sendDelayedReply(ctx, cleanText);
+      await this.recordDraftConversation(ctx, 'ia', cleanText);
+    };
 
     // Si el cliente ya mandó su pin antes, no se le vuelve a pedir:
     // se continúa directo con el cierre de la contratación.
     if (this.hasConfirmedLocation(session)) {
       session.step = 'AWAITING_LOCATION';
-      if (cleanText) {
-        await this.sendDelayedReply(ctx, cleanText);
-        await this.recordDraftConversation(ctx, 'ia', cleanText);
+      const cerrada = await this.applyDraftPaymentMethod(
+        ctx,
+        session.metodoPago,
+      );
+      /*
+       * Si la reserva no llego a cerrarse no hay resumen que la sustituya, y
+       * dejar el turno sin respuesta es como muere una conversacion.
+       */
+      if (!cerrada) {
+        await responderConElTextoDeLaIa();
       }
-      await this.applyDraftPaymentMethod(ctx, session.metodoPago);
       return true;
     }
 
     session.step = 'AWAITING_LOCATION';
 
     if (ubicacionCandidata) {
-      await this.sendDelayedReply(ctx, cleanText);
-      await this.recordDraftConversation(ctx, 'ia', cleanText);
-
       session.presetLocationId = ubicacionCandidata.id;
       session.locationNameSnapshot = ubicacionCandidata.name;
       session.locationAddressSnapshot = ubicacionCandidata.address;
       session.customerTransportCharge = 0;
 
-      await this.onLocation(ctx, {
-        latitude: Number(ubicacionCandidata.latitude),
-        longitude: Number(ubicacionCandidata.longitude),
-        title: ubicacionCandidata.name,
-        address: ubicacionCandidata.address,
-      });
+      try {
+        await this.onLocation(ctx, {
+          latitude: Number(ubicacionCandidata.latitude),
+          longitude: Number(ubicacionCandidata.longitude),
+          title: ubicacionCandidata.name,
+          address: ubicacionCandidata.address,
+        });
+      } catch (err) {
+        this.logger.error(
+          'Fallo el cierre con el motel ya elegido; se responde con el texto de la IA:',
+          err,
+        );
+        await responderConElTextoDeLaIa();
+      }
       return true;
     }
+
+    history.push({ role: 'model', parts: [{ text: cleanText }] });
 
     const askLocation =
       cleanText || 'Mándame tu ubicación en pin con el botón de abajo, mor.';

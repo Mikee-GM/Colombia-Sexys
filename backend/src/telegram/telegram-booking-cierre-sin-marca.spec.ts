@@ -63,7 +63,9 @@ function nuevaInstancia(ubicaciones = [MONTECARLO, MAJESTIC]) {
   privados.logger = { error: jest.fn(), warn: jest.fn() };
   privados.sendDelayedReply = jest.fn().mockResolvedValue(undefined);
   privados.recordDraftConversation = jest.fn().mockResolvedValue(undefined);
-  privados.applyDraftPaymentMethod = jest.fn().mockResolvedValue(undefined);
+  // Devuelve si la reserva quedo cerrada: de eso depende que la frase de la
+  // IA se mande o la sustituya el resumen.
+  privados.applyDraftPaymentMethod = jest.fn().mockResolvedValue(true);
   privados.onLocation = jest.fn().mockResolvedValue(undefined);
   privados.replyWithServiceLocationOptions = jest
     .fn()
@@ -193,7 +195,15 @@ describe('Cierre de la contratación sin la marca [DATA]', () => {
     expect(session.step).toBe('AWAITING_LOCATION');
   });
 
-  it('deja la respuesta del modelo en el historial al cerrar', async () => {
+  /**
+   * Con el motel ya elegido, el resumen del servicio sale justo despues y dice
+   * lo mismo con los datos. Mandar tambien la frase de la IA le dejaba al
+   * cliente dos mensajes casi identicos seguidos: "dejame checar los detalles y
+   * te confirmo" y, un minuto despues, "dejame checar los ultimos detallitos y
+   * te confirmo". Tampoco entra al historial: el modelo no puede creer que dijo
+   * algo que el cliente nunca vio.
+   */
+  it('no repite la frase de la IA cuando el resumen sale detras', async () => {
     const p = nuevaInstancia();
     const session: Record<string, unknown> = {
       duracionPactadaHoras: 1,
@@ -209,10 +219,61 @@ describe('Cierre de la contratación sin la marca [DATA]', () => {
       MONTECARLO,
     );
 
+    expect(p.sendDelayedReply).not.toHaveBeenCalled();
+    expect(history).toEqual([]);
+    expect(session.chatHistory).toBe(history);
+  });
+
+  /* Sin ubicacion no hay resumen que la sustituya: la frase si se manda. */
+  it('deja la respuesta del modelo en el historial cuando aun pide el pin', async () => {
+    const p = nuevaInstancia();
+    const session: Record<string, unknown> = {
+      duracionPactadaHoras: 1,
+      metodoPago: 'efectivo',
+    };
+    const history = historialVacio();
+
+    await p.cerrarContratacionSiEstaCompleta(
+      {},
+      session,
+      history,
+      'Listo, amor.',
+      null,
+    );
+
     expect(history).toEqual([
       { role: 'model', parts: [{ text: 'Listo, amor.' }] },
     ]);
     expect(session.chatHistory).toBe(history);
+  });
+
+  /*
+   * Si la reserva no llega a cerrarse no hay resumen, y un turno sin respuesta
+   * es como muere una conversacion.
+   */
+  it('responde con la frase de la IA si el cierre por pago no prospera', async () => {
+    const p = nuevaInstancia();
+    p.applyDraftPaymentMethod.mockResolvedValue(false);
+    const session: Record<string, unknown> = {
+      duracionPactadaHoras: 2,
+      metodoPago: 'efectivo',
+      locationLat: '20.5',
+      locationLng: '-100.3',
+    };
+    const history = historialVacio();
+
+    await p.cerrarContratacionSiEstaCompleta(
+      {},
+      session,
+      history,
+      'Perfecto mi amor.',
+      null,
+    );
+
+    expect(p.sendDelayedReply).toHaveBeenCalledWith({}, 'Perfecto mi amor.');
+    expect(history).toEqual([
+      { role: 'model', parts: [{ text: 'Perfecto mi amor.' }] },
+    ]);
   });
 });
 
