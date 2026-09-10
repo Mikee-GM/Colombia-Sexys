@@ -13,7 +13,7 @@ import {
   setChoferDisponibilidadAction,
   updateChoferAction,
 } from "@/lib/actions/choferes";
-import TelegramOtpButton from "@/components/erp/telegram-otp-button";
+import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import InputField from "../ui/InputField";
 import SearchBar from "../ui/SearchBar";
@@ -34,6 +34,7 @@ interface Chofer {
   vehiculoPlaca?: string;
   trustScore?: number | null;
   disponible: boolean;
+  telegramChatId?: string | null;
 }
 
 const formatPhoneNumber = (value: string): string => {
@@ -433,7 +434,7 @@ export default function ChoferesDashboard({
                   Confiabilidad
                 </th>
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
-                  Telegram OTP
+                  Telegram
                 </th>
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase text-right">
                   Acciones
@@ -475,7 +476,10 @@ export default function ChoferesDashboard({
                     <ReliabilityRating score={chofer.trustScore} compact />
                   </td>
                   <td className="px-6 py-4 text-sm font-medium">
-                    <TelegramOtpButton usuarioId={chofer.usuarioId} />
+                    <EstadoDeTelegram
+                      usuarioId={chofer.usuarioId}
+                      telegramChatId={chofer.telegramChatId}
+                    />
                   </td>
                   <td className="px-6 py-4 text-right space-x-4">
                     <button

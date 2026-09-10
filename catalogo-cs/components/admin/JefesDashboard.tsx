@@ -11,7 +11,7 @@ import {
   updateJefeAction,
   type RolDeOficina,
 } from "@/lib/actions/jefes";
-import TelegramOtpButton from "@/components/erp/telegram-otp-button";
+import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import InputField from "../ui/InputField";
 import SearchBar from "../ui/SearchBar";
@@ -25,6 +25,7 @@ interface Jefe {
   apellido?: string | null;
   rol: RolDeOficina;
   trustScore?: number | null;
+  telegramChatId?: string | null;
 }
 
 const inputClass =
@@ -344,7 +345,7 @@ export default function JefesDashboard({
                   Confiabilidad
                 </th>
                 <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
-                  Telegram OTP
+                  Telegram
                 </th>
                 <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase text-right">
                   Acciones
@@ -380,7 +381,10 @@ export default function JefesDashboard({
                     <ReliabilityRating score={jefe.trustScore} compact />
                   </td>
                   <td className="px-6 py-4 text-sm font-medium">
-                    <TelegramOtpButton usuarioId={jefe.id} />
+                    <EstadoDeTelegram
+                      usuarioId={jefe.id}
+                      telegramChatId={jefe.telegramChatId}
+                    />
                   </td>
                   <td className="px-6 py-4 text-right space-x-4">
                     <button

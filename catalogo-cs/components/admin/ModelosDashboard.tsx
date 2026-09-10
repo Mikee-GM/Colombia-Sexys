@@ -13,7 +13,7 @@ import {
   createModeloAction as createModelo,
   updateModeloAction as updateModelo,
 } from "@/lib/actions/modelos";
-import TelegramOtpButton from "@/components/erp/telegram-otp-button";
+import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
 import type { Modelo, ModeloPayload } from "@/types";
 import ModelModal from "./ModelModal";
 import ConfirmDialog from "../ui/ConfirmDialog";
@@ -184,11 +184,12 @@ export default function ModelosDashboard({
           compact
           className="mb-3"
         />
-        {modelo.usuarioId && (
-          <div className="mb-3">
-            <TelegramOtpButton usuarioId={modelo.usuarioId} />
-          </div>
-        )}
+        <div className="mb-3">
+          <EstadoDeTelegram
+            usuarioId={modelo.usuarioId}
+            telegramChatId={modelo.telegramChatId}
+          />
+        </div>
         {/* flex-wrap: con 4 acciones la fila no cabe en una tarjeta de la
             rejilla de 4 columnas y "Eliminar" se salia del borde. */}
         <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 pt-3.5 border-t border-zinc-800/60">

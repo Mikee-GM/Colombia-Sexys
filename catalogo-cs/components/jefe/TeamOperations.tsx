@@ -699,10 +699,19 @@ function EmployeeRatingSummary({ employee }: { employee: Employee }) {
 
 /** Estado de la empleada en una linea, para la fila de la lista. */
 function resumenEmpleada(employee: Employee) {
+  /*
+   * Sin Telegram vinculado no le llega NADA: ni la autorizacion de un servicio
+   * ni el aviso de su traslado. Solo se dice cuando falta, que es lo raro; la
+   * linea ya lleva dos datos y añadir "con Telegram" a todas las demas seria
+   * ruido en la fila de cada empleada.
+   */
+  const sinTelegram = employee.usuario && !employee.usuario.telegramChatId
+    ? " · Sin Telegram"
+    : "";
   if (employee.availabilityStatus === "ocupada") {
-    return `Ocupada${employee.estimatedAvailableAt ? ` hasta ${formatAvailabilityTime(employee.estimatedAvailableAt)}` : ""}`;
+    return `Ocupada${employee.estimatedAvailableAt ? ` hasta ${formatAvailabilityTime(employee.estimatedAvailableAt)}` : ""}${sinTelegram}`;
   }
-  return `${employee.disponible ? "Libre" : "No disponible"} · ${employee.ubicacionLat ? "Ubicación recibida" : "Sin ubicación"}`;
+  return `${employee.disponible ? "Libre" : "No disponible"} · ${employee.ubicacionLat ? "Ubicación recibida" : "Sin ubicación"}${sinTelegram}`;
 }
 
 function fondoEmpleada(employee: Employee) {

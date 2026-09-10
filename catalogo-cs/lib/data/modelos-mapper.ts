@@ -39,6 +39,7 @@ export function mapToModelo(emp: any): Modelo {
     jefeSecundarioId: emp.jefeSecundarioId || null,
     apartmentId: emp.apartmentId || null,
     usuarioId: emp.usuarioId || null,
+    telegramChatId: emp.usuario?.telegramChatId ?? null,
     trustScore: typeof emp.trustScore === "number" ? emp.trustScore : null,
     clientRatingAverage:
       emp.clientRatingAverage == null ? null : Number(emp.clientRatingAverage),

@@ -13,7 +13,7 @@ export type RolDeOficina = "jefe" | "admin";
  * Se piden por separado porque `/users` sin filtro devuelve tambien a modelos y
  * choferes, que no pintan nada en esta pantalla.
  */
-export async function getJefesAction(): Promise<{ id: string; email: string; nombre?: string | null; apellido?: string | null; rol: RolDeOficina; trustScore?: number | null }[]> {
+export async function getJefesAction(): Promise<{ id: string; email: string; nombre?: string | null; apellido?: string | null; rol: RolDeOficina; trustScore?: number | null; telegramChatId?: string | null }[]> {
   try {
     const [jefes, admins, trustScores] = await Promise.all([
       apiFetch<any[]>("/users?rol=jefe", {
@@ -32,6 +32,7 @@ export async function getJefesAction(): Promise<{ id: string; email: string; nom
       apellido: u.apellido,
       rol: (u.rol === "admin" ? "admin" : "jefe") as RolDeOficina,
       trustScore: trustScores[u.id] ?? null,
+      telegramChatId: u.telegramChatId ?? null,
     }));
   } catch (error) {
     if (isRedirectError(error)) throw error;

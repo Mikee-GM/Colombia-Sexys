@@ -46,6 +46,8 @@ export interface Modelo {
   jefeSecundarioId?: string | null;
   apartmentId?: string | null;
   usuarioId?: string | null;
+  /** Con chat vinculado recibe por Telegram; sin el, no le llega nada. */
+  telegramChatId?: string | null;
   trustScore?: number | null;
   clientRatingAverage?: number | null;
   clientRatingCount?: number;

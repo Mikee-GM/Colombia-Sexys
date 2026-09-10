@@ -261,7 +261,12 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
     rol: string,
     nombre: string,
     apellido: string,
-    telegram: string,
+    /*
+     * `null` cuando todavia no ha vinculado su Telegram. Es un estado real y
+     * frecuente --a una modelo recien dada de alta le pasa hasta que canjea su
+     * codigo-- y sin ninguna fila asi el panel no puede enseñar como se ve.
+     */
+    telegram: string | null,
     grupo: string | null,
   ): Registro => ({
     id: uuid,
@@ -286,10 +291,10 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
      * desde entonces. Se deriva del id de Telegram, que ya es unico por
      * persona, para que siga siendo estable entre ejecuciones.
      */
-    telegram_verification_code: String(
-      482900 + Number(telegram.slice(-3) || 0),
-    ),
-    telegram_verification_expires_at: horas(2),
+    telegram_verification_code: telegram
+      ? String(482900 + Number(telegram.slice(-3) || 0))
+      : null,
+    telegram_verification_expires_at: telegram ? horas(2) : null,
     telefono: '4421234567',
     created_at: dias(-120),
     last_login_at: horas(-2),
@@ -347,7 +352,8 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'empleada',
       'Fabiana',
       'Demo',
-      '900000006',
+      // Sin vincular a proposito: es como se ve una modelo recien dada de alta.
+      null,
       null,
     ),
     usuarioBase(
@@ -365,7 +371,12 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'chofer',
       'Hugo',
       'Demo',
-      '900000008',
+      /*
+       * Tambien sin vincular. Ademas de enseñar el estado en la tabla, deja el
+       * caso que mas se consulta: un chofer que nunca recibe ofertas porque le
+       * falta Telegram, que es una de las nueve condiciones del reparto.
+       */
+      null,
       null,
     ),
   ]);
