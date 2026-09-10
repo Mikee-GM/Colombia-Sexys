@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { ButtonHTMLAttributes, Dispatch, ReactNode, SetStateAction } from "react";
-import { Award, Banknote, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, ExternalLink, FileCheck2, MapPin, MessageCircle, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { Award, Banknote, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, Copy, ExternalLink, FileCheck2, MapPin, MessageCircle, Navigation, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
@@ -436,6 +436,77 @@ function ServiceList({ services, allServices, employees, active, disabled, onDec
  * segun lo que midieran los textos, cosa que en una pantalla estrecha pasaba
  * siempre.
  */
+/**
+ * A donde va la modelo, y como abrirlo.
+ *
+ * El panel del jefe solo enseñaba el nombre del sitio en una fila de la ficha
+ * --"Lugar: Motel Montecarlo"-- y las coordenadas que ya trae el servicio no se
+ * usaban mas que para armar el enlace de Uber. Cuando algo se tuerce el jefe
+ * necesita ver el punto en un mapa y poder pasarselo a un chofer, y para eso
+ * tenia que abrir el servicio en el panel de admin.
+ *
+ * Se pinta con lo que haya: hay servicios con nombre de sitio y sin
+ * coordenadas, y otros al reves. Sin ninguna de las dos cosas no se pinta nada,
+ * antes que dejar una caja vacia.
+ */
+function DestinoDelServicio({ service }: { service: Service }) {
+  const lat = service.ubicacionClienteLat;
+  const lng = service.ubicacionClienteLng;
+  const hayPunto = Boolean(Number(lat) && Number(lng));
+
+  const nombre = service.locationNameSnapshot;
+  const direccion = service.locationAddressSnapshot;
+  const enTexto = [nombre, direccion].filter(Boolean).join(" - ");
+
+  if (!hayPunto && !enTexto) return null;
+
+  const consulta = hayPunto ? `${lat},${lng}` : encodeURIComponent(enTexto);
+  const enElMapa = `https://www.google.com/maps/search/?api=1&query=${consulta}`;
+  const comoLlegar = `https://www.google.com/maps/dir/?api=1&destination=${consulta}`;
+  /* Lo que se copia es lo que sirve para pegarselo a alguien por el chat. */
+  const paraCopiar = hayPunto ? `${lat},${lng}` : enTexto;
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(paraCopiar);
+      toast.success("Ubicacion copiada");
+    } catch {
+      // Sin permiso de portapapeles --o fuera de https-- no hay nada que hacer
+      // desde aqui, pero el jefe tiene que enterarse de que no se copio.
+      toast.error("No se pudo copiar la ubicacion");
+    }
+  }
+
+  return (
+    <section className="mt-3 rounded-xl border border-zinc-900 bg-black/50 p-3">
+      <div className="flex items-start gap-2.5">
+        <MapPin size={15} className="mt-0.5 shrink-0 text-[#C5A55A]" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Destino</p>
+          <p className="mt-1 text-sm font-semibold text-zinc-200">
+            {nombre || "Ubicacion compartida por el cliente"}
+            {service.habitacion && <span className="ml-2 font-normal text-zinc-400">{`Hab. ${service.habitacion}`}</span>}
+          </p>
+          {direccion && <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">{direccion}</p>}
+          {!hayPunto && <p className="mt-1 text-[11px] text-amber-400">Sin coordenadas: se busca por el nombre del sitio.</p>}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <a href={enElMapa} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-[#C5A55A] px-2 py-2 text-[11px] font-semibold text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black">
+          <ExternalLink size={14} />Ver mapa
+        </a>
+        <a href={comoLlegar} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-zinc-800 px-2 py-2 text-[11px] font-semibold text-zinc-300 transition-colors hover:text-white">
+          <Navigation size={14} />Como llegar
+        </a>
+        <button type="button" onClick={copiar} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-zinc-800 px-2 py-2 text-[11px] font-semibold text-zinc-300 transition-colors hover:text-white">
+          <Copy size={14} />Copiar
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function ServiceCard({ service, previous, employees, disabled, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { service: Service; previous?: Service; employees: Employee[]; disabled: boolean; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   const programado = service.tipoAgenda === "programado";
   const pendiente = service.estado === "pendiente";
@@ -445,7 +516,6 @@ function ServiceCard({ service, previous, employees, disabled, onRequestAccept, 
     ["Duración", `${service.duracionPactadaHoras} horas`],
     ["Pago", service.metodoPago.toUpperCase()],
   ];
-  if (service.locationNameSnapshot) datos.push(["Lugar", service.locationNameSnapshot]);
   // `formatAvailabilityTime` devuelve null si la fecha no se puede leer: en ese
   // caso no se pinta la fila, mejor que una fila con un hueco.
   const llegada = service.horaInicioEstimada && !programado ? formatAvailabilityTime(service.horaInicioEstimada) : null;
@@ -477,6 +547,8 @@ function ServiceCard({ service, previous, employees, disabled, onRequestAccept, 
           </div>
         ))}
       </dl>
+
+      <DestinoDelServicio service={service} />
 
       {service.notasJefe && <div className="mt-3 border-l-2 border-[#C5A55A]/70 bg-black/50 px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]">Notas internas</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{service.notasJefe}</p></div>}
       <ReceiptEvidenceList service={service} />
