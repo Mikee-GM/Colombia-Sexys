@@ -1208,6 +1208,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     const siguenOcupados = new Set(abiertos.map((viaje) => viaje.choferId));
 
+    /* Se les quita el viaje de la pantalla, queden libres despues o no. */
+    for (const id of ids) {
+      this.realtimeEventsService.emitToDriver(id, {
+        type: 'trip_cancelled',
+        data: { tripIds: viajes.map((viaje) => viaje.id) },
+      });
+    }
+
     const libres = ids.filter((id) => !siguenOcupados.has(id));
     if (libres.length === 0) return;
 
@@ -2955,6 +2963,20 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     viaje.horaNotificacion = new Date();
     await this.viajesRepository.save(viaje);
 
+    /*
+     * Que la oferta aparezca en el portal sin tener que recargar.
+     *
+     * Salia por el chat y por el aviso push, pero al canal del chofer no se
+     * emitia nada: quien tenia el portal abierto no veia la tarjeta hasta que
+     * recargaba a mano, y en la aplicacion instalada no hay ni ese gesto. La
+     * oferta caduca sola en dos minutos, asi que enterarse tarde es lo mismo
+     * que no enterarse.
+     */
+    this.realtimeEventsService.emitToDriver(nearestDriver.id, {
+      type: 'trip_offered',
+      data: { tripId: viaje.id, servicioId: viaje.servicioId },
+    });
+
     // Enviar mensaje al chofer por privado
     const driverChatId = nearestDriver.usuario.telegramChatId;
     if (driverChatId) {
@@ -3174,6 +3196,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         telegramChoferMsgOfertaId: null,
         ofertaExpiraEn: null,
       });
+      /* Para que la tarjeta se vaya de su portal sin recargar. */
+      this.realtimeEventsService.emitToDriver(choferId, {
+        type: 'trip_offer_released',
+        data: { tripId: viajeId },
+      });
 
       await this.dispatchViaje(viajeId);
     }
@@ -3262,6 +3289,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         choferId: null,
         telegramChoferMsgOfertaId: null,
         ofertaExpiraEn: null,
+      });
+      /* Para que la tarjeta se vaya de su portal sin recargar. */
+      this.realtimeEventsService.emitToDriver(choferId, {
+        type: 'trip_offer_released',
+        data: { tripId: viajeId },
       });
 
       // El conteo va aparte y aislado: avisar al chofer o multarlo no puede

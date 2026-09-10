@@ -31,7 +31,7 @@ describe('ServicesService rechazarOfertaManual', () => {
     choferesRepository,
     serviciosRepository: {},
     bot: { telegram: { editMessageText: jest.fn() } },
-    realtimeEventsService: { emitToJefes: jest.fn() },
+    realtimeEventsService: { emitToJefes: jest.fn(), emitToDriver: jest.fn() },
   });
 
   /* El reparto al siguiente chofer y el conteo se prueban por su cuenta. */
@@ -69,6 +69,28 @@ describe('ServicesService rechazarOfertaManual', () => {
     expect(viajesRepository.save).not.toHaveBeenCalled();
     expect(contar).toHaveBeenCalledWith('chofer-1', null);
     expect(dispatch).toHaveBeenCalledWith('viaje-1');
+  });
+
+  /*
+   * Sin este evento la tarjeta seguia en su portal aunque la oferta ya no fuera
+   * suya: el canal del chofer no recibia nada del ciclo de la oferta, asi que
+   * la pantalla solo cambiaba al recargar a mano.
+   */
+  it('avisa al portal del chofer de que la oferta dejo de ser suya', async () => {
+    viajesRepository.findOne.mockResolvedValue(ofertaDe('chofer-1'));
+
+    await service.rechazarOfertaManual('viaje-1', 'chofer-1');
+
+    expect(
+      (
+        service as unknown as {
+          realtimeEventsService: { emitToDriver: jest.Mock };
+        }
+      ).realtimeEventsService.emitToDriver,
+    ).toHaveBeenCalledWith('chofer-1', {
+      type: 'trip_offer_released',
+      data: { tripId: 'viaje-1' },
+    });
   });
 
   it('no cuenta un segundo rechazo sobre la misma oferta', async () => {

@@ -25,7 +25,7 @@ describe('ServicesService cancel', () => {
   };
   const choferesRepository = { findOne: jest.fn(), update: jest.fn() };
   const usuariosRepository = { findOne: jest.fn(), findOneBy: jest.fn() };
-  const realtime = { emitToBoss: jest.fn() };
+  const realtime = { emitToBoss: jest.fn(), emitToDriver: jest.fn() };
   const bot = { telegram: { sendMessage: jest.fn() } };
   const aiMessageService = {
     generate: jest
