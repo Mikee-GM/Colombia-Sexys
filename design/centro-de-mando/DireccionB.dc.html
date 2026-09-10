@@ -1,0 +1,175 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #050505; font-family: Montserrat, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #C5A55A; } a:hover { color: #E8D5A3; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="width: 1120px; height: 820px; background: #050505; color: #ffffff; font-size: 14px; padding: 26px 30px; display: flex; flex-direction: column; gap: 16px;">
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between;">
+    <div>
+      <p style="margin: 0 0 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.22em; color: #8B7635;">DIRECCION B</p>
+      <h1 style="margin: 0; font-family: Cinzel, serif; font-size: 26px; font-weight: 600; color: #C5A55A;">Tres tiempos</h1>
+    </div>
+    <p style="margin: 0; max-width: 430px; text-align: right; font-size: 12px; line-height: 1.6; color: #71717A;">
+      Todo se ordena por horizonte: lo que pasa <span style="color:#A1A1AA;">ahora</span>,
+      lo que cierra <span style="color:#A1A1AA;">hoy</span> y lo que se mide por
+      <span style="color:#A1A1AA;">semana</span>. Nada se oculta; cada dato entra en la franja de su ritmo.
+    </p>
+  </div>
+
+  <!-- AHORA -->
+  <div style="border: 1px solid rgba(52,211,153,0.28); border-radius: 16px; background: linear-gradient(180deg, rgba(52,211,153,0.05), rgba(52,211,153,0) 60%), #0A0A0C; padding: 16px 20px;">
+    <div style="display: flex; align-items: center; gap: 11px; margin-bottom: 13px;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #34D399;"></span>
+      <h2 style="margin: 0; font-family: Cinzel, serif; font-size: 15px; font-weight: 600; color: #34D399; letter-spacing: 0.08em;">AHORA</h2>
+      <span style="font-size: 11px; color: #52525B;">se mueve solo, se mira de reojo</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;">
+      <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px;">
+        <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">SERVICIOS EN CURSO</p>
+        <p style="margin: 5px 0 0; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums;">2</p>
+        <p style="margin: 3px 0 0; font-size: 10.5px; color: #52525B;">1 termina en 40 min</p>
+      </div>
+      <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px;">
+        <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">TRASLADOS ACTIVOS</p>
+        <p style="margin: 5px 0 0; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums;">1</p>
+        <p style="margin: 3px 0 0; font-size: 10.5px; color: #F87171;">1 servicio sin transporte</p>
+      </div>
+      <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px;">
+        <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">DISPONIBLES</p>
+        <p style="margin: 5px 0 0; font-size: 24px; font-weight: 700; color: #34D399; font-variant-numeric: tabular-nums;">3<span style="font-size: 13px; color: #52525B;"> modelos</span></p>
+        <p style="margin: 3px 0 0; font-size: 10.5px; color: #52525B;">1 de 2 choferes en jornada</p>
+      </div>
+      <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between;">
+        <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">MAPA</p>
+        <div style="position: relative; height: 42px; margin-top: 6px; border-radius: 8px; background: #060608; overflow: hidden;">
+          <div style="position: absolute; inset: 0; background-image: linear-gradient(rgba(197,165,90,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(197,165,90,0.07) 1px, transparent 1px); background-size: 14px 14px;"></div>
+          <div style="position: absolute; left: 26px; top: 14px; width: 6px; height: 6px; border-radius: 50%; background: #34D399;"></div>
+          <div style="position: absolute; left: 74px; top: 24px; width: 6px; height: 6px; border-radius: 50%; background: #FBBF24;"></div>
+          <div style="position: absolute; left: 128px; top: 10px; width: 6px; height: 6px; border-radius: 50%; background: #C5A55A;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOY -->
+  <div style="border: 1px solid rgba(197,165,90,0.3); border-radius: 16px; background: #0A0A0C; padding: 16px 20px;">
+    <div style="display: flex; align-items: center; gap: 11px; margin-bottom: 13px;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #C5A55A;"></span>
+      <h2 style="margin: 0; font-family: Cinzel, serif; font-size: 15px; font-weight: 600; color: #E8D5A3; letter-spacing: 0.08em;">HOY</h2>
+      <span style="font-size: 11px; color: #52525B;">lo que tienes que resolver antes de dormir</span>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px;">
+      <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; overflow: hidden;">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid rgba(39,39,42,0.6);">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #A1A1AA;">POR RESOLVER</span>
+          <span style="font-size: 11px; font-weight: 700; color: #F87171;">6</span>
+        </div>
+        <div style="display: flex; flex-direction: column;">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid rgba(39,39,42,0.4);">
+            <span style="width: 3px; height: 20px; border-radius: 2px; background: #F87171;"></span>
+            <span style="flex: 1; font-size: 12.5px; color: #ffffff;">Comprobante de $7,400 sin validar</span>
+            <span style="font-size: 10.5px; color: #52525B;">14 min</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid rgba(39,39,42,0.4);">
+            <span style="width: 3px; height: 20px; border-radius: 2px; background: #F87171;"></span>
+            <span style="flex: 1; font-size: 12.5px; color: #ffffff;">SR-000078 sin transporte</span>
+            <span style="font-size: 10.5px; color: #52525B;">22 min</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid rgba(39,39,42,0.4);">
+            <span style="width: 3px; height: 20px; border-radius: 2px; background: #FBBF24;"></span>
+            <span style="flex: 1; font-size: 12.5px; color: #A1A1AA;">1 registro a mano por aprobar</span>
+            <span style="font-size: 10.5px; color: #52525B;">3 h</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 14px;">
+            <span style="width: 3px; height: 20px; border-radius: 2px; background: #FBBF24;"></span>
+            <span style="flex: 1; font-size: 12.5px; color: #A1A1AA;">1 apelacion y 1 reporte abiertos</span>
+            <span style="font-size: 10.5px; color: #52525B;">2 d</span>
+          </div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px;">
+        <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px;">
+          <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">FACTURADO HOY</p>
+          <p style="margin: 5px 0 0; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums;">$11,400</p>
+        </div>
+        <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px;">
+          <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">EFECTIVO EN CALLE</p>
+          <p style="margin: 5px 0 0; font-size: 24px; font-weight: 700; color: #FBBF24; font-variant-numeric: tabular-nums;">$2,400</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEMANA -->
+  <div style="flex: 1; min-height: 0; border: 1px solid rgba(39,39,42,0.8); border-radius: 16px; background: #0A0A0C; padding: 16px 20px;">
+    <div style="display: flex; align-items: center; gap: 11px; margin-bottom: 13px;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #52525B;"></span>
+      <h2 style="margin: 0; font-family: Cinzel, serif; font-size: 15px; font-weight: 600; color: #A1A1AA; letter-spacing: 0.08em;">SEMANA</h2>
+      <span style="font-size: 11px; color: #52525B;">tendencia y cierre, no urgencia</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;">
+      <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px;">
+        <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">INGRESO POR DIA</p>
+        <div style="display: flex; align-items: flex-end; gap: 4px; height: 40px; margin-top: 10px;">
+          <div style="flex:1; height:38%; background:rgba(197,165,90,0.3); border-radius:2px 2px 0 0;"></div>
+          <div style="flex:1; height:61%; background:rgba(197,165,90,0.3); border-radius:2px 2px 0 0;"></div>
+          <div style="flex:1; height:47%; background:rgba(197,165,90,0.3); border-radius:2px 2px 0 0;"></div>
+          <div style="flex:1; height:88%; background:#C5A55A; border-radius:2px 2px 0 0;"></div>
+          <div style="flex:1; height:100%; background:#C5A55A; border-radius:2px 2px 0 0;"></div>
+          <div style="flex:1; height:22%; background:rgba(197,165,90,0.16); border-radius:2px 2px 0 0;"></div>
+          <div style="flex:1; height:12%; background:rgba(197,165,90,0.16); border-radius:2px 2px 0 0;"></div>
+        </div>
+      </div>
+      <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px;">
+        <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">POR MODELO</p>
+        <div style="display: flex; flex-direction: column; gap: 7px; margin-top: 10px;">
+          <div><div style="display:flex;justify-content:space-between;font-size:10.5px;color:#A1A1AA;"><span>Valeria</span><span>$12.4k</span></div><div style="height:4px;margin-top:3px;border-radius:2px;background:rgba(39,39,42,0.9);"><div style="width:100%;height:100%;border-radius:2px;background:#C5A55A;"></div></div></div>
+          <div><div style="display:flex;justify-content:space-between;font-size:10.5px;color:#A1A1AA;"><span>Camila</span><span>$9.1k</span></div><div style="height:4px;margin-top:3px;border-radius:2px;background:rgba(39,39,42,0.9);"><div style="width:73%;height:100%;border-radius:2px;background:#8B7635;"></div></div></div>
+          <div><div style="display:flex;justify-content:space-between;font-size:10.5px;color:#A1A1AA;"><span>Daniela</span><span>$7.4k</span></div><div style="height:4px;margin-top:3px;border-radius:2px;background:rgba(39,39,42,0.9);"><div style="width:59%;height:100%;border-radius:2px;background:#8B7635;"></div></div></div>
+        </div>
+      </div>
+      <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px;">
+        <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">COMPOSICION</p>
+        <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 12px; font-size: 10.5px; color: #A1A1AA;">
+          <div style="display:flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:2px;background:#C5A55A;"></span>Servicios 74%</div>
+          <div style="display:flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:2px;background:#8B7635;"></span>Extras 19%</div>
+          <div style="display:flex;align-items:center;gap:7px;"><span style="width:9px;height:9px;border-radius:2px;background:#52525B;"></span>Transporte 7%</div>
+        </div>
+      </div>
+      <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 12px; background: #08080A; padding: 12px 14px;">
+        <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">CIERRE SEMANAL</p>
+        <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;">3<span style="font-size:13px;color:#52525B;"> / 5</span></p>
+        <div style="height: 5px; margin-top: 9px; border-radius: 3px; background: rgba(39,39,42,0.9); overflow: hidden;"><div style="width:60%;height:100%;background:linear-gradient(90deg,#8B7635,#C5A55A);"></div></div>
+        <p style="margin: 7px 0 0; font-size: 10.5px; color: #52525B;">2 liquidaciones sin cerrar</p>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 14px; padding: 12px 16px; border: 1px dashed rgba(63,63,70,0.8); border-radius: 12px;">
+    <div style="flex: 1;">
+      <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #34D399;">A FAVOR</p>
+      <p style="margin: 4px 0 0; font-size: 11.5px; line-height: 1.55; color: #A1A1AA;">Cada dato tiene un sitio evidente y se aprende en un dia. Nadie tiene que decidir si algo es urgente: lo dice la franja.</p>
+    </div>
+    <div style="flex: 1;">
+      <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #FBBF24;">EN CONTRA</p>
+      <p style="margin: 4px 0 0; font-size: 11.5px; line-height: 1.55; color: #A1A1AA;">Hay cosas sin tiempo claro --una sancion vigente, un cliente bloqueado-- y toca forzarlas a una franja. Las tres compiten por el alto de la pantalla.</p>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

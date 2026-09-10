@@ -18,7 +18,15 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, Eye, EyeOff, GripVertical, LayoutGrid, RotateCcw } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  GripVertical,
+  LayoutGrid,
+  RotateCcw,
+} from "lucide-react";
 
 import {
   saveDashboardLayout,
@@ -59,6 +67,19 @@ export type GrupoTablero = {
   bloques: BloqueTablero[];
   /** Clases de la rejilla del grupo. */
   gridClassName: string;
+  /**
+   * Encabezado de la zona. Se omite en los grupos que continuan la zona
+   * anterior: una zona puede repartirse en dos grupos --indicadores y
+   * paneles-- porque son rejillas distintas, pero lleva un solo titulo.
+   */
+  titulo?: string;
+  descripcion?: string;
+  /**
+   * La zona se abre y se cierra. Se usa para el analisis a fondo: son tres mil
+   * lineas de tablero que no tienen por que estar delante cada vez que se abre
+   * el panel, pero tampoco pueden desaparecer.
+   */
+  plegable?: boolean;
 };
 
 function ordenarBloques(
@@ -95,8 +116,14 @@ function BloqueArrastrable({
   editando: boolean;
   onOcultar: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: bloque.id, disabled: !editando });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: bloque.id, disabled: !editando });
 
   return (
     <div
@@ -148,6 +175,69 @@ function BloqueArrastrable({
   );
 }
 
+/**
+ * Encabezado de una zona del tablero.
+ *
+ * Las zonas son la respuesta al problema de fondo del centro de mando: veinte
+ * bloques con el mismo peso visual y sin ninguna jerarquia entre ellos. El
+ * titulo dice a que pregunta responde lo que viene debajo.
+ */
+function EncabezadoDeZona({
+  titulo,
+  descripcion,
+  plegable,
+  cerrada,
+  onAlternar,
+}: {
+  titulo: string;
+  descripcion?: string;
+  plegable?: boolean;
+  cerrada: boolean;
+  onAlternar: () => void;
+}) {
+  const contenido = (
+    <>
+      <div className="min-w-0 text-left">
+        <h2 className="font-heading text-[15px] font-semibold tracking-[0.05em] text-zinc-200">
+          {titulo}
+        </h2>
+        {descripcion ? (
+          <p className="mt-0.5 text-[11px] text-zinc-500">{descripcion}</p>
+        ) : null}
+      </div>
+
+      {plegable ? (
+        <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-800 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#C5A55A]">
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-transform ${
+              cerrada ? "" : "rotate-180"
+            }`}
+          />
+          {cerrada ? "Abrir" : "Cerrar"}
+        </span>
+      ) : null}
+    </>
+  );
+
+  if (!plegable) {
+    return (
+      <div className="flex items-center justify-between gap-4 border-t border-zinc-800/70 pt-5">
+        {contenido}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onAlternar}
+      className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-black/40 px-4 py-3.5 text-left transition-colors hover:border-[#C5A55A]/40"
+    >
+      {contenido}
+    </button>
+  );
+}
+
 export default function TableroPersonalizable({
   grupos,
   layoutInicial,
@@ -162,6 +252,19 @@ export default function TableroPersonalizable({
   );
 
   const [editando, setEditando] = useState(false);
+
+  /*
+   * Que zonas plegables estan abiertas. Empiezan todas cerradas y el estado no
+   * se guarda: la puerta se abre para consultar algo concreto, y dejarla
+   * abierta para siempre devolveria la pantalla al problema que resuelve.
+   */
+  const [abiertas, setAbiertas] = useState<string[]>([]);
+  const alternarZona = (id: string) =>
+    setAbiertas((actuales) =>
+      actuales.includes(id)
+        ? actuales.filter((otra) => otra !== id)
+        : [...actuales, id],
+    );
   const [layout, setLayout] = useState<DashboardLayout>(
     layoutInicial ?? { orden: bloques.map((bloque) => bloque.id), ocultos: [] },
   );
@@ -191,7 +294,9 @@ export default function TableroPersonalizable({
     () => gruposOrdenados.flatMap((grupo) => grupo.ocultos),
     [gruposOrdenados],
   );
-  const hayVisibles = gruposOrdenados.some((grupo) => grupo.visibles.length > 0);
+  const hayVisibles = gruposOrdenados.some(
+    (grupo) => grupo.visibles.length > 0,
+  );
 
   const persistir = (siguiente: DashboardLayout) => {
     setLayout(siguiente);
@@ -274,7 +379,7 @@ export default function TableroPersonalizable({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-end gap-2">
         {error ? (
           <span className="mr-auto text-[11px] text-red-400">{error}</span>
@@ -340,31 +445,49 @@ export default function TableroPersonalizable({
         collisionDetection={closestCenter}
         onDragEnd={alSoltar}
       >
-        {gruposOrdenados.map((grupo) =>
-          grupo.visibles.length === 0 ? null : (
-            <SortableContext
-              key={grupo.id}
-              items={grupo.visibles.map((bloque) => bloque.id)}
-              strategy={rectSortingStrategy}
-            >
-              <div className={grupo.gridClassName}>
-                {grupo.visibles.map((bloque) => (
-                  <BloqueArrastrable
-                    key={bloque.id}
-                    bloque={bloque}
-                    editando={editando}
-                    onOcultar={() => alternarVisibilidad(bloque.id)}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          ),
-        )}
+        {gruposOrdenados.map((grupo) => {
+          if (grupo.visibles.length === 0) return null;
+
+          const cerrada = grupo.plegable && !abiertas.includes(grupo.id);
+
+          return (
+            <div key={grupo.id} className="flex flex-col gap-3">
+              {grupo.titulo ? (
+                <EncabezadoDeZona
+                  titulo={grupo.titulo}
+                  descripcion={grupo.descripcion}
+                  plegable={grupo.plegable}
+                  cerrada={Boolean(cerrada)}
+                  onAlternar={() => alternarZona(grupo.id)}
+                />
+              ) : null}
+
+              {cerrada ? null : (
+                <SortableContext
+                  items={grupo.visibles.map((bloque) => bloque.id)}
+                  strategy={rectSortingStrategy}
+                >
+                  <div className={grupo.gridClassName}>
+                    {grupo.visibles.map((bloque) => (
+                      <BloqueArrastrable
+                        key={bloque.id}
+                        bloque={bloque}
+                        editando={editando}
+                        onOcultar={() => alternarVisibilidad(bloque.id)}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              )}
+            </div>
+          );
+        })}
       </DndContext>
 
       {!hayVisibles ? (
         <p className="rounded-2xl border border-zinc-800 bg-black/40 px-5 py-10 text-center text-sm text-zinc-500">
-          Ocultaste todos los bloques. Usa Personalizar para volver a mostrarlos.
+          Ocultaste todos los bloques. Usa Personalizar para volver a
+          mostrarlos.
         </p>
       ) : null}
     </div>

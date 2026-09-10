@@ -1,10 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { ErpPageHeader } from "@/components/erp/primitives";
-import {
-  bloquesDeCentroDeMando,
-  SeparadorTableroDetallado,
-} from "@/components/erp/centro-de-mando";
+import { bloquesDeCentroDeMando } from "@/components/erp/centro-de-mando";
+import { asuntosPendientes } from "@/components/erp/asuntos-pendientes";
+import BandejaPendiente from "@/components/erp/bandeja-pendiente";
 import { bloquesDeSemanaEnCurso } from "@/components/erp/semana-en-curso";
 import TableroPersonalizable, {
   type BloqueTablero,
@@ -87,12 +86,13 @@ export default async function DashboardPage() {
     // Sin disposicion guardada se usa el orden por defecto, no un tablero vacio.
     optionalSource(getDashboardLayout(), null, contexto),
     // Mismos datos que ya usa /admin/map: el mapa del centro de mando es el
-    // mismo componente, solo que integrado como bloque reordenable.
+    // mismo componente, solo que integrado como bloque reordenable. La bandeja
+    // los reaprovecha para saber quien no tiene Telegram vinculado.
     optionalSource(getEmployees(), [], contexto),
     optionalSource(getDrivers(), [], contexto),
   ]);
 
-  const { kpis, paneles } = bloquesDeCentroDeMando({
+  const { contadores, ahora, dinero } = bloquesDeCentroDeMando({
     overview,
     offDuty: offDuty ?? [],
   });
@@ -104,24 +104,49 @@ export default async function DashboardPage() {
     endDate,
   });
 
+  const asuntos = asuntosPendientes({
+    overview,
+    appeals: appeals ?? [],
+    empleadas: mapEmployees ?? [],
+    choferes: mapDrivers ?? [],
+  });
+
   /*
-   * Los indicadores y los paneles van en grupos distintos porque son piezas de
-   * tamaños incompatibles: una tarjeta de KPI intercalada entre dos paneles
-   * anchos queda ridicula. Dentro de cada grupo se reordenan libremente.
+   * El tablero se lee de arriba abajo como cuatro preguntas, y no como una
+   * rejilla de veinte widgets con el mismo peso: que tengo que hacer, que esta
+   * pasando ahora, cuanto dinero hay, y --detras de una puerta-- el analisis a
+   * fondo.
+   *
+   * Una zona puede ocupar dos grupos cuando mezcla rejillas distintas: los
+   * indicadores y los paneles anchos no comparten fila porque una tarjeta de
+   * KPI intercalada entre dos paneles queda ridicula. En ese caso el segundo
+   * grupo va sin titulo y continua la zona anterior.
    */
   const grupos = [
     {
-      id: "indicadores",
-      gridClassName:
-        "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6",
-      bloques: kpis,
+      id: "pendiente",
+      gridClassName: "grid grid-cols-1 gap-4",
+      bloques: [
+        {
+          id: "bandeja-pendiente",
+          titulo: "Pendiente de ti",
+          anchoCompleto: true,
+          contenido: <BandejaPendiente asuntos={asuntos} />,
+        } satisfies BloqueTablero,
+      ],
     },
     {
-      id: "paneles",
+      id: "ahora-contadores",
+      titulo: "Ahora mismo",
+      descripcion: "Quien esta trabajando y donde esta",
+      gridClassName: "grid grid-cols-1 gap-4",
+      bloques: contadores,
+    },
+    {
+      id: "ahora-paneles",
       gridClassName: "grid grid-cols-1 gap-6 xl:grid-cols-2",
       bloques: [
-        ...paneles,
-        ...semana,
+        ...ahora,
         {
           id: "mapa-en-vivo",
           titulo: "Mapa en tiempo real",
@@ -130,32 +155,47 @@ export default async function DashboardPage() {
             <LiveMapDynamic employees={mapEmployees} drivers={mapDrivers} />
           ),
         } satisfies BloqueTablero,
-        {
-          id: "separador-detallado",
-          titulo: "Separador del tablero detallado",
-          anchoCompleto: true,
-          contenido: <SeparadorTableroDetallado />,
-        } satisfies BloqueTablero,
-        /*
-         * El God Eye, repartido en cuatro bloques.
-         *
-         * Antes entraba entero como un solo bloque llamado "Tablero
-         * detallado": desde ahi hacia abajo eran tres mil lineas que solo se
-         * podian mover u ocultar a la vez. Cada seccion es ahora un widget
-         * propio, aunque las cuatro siguen saliendo del mismo componente y
-         * comparten su estado --seleccionar un actor a la izquierda sigue
-         * abriendo su expediente a la derecha--.
-         */
-        ...SECCIONES_DEL_GOD_EYE.map(
-          (seccion) =>
-            ({
-              id: `god-eye-${seccion.nombre}`,
-              titulo: seccion.titulo,
-              anchoCompleto: true,
-              contenido: <SeccionGodEye nombre={seccion.nombre} />,
-            }) satisfies BloqueTablero,
-        ),
       ],
+    },
+    {
+      id: "dinero-indicadores",
+      titulo: "Dinero",
+      descripcion: `Semana del ${startDate} al ${endDate}`,
+      gridClassName: "grid grid-cols-1 gap-4 sm:grid-cols-3",
+      bloques: dinero,
+    },
+    {
+      id: "dinero-paneles",
+      gridClassName: "grid grid-cols-1 gap-6 xl:grid-cols-2",
+      bloques: semana,
+    },
+    {
+      /*
+       * El God Eye, repartido en cuatro bloques y detras de una puerta.
+       *
+       * Antes entraba entero como un solo bloque llamado "Tablero detallado":
+       * desde ahi hacia abajo eran tres mil lineas que solo se podian mover u
+       * ocultar a la vez. Cada seccion es ahora un widget propio, aunque las
+       * cuatro siguen saliendo del mismo componente y comparten su estado
+       * --seleccionar un actor a la izquierda sigue abriendo su expediente a la
+       * derecha--. La zona empieza cerrada porque repetia los indicadores de
+       * arriba y era lo primero que se veia al bajar.
+       */
+      id: "analisis",
+      titulo: "Analisis a fondo",
+      descripcion:
+        "Expediente de una persona, interceptor de chat, historico y apelaciones",
+      plegable: true,
+      gridClassName: "grid grid-cols-1 gap-6",
+      bloques: SECCIONES_DEL_GOD_EYE.map(
+        (seccion) =>
+          ({
+            id: `god-eye-${seccion.nombre}`,
+            titulo: seccion.titulo,
+            anchoCompleto: true,
+            contenido: <SeccionGodEye nombre={seccion.nombre} />,
+          }) satisfies BloqueTablero,
+      ),
     },
   ];
 

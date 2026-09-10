@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #050505; font-family: Montserrat, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    * { box-sizing: border-box; }
+    .inv { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+    .inv th { padding: 7px 10px; text-align: left; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A; border-bottom: 1px solid rgba(197,165,90,0.28); }
+    .inv td { padding: 6px 10px; border-bottom: 1px solid rgba(39,39,42,0.5); color: #A1A1AA; vertical-align: top; line-height: 1.45; }
+    .inv td.dato { color: #ffffff; font-weight: 500; }
+    .inv tr.grupo td { padding-top: 13px; border-bottom: none; font-size: 9px; font-weight: 700; letter-spacing: 0.16em; color: #8B7635; }
+  </style>
+</helmet>
+
+<div style="width: 1440px; height: 1180px; background: #050505; color: #ffffff; font-size: 14px; padding: 30px 34px; display: flex; flex-direction: column; gap: 18px;">
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between;">
+    <div>
+      <p style="margin: 0 0 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.22em; color: #8B7635;">CONTROL</p>
+      <h1 style="margin: 0; font-family: Cinzel, serif; font-size: 26px; font-weight: 600; color: #C5A55A;">Donde queda cada dato</h1>
+    </div>
+    <p style="margin: 0; max-width: 520px; text-align: right; font-size: 12px; line-height: 1.6; color: #71717A;">
+      Los 23 bloques que hoy tiene el dashboard, uno por uno, y su sitio en cada direccion.
+      Ninguno desaparece: cambian de lugar, se agrupan o pasan a segundo plano, pero
+      <span style="color:#A1A1AA;">todos siguen alcanzables</span>.
+    </p>
+  </div>
+
+  <div style="flex: 1; min-height: 0; border: 1px solid rgba(39,39,42,0.8); border-radius: 16px; background: #0A0A0C; padding: 6px 16px 14px; overflow: hidden;">
+    <table class="inv">
+      <thead>
+        <tr>
+          <th style="width: 250px;">HOY EN EL DASHBOARD</th>
+          <th style="width: 355px; color: #C5A55A;">A &middot; PENDIENTE DE TI</th>
+          <th style="width: 320px;">B &middot; TRES TIEMPOS</th>
+          <th>C &middot; PORTADA Y PROFUNDIDAD</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="grupo"><td colspan="4">LOS SEIS INDICADORES DE ARRIBA</td></tr>
+        <tr><td class="dato">Facturado hoy</td><td>Zona Dinero, cifra principal</td><td>Franja Hoy</td><td>Tarjeta Cobros, portada</td></tr>
+        <tr><td class="dato">Facturado en la semana</td><td>Zona Dinero, sobre la grafica</td><td>Franja Semana</td><td>Tarjeta La semana, portada</td></tr>
+        <tr><td class="dato">Efectivo en calle</td><td>Zona Dinero, con su alerta si crece</td><td>Franja Hoy</td><td>Tarjeta Cobros, portada</td></tr>
+        <tr><td class="dato">Modelos disponibles</td><td>Zona Ahora mismo, contador</td><td>Franja Ahora</td><td>Tarjeta Personal, portada</td></tr>
+        <tr><td class="dato">Choferes activos</td><td>Zona Ahora mismo, contador</td><td>Franja Ahora</td><td>Tarjeta Personal, portada</td></tr>
+        <tr><td class="dato">Sanciones vigentes</td><td>Bandeja, solo si alguna vence hoy</td><td>Franja Hoy, forzado</td><td>Tarjeta Disciplina, portada</td></tr>
+
+        <tr class="grupo"><td colspan="4">LOS NUEVE PANELES DEL CENTRO DE MANDO</td></tr>
+        <tr><td class="dato">Comprobantes por validar</td><td>Bandeja, prioridad alta con antiguedad</td><td>Franja Hoy, Por resolver</td><td>Tarjeta Cobros, al abrir</td></tr>
+        <tr><td class="dato">Servicios sin transporte</td><td>Bandeja, prioridad maxima</td><td>Franja Hoy, Por resolver</td><td>Tarjeta Operacion, al abrir</td></tr>
+        <tr><td class="dato">Reportes de conducta abiertos</td><td>Bandeja, fusionado en un solo hilo</td><td>Franja Hoy, Por resolver</td><td>Tarjeta Disciplina, al abrir</td></tr>
+        <tr><td class="dato">Apelaciones pendientes</td><td>Bandeja, mismo hilo</td><td>Franja Hoy, Por resolver</td><td>Tarjeta Disciplina, al abrir</td></tr>
+        <tr><td class="dato">Reportes por atender</td><td>Bandeja, mismo hilo</td><td>Franja Hoy, Por resolver</td><td>Tarjeta Disciplina, al abrir</td></tr>
+        <tr><td class="dato">Calificaciones negativas</td><td>Bandeja, prioridad media</td><td>Franja Hoy, Por resolver</td><td>Tarjeta Disciplina, al abrir</td></tr>
+        <tr><td class="dato">Personal fuera de jornada</td><td>Zona Ahora mismo, bajo los contadores</td><td>Franja Ahora</td><td>Tarjeta Personal, al abrir</td></tr>
+        <tr><td class="dato">Operacion en vivo</td><td>Zona Ahora mismo, lista de servicios</td><td>Franja Ahora</td><td>Tarjeta Operacion, al abrir</td></tr>
+        <tr><td class="dato">Alertas del sistema</td><td>Bandeja, solo cuando hay algo</td><td>Franja Ahora</td><td>Tarjeta Operacion, al abrir</td></tr>
+
+        <tr class="grupo"><td colspan="4">LOS CUATRO BLOQUES DE LA SEMANA</td></tr>
+        <tr><td class="dato">Ingreso por dia</td><td>Zona Dinero, grafica de barras</td><td>Franja Semana</td><td>Tarjeta La semana, al abrir</td></tr>
+        <tr><td class="dato">Ingreso por modelo</td><td>Zona Dinero, ranking compacto</td><td>Franja Semana</td><td>Tarjeta La semana, al abrir</td></tr>
+        <tr><td class="dato">Composicion del ingreso</td><td>Zona Dinero, tras la grafica</td><td>Franja Semana</td><td>Tarjeta La semana, al abrir</td></tr>
+        <tr><td class="dato">Cierre semanal</td><td>Zona Dinero, barra de avance</td><td>Franja Semana</td><td>Tarjeta La semana, al abrir</td></tr>
+
+        <tr class="grupo"><td colspan="4">MAPA Y GOD EYE</td></tr>
+        <tr><td class="dato">Mapa en vivo</td><td>Zona Ahora mismo, reducido y ampliable</td><td>Franja Ahora, en miniatura</td><td>Tarjeta Operacion, panel derecho</td></tr>
+        <tr><td class="dato">God Eye &middot; Finanzas</td><td>Analisis a fondo, una puerta</td><td>Franja Semana, enlace</td><td>Enlace al pie de La semana</td></tr>
+        <tr><td class="dato">God Eye &middot; Personal</td><td>Analisis a fondo, una puerta</td><td>Franja Semana, enlace</td><td>Enlace al pie de Personal</td></tr>
+        <tr><td class="dato">God Eye &middot; Operacion</td><td>Analisis a fondo, una puerta</td><td>Franja Semana, enlace</td><td>Enlace al pie de Operacion</td></tr>
+        <tr><td class="dato">God Eye &middot; Clientes</td><td>Analisis a fondo, una puerta</td><td>Franja Semana, enlace</td><td>Enlace al pie de Cobros</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px;">
+    <div style="border: 1px solid rgba(197,165,90,0.4); border-radius: 12px; background: rgba(197,165,90,0.045); padding: 13px 16px;">
+      <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: #C5A55A;">LO QUE SE GANA EN LAS TRES</p>
+      <p style="margin: 6px 0 0; font-size: 11.5px; line-height: 1.6; color: #A1A1AA;">Las cinco bandejas de reportes, apelaciones y calificaciones dejan de estar separadas: son el mismo trabajo --alguien espera una decision tuya-- y hoy compiten entre si. God Eye deja de repetir los indicadores de arriba.</p>
+    </div>
+    <div style="border: 1px solid rgba(39,39,42,0.9); border-radius: 12px; background: #0A0A0C; padding: 13px 16px;">
+      <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">LO QUE NO CAMBIA</p>
+      <p style="margin: 6px 0 0; font-size: 11.5px; line-height: 1.6; color: #A1A1AA;">Ningun dato se borra ni se calcula distinto. Las consultas del backend son las mismas; cambia el orden en pantalla y que los bloques vacios dejen de ocupar sitio.</p>
+    </div>
+    <div style="border: 1px solid rgba(52,211,153,0.3); border-radius: 12px; background: rgba(52,211,153,0.04); padding: 13px 16px;">
+      <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: #34D399;">LA RECOMENDACION</p>
+      <p style="margin: 6px 0 0; font-size: 11.5px; line-height: 1.6; color: #A1A1AA;">La A. Es la unica que responde a la pregunta con la que se abre el panel --que tengo que hacer ahora-- y deja todo lo demas visible sin un clic de por medio.</p>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

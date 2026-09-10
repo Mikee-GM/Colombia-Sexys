@@ -1,0 +1,18 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "A - Pendiente de ti (recomendada)", "x": 0, "y": 0, "w": 1440, "h": 900 },
+    { "file": "DireccionB.dc.html", "title": "B - Tres tiempos", "x": 1560, "y": 0, "w": 1120, "h": 820 },
+    { "file": "DireccionC.dc.html", "title": "C - Portada y profundidad", "x": 2800, "y": 0, "w": 1120, "h": 820 },
+    { "file": "Inventario.dc.html", "title": "Donde queda cada dato", "x": 0, "y": 1060, "w": 1440, "h": 1180 }
+  ],
+  "annotations": [
+    {
+      "id": "resumen-de-la-propuesta",
+      "x": 1560,
+      "y": 940,
+      "w": 300,
+      "text": "Tres formas de ordenar el mismo dashboard. La A es la propuesta; B y C estan al lado para comparar. Abajo, el mapa de donde acaba cada uno de los 23 bloques que hay hoy."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

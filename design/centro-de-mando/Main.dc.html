@@ -1,0 +1,278 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #050505; font-family: Montserrat, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+    * { box-sizing: border-box; }
+  </style>
+</helmet>
+
+<div style="display: flex; width: 1440px; height: 900px; background: #050505; color: #ffffff; font-size: 14px;">
+
+  <!-- MENU LATERAL, tal como esta hoy -->
+  <div style="width: 210px; flex-shrink: 0; border-right: 1px solid rgba(39,39,42,0.8); background: #050505; display: flex; flex-direction: column; padding: 20px 0;">
+    <div style="padding: 0 18px 22px; display: flex; flex-direction: column; align-items: center; gap: 8px; border-bottom: 1px solid rgba(39,39,42,0.8);">
+      <div style="width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(197,165,90,0.5); display: flex; align-items: center; justify-content: center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="1.6"><path d="M12 3c2.5 3 5 5.2 5 8.6A5 5 0 0 1 7 11.6C7 8.2 9.5 6 12 3Z"/></svg>
+      </div>
+      <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.22em; color: #C5A55A;">PANEL ADMIN</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 20px 0 0;">
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="padding: 0 18px 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; color: #52525B;">NUCLEO</span>
+        <span style="margin: 0 10px; padding: 9px 12px; border-radius: 10px; background: #C5A55A; color: #000000; font-size: 12px; font-weight: 600;">Centro de Mando</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="padding: 0 18px 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; color: #52525B;">FINANZAS</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #A1A1AA;">Dinero del Personal</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #A1A1AA;">Liquidaciones</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #A1A1AA;">Cortes de Choferes</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #A1A1AA;">Cuentas Bancarias</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="padding: 0 18px 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; color: #52525B;">OPERACION</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #A1A1AA;">Servicios</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #A1A1AA;">Registros a Mano</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #A1A1AA;">Clientes</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #A1A1AA;">Transporte</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #A1A1AA;">Mapa</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUERPO -->
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
+
+    <!-- Cabecera -->
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; padding: 26px 32px 18px; border-bottom: 1px solid rgba(39,39,42,0.8);">
+      <div>
+        <h1 style="margin: 0; font-family: Cinzel, 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #C5A55A; letter-spacing: 0.01em;">Centro de Mando</h1>
+        <p style="margin: 5px 0 0; font-size: 12px; color: #71717A;">Miercoles 10 de septiembre &middot; 03:12 h &middot; Queretaro</p>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border: 1px solid rgba(52,211,153,0.35); border-radius: 999px; background: rgba(6,78,59,0.35); font-size: 11px; font-weight: 600; color: #34D399;">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #34D399;"></span>
+          En vivo
+        </span>
+        <span style="padding: 7px 14px; border: 1px solid rgba(39,39,42,0.9); border-radius: 10px; font-size: 11px; font-weight: 600; color: #A1A1AA;">Semana</span>
+      </div>
+    </div>
+
+    <div style="flex: 1; min-height: 0; overflow: hidden; padding: 22px 32px 0; display: flex; flex-direction: column; gap: 20px;">
+
+      <!-- ================= 1. LO QUE PIDE ACCION ================= -->
+      <div style="border: 1px solid rgba(197,165,90,0.35); border-radius: 18px; background: linear-gradient(180deg, rgba(197,165,90,0.055), rgba(197,165,90,0) 55%), #0A0A0C; overflow: hidden;">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 15px 20px 13px; border-bottom: 1px solid rgba(39,39,42,0.7);">
+          <div style="display: flex; align-items: baseline; gap: 12px;">
+            <h2 style="margin: 0; font-family: Cinzel, serif; font-size: 17px; font-weight: 600; color: #E8D5A3; letter-spacing: 0.04em;">Pendiente de ti</h2>
+            <span style="font-size: 11px; color: #71717A;">ordenado por lo que se rompe antes</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="padding: 4px 11px; border-radius: 999px; background: rgba(248,113,113,0.14); border: 1px solid rgba(248,113,113,0.4); font-size: 11px; font-weight: 700; color: #F87171;">2 urgentes</span>
+            <span style="padding: 4px 11px; border-radius: 999px; background: rgba(39,39,42,0.7); border: 1px solid rgba(63,63,70,0.8); font-size: 11px; font-weight: 700; color: #A1A1AA;">6 en total</span>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column;">
+
+          <div style="display: grid; grid-template-columns: 3px 1fr 150px 128px; align-items: center; gap: 16px; padding: 13px 20px; border-bottom: 1px solid rgba(39,39,42,0.5);">
+            <span style="height: 30px; border-radius: 2px; background: #F87171;"></span>
+            <div style="min-width: 0;">
+              <p style="margin: 0; font-size: 13.5px; font-weight: 600; color: #ffffff;">Servicio SR-000078 lleva 22 min sin transporte asignado</p>
+              <p style="margin: 3px 0 0; font-size: 11.5px; color: #71717A;">Valeria Mejia &middot; Motel Montecarlo &middot; el cliente ya esta esperando</p>
+            </div>
+            <span style="font-size: 11px; color: #A1A1AA;">Transporte</span>
+            <span style="justify-self: end; padding: 7px 14px; border: 1px solid #C5A55A; border-radius: 9px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #E8D5A3;">ASIGNAR</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 3px 1fr 150px 128px; align-items: center; gap: 16px; padding: 13px 20px; border-bottom: 1px solid rgba(39,39,42,0.5);">
+            <span style="height: 30px; border-radius: 2px; background: #F87171;"></span>
+            <div style="min-width: 0;">
+              <p style="margin: 0; font-size: 13.5px; font-weight: 600; color: #ffffff;">Comprobante de $7,400 esperando validacion</p>
+              <p style="margin: 3px 0 0; font-size: 11.5px; color: #71717A;">Roberto M &middot; recibido hace 14 min &middot; el servicio no arranca sin esto</p>
+            </div>
+            <span style="font-size: 11px; color: #A1A1AA;">Dinero</span>
+            <span style="justify-self: end; padding: 7px 14px; border: 1px solid #C5A55A; border-radius: 9px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #E8D5A3;">REVISAR</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 3px 1fr 150px 128px; align-items: center; gap: 16px; padding: 13px 20px; border-bottom: 1px solid rgba(39,39,42,0.5);">
+            <span style="height: 30px; border-radius: 2px; background: #FBBF24;"></span>
+            <div style="min-width: 0;">
+              <p style="margin: 0; font-size: 13.5px; font-weight: 600; color: #ffffff;">Apelacion de Valentina sobre una calificacion de 2 estrellas</p>
+              <p style="margin: 3px 0 0; font-size: 11.5px; color: #71717A;">Abierta hace 2 dias &middot; sin admin asignado</p>
+            </div>
+            <span style="font-size: 11px; color: #A1A1AA;">Disciplina</span>
+            <span style="justify-self: end; padding: 7px 14px; border: 1px solid rgba(63,63,70,0.9); border-radius: 9px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #A1A1AA;">RESOLVER</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 3px 1fr 150px 128px; align-items: center; gap: 16px; padding: 13px 20px; border-bottom: 1px solid rgba(39,39,42,0.5);">
+            <span style="height: 30px; border-radius: 2px; background: #FBBF24;"></span>
+            <div style="min-width: 0;">
+              <p style="margin: 0; font-size: 13.5px; font-weight: 600; color: #ffffff;">Salome sigue sin vincular su Telegram</p>
+              <p style="margin: 3px 0 0; font-size: 11.5px; color: #71717A;">Dada de alta hace 4 dias &middot; no puede recibir ningun servicio</p>
+            </div>
+            <span style="font-size: 11px; color: #A1A1AA;">Personal</span>
+            <span style="justify-self: end; padding: 7px 14px; border: 1px solid rgba(63,63,70,0.9); border-radius: 9px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #A1A1AA;">GENERAR CODIGO</span>
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 11px 20px;">
+            <span style="font-size: 11.5px; color: #52525B;">2 mas: 1 registro a mano por aprobar &middot; 1 reporte de conducta abierto</span>
+            <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: #C5A55A;">VER TODO</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= 2 y 3. AHORA + DINERO ================= -->
+      <div style="display: grid; grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr); gap: 20px; min-height: 0;">
+
+        <!-- AHORA MISMO -->
+        <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 18px; background: #080808; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 12px; border-bottom: 1px solid rgba(39,39,42,0.7);">
+            <h2 style="margin: 0; font-family: Cinzel, serif; font-size: 15px; font-weight: 600; color: #ffffff; letter-spacing: 0.05em;">Ahora mismo</h2>
+            <span style="font-size: 11px; color: #71717A;">2 servicios en curso &middot; 1 traslado</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: rgba(39,39,42,0.6);">
+            <div style="background: #080808; padding: 12px 14px;">
+              <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">EN CURSO</p>
+              <p style="margin: 4px 0 0; font-size: 22px; font-weight: 700; color: #ffffff; font-variant-numeric: tabular-nums;">2</p>
+            </div>
+            <div style="background: #080808; padding: 12px 14px;">
+              <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">MODELOS LIBRES</p>
+              <p style="margin: 4px 0 0; font-size: 22px; font-weight: 700; color: #34D399; font-variant-numeric: tabular-nums;">3</p>
+            </div>
+            <div style="background: #080808; padding: 12px 14px;">
+              <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">CHOFERES</p>
+              <p style="margin: 4px 0 0; font-size: 22px; font-weight: 700; color: #FBBF24; font-variant-numeric: tabular-nums;">1<span style="font-size: 12px; font-weight: 500; color: #52525B;"> / 2</span></p>
+            </div>
+            <div style="background: #080808; padding: 12px 14px;">
+              <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">AGENDADOS HOY</p>
+              <p style="margin: 4px 0 0; font-size: 22px; font-weight: 700; color: #ffffff; font-variant-numeric: tabular-nums;">2</p>
+            </div>
+          </div>
+
+          <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 232px; gap: 0;">
+            <div style="display: flex; flex-direction: column; border-right: 1px solid rgba(39,39,42,0.7);">
+              <div style="display: flex; align-items: center; gap: 11px; padding: 12px 18px; border-bottom: 1px solid rgba(39,39,42,0.45);">
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: #34D399; flex-shrink: 0;"></span>
+                <div style="min-width: 0; flex: 1;">
+                  <p style="margin: 0; font-size: 12.5px; font-weight: 600; color: #ffffff;">Valeria Mejia &middot; 3 h</p>
+                  <p style="margin: 2px 0 0; font-size: 11px; color: #71717A;">Montecarlo &middot; termina 06:10</p>
+                </div>
+                <span style="font-size: 11px; font-weight: 600; color: #E8D5A3; font-variant-numeric: tabular-nums;">$7,500</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 11px; padding: 12px 18px; border-bottom: 1px solid rgba(39,39,42,0.45);">
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: #FBBF24; flex-shrink: 0;"></span>
+                <div style="min-width: 0; flex: 1;">
+                  <p style="margin: 0; font-size: 12.5px; font-weight: 600; color: #ffffff;">Camila &middot; 2 h</p>
+                  <p style="margin: 2px 0 0; font-size: 11px; color: #71717A;">En traslado &middot; Uber en camino</p>
+                </div>
+                <span style="font-size: 11px; font-weight: 600; color: #E8D5A3; font-variant-numeric: tabular-nums;">$5,000</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 11px; padding: 12px 18px;">
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: #52525B; flex-shrink: 0;"></span>
+                <div style="min-width: 0; flex: 1;">
+                  <p style="margin: 0; font-size: 12.5px; font-weight: 600; color: #A1A1AA;">Daniela &middot; agendado 09:00</p>
+                  <p style="margin: 2px 0 0; font-size: 11px; color: #52525B;">Majestic &middot; confirmar la vispera</p>
+                </div>
+                <span style="font-size: 11px; font-weight: 600; color: #71717A; font-variant-numeric: tabular-nums;">$10,000</span>
+              </div>
+            </div>
+
+            <!-- Mapa reducido a su papel: donde esta la gente, no una pantalla entera -->
+            <div style="position: relative; background: #060608; overflow: hidden;">
+              <div style="position: absolute; inset: 0; background-image: linear-gradient(rgba(197,165,90,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(197,165,90,0.055) 1px, transparent 1px); background-size: 26px 26px;"></div>
+              <div style="position: absolute; left: 62px; top: 58px; width: 9px; height: 9px; border-radius: 50%; background: #34D399; box-shadow: 0 0 0 4px rgba(52,211,153,0.16);"></div>
+              <div style="position: absolute; left: 132px; top: 104px; width: 9px; height: 9px; border-radius: 50%; background: #FBBF24; box-shadow: 0 0 0 4px rgba(251,191,36,0.16);"></div>
+              <div style="position: absolute; left: 88px; top: 148px; width: 9px; height: 9px; border-radius: 50%; background: #C5A55A; box-shadow: 0 0 0 4px rgba(197,165,90,0.16);"></div>
+              <div style="position: absolute; left: 168px; top: 44px; width: 9px; height: 9px; border-radius: 50%; background: #52525B;"></div>
+              <span style="position: absolute; left: 12px; bottom: 11px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.14em; color: #52525B;">QUERETARO</span>
+              <span style="position: absolute; right: 12px; bottom: 11px; font-size: 10px; font-weight: 600; color: #C5A55A;">Ampliar</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DINERO -->
+        <div style="border: 1px solid rgba(39,39,42,0.8); border-radius: 18px; background: #080808; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 12px; border-bottom: 1px solid rgba(39,39,42,0.7);">
+            <h2 style="margin: 0; font-family: Cinzel, serif; font-size: 15px; font-weight: 600; color: #ffffff; letter-spacing: 0.05em;">Dinero</h2>
+            <span style="font-size: 11px; color: #71717A;">semana del 7 al 13</span>
+          </div>
+
+          <div style="padding: 16px 18px 14px; border-bottom: 1px solid rgba(39,39,42,0.55);">
+            <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">FACTURADO EN LA SEMANA</p>
+            <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 5px;">
+              <span style="font-size: 30px; font-weight: 700; color: #ffffff; font-variant-numeric: tabular-nums; letter-spacing: -0.015em;">$28,900</span>
+              <span style="font-size: 11.5px; font-weight: 600; color: #34D399;">+18% vs. semana pasada</span>
+            </div>
+            <div style="display: flex; align-items: flex-end; gap: 5px; height: 44px; margin-top: 13px;">
+              <div style="flex: 1; height: 38%; background: rgba(197,165,90,0.28); border-radius: 2px 2px 0 0;"></div>
+              <div style="flex: 1; height: 61%; background: rgba(197,165,90,0.28); border-radius: 2px 2px 0 0;"></div>
+              <div style="flex: 1; height: 47%; background: rgba(197,165,90,0.28); border-radius: 2px 2px 0 0;"></div>
+              <div style="flex: 1; height: 88%; background: #C5A55A; border-radius: 2px 2px 0 0;"></div>
+              <div style="flex: 1; height: 100%; background: #C5A55A; border-radius: 2px 2px 0 0;"></div>
+              <div style="flex: 1; height: 22%; background: rgba(197,165,90,0.16); border-radius: 2px 2px 0 0;"></div>
+              <div style="flex: 1; height: 12%; background: rgba(197,165,90,0.16); border-radius: 2px 2px 0 0;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-top: 6px;">
+              <span style="font-size: 9.5px; color: #52525B;">L</span><span style="font-size: 9.5px; color: #52525B;">M</span><span style="font-size: 9.5px; color: #52525B;">M</span><span style="font-size: 9.5px; color: #52525B;">J</span><span style="font-size: 9.5px; color: #E8D5A3; font-weight: 700;">V</span><span style="font-size: 9.5px; color: #52525B;">S</span><span style="font-size: 9.5px; color: #52525B;">D</span>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: rgba(39,39,42,0.6);">
+            <div style="background: #080808; padding: 13px 18px;">
+              <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">HOY</p>
+              <p style="margin: 4px 0 0; font-size: 19px; font-weight: 700; color: #ffffff; font-variant-numeric: tabular-nums;">$11,400</p>
+            </div>
+            <div style="background: #080808; padding: 13px 18px;">
+              <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">EFECTIVO EN CALLE</p>
+              <p style="margin: 4px 0 0; font-size: 19px; font-weight: 700; color: #FBBF24; font-variant-numeric: tabular-nums;">$2,400</p>
+            </div>
+          </div>
+
+          <div style="flex: 1; min-height: 0; padding: 13px 18px; display: flex; flex-direction: column; gap: 9px;">
+            <p style="margin: 0; font-size: 9px; font-weight: 700; letter-spacing: 0.14em; color: #71717A;">CIERRE DE LA SEMANA</p>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 12px; color: #A1A1AA;">3 de 5 liquidaciones cerradas</span>
+              <span style="font-size: 11px; font-weight: 600; color: #C5A55A;">Abrir</span>
+            </div>
+            <div style="height: 5px; border-radius: 3px; background: rgba(39,39,42,0.9); overflow: hidden;">
+              <div style="width: 60%; height: 100%; background: linear-gradient(90deg, #8B7635, #C5A55A);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= 4. LO PROFUNDO, DETRAS DE UNA PUERTA ================= -->
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 13px 20px; border: 1px solid rgba(39,39,42,0.8); border-radius: 16px; background: #070709;">
+        <div style="display: flex; align-items: center; gap: 13px;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="1.6"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+          <div>
+            <p style="margin: 0; font-size: 13px; font-weight: 600; color: #ffffff;">Analisis a fondo</p>
+            <p style="margin: 2px 0 0; font-size: 11px; color: #71717A;">Expediente de una persona, interceptor de chat, historico y sanciones</p>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="padding: 6px 12px; border: 1px solid rgba(63,63,70,0.9); border-radius: 9px; font-size: 11px; font-weight: 600; color: #A1A1AA;">Actores</span>
+          <span style="padding: 6px 12px; border: 1px solid rgba(63,63,70,0.9); border-radius: 9px; font-size: 11px; font-weight: 600; color: #A1A1AA;">Servicios y chat</span>
+          <span style="padding: 6px 12px; border: 1px solid rgba(63,63,70,0.9); border-radius: 9px; font-size: 11px; font-weight: 600; color: #A1A1AA;">Apelaciones</span>
+          <span style="padding: 6px 13px; border: 1px solid #C5A55A; border-radius: 9px; font-size: 11px; font-weight: 700; color: #E8D5A3;">ABRIR</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
