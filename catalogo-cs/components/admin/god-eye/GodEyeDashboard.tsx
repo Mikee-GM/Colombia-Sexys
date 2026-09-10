@@ -1532,9 +1532,10 @@ export default function GodEyeDashboard({
                                       <p className="text-base sm:text-lg font-extrabold text-[#C5A55A]">
                                         ${s.totalFinal || 0} MXN
                                       </p>
+                                      {/* Solo el monto: aqui no se dice que se hizo, solo cuanto se cobro por ello. */}
                                       {s.extrasServicio && s.extrasServicio.length > 0 && (
                                         <p className="text-xs text-zinc-300">
-                                          Extras: {s.extrasServicio.map((e: any) => `${e.nombre} (+$${e.precio})`).join(", ")}
+                                          Extras: +${s.extrasServicio.reduce((suma: number, e: any) => suma + Number(e.precio || 0), 0).toLocaleString()}
                                         </p>
                                       )}
                                     </div>
