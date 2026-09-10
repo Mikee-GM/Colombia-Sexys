@@ -797,6 +797,47 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Los viajes recientes cuya empleada el chofer todavia no ha calificado.
+   *
+   * Calificar ya existia en el portal del chofer como endpoint, pero no habia
+   * de donde sacar que viaje calificar, asi que la opcion no aparecia por
+   * ningun lado: la unica via era el boton del chat, justo despues de cerrar el
+   * viaje. Quien cerraba desde el portal --o no veia el mensaje a tiempo-- ya no
+   * podia calificar nunca.
+   *
+   * Se calcula igual que el de la empleada: viajes finalizados de la ultima
+   * semana sin una calificacion suya. La direccion es la del chofer a la
+   * empleada, la unica que puede dar.
+   */
+  async listarEmpleadasPorCalificar(actor: Actor) {
+    const identity = await this.identityForActor(actor);
+    if (!identity || identity.type !== 'driver') {
+      throw new ForbiddenException('No tienes viajes que calificar');
+    }
+    return this.dataSource.query(
+      `SELECT v.id             AS "viajeId",
+              v.tipo           AS "tipo",
+              v.hora_fin_viaje AS "fecha",
+              e.nombre_artistico AS "empleadaNombre"
+       FROM viajes v
+       JOIN servicios s ON s.id = v.servicio_id
+       JOIN empleadas e ON e.id = s.empleada_id
+       WHERE v.chofer_id = $1
+         AND v.estado = 'finalizado'
+         AND v.hora_fin_viaje > now() - interval '7 days'
+         AND NOT EXISTS (
+           SELECT 1 FROM interaction_ratings r
+           WHERE r.direction = 'driver_to_employee'
+             AND r.trip_id = v.id
+             AND r.driver_id = $1
+         )
+       ORDER BY v.hora_fin_viaje DESC
+       LIMIT 5`,
+      [identity.id],
+    );
+  }
+
+  /**
    * Las calificaciones que esta persona todavia puede apelar.
    *
    * La identidad sale del actor y no de un parametro: si viniera del cliente,

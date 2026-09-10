@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { getApiBaseUrl } from "@/lib/api-server";
 import { getBackendCookieHeader, getCsrfToken } from "@/lib/auth";
 import type { DriverPortalData } from "@/lib/types";
@@ -333,6 +335,76 @@ export async function reportarConducta(
     return { success: true };
   } catch (error: any) {
     console.error("Error al reportar:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
+
+/** Un viaje ya terminado cuya empleada sigue sin calificar. */
+export type EmpleadaPorCalificar = {
+  viajeId: string;
+  tipo: "ida" | "regreso";
+  fecha: string | null;
+  empleadaNombre: string | null;
+};
+
+/**
+ * Las empleadas de sus viajes recientes que aun no ha calificado.
+ *
+ * Calificar existia como endpoint y como botones del chat, pero el portal no
+ * tenia de donde sacar que viaje calificar, asi que la opcion no aparecia por
+ * ningun lado: quien cerraba el viaje desde el portal --o no veia el mensaje del
+ * bot a tiempo-- se quedaba sin poder calificar nunca.
+ */
+export async function getEmpleadasPorCalificar(
+  token?: string,
+): Promise<EmpleadaPorCalificar[]> {
+  try {
+    const response = await fetch(
+      portalUrl("/driver-portal/ratings/pending-employees", token),
+      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+    );
+    if (!response.ok) return [];
+    return (await response.json()) as EmpleadaPorCalificar[];
+  } catch (error) {
+    console.error("Error al leer las empleadas por calificar:", error);
+    return [];
+  }
+}
+
+/** Deja la valoracion del chofer sobre la empleada de uno de sus viajes. */
+export async function calificarEmpleada(
+  input: { viajeId: string; stars: number; comment?: string },
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(portalUrl("/driver-portal/ratings", token), {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        ...(await portalHeaders(token)),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        direction: "driver_to_employee",
+        interactionId: input.viajeId,
+        stars: input.stars,
+        ...(input.comment?.trim() ? { comment: input.comment.trim() } : {}),
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo enviar la calificacion",
+      };
+    }
+    revalidatePath("/chofer/portal");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al calificar a la empleada:", error);
     return {
       success: false,
       error: error.message || "Error de conexion con el servidor",

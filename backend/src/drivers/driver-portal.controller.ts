@@ -223,6 +223,20 @@ export class DriverPortalController {
     );
   }
 
+  /**
+   * Las empleadas de sus viajes recientes que todavia no ha calificado.
+   *
+   * El endpoint de calificar ya existia, pero el portal no tenia de donde sacar
+   * que viaje calificar, asi que la opcion no aparecia por ningun lado.
+   */
+  @Get('ratings/pending-employees')
+  empleadasPorCalificar(@PortalUser() userId: string) {
+    return this.disciplineService.listarEmpleadasPorCalificar({
+      id: userId,
+      rol: 'chofer',
+    });
+  }
+
   @Post('ratings')
   @HttpCode(201)
   async calificar(@PortalUser() userId: string, @Body() dto: CreateRatingDto) {

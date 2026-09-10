@@ -28,8 +28,18 @@ type TabType = "resumen" | "ranking" | "viajes" | "reputacion";
 
 import ViajeAhora from "@/components/chofer/ViajeAhora";
 import OfertaDeViaje from "@/components/chofer/OfertaDeViaje";
+import CalificarEmpleada from "@/components/chofer/CalificarEmpleada";
 import Link from "next/link";
-import { ArrowRight, Banknote, BarChart3, Bell, Car, Crown, Star, Trophy } from "lucide-react";
+import {
+  ArrowRight,
+  Banknote,
+  BarChart3,
+  Bell,
+  Car,
+  Crown,
+  Star,
+  Trophy,
+} from "lucide-react";
 import { ZONA_LABEL } from "@/components/chofer/zonas";
 
 export default function DriverPortalView({
@@ -109,7 +119,9 @@ export default function DriverPortalView({
                 <span className="flex items-center gap-1">
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      data.profile.disponible ? "bg-emerald-400 animate-pulse" : "bg-gray-500"
+                      data.profile.disponible
+                        ? "bg-emerald-400 animate-pulse"
+                        : "bg-gray-500"
                     }`}
                   />
                   {data.profile.disponible ? "Disponible" : "No disponible"}
@@ -131,7 +143,9 @@ export default function DriverPortalView({
             <div className="text-sm sm:text-base font-bold text-[#E8D5A3] flex items-center justify-end gap-1">
               <Trophy size={15} />
               <span>#{data.ranking.myPosition}</span>
-              <span className="text-xs text-gray-500 font-normal">/ {data.ranking.totalDrivers}</span>
+              <span className="text-xs text-gray-500 font-normal">
+                / {data.ranking.totalDrivers}
+              </span>
             </div>
           </div>
         </div>
@@ -158,7 +172,11 @@ export default function DriverPortalView({
             { id: "resumen", label: "Resumen", icono: <BarChart3 size={14} /> },
             { id: "ranking", label: "Ranking", icono: <Trophy size={14} /> },
             { id: "viajes", label: "Viajes", icono: <Car size={14} /> },
-            { id: "reputacion", label: "Reputación", icono: <Star size={14} /> },
+            {
+              id: "reputacion",
+              label: "Reputación",
+              icono: <Star size={14} />,
+            },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -187,6 +205,12 @@ export default function DriverPortalView({
           <OfertaDeViaje key={oferta.id} oferta={oferta} />
         ))}
         <ViajeAhora viaje={data.activeTrip} zonaLabel={ZONA_LABEL} />
+        {/*
+          Los viajes que cerro y todavia no ha calificado.
+          Va aqui arriba, no en su reputacion: es algo que hacer, no algo que
+          mirar. Se dibuja sola solo cuando queda alguno.
+        */}
+        <CalificarEmpleada />
         {/*
           El viaje sigue asomando aqui, pero se trabaja en `/chofer/servicio`:
           alli no compite con las ganancias ni con el historial.
@@ -275,8 +299,11 @@ export default function DriverPortalView({
                 </div>
                 {vehiculoResumen ? (
                   <p className="text-xs text-gray-400 leading-relaxed">
-                    <span className="text-white font-semibold">{vehiculoResumen}</span>
-                    {data.profile.vehiculo.placa && ` — Placa ${data.profile.vehiculo.placa}`}
+                    <span className="text-white font-semibold">
+                      {vehiculoResumen}
+                    </span>
+                    {data.profile.vehiculo.placa &&
+                      ` — Placa ${data.profile.vehiculo.placa}`}
                   </p>
                 ) : (
                   <p className="text-xs text-gray-500 italic">
@@ -311,7 +338,9 @@ export default function DriverPortalView({
                   </span>
                 </div>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Se calcula sobre tus viajes internos finalizados de la semana en curso. Administración confirma el pago desde el panel de liquidaciones.
+                  Se calcula sobre tus viajes internos finalizados de la semana
+                  en curso. Administración confirma el pago desde el panel de
+                  liquidaciones.
                 </p>
                 <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-gray-400">
                   <span>Ganancia de la semana:</span>
@@ -357,11 +386,13 @@ export default function DriverPortalView({
                 Tabla de Clasificación de Choferes
               </h2>
               <p className="text-xs sm:text-sm text-gray-400 max-w-lg mx-auto">
-                Tu posición se calcula con tu calificación promedio y los reportes confirmados en tu contra en los últimos 90 días.
+                Tu posición se calcula con tu calificación promedio y los
+                reportes confirmados en tu contra en los últimos 90 días.
               </p>
               <div className="pt-2">
                 <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#C5A55A]/20 text-[#E8D5A3] border border-[#C5A55A]/40 text-xs font-bold">
-                  Tu Puesto Actual: #{data.ranking.myPosition} de {data.ranking.totalDrivers} choferes
+                  Tu Puesto Actual: #{data.ranking.myPosition} de{" "}
+                  {data.ranking.totalDrivers} choferes
                 </span>
               </div>
             </div>
@@ -396,7 +427,13 @@ export default function DriverPortalView({
                       </div>
 
                       <div className="flex-1 font-semibold text-sm">
-                        <span className={entry.isMe ? "text-[#E8D5A3] font-bold" : "text-gray-200"}>
+                        <span
+                          className={
+                            entry.isMe
+                              ? "text-[#E8D5A3] font-bold"
+                              : "text-gray-200"
+                          }
+                        >
                           {entry.nombre}
                         </span>
                         {entry.isMe && (
@@ -429,9 +466,12 @@ export default function DriverPortalView({
             <div className="bg-[#141721] rounded-xl border border-white/5 overflow-hidden shadow-sm">
               <div className="p-4 border-b border-white/5 flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-white">Historial de Viajes</h3>
+                  <h3 className="text-sm font-bold text-white">
+                    Historial de Viajes
+                  </h3>
                   <p className="text-xs text-gray-400">
-                    Tus últimos viajes internos finalizados y tu pago por cada uno.
+                    Tus últimos viajes internos finalizados y tu pago por cada
+                    uno.
                   </p>
                 </div>
                 <span className="text-xs text-[#E8D5A3] font-semibold bg-[#C5A55A]/10 px-2.5 py-1 rounded-md border border-[#C5A55A]/20">
@@ -446,42 +486,45 @@ export default function DriverPortalView({
               ) : (
                 <div className="divide-y divide-white/5">
                   {data.recentTrips.map((trip) => (
-                    <div key={trip.id} className="p-4 hover:bg-white/[0.02] transition-colors">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-white">
-                            {formatDate(trip.fecha)}
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-gray-300 capitalize">
-                            {trip.tipo}
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-gray-300">
-                            {ZONA_LABEL[trip.zona] || trip.zona}
-                          </span>
+                    <div
+                      key={trip.id}
+                      className="p-4 hover:bg-white/[0.02] transition-colors"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white">
+                              {formatDate(trip.fecha)}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-gray-300 capitalize">
+                              {trip.tipo}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-gray-300">
+                              {ZONA_LABEL[trip.zona] || trip.zona}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5">
+                          <div className="text-[10px] uppercase tracking-wider text-gray-400">
+                            Tu Pago
+                          </div>
+                          <div className="text-base font-bold text-emerald-400">
+                            {formatCurrency(trip.driverPayout)}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5">
-                        <div className="text-[10px] uppercase tracking-wider text-gray-400">
-                          Tu Pago
-                        </div>
-                        <div className="text-base font-bold text-emerald-400">
-                          {formatCurrency(trip.driverPayout)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* La interaccion de un chofer es el viaje, no el
+                      {/* La interaccion de un chofer es el viaje, no el
                         servicio: es lo que el backend sabe resolver. */}
-                    <div className="mt-3">
-                      <ReportarConducta
-                        servicioId={trip.id}
-                        direction="driver_to_employee"
-                        sujeto="este viaje"
-                        reportar={reportarConducta}
-                      />
-                    </div>
+                      <div className="mt-3">
+                        <ReportarConducta
+                          servicioId={trip.id}
+                          direction="driver_to_employee"
+                          sujeto="este viaje"
+                          reportar={reportarConducta}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -497,7 +540,7 @@ export default function DriverPortalView({
             <ApelarCalificacion
               cargar={getCalificacionesApelables}
               apelar={apelarCalificacion}
-                         />
+            />
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-[#141721] p-5 rounded-xl border border-white/5 text-center space-y-1">
@@ -505,7 +548,9 @@ export default function DriverPortalView({
                   <span>★</span>
                   <span>{data.reputation.ratingAverage.toFixed(1)}</span>
                 </div>
-                <div className="text-xs font-semibold text-white">Promedio General</div>
+                <div className="text-xs font-semibold text-white">
+                  Promedio General
+                </div>
                 <div className="text-[11px] text-gray-400">
                   {data.reputation.ratingCount} valoraciones de empleadas
                 </div>
@@ -515,7 +560,9 @@ export default function DriverPortalView({
                 <div className="text-3xl font-extrabold text-emerald-400">
                   {data.reputation.kpiScore}
                 </div>
-                <div className="text-xs font-semibold text-white">Puntuación KPI</div>
+                <div className="text-xs font-semibold text-white">
+                  Puntuación KPI
+                </div>
                 <div className="text-[11px] text-gray-400">
                   {data.reputation.confirmedReports90Days > 0
                     ? `${data.reputation.confirmedReports90Days} reporte(s) confirmado(s) en 90 días`
@@ -536,7 +583,9 @@ export default function DriverPortalView({
 
             <div className="bg-[#141721] rounded-xl border border-white/5 overflow-hidden shadow-sm">
               <div className="p-4 border-b border-white/5">
-                <h3 className="text-sm font-bold text-white">Opiniones y Comentarios</h3>
+                <h3 className="text-sm font-bold text-white">
+                  Opiniones y Comentarios
+                </h3>
                 <p className="text-xs text-gray-400">
                   Lo que las empleadas han comentado tras tus viajes.
                 </p>
@@ -549,14 +598,19 @@ export default function DriverPortalView({
               ) : (
                 <div className="divide-y divide-white/5">
                   {data.reputation.reviews.map((rev) => (
-                    <div key={rev.id} className="p-4 space-y-1.5 hover:bg-white/[0.02] transition-colors">
+                    <div
+                      key={rev.id}
+                      className="p-4 space-y-1.5 hover:bg-white/[0.02] transition-colors"
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1 text-amber-300 text-sm">
                           {Array.from({ length: rev.estrellas }).map((_, i) => (
                             <span key={i}>★</span>
                           ))}
                         </div>
-                        <span className="text-[11px] text-gray-500">{formatDate(rev.fecha)}</span>
+                        <span className="text-[11px] text-gray-500">
+                          {formatDate(rev.fecha)}
+                        </span>
                       </div>
                       <p className="text-xs text-gray-300 leading-relaxed font-normal">
                         &ldquo;{rev.comentario}&rdquo;
