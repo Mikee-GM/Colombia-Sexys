@@ -9,6 +9,7 @@ import {
   createJefeAction,
   deleteJefeAction,
   updateJefeAction,
+  type RolDeOficina,
 } from "@/lib/actions/jefes";
 import TelegramOtpButton from "@/components/erp/telegram-otp-button";
 import ConfirmDialog from "../ui/ConfirmDialog";
@@ -22,6 +23,7 @@ interface Jefe {
   email: string;
   nombre?: string | null;
   apellido?: string | null;
+  rol: RolDeOficina;
   trustScore?: number | null;
 }
 
@@ -49,6 +51,11 @@ export default function JefesDashboard({
   const [apellido, setApellido] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  /*
+   * El rol solo se elige al crear. Cambiarlo despues es una escalada de
+   * privilegios y el backend la rechaza, asi que tampoco se ofrece aqui.
+   */
+  const [rol, setRol] = useState<RolDeOficina>("jefe");
   const [editingJefe, setEditingJefe] = useState<Jefe | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -72,13 +79,17 @@ export default function JefesDashboard({
         if (!res.success) {
           throw new Error(res.error || "No se pudo actualizar el jefe");
         }
-        toast.success("Jefe actualizado correctamente.");
+        toast.success("Cuenta actualizada correctamente.");
       } else {
-        const res = await createJefeAction(nombre, apellido, email, password);
+        const res = await createJefeAction(nombre, apellido, email, password, rol);
         if (!res.success) {
-          throw new Error(res.error || "No se pudo crear el jefe");
+          throw new Error(res.error || "No se pudo crear la cuenta");
         }
-        toast.success("Jefe creado correctamente.");
+        toast.success(
+          rol === "admin"
+            ? "Administrador creado correctamente."
+            : "Jefe creado correctamente.",
+        );
       }
       setShowModal(false);
       setNombre("");
@@ -114,6 +125,7 @@ export default function JefesDashboard({
     setApellido("");
     setEmail("");
     setPassword("");
+    setRol("jefe");
     setShowModal(true);
   };
 
@@ -170,7 +182,7 @@ export default function JefesDashboard({
               </button>
 
               <h3 className="font-heading text-2xl font-semibold text-white tracking-wide mb-6">
-                {editingJefe ? "Editar Jefe" : "Crear Nuevo Jefe"}
+                {editingJefe ? "Editar cuenta" : "Crear nueva cuenta"}
               </h3>
 
               <form onSubmit={handleSaveJefe} className="space-y-5">
@@ -202,6 +214,54 @@ export default function JefesDashboard({
                   placeholder="jefe@colombiasexys.com"
                 />
 
+                {/* Solo al crear: el rol de una cuenta ya existente no se
+                    cambia desde aqui. */}
+                {!editingJefe && (
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
+                      Rol de la cuenta
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {(
+                        [
+                          {
+                            valor: "jefe" as const,
+                            titulo: "Jefe",
+                            nota: "Autoriza servicios de su equipo",
+                          },
+                          {
+                            valor: "admin" as const,
+                            titulo: "Administrador",
+                            nota: "Acceso completo al panel",
+                          },
+                        ]
+                      ).map((opcion) => (
+                        <button
+                          key={opcion.valor}
+                          type="button"
+                          onClick={() => setRol(opcion.valor)}
+                          className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+                            rol === opcion.valor
+                              ? "border-[#C5A55A] bg-[#C5A55A]/10"
+                              : "border-zinc-800 bg-black/40 hover:border-zinc-700"
+                          }`}
+                        >
+                          <span
+                            className={`block text-xs font-bold ${
+                              rol === opcion.valor ? "text-[#E8D5A3]" : "text-white"
+                            }`}
+                          >
+                            {opcion.titulo}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] leading-snug text-zinc-500">
+                            {opcion.nota}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <InputField
                   label={editingJefe ? "Contrasena (opcional)" : "Contrasena"}
                   type="password"
@@ -216,7 +276,13 @@ export default function JefesDashboard({
                   disabled={saving}
                   className="w-full bg-[#C5A55A] text-black font-black text-xs tracking-[0.2em] uppercase py-4 rounded-lg mt-4 hover:bg-[#D4AF37] transition-all duration-300 disabled:opacity-50 flex justify-center items-center"
                 >
-                  {saving ? "Guardando..." : editingJefe ? "Guardar Cambios" : "Crear Jefe"}
+                  {saving
+                    ? "Guardando..."
+                    : editingJefe
+                      ? "Guardar Cambios"
+                      : rol === "admin"
+                        ? "Crear Administrador"
+                        : "Crear Jefe"}
                 </button>
               </form>
             </motion.div>
@@ -233,7 +299,7 @@ export default function JefesDashboard({
             Gestiona las cuentas de los jefes asignados a las modelos
           </p>
         </div>
-        <CreateButton onClick={openCreateModal} label="Nuevo Jefe" />
+        <CreateButton onClick={openCreateModal} label="Nueva cuenta" />
       </div>
 
       <SearchBar
@@ -271,6 +337,9 @@ export default function JefesDashboard({
                   Correo Electronico
                 </th>
                 <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
+                  Rol
+                </th>
+                <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
                   Confiabilidad
                 </th>
                 <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
@@ -294,6 +363,17 @@ export default function JefesDashboard({
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-zinc-300">
                     {jefe.email}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        jefe.rol === "admin"
+                          ? "border-[#C5A55A]/50 bg-[#C5A55A]/10 text-[#E8D5A3]"
+                          : "border-zinc-700 bg-zinc-900/60 text-zinc-400"
+                      }`}
+                    >
+                      {jefe.rol === "admin" ? "Administrador" : "Jefe"}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <ReliabilityRating score={jefe.trustScore} compact />

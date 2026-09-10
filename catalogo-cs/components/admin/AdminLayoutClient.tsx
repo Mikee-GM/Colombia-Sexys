@@ -97,7 +97,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Modelos", href: "/admin/modelos", icon: Users },
       { label: "Choferes", href: "/admin/choferes", icon: Car },
-      { label: "Jefes", href: "/admin/jefes", icon: Shield },
+      { label: "Jefes y admins", href: "/admin/jefes", icon: Shield },
       { label: "Candidatas", href: "/admin/candidatas", icon: UserPlus },
     ],
   },

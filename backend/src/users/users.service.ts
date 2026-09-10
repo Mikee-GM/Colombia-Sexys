@@ -105,9 +105,31 @@ export class UsersService {
     return this.usuariosRepository.findOne({ where: { id } });
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {
+  /**
+   * El mismo cerrojo que en la creacion, que aqui faltaba.
+   *
+   * `create` comprueba que solo un admin pueda crear otro admin, pero esta ruta
+   * esta abierta a `admin` y `jefe` y volcaba el DTO entero en el UPDATE.
+   * `UpdateUserDto` es un `PartialType` del de creacion, asi que incluye `rol`:
+   * cualquier jefe podia ascenderse a admin con un PATCH sobre su propio
+   * usuario, que es exactamente la escalada que el cerrojo de arriba existe
+   * para impedir.
+   *
+   * Se comprueba tanto ascender a alguien a admin como degradar a un admin: las
+   * dos son decisiones que solo le tocan a un admin.
+   */
+  async update(id: string, updateUserDto: UpdateUserDto, actor?: Usuarios) {
     const { password, ...toUpdate } = updateUserDto as any;
     const updateData: any = { ...toUpdate };
+
+    if (updateData.rol !== undefined && actor?.rol !== 'admin') {
+      const actual = await this.usuariosRepository.findOne({ where: { id } });
+      if (updateData.rol === 'admin' || actual?.rol === 'admin') {
+        throw new ForbiddenException(
+          'Solo un administrador puede cambiar el rol de una cuenta admin',
+        );
+      }
+    }
 
     if (password) {
       const salt = await bcrypt.genSalt(10);

@@ -4,20 +4,33 @@ import { apiFetch } from "@/lib/api-server";
 import { isRedirectError } from "@/lib/auth";
 import { getStaffTrustScores } from "@/lib/staff-reliability";
 
-export async function getJefesAction(): Promise<{ id: string; email: string; nombre?: string | null; apellido?: string | null; trustScore?: number | null }[]> {
+/** Personal de oficina: jefes y administradores. */
+export type RolDeOficina = "jefe" | "admin";
+
+/**
+ * Jefes y admins en la misma lista.
+ *
+ * Se piden por separado porque `/users` sin filtro devuelve tambien a modelos y
+ * choferes, que no pintan nada en esta pantalla.
+ */
+export async function getJefesAction(): Promise<{ id: string; email: string; nombre?: string | null; apellido?: string | null; rol: RolDeOficina; trustScore?: number | null }[]> {
   try {
-    const [users, trustScores] = await Promise.all([
+    const [jefes, admins, trustScores] = await Promise.all([
       apiFetch<any[]>("/users?rol=jefe", {
+        authenticated: true,
+      }),
+      apiFetch<any[]>("/users?rol=admin", {
         authenticated: true,
       }),
       getStaffTrustScores(),
     ]);
 
-    return users.map((u: any) => ({
+    return [...jefes, ...admins].map((u: any) => ({
       id: u.id,
       email: u.email,
       nombre: u.nombre,
       apellido: u.apellido,
+      rol: (u.rol === "admin" ? "admin" : "jefe") as RolDeOficina,
       trustScore: trustScores[u.id] ?? null,
     }));
   } catch (error) {
@@ -31,12 +44,14 @@ export async function createJefeAction(
   nombre: string,
   apellido: string,
   email: string,
-  password: string
+  password: string,
+  /* El backend solo deja crear un admin a otro admin; aqui solo se pide. */
+  rol: RolDeOficina = "jefe"
 ): Promise<{ success: boolean; error?: string }> {
   try {
     await apiFetch("/users", {
       method: "POST",
-      body: JSON.stringify({ nombre, apellido, email, password, rol: "jefe" }),
+      body: JSON.stringify({ nombre, apellido, email, password, rol }),
       authenticated: true,
     });
 

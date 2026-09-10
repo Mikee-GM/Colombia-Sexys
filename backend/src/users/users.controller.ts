@@ -104,8 +104,12 @@ export class UsersController {
   })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'jefe')
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(id, updateUserDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+    @GetUser() actor: Usuarios,
+  ) {
+    return this.usersService.update(id, updateUserDto, actor);
   }
 
   @Delete(':id')
