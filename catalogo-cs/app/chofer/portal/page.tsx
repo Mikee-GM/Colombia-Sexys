@@ -62,5 +62,11 @@ export default async function DriverPortalPage({ searchParams }: PageProps) {
     );
   }
 
-  return <DriverPortalView initialData={result.data} workShift={workShift} />;
+  return (
+    <DriverPortalView
+      initialData={result.data}
+      workShift={workShift}
+      token={token ?? null}
+    />
+  );
 }

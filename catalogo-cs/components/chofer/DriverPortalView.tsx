@@ -17,11 +17,14 @@ import {
 import CerrarSesion from "@/components/ui/CerrarSesion";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
+import AvisosParaChofer from "@/components/chofer/AvisosParaChofer";
 
 interface DriverPortalViewProps {
   initialData: DriverPortalData;
   /** Nulo cuando se entra con un enlace antiguo, sin sesion. */
   workShift?: WorkShiftStatus | null;
+  /** Token del enlace de la Mini App; sin el no hay avisos en vivo. */
+  token?: string | null;
 }
 
 type TabType = "resumen" | "ranking" | "viajes" | "reputacion";
@@ -45,6 +48,7 @@ import { ZONA_LABEL } from "@/components/chofer/zonas";
 export default function DriverPortalView({
   initialData,
   workShift,
+  token = null,
 }: DriverPortalViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>("resumen");
   const data = initialData;
@@ -93,6 +97,7 @@ export default function DriverPortalView({
 
   return (
     <div className="min-h-screen bg-[#0B0D13] text-gray-100 flex flex-col font-sans selection:bg-[#C5A55A]/30">
+      <AvisosParaChofer token={token} />
       {/* HEADER / HERO BAR */}
       {/* Igual que en el portal de la empleada: la barra de estado del
           telefono se pinta encima de la pagina y hay que dejarle su hueco. */}

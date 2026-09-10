@@ -17,17 +17,25 @@ import {
   ApiSseTokenDocs,
 } from '../common/swagger/api-docs.decorators';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
+import { PortalUser } from '../auth/decorators/portal-user.decorator';
 import { Usuarios } from '../users/entities/user.entity';
 
 /**
- * Todos los canales se autentican con JwtAuthGuard, es decir por cookie firmada
- * o cabecera Authorization.
+ * Jefes y empleadas se autentican con JwtAuthGuard: cookie firmada de sesion
+ * completa o cabecera Authorization.
  *
- * Antes tres de ellos recibian el JWT como `?token=`: los query strings acaban
+ * Antes tres canales recibian el JWT como `?token=`: los query strings acaban
  * en los logs de acceso del proxy, en el historial del navegador y en la
  * cabecera Referer de cualquier recurso externo. Ademas se verificaban a mano
  * sin comprobar el tipo de token ni la sesion, asi que un token de portal de 7
  * dias abria el canal.
+ *
+ * `sse/chofer` es distinto a proposito: el portal de chofer es una Mini App de
+ * Telegram que nunca llega a tener esa sesion completa (ver PortalAuthGuard),
+ * asi que usa el mismo guard que ya protege el resto del portal
+ * (DriverPortalController) en vez de JwtAuthGuard. Ese guard si sabe aceptar
+ * el token por query de forma segura, verificando tipo y firma.
  *
  * Se elimino tambien `sse/cliente`: esperaba un rol 'cliente' que no existe en
  * la enumeracion de Usuarios y que ningun punto del backend emite, asi que era
@@ -35,7 +43,6 @@ import { Usuarios } from '../users/entities/user.entity';
  */
 @Controller('realtime')
 @ApiControllerDocs('realtime')
-@UseGuards(JwtAuthGuard)
 export class RealtimeController {
   constructor(
     private readonly realtimeEventsService: RealtimeEventsService,
@@ -46,6 +53,7 @@ export class RealtimeController {
   ) {}
 
   @Sse('sse/jefes')
+  @UseGuards(JwtAuthGuard)
   @ApiSseTokenDocs('Conectar canal SSE para panel de jefes')
   sseJefes(@Req() request: { user: Usuarios }): Observable<any> {
     const user = request.user;
@@ -58,6 +66,7 @@ export class RealtimeController {
   }
 
   @Sse('sse/empleada')
+  @UseGuards(JwtAuthGuard)
   @ApiSseTokenDocs('Conectar canal SSE para empleada autenticada')
   async sseEmpleada(
     @Req() request: { user: Usuarios },
@@ -77,16 +86,11 @@ export class RealtimeController {
   }
 
   @Sse('sse/chofer')
+  @UseGuards(PortalAuthGuard)
   @ApiSseTokenDocs('Conectar canal SSE para chofer autenticado')
-  async sseChofer(
-    @Req() request: { user: Usuarios },
-  ): Promise<Observable<any>> {
-    const user = request.user;
-    if (user.rol !== 'chofer') {
-      throw new ForbiddenException('Solo choferes pueden conectar aquí');
-    }
+  async sseChofer(@PortalUser() userId: string): Promise<Observable<any>> {
     const chofer = await this.choferesRepository.findOne({
-      where: { usuarioId: user.id },
+      where: { usuarioId: userId },
       select: { id: true },
     });
     if (!chofer) {
