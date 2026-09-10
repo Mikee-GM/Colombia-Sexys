@@ -80,6 +80,90 @@ function dominiosDeLasEntidades(dominios: Dominios): void {
   }
 }
 
+/**
+ * Dominios que solo existen en TypeScript.
+ *
+ * Media docena de columnas son `varchar` con su lista de valores escrita en el
+ * tipo de la propiedad o en un alias --`estado: SubmissionStatus`--. Postgres
+ * acepta cualquier cosa ahi, asi que un valor equivocado no falla al insertar:
+ * falla despues, en la pantalla que filtra por el, que sale vacia con la base
+ * llena. Asi se colaron el proveedor de transporte, el estado de las fotos
+ * semanales y el de las apelaciones.
+ */
+function dominiosDeLosTipos(dominios: Dominios): void {
+  const archivos = archivosQueTerminanEn('.ts');
+
+  // Alias de tipo con union de literales, y las listas `as const` de las que
+  // se derivan: `export type X = 'a' | 'b'` y `export const Y = [...] as const`.
+  const alias = new Map<string, string[]>();
+  for (const archivo of archivos) {
+    const fuente = fs.readFileSync(archivo, 'utf8');
+    for (const m of fuente.matchAll(
+      /export type ([A-Za-z0-9_]+)\s*=\s*((?:\s*\|?\s*'[^']*')+)\s*;/g,
+    )) {
+      alias.set(
+        m[1],
+        [...m[2].matchAll(/'([^']*)'/g)].map((v) => v[1]),
+      );
+    }
+    for (const m of fuente.matchAll(
+      /export const ([A-Za-z0-9_]+)\s*=\s*\[([\s\S]*?)\]\s*as const/g,
+    )) {
+      const valores = [...m[2].matchAll(/'([^']*)'/g)].map((v) => v[1]);
+      const derivado = new RegExp(
+        `export type ([A-Za-z0-9_]+) = \\(typeof ${m[1]}\\)\\[number\\]`,
+      ).exec(fuente);
+      if (derivado) alias.set(derivado[1], valores);
+    }
+  }
+
+  for (const archivo of archivos) {
+    if (!archivo.endsWith('.entity.ts')) continue;
+    const fuente = fs.readFileSync(archivo, 'utf8');
+    const cabeceras = [...fuente.matchAll(/@Entity\((?:'|")([^'"]+)/g)];
+    for (let i = 0; i < cabeceras.length; i += 1) {
+      const tabla = cabeceras[i][1];
+      const trozo = fuente.slice(
+        cabeceras[i].index ?? 0,
+        cabeceras[i + 1]?.index ?? fuente.length,
+      );
+
+      /*
+       * Cada columna se lee desde su `@Column(` hasta la declaracion de la
+       * propiedad, sin intentar cerrar el parentesis: muchas traen
+       * `default: () => ...` dentro, y buscar el parentesis de cierre corta el
+       * bloque por la mitad y no encuentra nada.
+       */
+      const piezas = trozo.split('@Column(').slice(1);
+      for (const pieza of piezas) {
+        const decl = /\n\s{2}([a-zA-Z0-9_]+)[?!]?\s*:\s*([^;]+);/.exec(pieza);
+        if (!decl) continue;
+        const cabecera = pieza.slice(0, decl.index);
+        const [, propiedad, tipo] = decl;
+        const nombre =
+          /name:\s*'([^']+)'/.exec(cabecera)?.[1] ??
+          propiedad.replace(/[A-Z]/g, (l) => `_${l.toLowerCase()}`);
+
+        let valores: string[] = [];
+        if (tipo.includes('|') && tipo.includes("'")) {
+          valores = [...tipo.matchAll(/'([^']*)'/g)].map((m) => m[1]);
+        } else {
+          const referido = tipo.replace(/\s|\||null|undefined/g, '');
+          if (alias.has(referido)) valores = alias.get(referido)!;
+        }
+        // Un dominio de verdad es una lista de identificadores; las
+        // descripciones de `@ApiProperty` son prosa y solo darian ruido.
+        if (
+          valores.length > 1 &&
+          valores.every((v) => /^[a-z][a-z0-9_]*$/.test(v))
+        ) {
+          anotar(dominios, tabla, nombre, valores);
+        }
+      }
+    }
+  }
+}
+
 /** `CHECK (columna IN ('a', 'b'))` de las migraciones. */
 function dominiosDeLasMigraciones(dominios: Dominios): void {
   for (const archivo of archivosQueTerminanEn('.ts')) {
@@ -139,6 +223,7 @@ describe('Los valores de la siembra caben en su columna', () => {
   const dominios: Dominios = new Map();
   dominiosDeLasEntidades(dominios);
   dominiosDeLasMigraciones(dominios);
+  dominiosDeLosTipos(dominios);
 
   let filas: { tabla: string; fila: Record<string, unknown> }[];
 
