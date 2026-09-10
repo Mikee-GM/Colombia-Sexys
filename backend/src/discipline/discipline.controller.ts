@@ -119,6 +119,16 @@ export class DisciplineController {
     return this.discipline.listPendingAppeals();
   }
 
+  /* Todo lo que se reporto o apelo sobre un mismo servicio, junto. */
+  @Get('cases/:serviceId')
+  @Roles('admin', 'jefe')
+  getCaso(
+    @Param('serviceId', ParseUUIDPipe) serviceId: string,
+    @Req() req: any,
+  ) {
+    return this.discipline.getCaso(serviceId, req.user);
+  }
+
   @Post('appeals/:id/resolve')
   @Roles('admin')
   resolveAppeal(

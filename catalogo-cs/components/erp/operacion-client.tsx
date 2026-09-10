@@ -109,6 +109,20 @@ function referencia(service: Service) {
   );
 }
 
+/**
+ * Un servicio que sigue abierto pertenece al tablero de hoy, empezara cuando
+ * empezara.
+ *
+ * Sin esto un servicio que arranca a las 22:00 y dura tres horas desaparecia de
+ * la torre de control al pasar la medianoche, estando en curso: su dia de
+ * referencia era el de ayer. Igual un servicio pendiente sin fecha, que se
+ * quedaba en el dia en que se creo y nunca llegaba a verse en "Hoy" aunque
+ * fuera justo lo que habia que atender.
+ */
+function sigueAbierto(service: Service) {
+  return service.estado === "en_curso" || service.estado === "pendiente";
+}
+
 function duracionLegible(ms: number) {
   if (ms <= 0) return null;
   const minutos = Math.floor(ms / 60_000);
@@ -215,6 +229,9 @@ export default function OperacionClient({
 
     return services
       .filter((service) => {
+        /* Lo que esta pasando ahora entra en cualquiera de los dos rangos. */
+        if (sigueAbierto(service)) return true;
+
         const dia = diaLocal(referencia(service));
         if (!dia) return false;
         if (rango === "hoy") return dia === hoy;
@@ -240,7 +257,9 @@ export default function OperacionClient({
     );
 
     const viajesSinChofer = delRango.flatMap((service) =>
-      (service.viajes ?? []).filter(sinChofer).map((trip) => ({ service, trip })),
+      (service.viajes ?? [])
+        .filter(sinChofer)
+        .map((trip) => ({ service, trip })),
     );
 
     return {
@@ -439,7 +458,9 @@ export default function OperacionClient({
           footnote={
             kpis.cerrados
               ? `Sobre ${kpis.cerrados} ${
-                  kpis.cerrados === 1 ? "servicio cerrado" : "servicios cerrados"
+                  kpis.cerrados === 1
+                    ? "servicio cerrado"
+                    : "servicios cerrados"
                 }`
               : "Aun sin servicios cerrados"
           }
@@ -482,7 +503,9 @@ export default function OperacionClient({
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Panel
-          title={rango === "hoy" ? "Servicios del dia" : "Servicios de la semana"}
+          title={
+            rango === "hoy" ? "Servicios del dia" : "Servicios de la semana"
+          }
           subtitle="servicios - el codigo abre la ficha, la fila abre la gestion"
           flush
           action={
@@ -640,7 +663,9 @@ export default function OperacionClient({
             title="Cola de transporte"
             subtitle="viajes internos sin chofer asignado"
             action={
-              <StatusBadge tone={kpis.viajesSinChofer.length ? "amber" : "green"}>
+              <StatusBadge
+                tone={kpis.viajesSinChofer.length ? "amber" : "green"}
+              >
                 {kpis.viajesSinChofer.length}
               </StatusBadge>
             }

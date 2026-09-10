@@ -1,0 +1,183 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #000000; font-family: Montserrat, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+    * { box-sizing: border-box; }
+    .tarjeta { display: flex; flex-direction: column; gap: 11px; border-radius: 12px; border: 1px solid #27272a; background: #09090b; padding: 15px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 999px; border: 1px solid; padding: 4px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; }
+    .b-gold { border-color: rgba(197,165,90,0.3); background: rgba(197,165,90,0.1); color: #C5A55A; }
+    .b-red { border-color: rgba(248,113,113,0.25); background: rgba(248,113,113,0.08); color: #f87171; }
+    .b-amber { border-color: rgba(251,191,36,0.25); background: rgba(251,191,36,0.08); color: #fbbf24; }
+    .b-blue { border-color: rgba(96,165,250,0.25); background: rgba(96,165,250,0.08); color: #60a5fa; }
+    .b-zinc { border-color: #27272a; background: rgba(24,24,27,0.6); color: #a1a1aa; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 12px; border: 1px solid #27272a; background: #09090b; padding: 0 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #d4d4d8; }
+    .btn-oro { border-color: #C5A55A; background: transparent; color: #C5A55A; }
+    .btn-tenue { color: #a1a1aa; }
+  </style>
+</helmet>
+
+<div style="display: flex; width: 390px; height: 1460px; flex-direction: column; background: #000000; color: #ffffff; font-size: 14px;">
+
+  <!-- Barra propia del panel. Encima de ella pinta el telefono su barra de estado,
+       por eso queda ese aire arriba y no se dibuja nada ahi. -->
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid #27272a; background: #050505; padding: 44px 16px 12px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+      <span style="font-size: 12px; font-weight: 600; color: #C5A55A;">Pendiente de ti</span>
+    </div>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="2"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>
+  </div>
+
+  <div style="display: flex; flex: 1; flex-direction: column; gap: 16px; padding: 16px;">
+
+    <div style="border-bottom: 1px solid #27272a; padding-bottom: 14px;">
+      <h1 style="margin: 0; font-family: Cinzel, serif; font-size: 22px; font-weight: 600; line-height: 1.2; color: #E8D5A3;">Caso del servicio SR-000071</h1>
+      <p style="margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: #71717a;">Cuatro reportes y una apelacion del mismo servicio</p>
+    </div>
+
+    <!-- Contexto compacto -->
+    <div style="display: flex; flex-direction: column; gap: 12px; border-radius: 14px; border: 1px solid #27272a; background: rgba(0,0,0,0.4); padding: 14px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+        <span style="font-size: 12.5px; color: #a1a1aa;">9 sep, 20:43 &middot; 3 h &middot; $3,500</span>
+        <span class="badge b-blue">Finalizado</span>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 7px;">
+        <span style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; border: 1px solid #27272a; background: #09090b; padding: 5px 11px;">
+          <span style="font-size: 12px; font-weight: 600; color: #ffffff;">Camila</span>
+          <span style="font-size: 10.5px; color: #52525b;">Empleada</span>
+        </span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; border: 1px solid #27272a; background: #09090b; padding: 5px 11px;">
+          <span style="font-size: 12px; font-weight: 600; color: #ffffff;">Roberto M</span>
+          <span style="font-size: 10.5px; color: #52525b;">Cliente</span>
+        </span>
+        <span style="display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; border: 1px solid #27272a; background: #09090b; padding: 5px 11px;">
+          <span style="font-size: 12px; font-weight: 600; color: #ffffff;">Gerardo Demo</span>
+          <span style="font-size: 10.5px; color: #52525b;">Chofer</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Filtro -->
+    <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+      <span style="border-radius: 10px; border: 1px solid #C5A55A; background: rgba(197,165,90,0.1); padding: 8px 13px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #C5A55A;">Todos</span>
+      <span style="border-radius: 10px; border: 1px solid #27272a; background: #09090b; padding: 8px 13px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa;">Sin resolver</span>
+      <span style="border-radius: 10px; border: 1px solid #27272a; background: #09090b; padding: 8px 13px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa;">Reportes</span>
+    </div>
+
+    <!-- Una columna: las tarjetas son las mismas -->
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+
+      <div class="tarjeta" style="border-color: rgba(248,113,113,0.35);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-size: 11px; color: #a1a1aa;">Reporte de conducta</span>
+          <span class="badge b-red">Urgente</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #71717a;">
+          <span style="font-weight: 600; color: #d4d4d8;">Roberto M</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span style="font-weight: 600; color: #d4d4d8;">Camila</span>
+        </div>
+        <h3 style="margin: 0; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Trato inadecuado</h3>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">La modelo se nego a continuar el servicio a la hora y media y se fue del lugar discutiendo. Pide que le devuelvan la mitad.</p>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(39,39,42,0.6); padding-top: 11px;">
+          <span class="badge b-amber">Nuevo</span>
+          <span style="font-size: 11px; color: #52525b;">Hace 3 h</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+          <span class="btn btn-oro">Confirmar</span>
+          <span class="btn btn-tenue">Desestimar</span>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-size: 11px; color: #a1a1aa;">Reporte de conducta</span>
+          <span class="badge b-amber">Alta</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #71717a;">
+          <span style="font-weight: 600; color: #d4d4d8;">Camila</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span style="font-weight: 600; color: #d4d4d8;">Roberto M</span>
+        </div>
+        <h3 style="margin: 0; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Seguridad</h3>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">Habia otra persona en la habitacion que no estaba acordada. Salio del lugar por eso y aviso al jefe por el bot.</p>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(39,39,42,0.6); padding-top: 11px;">
+          <span class="badge b-amber">Nuevo</span>
+          <span style="font-size: 11px; color: #52525b;">Hace 3 h</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+          <span class="btn btn-oro">Confirmar</span>
+          <span class="btn btn-tenue">Desestimar</span>
+        </div>
+      </div>
+
+      <div class="tarjeta" style="border-color: rgba(197,165,90,0.35);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-size: 11px; color: #a1a1aa;">Apelacion de calificacion</span>
+          <span class="badge b-gold">2 de 5</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #71717a;">
+          <span style="font-weight: 600; color: #d4d4d8;">Roberto M</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span style="font-weight: 600; color: #d4d4d8;">Camila</span>
+        </div>
+        <h3 style="margin: 0; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Pide anular la calificacion</h3>
+        <p style="margin: 0; border-left: 2px solid #27272a; padding-left: 10px; font-size: 12.5px; line-height: 1.55; color: #71717a;">&ldquo;Se fue antes de tiempo y sin explicacion.&rdquo;</p>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">Motivo: me fui porque habia una tercera persona que no estaba acordada.</p>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(39,39,42,0.6); padding-top: 11px;">
+          <span class="badge b-gold">Sin resolver</span>
+          <span style="font-size: 11px; color: #52525b;">Hace 2 h</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+          <span class="btn btn-oro">Anular</span>
+          <span class="btn btn-tenue">Confirmar</span>
+        </div>
+      </div>
+
+      <div class="tarjeta">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-size: 11px; color: #a1a1aa;">Reporte de conducta</span>
+          <span class="badge b-zinc">Normal</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #71717a;">
+          <span style="font-weight: 600; color: #d4d4d8;">Gerardo Demo</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span style="font-weight: 600; color: #d4d4d8;">Camila</span>
+        </div>
+        <h3 style="margin: 0; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Demora o impuntualidad</h3>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">Espero veinticinco minutos en el punto de regreso.</p>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(39,39,42,0.6); padding-top: 11px;">
+          <span class="badge b-blue">En revision</span>
+          <span style="font-size: 11px; color: #52525b;">Hace 2 h</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+          <span class="btn btn-oro">Confirmar</span>
+          <span class="btn btn-tenue">Desestimar</span>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 11px; border-radius: 12px; border: 1px dashed #3f3f46; background: rgba(9,9,11,0.5); padding: 16px;">
+        <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #71717a;">CUANDO YA DECIDISTE</p>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">La sancion se crea desde aqui y queda ligada al caso.</p>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;">
+          <span class="btn btn-oro">Sancionar</span>
+          <span class="btn btn-tenue">Cerrar caso</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

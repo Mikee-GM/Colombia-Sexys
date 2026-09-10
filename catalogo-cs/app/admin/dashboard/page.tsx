@@ -7,6 +7,7 @@ import BandejaPendiente from "@/components/erp/bandeja-pendiente";
 import { bloquesDeSemanaEnCurso } from "@/components/erp/semana-en-curso";
 import TableroPersonalizable, {
   type BloqueTablero,
+  type PestanaTablero,
 } from "@/components/erp/tablero-personalizable";
 import LiveMapDynamic from "@/components/dashboard/LiveMapDynamic";
 import { getEmployees } from "@/lib/data/employees";
@@ -112,10 +113,25 @@ export default async function DashboardPage() {
   });
 
   /*
-   * El tablero se lee de arriba abajo como cuatro preguntas, y no como una
-   * rejilla de veinte widgets con el mismo peso: que tengo que hacer, que esta
-   * pasando ahora, cuanto dinero hay, y --detras de una puerta-- el analisis a
-   * fondo.
+   * Dos pestañas, porque son dos intenciones distintas y no dos partes de la
+   * misma lectura: operar el dia de hoy, o investigar a fondo. El analisis
+   * estaba al final de una pagina larga y para llegar habia que bajar pasando
+   * por todo lo demas.
+   */
+  const pestanas: PestanaTablero[] = [
+    { id: "operacion", titulo: "Operacion" },
+    {
+      id: "analisis",
+      titulo: "Analisis a fondo",
+      descripcion:
+        "Expediente de una persona, interceptor de chat, historico y apelaciones",
+    },
+  ];
+
+  /*
+   * Dentro de la pestaña de operacion el tablero se lee de arriba abajo como
+   * tres preguntas, y no como una rejilla de veinte widgets con el mismo peso:
+   * que tengo que hacer, que esta pasando ahora y cuanto dinero hay.
    *
    * Una zona puede ocupar dos grupos cuando mezcla rejillas distintas: los
    * indicadores y los paneles anchos no comparten fila porque una tarjeta de
@@ -171,21 +187,17 @@ export default async function DashboardPage() {
     },
     {
       /*
-       * El God Eye, repartido en cuatro bloques y detras de una puerta.
+       * El God Eye, repartido en cuatro bloques y en su propia pestaña.
        *
        * Antes entraba entero como un solo bloque llamado "Tablero detallado":
        * desde ahi hacia abajo eran tres mil lineas que solo se podian mover u
        * ocultar a la vez. Cada seccion es ahora un widget propio, aunque las
        * cuatro siguen saliendo del mismo componente y comparten su estado
        * --seleccionar un actor a la izquierda sigue abriendo su expediente a la
-       * derecha--. La zona empieza cerrada porque repetia los indicadores de
-       * arriba y era lo primero que se veia al bajar.
+       * derecha--.
        */
       id: "analisis",
-      titulo: "Analisis a fondo",
-      descripcion:
-        "Expediente de una persona, interceptor de chat, historico y apelaciones",
-      plegable: true,
+      pestana: "analisis",
       gridClassName: "grid grid-cols-1 gap-6",
       bloques: SECCIONES_DEL_GOD_EYE.map(
         (seccion) =>
@@ -216,7 +228,11 @@ export default async function DashboardPage() {
         initialActors={actors}
         initialAppeals={appeals}
       >
-        <TableroPersonalizable grupos={grupos} layoutInicial={layout} />
+        <TableroPersonalizable
+          grupos={grupos}
+          pestanas={pestanas}
+          layoutInicial={layout}
+        />
       </GodEyeDashboard>
 
       {/* No pinta nada: escucha los rechazos de ofertas y levanta el aviso. */}

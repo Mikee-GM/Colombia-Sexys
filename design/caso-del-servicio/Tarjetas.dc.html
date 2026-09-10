@@ -1,0 +1,172 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #000000; font-family: Montserrat, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+    * { box-sizing: border-box; }
+    .tarjeta { display: flex; flex-direction: column; gap: 11px; border-radius: 12px; border: 1px solid #27272a; background: #09090b; padding: 15px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 999px; border: 1px solid; padding: 4px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; }
+    .b-gold { border-color: rgba(197,165,90,0.3); background: rgba(197,165,90,0.1); color: #C5A55A; }
+    .b-red { border-color: rgba(248,113,113,0.25); background: rgba(248,113,113,0.08); color: #f87171; }
+    .b-amber { border-color: rgba(251,191,36,0.25); background: rgba(251,191,36,0.08); color: #fbbf24; }
+    .b-blue { border-color: rgba(96,165,250,0.25); background: rgba(96,165,250,0.08); color: #60a5fa; }
+    .b-green { border-color: rgba(74,222,128,0.25); background: rgba(74,222,128,0.08); color: #4ade80; }
+    .b-zinc { border-color: #27272a; background: rgba(24,24,27,0.6); color: #a1a1aa; }
+    .btn { border-radius: 12px; border: 1px solid #27272a; background: #09090b; padding: 8px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #d4d4d8; }
+    .btn-oro { border-color: #C5A55A; background: transparent; color: #C5A55A; }
+    .btn-tenue { color: #a1a1aa; }
+    .rotulo { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: #8B7635; }
+  </style>
+</helmet>
+
+<div style="display: flex; width: 1260px; height: 900px; flex-direction: column; gap: 22px; background: #000000; color: #ffffff; font-size: 14px; padding: 28px 30px;">
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 24px;">
+    <div>
+      <p style="margin: 0 0 4px;" class="rotulo">ANATOMIA Y ESTADOS</p>
+      <h1 style="margin: 0; font-family: Cinzel, serif; font-size: 24px; font-weight: 600; color: #E8D5A3;">La tarjeta de reporte</h1>
+    </div>
+    <p style="margin: 0; max-width: 480px; text-align: right; font-size: 12px; line-height: 1.6; color: #71717a;">
+      Una sola tarjeta con seis estados. Lo que cambia entre ellos es el distintivo de estado y
+      que botones aparecen; la estructura y la altura no se mueven, para que puestas en cuadricula
+      se lean en paralelo.
+    </p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 26px; align-items: start;">
+
+    <!-- Anatomia -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <p style="margin: 0;" class="rotulo">ANATOMIA</p>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="width: 26px; flex-shrink: 0; text-align: right; font-size: 10px; color: #52525b;">1</span>
+          <div class="tarjeta" style="flex: 1; gap: 0; padding: 0; border-color: rgba(197,165,90,0.35);">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 13px 15px 11px;">
+              <span style="font-size: 11px; color: #a1a1aa;">Reporte de conducta</span>
+              <span class="badge b-red">Urgente</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; padding: 0 15px 11px; font-size: 11.5px; color: #71717a;">
+              <span style="font-weight: 600; color: #d4d4d8;">Quien reporta</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+              <span style="font-weight: 600; color: #d4d4d8;">A quien</span>
+            </div>
+            <h3 style="margin: 0; padding: 0 15px 10px; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Motivo</h3>
+            <p style="margin: 0; padding: 0 15px 13px; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">Lo que dice quien lo puso, tal cual. Es lo unico que se compara de verdad entre una tarjeta y otra.</p>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(39,39,42,0.6); padding: 11px 15px;">
+              <span class="badge b-amber">Estado</span>
+              <span style="font-size: 11px; color: #52525b;">Cuando entro</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; padding: 0 15px 15px;">
+              <span class="btn btn-oro">Accion principal</span>
+              <span class="btn btn-tenue">Contraria</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 7px; border-radius: 12px; border: 1px solid #27272a; background: rgba(9,9,11,0.6); padding: 14px;">
+        <div style="display: flex; gap: 10px; font-size: 11.5px; line-height: 1.5;"><span style="width: 12px; flex-shrink: 0; color: #8B7635;">1</span><span style="color: #a1a1aa;">El borde se tiñe de rojo solo con prioridad urgente, y de dorado en una apelacion sin resolver.</span></div>
+        <div style="display: flex; gap: 10px; font-size: 11.5px; line-height: 1.5;"><span style="width: 12px; flex-shrink: 0; color: #8B7635;">2</span><span style="color: #a1a1aa;">La flecha entre nombres dice la direccion del reporte sin tener que leer una etiqueta larga.</span></div>
+        <div style="display: flex; gap: 10px; font-size: 11.5px; line-height: 1.5;"><span style="width: 12px; flex-shrink: 0; color: #8B7635;">3</span><span style="color: #a1a1aa;">El texto crece y empuja; los botones quedan siempre abajo, a la misma altura en toda la fila.</span></div>
+        <div style="display: flex; gap: 10px; font-size: 11.5px; line-height: 1.5;"><span style="width: 12px; flex-shrink: 0; color: #8B7635;">4</span><span style="color: #a1a1aa;">Un solo boton dorado por tarjeta: la accion que cierra el asunto. Las demas van en gris.</span></div>
+      </div>
+    </div>
+
+    <!-- Estados -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <p style="margin: 0;" class="rotulo">ESTADOS</p>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+
+        <div class="tarjeta">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span class="badge b-amber">Nuevo</span>
+            <span style="font-size: 11px; color: #52525b;">Nadie lo ha mirado</span>
+          </div>
+          <p style="margin: 0; font-size: 12px; line-height: 1.55; color: #71717a;">Entra asi desde el bot. Es lo que cuenta como pendiente en el centro de mando.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span class="btn btn-oro">Confirmar</span>
+            <span class="btn btn-tenue">Desestimar</span>
+            <span class="btn btn-tenue">Expediente</span>
+          </div>
+        </div>
+
+        <div class="tarjeta">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span class="badge b-blue">En revision</span>
+            <span style="font-size: 11px; color: #52525b;">Alguien lo abrio</span>
+          </div>
+          <p style="margin: 0; font-size: 12px; line-height: 1.55; color: #71717a;">Sigue contando como pendiente. Cambia el distintivo, no los botones.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span class="btn btn-oro">Confirmar</span>
+            <span class="btn btn-tenue">Desestimar</span>
+            <span class="btn btn-tenue">Expediente</span>
+          </div>
+        </div>
+
+        <div class="tarjeta" style="opacity: 0.72;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span class="badge b-zinc">Cerrado</span>
+            <span class="badge b-green">Confirmado</span>
+          </div>
+          <p style="margin: 0; font-size: 12px; line-height: 1.55; color: #71717a;">Se apaga y muestra la resolucion escrita. Desde aqui se puede sancionar.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span class="btn btn-oro">Sancionar</span>
+            <span class="btn btn-tenue">Expediente</span>
+            <span class="btn btn-tenue">Reabrir</span>
+          </div>
+        </div>
+
+        <div class="tarjeta" style="opacity: 0.72;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span class="badge b-zinc">Cerrado</span>
+            <span class="badge b-zinc">No sustentado</span>
+          </div>
+          <p style="margin: 0; font-size: 12px; line-height: 1.55; color: #71717a;">Igual que el anterior pero sin consecuencia: no aparece el boton de sancionar.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span class="btn btn-tenue">Expediente</span>
+            <span class="btn btn-tenue">Reabrir</span>
+          </div>
+        </div>
+
+        <div class="tarjeta" style="border-color: rgba(197,165,90,0.35);">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span class="badge b-gold">Apelacion sin resolver</span>
+            <span class="badge b-gold">2 de 5</span>
+          </div>
+          <p style="margin: 0; font-size: 12px; line-height: 1.55; color: #71717a;">Lleva la calificacion original citada y el motivo. Mientras esta abierta no cuenta en el promedio.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span class="btn btn-oro">Anular calificacion</span>
+            <span class="btn btn-tenue">Confirmar calificacion</span>
+          </div>
+        </div>
+
+        <div class="tarjeta" style="opacity: 0.72;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span class="badge b-zinc">Apelacion resuelta</span>
+            <span class="badge b-zinc">Calificacion anulada</span>
+          </div>
+          <p style="margin: 0; font-size: 12px; line-height: 1.55; color: #71717a;">Queda en la cuadricula como parte del caso, sin botones de decision.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <span class="btn btn-tenue">Expediente</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

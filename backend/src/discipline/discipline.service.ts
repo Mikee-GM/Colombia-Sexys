@@ -863,11 +863,132 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     return saved;
   }
 
+  /**
+   * Las apelaciones que esperan decision.
+   *
+   * Devuelve tambien de que servicio salio cada una. Una calificacion de viaje
+   * no guarda `service_id` --cuelga del viaje-- asi que se resuelve por ahi; sin
+   * ese dato el panel no puede llevar al caso del servicio y la apelacion se
+   * queda como una fila suelta sin contexto.
+   */
   async listPendingAppeals() {
-    return this.ratings.find({
-      where: { appealStatus: 'pending' },
-      order: { createdAt: 'DESC' },
-    });
+    return this.dataSource.query(
+      `SELECT
+         r.id,
+         r.direction,
+         r.stars,
+         r.comment,
+         r.appeal_status AS "appealStatus",
+         r.appeal_reason AS "appealReason",
+         r.created_at AS "createdAt",
+         COALESCE(r.service_id, v.servicio_id) AS "serviceId"
+       FROM interaction_ratings r
+       LEFT JOIN viajes v ON v.id = r.trip_id
+       WHERE r.appeal_status = 'pending'
+       ORDER BY r.created_at DESC`,
+    );
+  }
+
+  /**
+   * El caso de un servicio: todo lo que se puso sobre esa misma noche.
+   *
+   * Un incidente casi nunca deja un solo rastro --el cliente reporta, la modelo
+   * reporta lo contrario, el chofer añade lo suyo y alguien apela su
+   * calificacion-- y hasta ahora cada pieza se resolvia por separado desde una
+   * lista distinta, sin ver las otras. Aqui salen juntas para poder compararlas
+   * antes de decidir.
+   *
+   * Se incluye lo que cuelga de los viajes del servicio, no solo lo que apunta
+   * al servicio: un reporte contra el chofer se guarda contra el viaje.
+   */
+  async getCaso(serviceId: string, actor: Actor) {
+    if (actor.rol === 'jefe') {
+      const [propio] = await this.dataSource.query(
+        `SELECT 1 FROM servicios WHERE id = $1 AND jefe_id = $2`,
+        [serviceId, actor.id],
+      );
+      if (!propio) {
+        throw new ForbiddenException('Ese servicio no es de su zona');
+      }
+    } else if (actor.rol !== 'admin') {
+      throw new ForbiddenException('No puede consultar el caso de un servicio');
+    }
+
+    const [reports, ratings] = await Promise.all([
+      this.dataSource.query(
+        `SELECT
+           r.id,
+           r.direction,
+           r.reporter_type AS "reporterType",
+           r.reporter_id AS "reporterId",
+           r.subject_type AS "subjectType",
+           r.subject_id AS "subjectId",
+           r.service_id AS "serviceId",
+           r.trip_id AS "tripId",
+           r.category,
+           r.description,
+           r.priority,
+           r.status,
+           r.outcome,
+           r.resolution,
+           r.created_at AS "createdAt"
+         FROM conduct_reports r
+         LEFT JOIN viajes v ON v.id = r.trip_id
+         WHERE r.service_id = $1 OR v.servicio_id = $1
+         ORDER BY r.created_at ASC`,
+        [serviceId],
+      ),
+      this.dataSource.query(
+        `SELECT
+           r.id,
+           r.direction,
+           r.stars,
+           r.comment,
+           r.appeal_status AS "appealStatus",
+           r.appeal_reason AS "appealReason",
+           r.created_at AS "createdAt",
+           $1::uuid AS "serviceId"
+         FROM interaction_ratings r
+         LEFT JOIN viajes v ON v.id = r.trip_id
+         WHERE r.service_id = $1 OR v.servicio_id = $1
+         ORDER BY r.created_at ASC`,
+        [serviceId],
+      ),
+    ]);
+
+    /*
+     * Los nombres de quienes intervienen. El panel no puede pedir un expediente
+     * por cada fila solo para poner un nombre donde ahora hay un UUID.
+     */
+    const [servicio] = await this.dataSource.query(
+      `SELECT
+         s.id,
+         s.estado,
+         s.total_final AS "totalFinal",
+         s.duracion_pactada_horas AS "duracionPactadaHoras",
+         s.hora_inicio_servicio AS "horaInicioServicio",
+         s.created_at AS "createdAt",
+         e.id AS "empleadaId",
+         e.nombre_artistico AS "empleadaNombre",
+         c.id AS "clienteId",
+         c.nombre_telegram AS "clienteNombre",
+         u.email AS "jefeEmail",
+         (
+           SELECT json_agg(DISTINCT jsonb_build_object('id', ch.id, 'nombre', ch.nombre))
+           FROM viajes vv
+           JOIN choferes ch ON ch.id = vv.chofer_id
+           WHERE vv.servicio_id = s.id
+         ) AS choferes
+       FROM servicios s
+       LEFT JOIN empleadas e ON e.id = s.empleada_id
+       LEFT JOIN clientes c ON c.id = s.cliente_id
+       LEFT JOIN usuarios u ON u.id = s.jefe_id
+       WHERE s.id = $1`,
+      [serviceId],
+    );
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+
+    return { servicio, reports, ratings };
   }
 
   async resolveAppeal(

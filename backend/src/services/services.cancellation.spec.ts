@@ -16,8 +16,14 @@ describe('ServicesService cancel', () => {
     exists: jest.fn().mockResolvedValue(false),
     manager: { getRepository: jest.fn(() => ({ update: jest.fn() })) },
   };
-  const viajesRepository = { update: jest.fn(), findOne: jest.fn() };
-  const choferesRepository = { findOne: jest.fn() };
+  const viajesRepository = {
+    update: jest.fn(),
+    findOne: jest.fn(),
+    // La cancelacion pregunta si al chofer le queda otro viaje abierto antes
+    // de devolverle la disponibilidad.
+    find: jest.fn().mockResolvedValue([]),
+  };
+  const choferesRepository = { findOne: jest.fn(), update: jest.fn() };
   const usuariosRepository = { findOne: jest.fn(), findOneBy: jest.fn() };
   const realtime = { emitToBoss: jest.fn() };
   const bot = { telegram: { sendMessage: jest.fn() } };
@@ -219,12 +225,46 @@ describe('ServicesService cancel', () => {
       usuario: { telegramChatId: '777' },
     });
 
+    viajesRepository.find.mockResolvedValue([]);
+
     await service.cancel('svc-1', actor, { reason: 'cliente_desistio' });
 
     expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
       '777',
       expect.stringContaining('queda sin efecto'),
     );
+    /*
+     * Y queda libre de verdad, no solo en el mensaje. Se le avisaba "quedas
+     * libre" pero seguia marcado como ocupado, asi que el reparto dejaba de
+     * contarlo desde ese momento y el sintoma era "no hay choferes
+     * disponibles" con su ficha activa y en jornada.
+     */
+    expect(choferesRepository.update).toHaveBeenCalledTimes(1);
+    const [criterio, cambios] = choferesRepository.update.mock.calls[0];
+    // `In([...])` viaja como operador de TypeORM, no como arreglo pelado.
+    expect(criterio.id.value).toEqual(['chofer-1']);
+    expect(cambios).toEqual({ disponible: true });
+  });
+
+  it('no libera al chofer que sigue con otro viaje abierto', async () => {
+    const servicio = servicioEnCurso();
+    servicio.viajes = [
+      { id: 'trip-1', estado: 'aceptado', choferId: 'chofer-1' },
+    ] as any;
+    serviciosRepository.findOne.mockResolvedValue(servicio);
+    usuariosRepository.findOne.mockResolvedValue(null);
+    choferesRepository.findOne.mockResolvedValue({
+      id: 'chofer-1',
+      usuario: { telegramChatId: '777' },
+    });
+    // Le queda el viaje de otro servicio.
+    viajesRepository.find.mockResolvedValue([
+      { id: 'trip-9', choferId: 'chofer-1' },
+    ]);
+
+    await service.cancel('svc-1', actor, { reason: 'cliente_desistio' });
+
+    expect(choferesRepository.update).not.toHaveBeenCalled();
   });
 
   /*

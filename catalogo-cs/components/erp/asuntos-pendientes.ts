@@ -72,6 +72,18 @@ export function tiempoEsperando(iso: string | null | undefined): string | null {
   return dias === 1 ? "hace 1 dia" : `hace ${dias} dias`;
 }
 
+/**
+ * A donde lleva un reporte o una apelacion.
+ *
+ * Al caso del servicio, que enseña de golpe todo lo que se puso sobre esa misma
+ * noche: la version del cliente, la de la modelo, la del chofer y la apelacion.
+ * Decidir con una sola de esas piezas delante es como se decidia antes. Sin
+ * servicio asociado --una fila vieja-- queda la lista general.
+ */
+function haciaElCaso(serviceId: string | null | undefined) {
+  return serviceId ? `/admin/reports/caso/${serviceId}` : "/admin/reports";
+}
+
 /** Une los trozos de contexto que existen, sin dejar separadores sueltos. */
 function detalle(...partes: Array<string | null | undefined>) {
   return partes.filter(Boolean).join(" - ");
@@ -200,7 +212,7 @@ export function asuntosPendientes({
         reporte.description,
         tiempoEsperando(reporte.createdAt),
       ),
-      href: "/admin/reports",
+      href: haciaElCaso(reporte.serviceId),
       accion: "Resolver",
       desde: reporte.createdAt,
     });
@@ -238,7 +250,7 @@ export function asuntosPendientes({
         apelacion.appealReason,
         tiempoEsperando(apelacion.createdAt),
       ),
-      href: "/admin/reports",
+      href: haciaElCaso(apelacion.serviceId),
       accion: "Resolver",
       desde: apelacion.createdAt,
     });

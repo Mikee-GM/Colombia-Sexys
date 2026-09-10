@@ -1,0 +1,17 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Caso del servicio", "x": 0, "y": 0, "w": 1440, "h": 1160 },
+    { "file": "Movil.dc.html", "title": "En el telefono", "x": 1560, "y": 0, "w": 390, "h": 1460 },
+    { "file": "Tarjetas.dc.html", "title": "Anatomia y estados de la tarjeta", "x": 0, "y": 1300, "w": 1260, "h": 900 }
+  ],
+  "annotations": [
+    {
+      "id": "de-donde-se-llega",
+      "x": 2050,
+      "y": 0,
+      "w": 280,
+      "text": "Se llega desde la bandeja Pendiente de ti: al tocar un reporte o una apelacion, en vez de caer en la lista general de /admin/reports, se abre el caso completo del servicio.\n\nLos nombres y los textos son los de la base de prueba."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -19,6 +19,7 @@ import {
   Not,
   Repository,
 } from 'typeorm';
+import { Choferes } from '../drivers/entities/driver.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { DisciplineService } from '../discipline/discipline.service';
 import { Empleadas } from '../employees/entities/employee.entity';
@@ -1648,6 +1649,27 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
             );
           trip.estado = 'cancelado';
           await manager.save(Viajes, trip);
+
+          /*
+           * Un chofer que ya habia aceptado esta unidad queda marcado como
+           * ocupado, y quitar la unidad del servicio no pasa ni por finalizar
+           * ni por rechazar el viaje: sin esto se quedaria ocupado para siempre
+           * y el reparto dejaria de contarlo. Solo se libera si no le queda
+           * otro viaje abierto.
+           */
+          if (trip.choferId) {
+            const abiertos = await manager.count(Viajes, {
+              where: {
+                choferId: trip.choferId,
+                estado: Not(In(['finalizado', 'cancelado', 'rechazado'])),
+              },
+            });
+            if (abiertos === 0) {
+              await manager.update(Choferes, trip.choferId, {
+                disponible: true,
+              });
+            }
+          }
         }
 
         for (const unit of dto.transportUnits) {

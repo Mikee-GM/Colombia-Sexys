@@ -20,7 +20,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   Check,
-  ChevronDown,
   Eye,
   EyeOff,
   GripVertical,
@@ -75,11 +74,26 @@ export type GrupoTablero = {
   titulo?: string;
   descripcion?: string;
   /**
-   * La zona se abre y se cierra. Se usa para el analisis a fondo: son tres mil
-   * lineas de tablero que no tienen por que estar delante cada vez que se abre
-   * el panel, pero tampoco pueden desaparecer.
+   * En que pestaña vive el grupo. Sin valor va a la primera: un tablero de una
+   * sola pestaña no tiene que declararla en cada grupo.
    */
-  plegable?: boolean;
+  pestana?: string;
+};
+
+/**
+ * Una pestaña del tablero.
+ *
+ * El centro de mando se partio en dos porque el analisis a fondo quedaba al
+ * final de una pagina muy larga: para llegar habia que bajar pasando por todo
+ * lo demas, y con el tablero personalizado ni siquiera se sabia por donde
+ * andaba. Cada pestaña es una intencion distinta --operar hoy, o investigar--
+ * y no dos partes de la misma lectura.
+ */
+export type PestanaTablero = {
+  id: string;
+  titulo: string;
+  /** Se pinta bajo la barra, solo en las pestañas que necesitan explicarse. */
+  descripcion?: string;
 };
 
 function ordenarBloques(
@@ -185,18 +199,12 @@ function BloqueArrastrable({
 function EncabezadoDeZona({
   titulo,
   descripcion,
-  plegable,
-  cerrada,
-  onAlternar,
 }: {
   titulo: string;
   descripcion?: string;
-  plegable?: boolean;
-  cerrada: boolean;
-  onAlternar: () => void;
 }) {
-  const contenido = (
-    <>
+  return (
+    <div className="flex items-center justify-between gap-4 border-t border-zinc-800/70 pt-5">
       <div className="min-w-0 text-left">
         <h2 className="font-heading text-[15px] font-semibold tracking-[0.05em] text-zinc-200">
           {titulo}
@@ -205,44 +213,18 @@ function EncabezadoDeZona({
           <p className="mt-0.5 text-[11px] text-zinc-500">{descripcion}</p>
         ) : null}
       </div>
-
-      {plegable ? (
-        <span className="flex shrink-0 items-center gap-1.5 rounded-lg border border-zinc-800 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#C5A55A]">
-          <ChevronDown
-            className={`h-3.5 w-3.5 transition-transform ${
-              cerrada ? "" : "rotate-180"
-            }`}
-          />
-          {cerrada ? "Abrir" : "Cerrar"}
-        </span>
-      ) : null}
-    </>
-  );
-
-  if (!plegable) {
-    return (
-      <div className="flex items-center justify-between gap-4 border-t border-zinc-800/70 pt-5">
-        {contenido}
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={onAlternar}
-      className="flex items-center justify-between gap-4 rounded-2xl border border-zinc-800 bg-black/40 px-4 py-3.5 text-left transition-colors hover:border-[#C5A55A]/40"
-    >
-      {contenido}
-    </button>
+    </div>
   );
 }
 
 export default function TableroPersonalizable({
   grupos,
+  pestanas = [],
   layoutInicial,
 }: {
   grupos: GrupoTablero[];
+  /** Vacio para un tablero de una sola pestaña: entonces no se pinta la barra. */
+  pestanas?: PestanaTablero[];
   /** Nulo si el administrador nunca lo toco: se usa el orden por defecto. */
   layoutInicial: DashboardLayout | null;
 }) {
@@ -254,17 +236,10 @@ export default function TableroPersonalizable({
   const [editando, setEditando] = useState(false);
 
   /*
-   * Que zonas plegables estan abiertas. Empiezan todas cerradas y el estado no
-   * se guarda: la puerta se abre para consultar algo concreto, y dejarla
-   * abierta para siempre devolveria la pantalla al problema que resuelve.
+   * La pestaña abierta. No se guarda: al entrar al panel siempre interesa lo
+   * primero --lo que pide accion hoy-- y no donde se quedo la ultima vez.
    */
-  const [abiertas, setAbiertas] = useState<string[]>([]);
-  const alternarZona = (id: string) =>
-    setAbiertas((actuales) =>
-      actuales.includes(id)
-        ? actuales.filter((otra) => otra !== id)
-        : [...actuales, id],
-    );
+  const [pestanaActiva, setPestanaActiva] = useState(pestanas[0]?.id ?? "");
   const [layout, setLayout] = useState<DashboardLayout>(
     layoutInicial ?? { orden: bloques.map((bloque) => bloque.id), ocultos: [] },
   );
@@ -290,13 +265,33 @@ export default function TableroPersonalizable({
     [grupos, layout],
   );
 
+  /*
+   * Los grupos de la pestaña abierta. Un grupo sin pestaña declarada vive en la
+   * primera, para que un tablero de una sola pestaña no tenga que repetirla.
+   */
+  const gruposVisibles = useMemo(
+    () =>
+      gruposOrdenados.filter(
+        (grupo) =>
+          pestanas.length === 0 ||
+          (grupo.pestana ?? pestanas[0]?.id) === pestanaActiva,
+      ),
+    [gruposOrdenados, pestanas, pestanaActiva],
+  );
+
+  /*
+   * La lista de ocultos es la de la pestaña abierta y no la del tablero entero:
+   * volver a mostrar desde aqui un bloque que vive en la otra pestaña lo haria
+   * reaparecer donde no se esta mirando.
+   */
   const ocultos = useMemo(
-    () => gruposOrdenados.flatMap((grupo) => grupo.ocultos),
-    [gruposOrdenados],
+    () => gruposVisibles.flatMap((grupo) => grupo.ocultos),
+    [gruposVisibles],
   );
-  const hayVisibles = gruposOrdenados.some(
-    (grupo) => grupo.visibles.length > 0,
-  );
+  const hayVisibles = gruposVisibles.some((grupo) => grupo.visibles.length > 0);
+  const descripcionDePestana = pestanas.find(
+    (pestana) => pestana.id === pestanaActiva,
+  )?.descripcion;
 
   const persistir = (siguiente: DashboardLayout) => {
     setLayout(siguiente);
@@ -380,46 +375,78 @@ export default function TableroPersonalizable({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {error ? (
-          <span className="mr-auto text-[11px] text-red-400">{error}</span>
-        ) : guardando ? (
-          <span className="mr-auto text-[11px] text-zinc-500">Guardando</span>
+      <div className="flex flex-wrap items-center gap-3">
+        {pestanas.length > 1 ? (
+          <div role="tablist" className="flex flex-wrap items-center gap-2">
+            {pestanas.map((pestana) => {
+              const activa = pestana.id === pestanaActiva;
+              return (
+                <button
+                  key={pestana.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activa}
+                  onClick={() => setPestanaActiva(pestana.id)}
+                  className={`rounded-xl border px-4 py-2 text-[11px] font-bold uppercase tracking-[0.05em] transition-colors ${
+                    activa
+                      ? "border-[#C5A55A] bg-[#C5A55A]/10 text-[#E8D5A3]"
+                      : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {pestana.titulo}
+                </button>
+              );
+            })}
+          </div>
         ) : null}
 
-        {editando ? (
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {error ? (
+            <span className="text-[11px] text-red-400">{error}</span>
+          ) : guardando ? (
+            <span className="text-[11px] text-zinc-500">Guardando</span>
+          ) : null}
+
+          {editando ? (
+            <button
+              type="button"
+              onClick={restaurar}
+              className="flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-zinc-400 transition-colors hover:text-white"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Restaurar
+            </button>
+          ) : null}
+
           <button
             type="button"
-            onClick={restaurar}
-            className="flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-zinc-400 transition-colors hover:text-white"
+            onClick={() => setEditando((actual) => !actual)}
+            className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] transition-colors ${
+              editando
+                ? "border-[#C5A55A] bg-[#C5A55A] text-black"
+                : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:text-white"
+            }`}
           >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Restaurar
+            {editando ? (
+              <>
+                <Check className="h-3.5 w-3.5" />
+                Listo
+              </>
+            ) : (
+              <>
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Personalizar
+              </>
+            )}
           </button>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => setEditando((actual) => !actual)}
-          className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] transition-colors ${
-            editando
-              ? "border-[#C5A55A] bg-[#C5A55A] text-black"
-              : "border-zinc-800 bg-zinc-950 text-zinc-300 hover:text-white"
-          }`}
-        >
-          {editando ? (
-            <>
-              <Check className="h-3.5 w-3.5" />
-              Listo
-            </>
-          ) : (
-            <>
-              <LayoutGrid className="h-3.5 w-3.5" />
-              Personalizar
-            </>
-          )}
-        </button>
+        </div>
       </div>
+
+      {descripcionDePestana ? (
+        <p className="-mt-3 text-[12px] text-zinc-500">
+          {descripcionDePestana}
+        </p>
+      ) : null}
 
       {editando && ocultos.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-zinc-800 bg-black/40 px-4 py-3">
@@ -445,10 +472,8 @@ export default function TableroPersonalizable({
         collisionDetection={closestCenter}
         onDragEnd={alSoltar}
       >
-        {gruposOrdenados.map((grupo) => {
+        {gruposVisibles.map((grupo) => {
           if (grupo.visibles.length === 0) return null;
-
-          const cerrada = grupo.plegable && !abiertas.includes(grupo.id);
 
           return (
             <div key={grupo.id} className="flex flex-col gap-3">
@@ -456,29 +481,24 @@ export default function TableroPersonalizable({
                 <EncabezadoDeZona
                   titulo={grupo.titulo}
                   descripcion={grupo.descripcion}
-                  plegable={grupo.plegable}
-                  cerrada={Boolean(cerrada)}
-                  onAlternar={() => alternarZona(grupo.id)}
                 />
               ) : null}
 
-              {cerrada ? null : (
-                <SortableContext
-                  items={grupo.visibles.map((bloque) => bloque.id)}
-                  strategy={rectSortingStrategy}
-                >
-                  <div className={grupo.gridClassName}>
-                    {grupo.visibles.map((bloque) => (
-                      <BloqueArrastrable
-                        key={bloque.id}
-                        bloque={bloque}
-                        editando={editando}
-                        onOcultar={() => alternarVisibilidad(bloque.id)}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              )}
+              <SortableContext
+                items={grupo.visibles.map((bloque) => bloque.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className={grupo.gridClassName}>
+                  {grupo.visibles.map((bloque) => (
+                    <BloqueArrastrable
+                      key={bloque.id}
+                      bloque={bloque}
+                      editando={editando}
+                      onOcultar={() => alternarVisibilidad(bloque.id)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
             </div>
           );
         })}
@@ -486,8 +506,8 @@ export default function TableroPersonalizable({
 
       {!hayVisibles ? (
         <p className="rounded-2xl border border-zinc-800 bg-black/40 px-5 py-10 text-center text-sm text-zinc-500">
-          Ocultaste todos los bloques. Usa Personalizar para volver a
-          mostrarlos.
+          Ocultaste todos los bloques de esta pestaña. Usa Personalizar para
+          volver a mostrarlos.
         </p>
       ) : null}
     </div>

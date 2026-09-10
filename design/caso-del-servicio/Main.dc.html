@@ -1,0 +1,327 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; background: #000000; font-family: Montserrat, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+    * { box-sizing: border-box; }
+    .tarjeta { display: flex; flex-direction: column; gap: 12px; border-radius: 12px; border: 1px solid #27272a; background: #09090b; padding: 16px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 999px; border: 1px solid; padding: 4px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; }
+    .b-gold { border-color: rgba(197,165,90,0.3); background: rgba(197,165,90,0.1); color: #C5A55A; }
+    .b-red { border-color: rgba(248,113,113,0.25); background: rgba(248,113,113,0.08); color: #f87171; }
+    .b-amber { border-color: rgba(251,191,36,0.25); background: rgba(251,191,36,0.08); color: #fbbf24; }
+    .b-blue { border-color: rgba(96,165,250,0.25); background: rgba(96,165,250,0.08); color: #60a5fa; }
+    .b-green { border-color: rgba(74,222,128,0.25); background: rgba(74,222,128,0.08); color: #4ade80; }
+    .b-zinc { border-color: #27272a; background: rgba(24,24,27,0.6); color: #a1a1aa; }
+    .btn { border-radius: 12px; border: 1px solid #27272a; background: #09090b; padding: 8px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #d4d4d8; }
+    .btn-oro { border-color: #C5A55A; background: transparent; color: #C5A55A; }
+    .btn-tenue { color: #a1a1aa; }
+  </style>
+</helmet>
+
+<div style="display: flex; width: 1440px; height: 1160px; background: #000000; color: #ffffff; font-size: 14px;">
+
+  <!-- MENU LATERAL -->
+  <div style="width: 210px; flex-shrink: 0; border-right: 1px solid #27272a; background: #050505; display: flex; flex-direction: column; padding: 20px 0;">
+    <div style="padding: 0 18px 22px; display: flex; flex-direction: column; align-items: center; gap: 8px; border-bottom: 1px solid #27272a;">
+      <div style="width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(197,165,90,0.5); display: flex; align-items: center; justify-content: center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="1.6"><path d="M12 3c2.5 3 5 5.2 5 8.6A5 5 0 0 1 7 11.6C7 8.2 9.5 6 12 3Z"/></svg>
+      </div>
+      <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.22em; color: #C5A55A;">PANEL ADMIN</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px; padding: 20px 0 0;">
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="padding: 0 18px 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; color: #52525b;">NUCLEO</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #a1a1aa;">Centro de Mando</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="padding: 0 18px 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; color: #52525b;">OPERACION</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #a1a1aa;">Servicios</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #a1a1aa;">Clientes</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #a1a1aa;">Transporte</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <span style="padding: 0 18px 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.2em; color: #52525b;">CONTROL</span>
+        <span style="margin: 0 10px; padding: 9px 12px; border-radius: 10px; background: #C5A55A; color: #000000; font-size: 12px; font-weight: 600;">Reportes y Disciplina</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #a1a1aa;">Fotos y Contenido</span>
+        <span style="padding: 7px 22px; font-size: 12px; color: #a1a1aa;">Indicadores</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUERPO -->
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 24px; padding: 32px; overflow: hidden;">
+
+    <!-- Migaja: de donde se llega -->
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #52525b;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+      <span style="color: #C5A55A; font-weight: 600;">Pendiente de ti</span>
+      <span>/</span>
+      <span>Caso del servicio</span>
+    </div>
+
+    <!-- Cabecera -->
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 1px solid #27272a; padding-bottom: 20px;">
+      <div style="min-width: 0;">
+        <h1 style="margin: 0; font-family: Cinzel, serif; font-size: 30px; font-weight: 600; line-height: 1.15; color: #E8D5A3;">Caso del servicio SR-000071</h1>
+        <p style="margin: 6px 0 0; font-size: 13px; color: #71717a;">Los cuatro reportes y la apelacion que salieron de este servicio, juntos para poder compararlos</p>
+      </div>
+      <div style="display: flex; flex-shrink: 0; align-items: center; gap: 8px;">
+        <span class="btn">Ver el servicio</span>
+        <span class="btn">Ver el chat</span>
+      </div>
+    </div>
+
+    <!-- Contexto del servicio -->
+    <div style="display: flex; flex-direction: column; overflow: hidden; border-radius: 16px; border: 1px solid #27272a; background: rgba(0,0,0,0.4);">
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: #27272a;">
+        <div style="background: #050505; padding: 14px 18px;">
+          <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #71717a;">SERVICIO</p>
+          <p style="margin: 5px 0 0; font-size: 14px; font-weight: 600; color: #ffffff;">9 sep, 20:43 &middot; 3 h</p>
+        </div>
+        <div style="background: #050505; padding: 14px 18px;">
+          <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #71717a;">IMPORTE</p>
+          <p style="margin: 5px 0 0; font-size: 14px; font-weight: 600; color: #ffffff; font-variant-numeric: tabular-nums;">$3,500</p>
+        </div>
+        <div style="background: #050505; padding: 14px 18px;">
+          <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #71717a;">ESTADO</p>
+          <p style="margin: 5px 0 0;"><span class="badge b-blue">Finalizado</span></p>
+        </div>
+        <div style="background: #050505; padding: 14px 18px;">
+          <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #71717a;">JEFE QUE AUTORIZO</p>
+          <p style="margin: 5px 0 0; font-size: 14px; font-weight: 600; color: #ffffff;">Beto Demo</p>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 18px;">
+        <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #71717a;">INVOLUCRADOS</span>
+
+        <span style="display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; border: 1px solid #27272a; background: #09090b; padding: 5px 12px 5px 6px;">
+          <span style="display: inline-flex; height: 22px; width: 22px; align-items: center; justify-content: center; border-radius: 50%; background: rgba(197,165,90,0.14); font-size: 10px; font-weight: 700; color: #C5A55A;">CA</span>
+          <span style="font-size: 12.5px; font-weight: 600; color: #ffffff;">Camila</span>
+          <span style="font-size: 11px; color: #52525b;">Empleada</span>
+          <span class="badge b-red" style="padding: 2px 8px; font-size: 10px;">1 sancion vigente</span>
+        </span>
+
+        <span style="display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; border: 1px solid #27272a; background: #09090b; padding: 5px 12px 5px 6px;">
+          <span style="display: inline-flex; height: 22px; width: 22px; align-items: center; justify-content: center; border-radius: 50%; background: rgba(161,161,170,0.12); font-size: 10px; font-weight: 700; color: #a1a1aa;">RM</span>
+          <span style="font-size: 12.5px; font-weight: 600; color: #ffffff;">Roberto M</span>
+          <span style="font-size: 11px; color: #52525b;">Cliente</span>
+        </span>
+
+        <span style="display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; border: 1px solid #27272a; background: #09090b; padding: 5px 12px 5px 6px;">
+          <span style="display: inline-flex; height: 22px; width: 22px; align-items: center; justify-content: center; border-radius: 50%; background: rgba(161,161,170,0.12); font-size: 10px; font-weight: 700; color: #a1a1aa;">GD</span>
+          <span style="font-size: 12.5px; font-weight: 600; color: #ffffff;">Gerardo Demo</span>
+          <span style="font-size: 11px; color: #52525b;">Chofer</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- Filtro y recuento -->
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="border-radius: 10px; border: 1px solid #C5A55A; background: rgba(197,165,90,0.1); padding: 7px 13px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #C5A55A;">Todos</span>
+        <span style="border-radius: 10px; border: 1px solid #27272a; background: #09090b; padding: 7px 13px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa;">Sin resolver</span>
+        <span style="border-radius: 10px; border: 1px solid #27272a; background: #09090b; padding: 7px 13px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa;">Reportes</span>
+        <span style="border-radius: 10px; border: 1px solid #27272a; background: #09090b; padding: 7px 13px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #a1a1aa;">Apelaciones</span>
+      </div>
+      <span style="font-size: 12px; color: #71717a;">5 en total &middot; <span style="font-weight: 600; color: #f87171;">3 sin resolver</span></span>
+    </div>
+
+    <!-- CUADRICULA -->
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: stretch;">
+
+      <!-- 1. Reporte urgente del cliente -->
+      <div class="tarjeta" style="border-color: rgba(248,113,113,0.35);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: #a1a1aa;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="1.8"><path d="M4 15V5a1 1 0 0 1 1-1h14l-2 4 2 4H5"/><path d="M4 22v-7"/></svg>
+            Reporte de conducta
+          </span>
+          <span class="badge b-red">Urgente</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #71717a;">
+          <span style="font-weight: 600; color: #d4d4d8;">Roberto M</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span style="font-weight: 600; color: #d4d4d8;">Camila</span>
+          <span>&middot; cliente a empleada</span>
+        </div>
+
+        <h3 style="margin: 0; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Trato inadecuado</h3>
+
+        <p style="margin: 0; flex: 1; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">La modelo se nego a continuar el servicio a la hora y media y se fue del lugar discutiendo. Pide que le devuelvan la mitad de lo que pago.</p>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(39,39,42,0.6); padding-top: 12px;">
+          <span class="badge b-amber">Nuevo</span>
+          <span style="font-size: 11px; color: #52525b;">Hace 3 h</span>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span class="btn btn-oro">Confirmar</span>
+          <span class="btn btn-tenue">Desestimar</span>
+          <span class="btn btn-tenue">Expediente</span>
+        </div>
+      </div>
+
+      <!-- 2. La otra version del mismo incidente -->
+      <div class="tarjeta">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: #a1a1aa;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="1.8"><path d="M4 15V5a1 1 0 0 1 1-1h14l-2 4 2 4H5"/><path d="M4 22v-7"/></svg>
+            Reporte de conducta
+          </span>
+          <span class="badge b-amber">Alta</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #71717a;">
+          <span style="font-weight: 600; color: #d4d4d8;">Camila</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span style="font-weight: 600; color: #d4d4d8;">Roberto M</span>
+          <span>&middot; empleada a cliente</span>
+        </div>
+
+        <h3 style="margin: 0; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Seguridad</h3>
+
+        <p style="margin: 0; flex: 1; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">Habia otra persona en la habitacion que no estaba acordada. Salio del lugar por eso y aviso al jefe por el bot antes de irse.</p>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(39,39,42,0.6); padding-top: 12px;">
+          <span class="badge b-amber">Nuevo</span>
+          <span style="font-size: 11px; color: #52525b;">Hace 3 h</span>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span class="btn btn-oro">Confirmar</span>
+          <span class="btn btn-tenue">Desestimar</span>
+          <span class="btn btn-tenue">Expediente</span>
+        </div>
+      </div>
+
+      <!-- 3. La apelacion -->
+      <div class="tarjeta" style="border-color: rgba(197,165,90,0.35);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: #a1a1aa;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="1.8"><path d="M12 3 3 9v11h18V9Z"/><path d="M9 20v-6h6v6"/></svg>
+            Apelacion de calificacion
+          </span>
+          <span class="badge b-gold">2 de 5</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #71717a;">
+          <span style="font-weight: 600; color: #d4d4d8;">Roberto M</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span style="font-weight: 600; color: #d4d4d8;">Camila</span>
+          <span>&middot; apela Camila</span>
+        </div>
+
+        <h3 style="margin: 0; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Pide anular la calificacion</h3>
+
+        <div style="display: flex; flex: 1; flex-direction: column; gap: 9px;">
+          <p style="margin: 0; border-left: 2px solid #27272a; padding-left: 10px; font-size: 12.5px; line-height: 1.55; color: #71717a;">&ldquo;Se fue antes de tiempo y sin explicacion.&rdquo;</p>
+          <p style="margin: 0; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">Motivo: me fui porque habia una tercera persona que no estaba acordada, esta en mi reporte del mismo servicio.</p>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(39,39,42,0.6); padding-top: 12px;">
+          <span class="badge b-gold">Sin resolver</span>
+          <span style="font-size: 11px; color: #52525b;">Hace 2 h</span>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span class="btn btn-oro">Anular calificacion</span>
+          <span class="btn btn-tenue">Confirmar calificacion</span>
+        </div>
+      </div>
+
+      <!-- 4. Reporte del chofer, en revision -->
+      <div class="tarjeta">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: #a1a1aa;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="1.8"><path d="M4 15V5a1 1 0 0 1 1-1h14l-2 4 2 4H5"/><path d="M4 22v-7"/></svg>
+            Reporte de conducta
+          </span>
+          <span class="badge b-zinc">Normal</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #71717a;">
+          <span style="font-weight: 600; color: #d4d4d8;">Gerardo Demo</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span style="font-weight: 600; color: #d4d4d8;">Camila</span>
+          <span>&middot; chofer a empleada</span>
+        </div>
+
+        <h3 style="margin: 0; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Demora o impuntualidad</h3>
+
+        <p style="margin: 0; flex: 1; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">Espero veinticinco minutos en el punto de regreso. Coincide con la hora a la que ella dice que salio del lugar.</p>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(39,39,42,0.6); padding-top: 12px;">
+          <span class="badge b-blue">En revision</span>
+          <span style="font-size: 11px; color: #52525b;">Hace 2 h</span>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span class="btn btn-oro">Confirmar</span>
+          <span class="btn btn-tenue">Desestimar</span>
+          <span class="btn btn-tenue">Expediente</span>
+        </div>
+      </div>
+
+      <!-- 5. Reporte ya cerrado -->
+      <div class="tarjeta" style="opacity: 0.72;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: #a1a1aa;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B7635" stroke-width="1.8"><path d="M4 15V5a1 1 0 0 1 1-1h14l-2 4 2 4H5"/><path d="M4 22v-7"/></svg>
+            Reporte de conducta
+          </span>
+          <span class="badge b-zinc">Normal</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #71717a;">
+          <span style="font-weight: 600; color: #d4d4d8;">Camila</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#52525b" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          <span style="font-weight: 600; color: #d4d4d8;">Gerardo Demo</span>
+          <span>&middot; empleada a chofer</span>
+        </div>
+
+        <h3 style="margin: 0; font-family: Cinzel, serif; font-size: 16px; font-weight: 600; color: #ffffff;">Incumplimiento</h3>
+
+        <p style="margin: 0; flex: 1; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">Dice que el chofer no aviso al llegar. El registro del bot muestra el aviso enviado a las 20:38.</p>
+
+        <div style="display: flex; flex-direction: column; gap: 7px; border-top: 1px solid rgba(39,39,42,0.6); padding-top: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span class="badge b-zinc">Cerrado &middot; no sustentado</span>
+            <span style="font-size: 11px; color: #52525b;">Ayer</span>
+          </div>
+          <p style="margin: 0; font-size: 11.5px; line-height: 1.5; color: #52525b;">Resolucion: el aviso si se envio. Se le explico a ella y no se aplica sancion.</p>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span class="btn btn-tenue">Expediente</span>
+          <span class="btn btn-tenue">Reabrir</span>
+        </div>
+      </div>
+
+      <!-- 6. Resolver el caso entero -->
+      <div style="display: flex; flex-direction: column; justify-content: center; gap: 12px; border-radius: 12px; border: 1px dashed #3f3f46; background: rgba(9,9,11,0.5); padding: 20px;">
+        <p style="margin: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: #71717a;">CUANDO YA DECIDISTE</p>
+        <p style="margin: 0; font-size: 12.5px; line-height: 1.6; color: #a1a1aa;">Si un reporte confirmado exige una consecuencia, la sancion se crea desde aqui y queda ligada al caso.</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <span class="btn btn-oro">Sancionar</span>
+          <span class="btn btn-tenue">Cerrar el caso</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1174,6 +1174,49 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return { deleted: true };
   }
 
+  /**
+   * Devuelve la disponibilidad a los choferes de unos viajes que se cancelan.
+   *
+   * Al aceptar una oferta el chofer queda marcado como ocupado, y solo se le
+   * devuelve al terminar el viaje o al rechazarlo. Cancelar el servicio no
+   * pasaba por ninguno de los dos: el chofer recibia un aviso que decia "quedas
+   * libre" mientras la base seguia diciendo lo contrario, y desde ese momento el
+   * reparto dejaba de contarlo. El sintoma era siempre "no hay choferes
+   * disponibles" con la ficha del chofer mostrandolo activo y en jornada.
+   *
+   * Solo se libera a quien no tenga ya otro viaje abierto: un chofer puede
+   * arrastrar dos servicios y cancelar uno no lo saca del otro. Se llama
+   * despues de dejar los viajes en `cancelado`, para que esta consulta los vea
+   * cerrados.
+   */
+  private async liberarChoferesDe(viajes: Viajes[]): Promise<void> {
+    const ids = [
+      ...new Set(
+        viajes
+          .map((viaje) => viaje.choferId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (ids.length === 0) return;
+
+    const abiertos = await this.viajesRepository.find({
+      where: {
+        choferId: In(ids),
+        estado: Not(In(['finalizado', 'cancelado', 'rechazado'])),
+      },
+      select: { id: true, choferId: true },
+    });
+    const siguenOcupados = new Set(abiertos.map((viaje) => viaje.choferId));
+
+    const libres = ids.filter((id) => !siguenOcupados.has(id));
+    if (libres.length === 0) return;
+
+    await this.choferesRepository.update(
+      { id: In(libres) },
+      { disponible: true },
+    );
+  }
+
   async cancel(
     id: string,
     actor: Usuarios,
@@ -1214,6 +1257,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
       { estado: 'cancelado' },
     );
+    await this.liberarChoferesDe(viajesActivos);
 
     // Un Uber que ya estaba despachado se pago aunque el servicio no ocurriera.
     // No se puede saber desde aqui si el viaje llego a pedirse, asi que se deja
@@ -3410,6 +3454,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     if (viajeIda) {
       viajeIda.estado = 'cancelado';
       await this.viajesRepository.save(viajeIda);
+      await this.liberarChoferesDe([viajeIda]);
 
       if (viajeIda.choferId) {
         const chofer = await this.choferesRepository.findOne({

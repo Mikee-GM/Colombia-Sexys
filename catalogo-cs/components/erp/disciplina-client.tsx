@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Gavel, Scale, ShieldAlert, Wallet } from "lucide-react";
 
@@ -217,7 +218,10 @@ export default function DisciplinaClient({
     });
 
     return {
-      total: vigentes.reduce((sum, item) => sum + Number(item.fineAmount ?? 0), 0),
+      total: vigentes.reduce(
+        (sum, item) => sum + Number(item.fineAmount ?? 0),
+        0,
+      ),
       casos: vigentes.length,
     };
   }, [sanctions]);
@@ -280,6 +284,34 @@ export default function DisciplinaClient({
     });
   }
 
+  /*
+   * `?expediente=employee:<id>` abre ese expediente al entrar.
+   *
+   * Es como llega la gente desde el caso de un servicio, donde ya se decidio a
+   * quien hay que sancionar: sin esto aterrizaba en una pantalla llena de
+   * tablas y tenia que volver a buscar a la misma persona a mano. Se hace una
+   * sola vez por parametro para no reabrirlo cada vez que el componente se
+   * vuelve a pintar.
+   */
+  const searchParams = useSearchParams();
+  const expedienteEnLaUrl = searchParams.get("expediente");
+  const expedienteAbierto = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!expedienteEnLaUrl) return;
+    if (expedienteAbierto.current === expedienteEnLaUrl) return;
+
+    const [tipo, id] = expedienteEnLaUrl.split(":");
+    if (!tipo || !id) return;
+    if (!["client", "employee", "driver", "boss"].includes(tipo)) return;
+
+    expedienteAbierto.current = expedienteEnLaUrl;
+    openDossier(tipo as PersonType, id);
+    // openDossier es estable dentro del componente; depender de el reabriria
+    // el expediente en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expedienteEnLaUrl]);
+
   function handleConfirmClose(resolution: string) {
     if (!closeReportData) return;
     const { report, outcome } = closeReportData;
@@ -291,7 +323,9 @@ export default function DisciplinaClient({
         window.location.reload();
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "No se pudo cerrar el reporte",
+          error instanceof Error
+            ? error.message
+            : "No se pudo cerrar el reporte",
         );
       }
     });
@@ -357,7 +391,9 @@ export default function DisciplinaClient({
         setSelected(await getDossier(subjectType, subjectId));
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "No se pudo aplicar la multa",
+          error instanceof Error
+            ? error.message
+            : "No se pudo aplicar la multa",
         );
       }
     });
@@ -469,7 +505,8 @@ export default function DisciplinaClient({
           footnote={
             sancionesVigentes.length
               ? `${
-                  sancionesVigentes.filter((s) => s.type === "suspension").length
+                  sancionesVigentes.filter((s) => s.type === "suspension")
+                    .length
                 } suspensiones`
               : "Sin sanciones activas"
           }
@@ -642,7 +679,9 @@ export default function DisciplinaClient({
 
                     <Td>
                       {report.serviceId ? (
-                        <RecordLink href={`/admin/services/${report.serviceId}`}>
+                        <RecordLink
+                          href={`/admin/services/${report.serviceId}`}
+                        >
                           {codigoServicio(report.serviceId)}
                         </RecordLink>
                       ) : report.tripId ? (
@@ -861,7 +900,9 @@ export default function DisciplinaClient({
                   <div className="h-1.5 overflow-hidden rounded-full bg-zinc-900">
                     <div
                       className="h-full rounded-full bg-[#C5A55A]"
-                      style={{ width: `${Math.round(motivo.proporcion * 100)}%` }}
+                      style={{
+                        width: `${Math.round(motivo.proporcion * 100)}%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -917,7 +958,11 @@ export default function DisciplinaClient({
                   key={days}
                   type="button"
                   onClick={() =>
-                    setSanctionData({ dossier: selected, type: "suspension", days })
+                    setSanctionData({
+                      dossier: selected,
+                      type: "suspension",
+                      days,
+                    })
                   }
                   disabled={pending}
                   aria-busy={pending}

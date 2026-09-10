@@ -141,12 +141,17 @@ export class GodEyeService {
         r.description,
         r.created_at AS "createdAt",
         r.subject_type AS "subjectType",
+        -- De que servicio salio. Un reporte contra el chofer cuelga del viaje,
+        -- no del servicio, y sin resolverlo por ahi el panel no puede abrir el
+        -- caso al que pertenece.
+        COALESCE(r.service_id, v.servicio_id) AS "serviceId",
         CASE
           WHEN r.subject_type = 'employee' THEN e.nombre_artistico
           WHEN r.subject_type = 'driver' THEN c.nombre
           ELSE NULL
         END AS "subjectName"
       FROM conduct_reports r
+      LEFT JOIN viajes v ON v.id = r.trip_id
       LEFT JOIN empleadas e ON r.subject_type = 'employee' AND e.id = r.subject_id
       LEFT JOIN choferes c ON r.subject_type = 'driver' AND c.id = r.subject_id
       WHERE r.status IN ('nuevo', 'en_revision')

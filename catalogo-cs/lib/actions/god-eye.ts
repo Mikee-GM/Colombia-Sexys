@@ -30,6 +30,8 @@ export type GodEyeOverview = {
     createdAt: string;
     subjectType: "client" | "employee" | "driver";
     subjectName: string | null;
+    /** El servicio del que salio; abre el caso completo desde la bandeja. */
+    serviceId: string | null;
   }>;
   activeServices: Array<{
     id: string;

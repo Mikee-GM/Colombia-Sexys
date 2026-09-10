@@ -50,7 +50,43 @@ export type RatingAppeal = {
   appealStatus: "none" | "pending" | "upheld" | "overturned";
   appealReason: string | null;
   createdAt: string;
+  /**
+   * De que servicio salio la calificacion. Nulo solo si la fila es anterior a
+   * que se guardara; es lo que permite abrir el caso completo desde el panel.
+   */
+  serviceId: string | null;
 };
+
+/**
+ * El caso de un servicio: todo lo que se reporto o apelo sobre esa noche.
+ *
+ * Un incidente deja varios rastros a la vez --el cliente reporta, la modelo
+ * reporta lo contrario, el chofer añade lo suyo, alguien apela su
+ * calificacion-- y se decidian por separado desde listas distintas. Esto los
+ * devuelve juntos.
+ */
+export type CasoDelServicio = {
+  servicio: {
+    id: string;
+    estado: string;
+    totalFinal: string | number | null;
+    duracionPactadaHoras: number | null;
+    horaInicioServicio: string | null;
+    createdAt: string;
+    empleadaId: string | null;
+    empleadaNombre: string | null;
+    clienteId: string | null;
+    clienteNombre: string | null;
+    jefeEmail: string | null;
+    choferes: Array<{ id: string; nombre: string }> | null;
+  };
+  reports: ConductReport[];
+  ratings: RatingAppeal[];
+};
+
+export async function getCasoDelServicio(serviceId: string) {
+  return apiFetch<CasoDelServicio>(`/discipline/cases/${serviceId}`);
+}
 
 export type Dossier = {
   subjectType: PersonType;
@@ -73,9 +109,7 @@ export async function getSanctions() {
 }
 
 export async function getDossier(subjectType: PersonType, subjectId: string) {
-  return apiFetch<Dossier>(
-    `/discipline/dossiers/${subjectType}/${subjectId}`,
-  );
+  return apiFetch<Dossier>(`/discipline/dossiers/${subjectType}/${subjectId}`);
 }
 
 export async function getEmployeeRatingComments(employeeId: string) {
