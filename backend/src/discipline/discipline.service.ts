@@ -309,10 +309,30 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       }
     }
     if (actor.rol === 'jefe') {
+      /*
+       * Lo suyo es lo de sus servicios y lo de su gente.
+       *
+       * Con solo la primera condicion, un reporte sin servicio asociado no lo
+       * veia ningun jefe: se quedaba unicamente para administracion. Y los hay
+       * sin servicio a proposito --el que levanta el bot cuando corta una
+       * peticion prohibida puede pasar en el primer mensaje, antes de que
+       * exista ninguna contratacion--, que es justo el que mas prisa corre.
+       */
       query.andWhere(
-        `EXISTS (
-          SELECT 1 FROM servicios s
-          WHERE s.id = report.service_id AND s.jefe_id = :bossId
+        `(
+          EXISTS (
+            SELECT 1 FROM servicios s
+            WHERE s.id = report.service_id AND s.jefe_id = :bossId
+          )
+          OR (
+            report.service_id IS NULL
+            AND report.reporter_type = 'employee'
+            AND EXISTS (
+              SELECT 1 FROM empleadas e
+              WHERE e.id = report.reporter_id
+                AND (e.jefe_id = :bossId OR e.jefe_secundario_id = :bossId)
+            )
+          )
         )`,
         { bossId: actor.id },
       );
@@ -420,6 +440,83 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   async createSanction(dto: CreateSanctionDto, admin: Actor) {
     this.assertAdmin(admin);
     return this.persistSanction(dto, admin.id);
+  }
+
+  /**
+   * Deja constancia de una peticion que el bot bloqueo.
+   *
+   * El aviso salia solo por el chat del grupo del jefe, donde se pierde entre
+   * todo lo demas y no deja nada detras: nadie podia mirar despues cuantas
+   * veces habia pasado, ni actuar sobre el cliente desde el panel. Se guarda
+   * como reporte de conducta contra el cliente, que es lo que ya saben leer las
+   * dos pantallas de disciplina y la bandeja del centro de mando, y desde ahi
+   * se le puede bloquear.
+   *
+   * Entra como urgente a proposito. La categoria que dispara esto no admite un
+   * "ya lo vere manana": mientras nadie decide, el cliente sigue escribiendo.
+   *
+   * No lleva servicio ni viaje asociado --puede pasar en el primer mensaje, sin
+   * ninguna contratacion de por medio-- asi que no pasa por `createReport`, que
+   * exige una interaccion.
+   */
+  async registrarPeticionBloqueada(input: {
+    clienteId: string;
+    empleadaId: string;
+    jefeUsuarioId?: string | null;
+    categoria: string;
+    mensaje: string;
+    empleadaNombre?: string | null;
+  }): Promise<ConductReport> {
+    const reporte = await this.reports.save(
+      this.reports.create({
+        direction: 'employee_to_client',
+        reporterType: 'employee',
+        reporterId: input.empleadaId,
+        subjectType: 'client',
+        subjectId: input.clienteId,
+        serviceId: null,
+        tripId: null,
+        category: 'seguridad',
+        priority: 'urgente',
+        status: 'nuevo',
+        description:
+          `El bot bloqueo un mensaje de este cliente por la categoria ` +
+          `"${input.categoria}". Mensaje original: ${input.mensaje}`,
+      }),
+    );
+
+    const evento = {
+      type: 'discipline.blocked_request',
+      data: {
+        reportId: reporte.id,
+        clienteId: input.clienteId,
+        categoria: input.categoria,
+        empleadaNombre: input.empleadaNombre ?? null,
+      },
+    };
+    /* Al jefe de esa modelo y, por el canal compartido, a administracion. */
+    this.realtime.emitToBoss(input.jefeUsuarioId, evento);
+    this.realtime.emitToJefes(evento);
+
+    /*
+     * El aviso push no repite lo que escribio el cliente: se lee en la pantalla
+     * de bloqueo, a la vista de cualquiera que pase por al lado.
+     */
+    if (input.jefeUsuarioId) {
+      await this.notifications
+        .notificar(input.jefeUsuarioId, {
+          titulo: 'Peticion bloqueada',
+          cuerpo: 'El bot corto un mensaje de un cliente. Toca para revisarlo.',
+          url: '/jefe/reportes',
+          tag: `bloqueado-${reporte.id}`,
+          requireInteraction: true,
+        })
+        .catch((err) =>
+          this.logger.error('Error avisando de la peticion bloqueada:', err),
+        );
+    }
+
+    return reporte;
   }
 
   /**

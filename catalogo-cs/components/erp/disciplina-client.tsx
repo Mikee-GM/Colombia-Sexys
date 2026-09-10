@@ -20,6 +20,7 @@ import {
   type BadgeTone,
 } from "@/components/erp/primitives";
 import PromptDialog from "@/components/ui/PromptDialog";
+import { bloquearClienteAction } from "@/lib/actions/clientes";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { Directorio } from "@/lib/types";
@@ -311,6 +312,31 @@ export default function DisciplinaClient({
     // el expediente en cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expedienteEnLaUrl]);
+
+  /*
+   * Bloquear al cliente sin salir del reporte.
+   *
+   * Un reporte contra un cliente acaba casi siempre en lo mismo, y hasta ahora
+   * habia que anotarlo, irse a la pantalla de clientes, buscarlo por el nombre
+   * y bloquearlo alli. Cuando el reporte lo levanta el bot por una peticion que
+   * corto --y esas entran como urgentes-- ese paseo es justo el tiempo que el
+   * cliente sigue escribiendo.
+   */
+  const [bloqueo, setBloqueo] = useState<ConductReport | null>(null);
+
+  function confirmarBloqueo(reason: string) {
+    if (!bloqueo) return;
+    const cliente = bloqueo.subjectId;
+    startTransition(async () => {
+      const resultado = await bloquearClienteAction(cliente, reason);
+      if (!resultado.ok) {
+        toast.error(resultado.error);
+        return;
+      }
+      setBloqueo(null);
+      toast.success("Cliente bloqueado");
+    });
+  }
 
   function handleConfirmClose(resolution: string) {
     if (!closeReportData) return;
@@ -750,6 +776,18 @@ export default function DisciplinaClient({
                           Expediente
                         </button>
 
+                        {report.subjectType === "client" ? (
+                          <button
+                            type="button"
+                            onClick={() => setBloqueo(report)}
+                            disabled={pending}
+                            aria-busy={pending}
+                            className="rounded-xl border border-red-400/50 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-red-400 transition-colors hover:bg-red-400 hover:text-black disabled:opacity-40"
+                          >
+                            Bloquear
+                          </button>
+                        ) : null}
+
                         {report.status !== "cerrado" ? (
                           <>
                             <button
@@ -1059,6 +1097,20 @@ export default function DisciplinaClient({
           ) : null}
         </Panel>
       ) : null}
+
+      <PromptDialog
+        isOpen={!!bloqueo}
+        title="Bloquear a este cliente"
+        description="Deja de poder escribir a las modelos. Explica por que, que es lo que queda en su expediente."
+        placeholder="Ej: pidio algo prohibido por el reglamento y el bot corto la conversacion..."
+        labelConfirm="Bloquear cliente"
+        variant="red"
+        minLength={3}
+        maxLength={2000}
+        isLoading={pending}
+        onConfirm={confirmarBloqueo}
+        onCancel={() => setBloqueo(null)}
+      />
 
       <PromptDialog
         isOpen={!!closeReportData}

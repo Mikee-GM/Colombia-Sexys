@@ -1691,6 +1691,47 @@ export class TelegramBookingUpdate {
         `Aviso: un cliente (${clientName}, id ${telegramId ?? 'desconocido'}) escribio a ${empleada.nombreArtistico} algo bloqueado por la categoria "${category}".\n\nMensaje original:\n${originalMessage}`,
       )
       .catch(() => undefined);
+
+    /*
+     * Y queda constancia en el panel, no solo en el chat.
+     *
+     * En el grupo el aviso se pierde entre todo lo demas y no deja nada detras:
+     * nadie podia mirar despues cuantas veces habia pasado con el mismo cliente,
+     * ni bloquearlo sin salir a buscarlo a mano. Como reporte de conducta entra
+     * en las dos pantallas de disciplina y en la bandeja del centro de mando,
+     * que es donde se decide.
+     *
+     * Solo si el cliente tiene ficha: sin ella no hay a quien apuntarle el
+     * reporte, y el aviso del chat --que si lleva su id de Telegram-- sigue
+     * siendo la via.
+     */
+    if (!telegramId) return;
+    const cliente = await this.clientesRepository.findOne({
+      where: { telegramChatId: telegramId },
+      select: { id: true },
+    });
+    if (!cliente) {
+      this.logger.warn(
+        `El cliente ${telegramId} no tiene ficha, asi que la peticion bloqueada (${category}) solo queda en el chat.`,
+      );
+      return;
+    }
+
+    await this.disciplineService
+      .registrarPeticionBloqueada({
+        clienteId: cliente.id,
+        empleadaId: empleada.id,
+        jefeUsuarioId: boss?.id ?? null,
+        categoria: category,
+        mensaje: originalMessage,
+        empleadaNombre: empleada.nombreArtistico,
+      })
+      .catch((err) =>
+        this.logger.error(
+          'No se pudo dejar constancia de la peticion bloqueada:',
+          err,
+        ),
+      );
   }
 
   /** Jefe responsable de una empleada, con los mismos respaldos de siempre. */
