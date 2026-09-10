@@ -85,6 +85,42 @@ export class DriverTripsService {
   }
 
   /**
+   * El avance del viaje, a las pantallas de quienes lo estan esperando.
+   *
+   * Los tres pasos del chofer --ya llegue, ya la recogi, ya la deje-- salian
+   * solo por el chat del grupo del jefe. Ni su panel ni el portal de la modelo
+   * se enteraban de nada, y el propio chofer veia su pantalla igual hasta
+   * recargar a mano. Es justo el tramo en el que alguien esta esperando abajo,
+   * asi que es donde mas se nota que la pantalla no diga nada.
+   *
+   * Va al canal de los tres: el jefe coordina, la modelo espera el coche y el
+   * chofer tiene delante los botones del viaje.
+   */
+  private avisarAvanceDelViaje(
+    trip: Viajes,
+    chofer: Choferes | null,
+    accion: 'driver_arrived' | 'employee_picked_up' | 'trip_finished',
+  ): void {
+    const evento = {
+      type: 'trip_status_updated',
+      data: {
+        tripId: trip.id,
+        serviceId: trip.servicioId,
+        tripType: trip.tipo,
+        action: accion,
+        employeeName: trip.servicio?.empleada?.nombreArtistico ?? null,
+        driverName: chofer?.nombre ?? null,
+      },
+    };
+
+    if (trip.choferId) this.realtime.emitToDriver(trip.choferId, evento);
+    if (trip.servicio) {
+      this.realtime.emitToEmployee(trip.servicio.empleadaId, evento);
+      this.realtime.emitToBoss(trip.servicio.jefeId, evento);
+    }
+  }
+
+  /**
    * El chofer toma una oferta de viaje.
    *
    * La oferta se manda a varios a la vez, asi que esto es una carrera: gana
@@ -273,6 +309,7 @@ export class DriverTripsService {
       `El chofer *${chofer?.nombre ?? ''}* ya llegó a la ubicación para recoger a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}*.`,
     );
     await this.avisarLlegadaALaEmpleada(trip, chofer);
+    this.avisarAvanceDelViaje(trip, chofer, 'driver_arrived');
 
     return trip;
   }
@@ -315,6 +352,7 @@ export class DriverTripsService {
       `El chofer *${chofer?.nombre ?? ''}* ya recogió a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* e inició el trayecto al destino.`,
     );
     await this.retirarAvisosDeCamino(trip);
+    this.avisarAvanceDelViaje(trip, chofer, 'employee_picked_up');
 
     return trip;
   }
@@ -445,6 +483,7 @@ export class DriverTripsService {
     await this.pedirCalificacionAlaEmpleada(trip, chofer);
     await this.pedirCalificacionAlChofer(trip);
     if (trip.tipo === 'ida') await this.avisarLlegadaAlCliente(trip);
+    this.avisarAvanceDelViaje(trip, chofer, 'trip_finished');
 
     return trip;
   }

@@ -22,6 +22,9 @@ function viaje(overrides: Partial<Viajes> = {}): Viajes {
     tipo: 'ida',
     servicio: {
       id: 'servicio-1',
+      // Los dos ids por los que se enrutan los avisos en vivo a sus canales.
+      empleadaId: 'empleada-1',
+      jefeId: 'jefe-1',
       telegramThreadId: null,
       jefe: { grupoTelegramId: '-100', telegramChatId: '55' },
       empleada: {
@@ -123,6 +126,7 @@ function montar(trip: Viajes | null, afectadas = 1) {
 
   return {
     service,
+    realtime: dependencias.realtime,
     update,
     enviados,
     borrados,
@@ -192,6 +196,45 @@ describe('DriverTripsService.marcarLlegada', () => {
     expect(resultado.estado).toBe('llegado');
     expect(update).toHaveBeenCalledWith('viaje-1', { estado: 'llegado' });
   });
+});
+
+/**
+ * El avance del viaje tiene que llegar a las tres pantallas.
+ *
+ * Los tres pasos del chofer salian solo por el chat del grupo del jefe: su
+ * panel no se enteraba, el portal de la modelo tampoco --y es ella la que esta
+ * esperando el coche abajo-- y el propio chofer veia su pantalla igual hasta
+ * recargar a mano.
+ */
+describe('DriverTripsService avisa del avance a las tres pantallas', () => {
+  const casos = [
+    ['marcarLlegada', {}, 'driver_arrived'],
+    ['marcarRecogida', { estado: 'llegado' }, 'employee_picked_up'],
+  ] as const;
+
+  for (const [metodo, estado, accion] of casos) {
+    it(`emite ${accion} al jefe, a la modelo y al chofer`, async () => {
+      const { service, realtime } = montar(viaje(estado));
+
+      await (
+        service as unknown as Record<
+          string,
+          (a: string, b: string) => Promise<unknown>
+        >
+      )[metodo]('viaje-1', CHOFER);
+
+      const esperado = expect.objectContaining({
+        type: 'trip_status_updated',
+        data: expect.objectContaining({ action: accion, tripId: 'viaje-1' }),
+      });
+      expect(realtime.emitToBoss).toHaveBeenCalledWith('jefe-1', esperado);
+      expect(realtime.emitToEmployee).toHaveBeenCalledWith(
+        'empleada-1',
+        esperado,
+      );
+      expect(realtime.emitToDriver).toHaveBeenCalledWith(CHOFER, esperado);
+    });
+  }
 });
 
 describe('DriverTripsService.marcarRecogida', () => {

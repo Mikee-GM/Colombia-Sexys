@@ -160,20 +160,28 @@ export default function TeamOperations({ initialEmployees, initialServices, init
             acciones del mismo evento las pulsa el propio jefe.
           */
           if (payload.type === "trip_status_updated") {
-            const { action, tripType, employeeName } = payload.data ?? {};
-            if (action === "employee_en_route" || action === "employee_arrived") {
-              const quien = employeeName ?? "Una empleada";
-              const vuelta = tripType === "regreso";
-              toast.info(
-                action === "employee_arrived"
-                  ? vuelta
-                    ? `${quien} llegó a su casa`
-                    : `${quien} llegó al punto`
-                  : vuelta
-                    ? `${quien} ya va de regreso`
-                    : `${quien} ya va en camino`,
-              );
-            }
+            const { action, tripType, employeeName, driverName } = payload.data ?? {};
+            const quien = employeeName ?? "Una empleada";
+            const chofer = driverName ?? "El chofer";
+            const vuelta = tripType === "regreso";
+
+            /*
+              Lo que marca la modelo y lo que marca el chofer, dicho igual.
+
+              Los tres pasos del chofer no llegaban al panel: salian solo por el
+              chat del grupo, asi que el jefe se enteraba del traslado si estaba
+              mirando Telegram. Son los momentos en los que alguien esta
+              esperando abajo. Las acciones que pulsa el propio jefe siguen sin
+              anunciarse: ya sabe lo que acaba de hacer.
+            */
+            const aviso: Record<string, string> = {
+              employee_arrived: vuelta ? `${quien} llegó a su casa` : `${quien} llegó al punto`,
+              employee_en_route: vuelta ? `${quien} ya va de regreso` : `${quien} ya va en camino`,
+              driver_arrived: `${chofer} llegó por ${quien}`,
+              employee_picked_up: vuelta ? `${chofer} lleva a ${quien} de regreso` : `${chofer} recogió a ${quien}`,
+              trip_finished: vuelta ? `${quien} ya está en su casa` : `${chofer} dejó a ${quien} en el destino`,
+            };
+            if (action && aviso[action]) toast.info(aviso[action]);
           }
 
           if (payload.type === "chat_message") {
