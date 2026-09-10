@@ -228,6 +228,7 @@ function ViajeCard({
         <button
           type="button"
           disabled={pending || !motivo}
+          aria-busy={pending}
           onClick={guardarMotivo}
           className="rounded-lg border border-zinc-800 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-zinc-300 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A] disabled:opacity-40"
         >
@@ -258,6 +259,7 @@ function ViajeCard({
           <button
             type="button"
             disabled={pending}
+            aria-busy={pending}
             onClick={cerrarConMonto}
             className="rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A]/20 disabled:opacity-50"
           >

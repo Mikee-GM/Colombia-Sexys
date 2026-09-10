@@ -171,25 +171,30 @@ export default function ReportDetailSheet({
                 <section className="rounded-2xl border border-[#C5A55A]/30 bg-[#C5A55A]/5 p-5">
                   <div className="mb-4 flex items-center gap-2 text-[#C5A55A]"><UserRound size={17} /><h3 className="text-xs font-bold uppercase tracking-[0.16em]">Gestión del caso</h3></div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <button disabled={pending} onClick={() => scheduleAction(() => takeEmployeeReport(report.id), "Caso asignado a ti")} className="border border-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] transition hover:bg-[#C5A55A] hover:text-black disabled:opacity-50">Tomar caso</button>
-                    {report.status === "nuevo" && <button disabled={pending} onClick={() => scheduleAction(() => startEmployeeReportReview(report.id), "Revisión iniciada")} className="bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black disabled:opacity-50">Iniciar revisión</button>}
+                    <button disabled={pending}
+ aria-busy={pending} onClick={() => scheduleAction(() => takeEmployeeReport(report.id), "Caso asignado a ti")} className="border border-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] transition hover:bg-[#C5A55A] hover:text-black disabled:opacity-50">Tomar caso</button>
+                    {report.status === "nuevo" && <button disabled={pending}
+ aria-busy={pending} onClick={() => scheduleAction(() => startEmployeeReportReview(report.id), "Revisión iniciada")} className="bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black disabled:opacity-50">Iniciar revisión</button>}
                     <label className="space-y-1.5 text-xs text-zinc-500">
                       Responsable
-                      <select disabled={pending} value={report.assignedAdminId || ""} onChange={(event) => event.target.value && scheduleAction(() => assignEmployeeReport(report.id, event.target.value), "Responsable actualizado")} className="w-full border border-zinc-800 bg-black px-3 py-3 text-sm text-white outline-none focus:border-[#C5A55A]">
+                      <select disabled={pending}
+ aria-busy={pending} value={report.assignedAdminId || ""} onChange={(event) => event.target.value && scheduleAction(() => assignEmployeeReport(report.id, event.target.value), "Responsable actualizado")} className="w-full border border-zinc-800 bg-black px-3 py-3 text-sm text-white outline-none focus:border-[#C5A55A]">
                         <option value="">Sin asignar</option>
                         {admins.map((admin) => <option key={admin.id} value={admin.id}>{admin.email}</option>)}
                       </select>
                     </label>
                     <label className="space-y-1.5 text-xs text-zinc-500">
                       Prioridad
-                      <select disabled={pending} value={report.priority} onChange={(event) => scheduleAction(() => changeEmployeeReportPriority(report.id, event.target.value as EmployeeReportPriority), "Prioridad actualizada")} className="w-full border border-zinc-800 bg-black px-3 py-3 text-sm text-white outline-none focus:border-[#C5A55A]">
+                      <select disabled={pending}
+ aria-busy={pending} value={report.priority} onChange={(event) => scheduleAction(() => changeEmployeeReportPriority(report.id, event.target.value as EmployeeReportPriority), "Prioridad actualizada")} className="w-full border border-zinc-800 bg-black px-3 py-3 text-sm text-white outline-none focus:border-[#C5A55A]">
                         {Object.entries(priorityLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                       </select>
                     </label>
                   </div>
                   <div className="mt-4 space-y-2">
                     <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} rows={3} placeholder="Agregar nota interna…" className="w-full resize-none border border-zinc-800 bg-black p-3 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-[#C5A55A]" />
-                    <button disabled={pending || note.trim().length < 2} onClick={() => scheduleAction(async () => { const result = await addEmployeeReportNote(report.id, note.trim()); if (result.success) setNote(""); return result; }, "Nota agregada")} className="w-full border border-zinc-700 px-4 py-2.5 text-xs font-semibold text-zinc-300 hover:border-zinc-500 disabled:opacity-40">Agregar nota</button>
+                    <button disabled={pending || note.trim().length < 2}
+ aria-busy={pending} onClick={() => scheduleAction(async () => { const result = await addEmployeeReportNote(report.id, note.trim()); if (result.success) setNote(""); return result; }, "Nota agregada")} className="w-full border border-zinc-700 px-4 py-2.5 text-xs font-semibold text-zinc-300 hover:border-zinc-500 disabled:opacity-40">Agregar nota</button>
                   </div>
                   <div className="mt-5 grid grid-cols-2 gap-3 border-t border-zinc-800 pt-5">
                     <button onClick={() => setClosing("dismiss")} className="border border-zinc-700 px-4 py-3 text-xs font-bold uppercase tracking-wider text-zinc-400 hover:border-red-500/60 hover:text-red-300">Descartar</button>
@@ -239,7 +244,8 @@ export default function ReportDetailSheet({
           </div>
           <DialogFooter className="border-zinc-800 bg-transparent">
             <button onClick={() => setClosing(null)} className="border border-zinc-700 px-4 py-2 text-xs text-zinc-400">Cancelar</button>
-            <button disabled={pending || resolution.trim().length < 3} onClick={() => { if (!report || !closing) return; const action = closing; scheduleAction(async () => { const result = await closeEmployeeReport(report.id, action, resolution.trim()); if (result.success) { setClosing(null); setResolution(""); } return result; }, action === "resolve" ? "Reporte resuelto" : "Reporte descartado"); }} className="bg-[#C5A55A] px-4 py-2 text-xs font-bold text-black disabled:opacity-40">Confirmar</button>
+            <button disabled={pending || resolution.trim().length < 3}
+ aria-busy={pending} onClick={() => { if (!report || !closing) return; const action = closing; scheduleAction(async () => { const result = await closeEmployeeReport(report.id, action, resolution.trim()); if (result.success) { setClosing(null); setResolution(""); } return result; }, action === "resolve" ? "Reporte resuelto" : "Reporte descartado"); }} className="bg-[#C5A55A] px-4 py-2 text-xs font-bold text-black disabled:opacity-40">Confirmar</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

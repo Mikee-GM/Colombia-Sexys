@@ -220,6 +220,7 @@ export default function BankAccountsClient({
           <button
             type="button"
             disabled={pending}
+            aria-busy={pending}
             onClick={submit}
             className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black disabled:opacity-40"
           >

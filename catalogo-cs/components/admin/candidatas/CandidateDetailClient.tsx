@@ -230,6 +230,7 @@ export default function CandidateDetailClient({
                 <button
                   type="button"
                   disabled={saving}
+                  aria-busy={saving}
                   onClick={handlePromote}
                   className="rounded-full border border-brand-gold px-5 py-2 text-xs font-semibold uppercase text-brand-gold disabled:border-zinc-800 disabled:text-zinc-600"
                 >

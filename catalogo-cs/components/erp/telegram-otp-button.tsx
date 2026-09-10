@@ -83,6 +83,7 @@ export default function TelegramOtpButton({ usuarioId, initialCode }: Props) {
       type="button"
       onClick={handleGenerate}
       disabled={loading}
+      aria-busy={loading}
       className="text-xs font-bold uppercase tracking-wider text-[#C5A55A] transition-colors hover:text-[#E8D5A3] disabled:opacity-50"
     >
       {loading ? "Generando..." : "Generar OTP"}

@@ -439,6 +439,7 @@ export default function TurnosClient({
               type="button"
               onClick={handleCreate}
               disabled={submitting}
+              aria-busy={submitting}
               className="rounded-xl bg-[#C5A55A] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.05em] text-black transition-colors hover:bg-[#d8b769] disabled:opacity-50"
             >
               {submitting ? "Creando..." : "Crear turno"}

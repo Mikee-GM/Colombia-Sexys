@@ -56,6 +56,7 @@ export default function WorkShiftToggle({
       <button
         type="button"
         disabled={pending}
+        aria-busy={pending}
         onClick={cambiar}
         aria-pressed={!status.enJornada}
         className={`inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 ${

@@ -177,6 +177,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
               id="btn-iniciar-sesion"
               type="submit"
               disabled={loading}
+              aria-busy={loading}
               className="w-full bg-[#C5A55A] text-black font-black text-xs tracking-[0.2em] uppercase py-4 rounded-lg mt-4 hover:bg-[#D4AF37] transition-all duration-300 disabled:opacity-50 hover:shadow-[0_0_20px_rgba(197,165,90,0.25)] flex justify-center items-center gap-2"
             >
               {loading ? (

@@ -69,6 +69,7 @@ export default function ExtenderServicio({
             key={horas}
             type="button"
             disabled={pendiente}
+            aria-busy={pendiente}
             onClick={() => extender(horas)}
             className="rounded-lg border border-[#C5A55A]/50 py-3 text-sm font-bold text-[#E8D5A3] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-50"
           >

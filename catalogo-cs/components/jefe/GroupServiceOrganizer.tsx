@@ -399,6 +399,7 @@ function GroupRequestEditor({
               <button
                 className={clientActionButtonClass}
                 disabled={pending}
+                aria-busy={pending}
                 onClick={() =>
                   run(
                     () => requestGroupLocation(request.id),
@@ -412,6 +413,7 @@ function GroupRequestEditor({
               <button
                 className={clientActionButtonClass}
                 disabled={pending}
+                aria-busy={pending}
                 onClick={() =>
                   run(
                     () => sendGroupCatalog(request.id),
@@ -490,6 +492,7 @@ function GroupRequestEditor({
               <button
                 className={buttonClass}
                 disabled={pending}
+                aria-busy={pending}
                 onClick={() =>
                   run(
                     () =>
@@ -546,6 +549,7 @@ function GroupRequestEditor({
               <button
                 className={buttonClass}
                 disabled={pending || employeeIds.length < 2}
+                aria-busy={pending}
                 onClick={() =>
                   run(
                     () => reserveGroupEmployees(request.id, employeeIds),
@@ -558,6 +562,7 @@ function GroupRequestEditor({
               <button
                 className={buttonClass}
                 disabled={pending}
+                aria-busy={pending}
                 onClick={() =>
                   run(
                     () => extendGroupHold(request.id),
@@ -1036,6 +1041,7 @@ function ActiveGroupEditor({
                     <button
                       className={buttonClass}
                       disabled={pending}
+                      aria-busy={pending}
                       onClick={() =>
                         run(
                           () =>
@@ -1052,6 +1058,7 @@ function ActiveGroupEditor({
                     <button
                       className="rounded-xl border border-zinc-800 px-3 py-2 text-xs text-zinc-500 hover:border-red-900 hover:text-red-400"
                       disabled={pending}
+                      aria-busy={pending}
                       onClick={() => {
                         setRemovingParticipant({
                           serviceId: service.id,
@@ -1089,6 +1096,7 @@ function ActiveGroupEditor({
             <button
               className={buttonClass}
               disabled={pending}
+              aria-busy={pending}
               onClick={() =>
                 run(
                   () => changeGroupDuration(service.id, Number(duration)),
@@ -1146,6 +1154,7 @@ function ActiveGroupEditor({
           <button
             className={`${buttonClass} mt-3`}
             disabled={pending || !newEmployeeId}
+            aria-busy={pending}
             onClick={() =>
               run(
                 () =>
@@ -1440,6 +1449,7 @@ function UberScreenshotUpload({
         type="file"
         accept="image/*"
         disabled={pending}
+        aria-busy={pending}
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];

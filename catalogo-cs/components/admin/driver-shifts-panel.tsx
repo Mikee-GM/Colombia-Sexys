@@ -122,6 +122,7 @@ export default function DriverShiftsPanel({
                   <button
                     type="button"
                     disabled={pending}
+                    aria-busy={pending}
                     onClick={() => retirar(shift)}
                     className="inline-flex shrink-0 items-center gap-1.5 border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
                   >
@@ -164,6 +165,7 @@ export default function DriverShiftsPanel({
                     <button
                       type="button"
                       disabled={pending}
+                      aria-busy={pending}
                       onClick={() => asignar(shift)}
                       className="inline-flex shrink-0 items-center gap-1.5 border border-[#C5A55A]/40 bg-[#C5A55A]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#C5A55A] transition-colors hover:bg-[#C5A55A]/20 disabled:opacity-50"
                     >

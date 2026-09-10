@@ -885,6 +885,7 @@ export default function GodEyeDashboard({
         <button
           onClick={refreshAll}
           disabled={isPending}
+          aria-busy={isPending}
           className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-bold text-zinc-200 transition-all hover:border-[#C5A55A] hover:text-white"
         >
           <RefreshCw

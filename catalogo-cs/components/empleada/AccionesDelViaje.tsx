@@ -82,6 +82,7 @@ export default function AccionesDelViaje({
         type="button"
         onClick={marcar}
         disabled={enviando}
+        aria-busy={enviando}
         className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#C5A55A] px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#E8D5A3] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
       >
         {siguiente === "en_camino" ? (

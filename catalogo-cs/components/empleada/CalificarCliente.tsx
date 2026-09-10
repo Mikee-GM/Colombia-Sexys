@@ -166,6 +166,7 @@ export default function CalificarCliente({ token }: { token?: string }) {
                     type="button"
                     onClick={() => enviar(pendiente.servicioId)}
                     disabled={enviando}
+                    aria-busy={enviando}
                     className="flex-1 rounded-lg border border-[#C5A55A] bg-[#C5A55A] px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-black transition-colors hover:bg-[#E8D5A3] disabled:opacity-40"
                   >
                     {enviando ? "Enviando" : "Enviar"}

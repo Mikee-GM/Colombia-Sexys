@@ -44,6 +44,7 @@ export default function UberScreenshotUploader({
         type="file"
         accept="image/*"
         disabled={uploading}
+        aria-busy={uploading}
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) void handleFile(file);

@@ -175,6 +175,7 @@ export default function AgregarExtra({
           type="button"
           onClick={agregar}
           disabled={cargando || !elegido}
+          aria-busy={cargando}
           className="flex-1 rounded-lg border border-[#C5A55A] bg-[#C5A55A]/10 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#E8D5A3] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
         >
           {cargando ? "Guardando" : "Agregar"}

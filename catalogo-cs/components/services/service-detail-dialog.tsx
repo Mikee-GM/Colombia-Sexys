@@ -984,6 +984,7 @@ function AdminTripCard({
               type="file"
               accept="image/*"
               disabled={uploadingScreenshot}
+              aria-busy={uploadingScreenshot}
               onChange={handleUploadScreenshot}
               className="hidden"
               id={`uber-screenshot-${trip.id}`}
@@ -1052,6 +1053,7 @@ function AdminTripCard({
               <button
                 type="button"
                 disabled={savingFare}
+                aria-busy={savingFare}
                 onClick={handleSaveFare}
                 className="px-3.5 py-2 bg-[#C5A55A] text-black font-bold text-xs rounded-xl hover:bg-[#D4AF37]"
               >

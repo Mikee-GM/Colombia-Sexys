@@ -45,6 +45,7 @@ export default function CerrarSesion({
       type="button"
       onClick={salir}
       disabled={pendiente}
+      aria-busy={pendiente}
       aria-label="Cerrar sesión"
       title="Cerrar sesión"
       className={

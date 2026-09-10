@@ -187,6 +187,7 @@ export default function EditProfileModal({
             <button
               type="submit"
               disabled={saving}
+              aria-busy={saving}
               className="rounded-xl bg-[#C5A55A] px-5 py-2.5 text-xs font-bold text-black hover:bg-[#d8b86d] disabled:opacity-50 transition-colors flex items-center gap-2"
             >
               {saving ? (

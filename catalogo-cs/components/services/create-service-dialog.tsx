@@ -650,6 +650,7 @@ export default function CreateServiceDialog({
             <button
               type="submit"
               disabled={submitting || loadingInitial || !clienteResuelto || !selectedEmployeeId}
+              aria-busy={submitting}
               className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-zinc-950 bg-[#C5A55A] hover:bg-[#d8b769] shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (

@@ -106,6 +106,7 @@ export default function ComisionExtrasTarjeta({
             type="button"
             onClick={guardar}
             disabled={guardando}
+            aria-busy={guardando}
             className="flex items-center gap-1 rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/10 px-2.5 py-1 font-semibold text-[#E8D5A3] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-50"
           >
             <Check className="h-3 w-3" />

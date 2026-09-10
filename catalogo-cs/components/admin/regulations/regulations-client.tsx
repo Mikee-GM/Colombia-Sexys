@@ -199,6 +199,7 @@ export default function RegulationsClient() {
             }
           }}
           disabled={isSubmitting}
+          aria-busy={isSubmitting}
           className="flex items-center justify-center gap-2 bg-[#C5A55A] text-black font-bold px-6 py-3 rounded-full hover:bg-[#D4AF37] hover:shadow-[0_0_20px_rgba(197,165,90,0.5)] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md self-start sm:self-auto mb-4 sm:mb-0"
         >
           <Save className="w-5 h-5" />
@@ -363,6 +364,7 @@ export default function RegulationsClient() {
               <button
                 type="submit"
                 disabled={isSubmitting}
+                aria-busy={isSubmitting}
                 className="flex items-center gap-2 bg-[#C5A55A] text-black font-bold px-6 py-3 rounded-full hover:bg-[#D4AF37] hover:shadow-[0_0_20px_rgba(197,165,90,0.5)] active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
               >
                 <Save className="w-5 h-5" />

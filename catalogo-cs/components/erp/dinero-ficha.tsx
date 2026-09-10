@@ -181,6 +181,7 @@ export default function DineroFicha({
                 type="button"
                 onClick={liquidar}
                 disabled={pendiente || !esAdmin}
+                aria-busy={pendiente}
                 className="rounded-xl border border-[#C5A55A]/50 px-4 py-2 text-[12px] font-semibold text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Marcar como pagada
@@ -194,6 +195,7 @@ export default function DineroFicha({
                   type="button"
                   onClick={deshacer}
                   disabled={pendiente}
+                  aria-busy={pendiente}
                   className="rounded-xl border border-red-400/50 px-3 py-2 text-[12px] font-semibold text-red-400 transition-colors hover:bg-red-400 hover:text-black disabled:opacity-40"
                 >
                   Sí, deshacer

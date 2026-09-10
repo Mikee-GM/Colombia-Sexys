@@ -312,6 +312,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     {detalleEmpleada && <EmployeeSheet
       employee={detalleEmpleada}
       disabled={pending}
+      aria-busy={pending}
       onToggle={toggleAvailability}
       /* Las dos abren su propio panel, asi que la hoja se cierra antes: si no,
          quedaria una capa debajo de la otra y cerrar la de arriba dejaria al
@@ -671,7 +672,7 @@ function EditPendingServiceDialog({ service, onClose, onSaved }: { service: Serv
           </div>
           <div className="flex gap-2 pt-2">
             <button type="button" onClick={onClose} disabled={saving} className="flex-1 py-2.5 border border-zinc-800 rounded-xl text-xs font-bold uppercase text-zinc-400 hover:text-white">Cancelar</button>
-            <button type="submit" disabled={saving} className="flex-1 py-2.5 bg-[#C5A55A] text-black rounded-xl text-xs font-bold uppercase hover:bg-[#D4AF37] disabled:opacity-50">{saving ? "Guardando..." : "Guardar Cambios"}</button>
+            <button type="submit" disabled={saving} aria-busy={saving} className="flex-1 py-2.5 bg-[#C5A55A] text-black rounded-xl text-xs font-bold uppercase hover:bg-[#D4AF37] disabled:opacity-50">{saving ? "Guardando..." : "Guardar Cambios"}</button>
           </div>
         </form>
       </div>
@@ -861,7 +862,7 @@ function UberFareEditor({ trip, onRefresh }: { trip: Trip; onRefresh: () => Prom
 
   if (!editing && hasFare) return <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3"><div className="flex items-center gap-2"><CircleDollarSign size={18} className="text-[#C5A55A]" /><div><p className="text-[10px] uppercase tracking-wider text-zinc-500">Tarifa final</p><p className="font-heading text-xl text-[#E8D5A3]">${storedFare.toFixed(2)}</p></div></div>{canEditFare && <button type="button" onClick={() => { setFare(String(storedFare)); setEditing(true); }} className="inline-flex items-center gap-1 rounded-lg border border-[#C5A55A] px-3 py-2 text-xs font-semibold text-[#C5A55A]"><Pencil size={13} />Cambiar tarifa</button>}</div>;
 
-  return <div className="space-y-2 border-t border-zinc-900 pt-4"><label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500" htmlFor={`fare-${trip.id}`}>Tarifa final del viaje de {trip.tipo}</label><div className="flex gap-2"><input id={`fare-${trip.id}`} value={fare} onChange={(event) => setFare(event.target.value)} inputMode="decimal" placeholder="0.00" className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm outline-none focus:border-[#C5A55A]" /><button type="button" disabled={saving} onClick={saveFare} className="rounded-lg bg-[#C5A55A] px-4 py-3 text-xs font-semibold text-black disabled:opacity-50">{saving ? "Guardando" : "Guardar"}</button>{hasFare && <button type="button" disabled={saving} onClick={() => { setFare(String(storedFare)); setEditing(false); }} className="rounded-lg border border-zinc-800 px-3 py-3 text-xs text-zinc-400 disabled:opacity-50">Cancelar</button>}</div></div>;
+  return <div className="space-y-2 border-t border-zinc-900 pt-4"><label className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500" htmlFor={`fare-${trip.id}`}>Tarifa final del viaje de {trip.tipo}</label><div className="flex gap-2"><input id={`fare-${trip.id}`} value={fare} onChange={(event) => setFare(event.target.value)} inputMode="decimal" placeholder="0.00" className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-sm outline-none focus:border-[#C5A55A]" /><button type="button" disabled={saving} aria-busy={saving} onClick={saveFare} className="rounded-lg bg-[#C5A55A] px-4 py-3 text-xs font-semibold text-black disabled:opacity-50">{saving ? "Guardando" : "Guardar"}</button>{hasFare && <button type="button" disabled={saving} onClick={() => { setFare(String(storedFare)); setEditing(false); }} className="rounded-lg border border-zinc-800 px-3 py-3 text-xs text-zinc-400 disabled:opacity-50">Cancelar</button>}</div></div>;
 }
 
 function ChatPanel({ service, messages, setMessages, onClose }: { service: Service; messages: ConversationMessage[]; setMessages: Dispatch<SetStateAction<ConversationMessage[]>>; onClose: () => void }) {

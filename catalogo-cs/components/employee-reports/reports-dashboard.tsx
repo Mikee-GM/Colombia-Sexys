@@ -121,7 +121,8 @@ export default function ReportsDashboard({
           title="Reportes de empleadas"
           description={role === "admin" ? "Bandeja de atención, seguimiento y tolerancia operativa." : "Consulta los reportes y niveles de tolerancia de tu operación."}
         />
-        <button disabled={pending} onClick={() => startTransition(() => void refreshAll())} className="flex shrink-0 items-center justify-center gap-2 border border-zinc-800 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 transition hover:border-[#C5A55A] hover:text-[#C5A55A] disabled:opacity-50">
+        <button disabled={pending}
+ aria-busy={pending} onClick={() => startTransition(() => void refreshAll())} className="flex shrink-0 items-center justify-center gap-2 border border-zinc-800 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-400 transition hover:border-[#C5A55A] hover:text-[#C5A55A] disabled:opacity-50">
           <RefreshCw size={15} className={pending ? "animate-spin" : ""} /> Actualizar
         </button>
       </div>
@@ -163,7 +164,9 @@ export default function ReportsDashboard({
               <label className="space-y-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Empleada<select value={filters.employeeId || ""} onChange={(event) => setFilters((current) => ({ ...current, employeeId: event.target.value || undefined }))} className="block w-full border border-zinc-800 bg-black px-3 py-3 text-sm font-normal normal-case tracking-normal text-zinc-300 outline-none focus:border-[#C5A55A]"><option value="">Todas</option>{employeeOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
               <DateFilter label="Desde" value={filters.from || ""} onChange={(value) => setFilters((current) => ({ ...current, from: value || undefined }))} />
               <DateFilter label="Hasta" value={filters.to || ""} onChange={(value) => setFilters((current) => ({ ...current, to: value || undefined }))} />
-              <div className="flex items-end gap-2"><button disabled={pending} onClick={applyFilters} className="flex-1 bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black disabled:opacity-50">Filtrar</button><button title="Limpiar filtros" disabled={pending} onClick={clearFilters} className="border border-zinc-800 p-3 text-zinc-500 hover:text-white"><FilterX size={18} /></button></div>
+              <div className="flex items-end gap-2"><button disabled={pending}
+ aria-busy={pending} onClick={applyFilters} className="flex-1 bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black disabled:opacity-50">Filtrar</button><button title="Limpiar filtros" disabled={pending}
+ aria-busy={pending} onClick={clearFilters} className="border border-zinc-800 p-3 text-zinc-500 hover:text-white"><FilterX size={18} /></button></div>
             </div>
           </section>
 
@@ -176,7 +179,9 @@ export default function ReportsDashboard({
             </div>
             <div className="divide-y divide-zinc-900 md:hidden">{reports.items.map((report) => <ReportCard key={report.id} report={report} onClick={() => setSelectedId(report.id)} />)}</div>
             {!reports.items.length && <div className="flex min-h-52 flex-col items-center justify-center gap-3 p-8 text-center text-zinc-600"><CircleAlert size={28} /><p className="text-sm">No hay reportes que coincidan con los filtros.</p></div>}
-            <footer className="flex flex-col items-center justify-between gap-3 border-t border-zinc-800 px-5 py-4 text-xs text-zinc-600 sm:flex-row"><span>{reports.total} reporte{reports.total === 1 ? "" : "s"} · Página {reports.page} de {Math.max(reports.pages, 1)}</span><div className="flex gap-2"><button disabled={pending || reports.page <= 1} onClick={() => changePage(reports.page - 1)} className="border border-zinc-800 p-2 text-zinc-400 disabled:opacity-30"><ChevronLeft size={16} /></button><button disabled={pending || reports.page >= reports.pages} onClick={() => changePage(reports.page + 1)} className="border border-zinc-800 p-2 text-zinc-400 disabled:opacity-30"><ChevronRight size={16} /></button></div></footer>
+            <footer className="flex flex-col items-center justify-between gap-3 border-t border-zinc-800 px-5 py-4 text-xs text-zinc-600 sm:flex-row"><span>{reports.total} reporte{reports.total === 1 ? "" : "s"} · Página {reports.page} de {Math.max(reports.pages, 1)}</span><div className="flex gap-2"><button disabled={pending || reports.page <= 1}
+ aria-busy={pending} onClick={() => changePage(reports.page - 1)} className="border border-zinc-800 p-2 text-zinc-400 disabled:opacity-30"><ChevronLeft size={16} /></button><button disabled={pending || reports.page >= reports.pages}
+ aria-busy={pending} onClick={() => changePage(reports.page + 1)} className="border border-zinc-800 p-2 text-zinc-400 disabled:opacity-30"><ChevronRight size={16} /></button></div></footer>
           </section>
         </div>
       )}

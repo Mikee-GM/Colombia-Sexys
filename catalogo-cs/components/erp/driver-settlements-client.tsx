@@ -242,6 +242,7 @@ export default function DriverSettlementsClient({
                       <button
                         type="button"
                         disabled={pending}
+                        aria-busy={pending}
                         onClick={() => handleSettle(grupo.id)}
                         className="rounded-xl border border-[#C5A55A] px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-50"
                       >
@@ -252,6 +253,7 @@ export default function DriverSettlementsClient({
                       <button
                         type="button"
                         disabled={pending}
+                        aria-busy={pending}
                         onClick={() => handleUndo(grupo.id)}
                         className="rounded-xl border border-zinc-800 px-3.5 py-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500 transition-colors hover:border-zinc-600 hover:text-zinc-300 disabled:opacity-50"
                       >

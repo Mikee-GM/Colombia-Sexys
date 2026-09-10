@@ -132,6 +132,7 @@ export default function CorregirEstadoViaje({
         <button
           type="button"
           disabled={pendiente}
+          aria-busy={pendiente}
           onClick={corregir}
           className="rounded-lg border border-[#C5A55A]/50 py-2 text-[10px] font-bold uppercase tracking-wider text-[#E8D5A3] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-50"
         >

@@ -48,7 +48,8 @@ export default function EvidenceClient({ initialPage }: { initialPage: EvidenceP
       <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-950 p-4 sm:grid-cols-2">
         <label>
           <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-[#C5A55A]">Tipo</span>
-          <select className={`${inputClass} w-full`} value={kind} onChange={(event) => applyKind(event.target.value as typeof kind)} disabled={pending}>
+          <select className={`${inputClass} w-full`} value={kind} onChange={(event) => applyKind(event.target.value as typeof kind)} disabled={pending}
+ aria-busy={pending}>
             <option value="">Todas</option>
             <option value="uber">Capturas de Uber</option>
             <option value="transferencia">Comprobantes</option>
@@ -56,7 +57,8 @@ export default function EvidenceClient({ initialPage }: { initialPage: EvidenceP
         </label>
         <label>
           <span className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-[#C5A55A]">Estado</span>
-          <select className={`${inputClass} w-full`} value={status} onChange={(event) => applyStatus(event.target.value)} disabled={pending}>
+          <select className={`${inputClass} w-full`} value={status} onChange={(event) => applyStatus(event.target.value)} disabled={pending}
+ aria-busy={pending}>
             <option value="">Todos</option>
             <option value="ALMACENADA">Almacenada</option>
             <option value="PROCESANDO">Procesando</option>
@@ -84,7 +86,8 @@ export default function EvidenceClient({ initialPage }: { initialPage: EvidenceP
       )}
 
       {page.nextCursor && (
-        <button type="button" disabled={pending} onClick={() => load({ kind: kind || undefined, status: status || undefined }, true)} className="w-full rounded-xl border border-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] disabled:opacity-50">
+        <button type="button" disabled={pending}
+ aria-busy={pending} onClick={() => load({ kind: kind || undefined, status: status || undefined }, true)} className="w-full rounded-xl border border-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] disabled:opacity-50">
           {pending ? "Cargando" : "Cargar más"}
         </button>
       )}
@@ -142,6 +145,7 @@ function EvidenceCard({
             <button
               type="button"
               disabled={pending}
+              aria-busy={pending}
               onClick={() => void review("aprobado")}
               className="rounded-xl border border-emerald-600 px-4 py-3 text-xs font-bold uppercase tracking-wider text-emerald-500 disabled:opacity-50"
             >
@@ -150,6 +154,7 @@ function EvidenceCard({
             <button
               type="button"
               disabled={pending}
+              aria-busy={pending}
               onClick={() => void review("rechazado")}
               className="rounded-xl border border-red-600 px-4 py-3 text-xs font-bold uppercase tracking-wider text-red-500 disabled:opacity-50"
             >

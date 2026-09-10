@@ -536,6 +536,7 @@ export default function DisciplinaClient({
                   type="button"
                   onClick={() => resolveAppealDecision(appeal, "upheld")}
                   disabled={pending}
+                  aria-busy={pending}
                   className="rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-zinc-300 transition-colors hover:text-white disabled:opacity-40"
                 >
                   Confirmar calificacion
@@ -545,6 +546,7 @@ export default function DisciplinaClient({
                   type="button"
                   onClick={() => resolveAppealDecision(appeal, "overturned")}
                   disabled={pending}
+                  aria-busy={pending}
                   className="rounded-xl border border-[#C5A55A] px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-40"
                 >
                   Anular calificacion
@@ -703,6 +705,7 @@ export default function DisciplinaClient({
                             openDossier(report.subjectType, report.subjectId)
                           }
                           disabled={pending}
+                          aria-busy={pending}
                           className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-zinc-300 transition-colors hover:text-white disabled:opacity-40"
                         >
                           Expediente
@@ -719,6 +722,7 @@ export default function DisciplinaClient({
                                 })
                               }
                               disabled={pending}
+                              aria-busy={pending}
                               className="rounded-xl border border-[#C5A55A] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-40"
                             >
                               Confirmar
@@ -733,6 +737,7 @@ export default function DisciplinaClient({
                                 })
                               }
                               disabled={pending}
+                              aria-busy={pending}
                               className="rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-zinc-400 transition-colors hover:text-white disabled:opacity-40"
                             >
                               Desestimar
@@ -915,6 +920,7 @@ export default function DisciplinaClient({
                     setSanctionData({ dossier: selected, type: "suspension", days })
                   }
                   disabled={pending}
+                  aria-busy={pending}
                   className="rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-zinc-300 transition-colors hover:text-white disabled:opacity-40"
                 >
                   {`Suspender ${days} ${days === 1 ? "dia" : "dias"}`}
@@ -930,6 +936,7 @@ export default function DisciplinaClient({
                   setCustomReason("");
                 }}
                 disabled={pending}
+                aria-busy={pending}
                 className="rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-zinc-300 transition-colors hover:text-white disabled:opacity-40"
               >
                 Suspension personalizada
@@ -943,6 +950,7 @@ export default function DisciplinaClient({
                   setFineReason("");
                 }}
                 disabled={pending}
+                aria-busy={pending}
                 className="rounded-xl border border-[#C5A55A] px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-40"
               >
                 Aplicar multa
@@ -954,6 +962,7 @@ export default function DisciplinaClient({
                   setSanctionData({ dossier: selected, type: "permanent_ban" })
                 }
                 disabled={pending}
+                aria-busy={pending}
                 className="rounded-xl border border-red-400/25 bg-red-400/[0.08] px-3.5 py-2 text-[11px] font-bold uppercase tracking-[0.05em] text-red-400 transition-colors hover:bg-red-400/20 disabled:opacity-40"
               >
                 Baneo permanente
@@ -989,6 +998,7 @@ export default function DisciplinaClient({
                       <button
                         type="button"
                         disabled={pending}
+                        aria-busy={pending}
                         onClick={() =>
                           setRevokeData({ item, dossier: selected })
                         }
@@ -1113,6 +1123,7 @@ export default function DisciplinaClient({
               <button
                 type="button"
                 disabled={pending}
+                aria-busy={pending}
                 onClick={handleConfirmFine}
                 className="rounded-xl bg-[#C5A55A] px-4 py-2.5 text-xs font-bold uppercase tracking-[0.05em] text-black transition-colors hover:bg-[#d8b769] disabled:opacity-50"
               >

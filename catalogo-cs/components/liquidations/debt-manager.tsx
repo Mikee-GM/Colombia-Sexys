@@ -144,10 +144,12 @@ export default function DebtManager({ employeeId, employeeName }: Props) {
             placeholder="Préstamo para pasajes"
           />
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowForm(false)} disabled={submitting}>
+            <Button variant="outline" onClick={() => setShowForm(false)} disabled={submitting}
+ aria-busy={submitting}>
               Cancelar
             </Button>
-            <Button onClick={handleCreate} disabled={submitting}>Guardar</Button>
+            <Button onClick={handleCreate} disabled={submitting}
+ aria-busy={submitting}>Guardar</Button>
           </div>
         </div>
       )}
@@ -188,6 +190,7 @@ export default function DebtManager({ employeeId, employeeName }: Props) {
                         type="button"
                         onClick={() => handleDeleteDebt(debt.id)}
                         disabled={submitting}
+                        aria-busy={submitting}
                         className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-800 hover:text-red-400"
                         aria-label={`Retirar deuda ${debt.description}`}
                       >
@@ -208,6 +211,7 @@ export default function DebtManager({ employeeId, employeeName }: Props) {
                               type="button"
                               onClick={() => handleDeletePayment(debt.id, payment.id)}
                               disabled={submitting}
+                              aria-busy={submitting}
                               className="p-1 text-zinc-600 hover:text-red-400"
                               aria-label="Eliminar abono"
                             >
@@ -241,7 +245,8 @@ export default function DebtManager({ employeeId, employeeName }: Props) {
                             compact
                           />
                           <div className="flex items-end gap-2">
-                            <Button size="sm" onClick={() => handleAddPayment(debt.id)} disabled={submitting}>Abonar</Button>
+                            <Button size="sm" onClick={() => handleAddPayment(debt.id)} disabled={submitting}
+ aria-busy={submitting}>Abonar</Button>
                             <Button size="sm" variant="ghost" onClick={() => setPaymentDebtId(null)}>Cancelar</Button>
                           </div>
                         </div>

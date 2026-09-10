@@ -235,6 +235,7 @@ export default function SolicitudesListado({
                 <button
                   type="button"
                   disabled={cargando}
+                  aria-busy={cargando}
                   onClick={() => resolver(solicitud.id, aprobarSolicitudManual)}
                   className="rounded-xl border border-[#C5A55A] px-5 py-2.5 text-xs uppercase tracking-[0.14em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-50"
                 >
@@ -243,6 +244,7 @@ export default function SolicitudesListado({
                 <button
                   type="button"
                   disabled={cargando}
+                  aria-busy={cargando}
                   onClick={() => resolver(solicitud.id, rechazarSolicitudManual)}
                   className="rounded-xl border border-zinc-700 px-5 py-2.5 text-xs uppercase tracking-[0.14em] text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200 disabled:opacity-50"
                 >

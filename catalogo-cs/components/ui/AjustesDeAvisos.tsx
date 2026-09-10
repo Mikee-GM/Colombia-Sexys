@@ -105,6 +105,7 @@ export default function AjustesDeAvisos() {
                 role="switch"
                 aria-checked={encendido}
                 disabled={guardando !== null}
+                aria-busy={guardando === aviso.tipo}
                 onClick={() => void alternar(aviso.tipo)}
                 className="flex w-full items-start gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-zinc-900/60 disabled:opacity-60"
               >

@@ -239,6 +239,7 @@ export default function DepartmentModal({
               type="button"
               onClick={handleSubmit}
               disabled={saving || !nombre.trim()}
+              aria-busy={saving}
               className="flex items-center gap-2 rounded-xl bg-[#C5A55A] px-5 py-2.5 text-xs font-bold text-black hover:bg-[#E8D5A3] transition-all shadow-lg shadow-[#C5A55A]/20 disabled:opacity-50"
             >
               {saving ? (

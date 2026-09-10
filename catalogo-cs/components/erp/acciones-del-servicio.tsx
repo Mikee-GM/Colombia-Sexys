@@ -104,6 +104,7 @@ export default function AccionesDelServicio({
               <button
                 type="button"
                 disabled={pendiente}
+                aria-busy={pendiente}
                 onClick={() => decidir("aceptar")}
                 className="flex items-center justify-center gap-2 rounded-xl bg-[#C5A55A] py-3 text-xs font-bold uppercase tracking-wider text-black transition-colors hover:bg-[#d8b769] disabled:opacity-50"
               >
@@ -113,6 +114,7 @@ export default function AccionesDelServicio({
               <button
                 type="button"
                 disabled={pendiente}
+                aria-busy={pendiente}
                 onClick={() => decidir("rechazar")}
                 className="flex items-center justify-center gap-2 rounded-xl border border-zinc-800 py-3 text-xs font-bold uppercase tracking-wider text-zinc-400 transition-colors hover:border-zinc-600 hover:text-zinc-200 disabled:opacity-50"
               >
@@ -156,6 +158,7 @@ export default function AccionesDelServicio({
         <CancelServiceDialog
           serviceLabel={etiqueta}
           disabled={pendiente}
+          aria-busy={pendiente}
           onConfirm={cancelar}
           onCancel={() => setCancelando(false)}
         />

@@ -277,6 +277,7 @@ export default function FotosClient({
                   <button
                     type="button"
                     disabled={pending}
+                    aria-busy={pending}
                     onClick={() => revisar(submission, "aprobar_publica")}
                     className="flex min-w-0 items-center justify-center gap-1 rounded-[9px] border border-green-400/25 bg-green-400/[0.08] px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-green-400 transition-colors hover:bg-green-400/20 disabled:opacity-50"
                   >
@@ -287,6 +288,7 @@ export default function FotosClient({
                   <button
                     type="button"
                     disabled={pending}
+                    aria-busy={pending}
                     onClick={() => revisar(submission, "aprobar_privada")}
                     className="flex min-w-0 items-center justify-center gap-1 rounded-[9px] border border-[#C5A55A]/30 bg-[#C5A55A]/10 px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A]/20 disabled:opacity-50"
                   >
@@ -297,6 +299,7 @@ export default function FotosClient({
                   <button
                     type="button"
                     disabled={pending}
+                    aria-busy={pending}
                     onClick={() => setPorRechazar(submission)}
                     className="col-span-2 flex min-w-0 items-center justify-center gap-1 rounded-[9px] border border-red-400/25 bg-red-400/[0.08] px-1.5 py-2 text-[10px] font-bold uppercase tracking-[0.04em] text-red-400 transition-colors hover:bg-red-400/20 disabled:opacity-50"
                   >
@@ -372,6 +375,7 @@ export default function FotosClient({
                     <button
                       type="button"
                       disabled={pending}
+                      aria-busy={pending}
                       onClick={() => setPorBorrar(submission)}
                       className="inline-flex items-center gap-1.5 rounded-[9px] border border-red-400/25 bg-red-400/[0.08] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.04em] text-red-400 transition-colors hover:bg-red-400/20 disabled:opacity-50"
                       title="Borrar la foto y retirarla del catalogo"

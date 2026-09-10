@@ -408,6 +408,7 @@ export default function SolicitarServicio() {
             type="button"
             onClick={() => void enviar()}
             disabled={enviando}
+            aria-busy={enviando}
             className="w-full rounded-xl border border-[#C5A55A] bg-[#C5A55A] px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-black transition-opacity disabled:opacity-50"
           >
             {enviando ? "Enviando..." : "Enviar a mi jefe"}

@@ -294,10 +294,12 @@ export default function ChallengesClient({
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowForm(false)} disabled={submitting}>
+            <Button variant="outline" onClick={() => setShowForm(false)} disabled={submitting}
+ aria-busy={submitting}>
               Cancelar
             </Button>
-            <Button onClick={handleCreate} disabled={submitting}>
+            <Button onClick={handleCreate} disabled={submitting}
+ aria-busy={submitting}>
               {submitting ? "Creando..." : "Crear reto"}
             </Button>
           </div>

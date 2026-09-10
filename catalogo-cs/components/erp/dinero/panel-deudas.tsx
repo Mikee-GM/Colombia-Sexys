@@ -149,6 +149,7 @@ export default function PanelDeudas({
           type="button"
           onClick={registrar}
           disabled={pendiente}
+          aria-busy={pendiente}
           className="rounded-xl border border-[#C5A55A]/50 px-4 py-2 text-[12px] font-semibold text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-40"
         >
           Registrar deuda
@@ -212,6 +213,7 @@ export default function PanelDeudas({
                       type="button"
                       onClick={() => abonar(deuda.id)}
                       disabled={pendiente || saldada}
+                      aria-busy={pendiente}
                       className="rounded-xl border border-zinc-700 px-3 py-2 text-[12px] text-zinc-200 transition-colors hover:border-[#C5A55A]/50 hover:text-[#C5A55A] disabled:opacity-40"
                     >
                       Abonar
@@ -223,6 +225,7 @@ export default function PanelDeudas({
                           type="button"
                           onClick={() => quitarDeuda(deuda.id)}
                           disabled={pendiente}
+                          aria-busy={pendiente}
                           className="text-[12px] font-semibold text-red-400 disabled:opacity-40"
                         >
                           Confirmar borrado
@@ -265,6 +268,7 @@ export default function PanelDeudas({
                             type="button"
                             onClick={() => quitarAbono(deuda.id, pago.id)}
                             disabled={pendiente || !esAdmin}
+                            aria-busy={pendiente}
                             className="text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             Deshacer

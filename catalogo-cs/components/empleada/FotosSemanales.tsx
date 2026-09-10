@@ -295,6 +295,7 @@ export default function SubirFotosSemanales({
                   type="button"
                   onClick={() => quitar(indice)}
                   disabled={subiendo}
+                  aria-busy={subiendo}
                   className="absolute right-1 top-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white transition-colors hover:bg-red-500 disabled:opacity-50"
                 >
                   Quitar
@@ -311,6 +312,7 @@ export default function SubirFotosSemanales({
           type="button"
           onClick={subir}
           disabled={subiendo || seleccion.length === 0}
+          aria-busy={subiendo}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#C5A55A] bg-transparent px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#E8D5A3] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Upload className="h-3.5 w-3.5" />

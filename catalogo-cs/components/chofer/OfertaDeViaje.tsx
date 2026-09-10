@@ -93,6 +93,7 @@ export default function OfertaDeViaje({ oferta }: { oferta: DriverPortalOffer })
         <button
           type="button"
           disabled={pendiente || agotada}
+          aria-busy={pendiente}
           onClick={() => responder(() => aceptarOfertaDeViaje(oferta.id))}
           className="flex items-center justify-center gap-2 rounded-xl bg-[#C5A55A] py-4 text-xs font-bold uppercase tracking-wider text-black transition-colors hover:bg-[#d8b769] disabled:opacity-50"
         >
@@ -102,6 +103,7 @@ export default function OfertaDeViaje({ oferta }: { oferta: DriverPortalOffer })
         <button
           type="button"
           disabled={pendiente}
+          aria-busy={pendiente}
           onClick={() => responder(() => rechazarOfertaDeViaje(oferta.id))}
           className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400 transition-colors hover:border-red-500/60 hover:text-red-300 disabled:opacity-50"
         >

@@ -95,6 +95,97 @@ body {
   animation: shimmerGold 2.5s ease-in-out infinite;
 }
 
+/*
+ * Un boton esperando respuesta.
+ *
+ * Antes, esperar al servidor se veia solo como un boton desactivado con el
+ * color un poco mas bajo: exactamente igual que un boton que todavia no se
+ * puede pulsar. En un telefono con mala señal esa diferencia importa, porque
+ * sin señal de que el toque llego la gente vuelve a pulsar.
+ *
+ * Se resuelve aqui y no boton por boton porque son mas de sesenta repartidos
+ * por todo el panel, cada uno con sus clases: lo unico que tiene que declarar
+ * cada uno es `aria-busy`, que ademas es lo que lo anuncia a un lector de
+ * pantalla. El indicador hereda `currentColor`, asi que funciona igual sobre
+ * un boton dorado, uno verde o uno rojo.
+ *
+ * El `!important` de la opacidad es deliberado: los botones traen su propio
+ * `disabled:opacity-40` de Tailwind y, como durante la peticion el boton esta
+ * desactivado, esa regla apagaba tambien al indicador. Esperando no es lo
+ * mismo que desactivado y no puede verse igual.
+ */
+button[aria-busy="true"],
+a[aria-busy="true"] {
+  opacity: 1 !important;
+  cursor: wait;
+}
+
+button[aria-busy="true"]::after,
+a[aria-busy="true"]::after {
+  content: "";
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-left: 0.5em;
+  vertical-align: -0.12em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: girar 0.7s linear infinite;
+}
+
+/*
+ * Un boton con icono no lleva dos simbolos.
+ *
+ * Muchos botones del panel son solo un icono dentro de un cuadro de 40 px:
+ * añadirles un circulo al lado los desborda y empuja el icono. Y en los que
+ * llevan icono y texto, dos simbolos a la vez es ruido. En los dos casos late
+ * el icono que ya tienen, que dice lo mismo y no mueve nada de sitio.
+ *
+ * `svg:only-child` los reconoce a los dos: el texto suelto no cuenta como
+ * hijo, asi que la regla cubre tanto el boton de solo icono como el de icono
+ * mas etiqueta. Los que son puro texto se quedan con el indicador que gira.
+ */
+button[aria-busy="true"]:has(> svg:only-child)::after,
+a[aria-busy="true"]:has(> svg:only-child)::after {
+  content: none;
+}
+
+button[aria-busy="true"]:has(> svg:only-child) > svg,
+a[aria-busy="true"]:has(> svg:only-child) > svg {
+  animation: latir 0.9s ease-in-out infinite;
+}
+
+/*
+ * Quien pidio reducir el movimiento no ve girar nada, y un boton quieto vuelve
+ * a no decir si el toque llego. Late en vez de girar: comunica lo mismo sin
+ * desplazamiento.
+ */
+@media (prefers-reduced-motion: reduce) {
+  button[aria-busy="true"]::after,
+  a[aria-busy="true"]::after {
+    animation: latir 1.4s ease-in-out infinite;
+    border-right-color: currentColor;
+  }
+}
+
+/*
+ * Giro del indicador de carga.
+ *
+ * Se define aqui y no con `animate-spin` de Tailwind porque hace falta la
+ * pareja: quien tiene activado "reducir movimiento" en su telefono no ve girar
+ * nada, y un boton que se queda quieto durante la espera vuelve a no decir si
+ * el toque llego. En su lugar late, que comunica lo mismo sin desplazamiento.
+ */
+@keyframes girar {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes latir {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 /* Tipografia heading */
 .font-heading {
   font-family: var(--font-heading);

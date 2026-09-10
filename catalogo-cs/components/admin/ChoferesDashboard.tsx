@@ -352,6 +352,7 @@ export default function ChoferesDashboard({
                 <button
                   type="submit"
                   disabled={saving}
+                  aria-busy={saving}
                   className="w-full bg-[#C5A55A] text-black font-black text-xs tracking-[0.2em] uppercase py-4 rounded-lg mt-6 hover:bg-[#D4AF37] transition-all duration-300 disabled:opacity-50 flex justify-center items-center cursor-pointer"
                 >
                   {saving ? "Guardando..." : editingChofer ? "Guardar Cambios" : "Crear Chofer"}
@@ -540,6 +541,7 @@ function InterruptorDisponible({
       aria-checked={chofer.disponible}
       aria-label={`Disponibilidad de ${chofer.nombre}`}
       disabled={guardando}
+      aria-busy={guardando}
       onClick={async () => {
         setGuardando(true);
         try {

@@ -155,6 +155,7 @@ export default function PanelEfectivo({
               type="button"
               onClick={registrar}
               disabled={pendiente}
+              aria-busy={pendiente}
               className="rounded-xl border border-[#C5A55A]/50 px-4 py-2 text-[12px] font-semibold text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:opacity-40"
             >
               Registrar
@@ -206,6 +207,7 @@ export default function PanelEfectivo({
                         type="button"
                         onClick={() => cerrar(fila.id)}
                         disabled={pendiente}
+                        aria-busy={pendiente}
                         className="text-[12px] text-zinc-400 underline decoration-[#C5A55A]/40 underline-offset-4 hover:text-[#C5A55A] disabled:opacity-40"
                       >
                         Dar por entregada
@@ -287,6 +289,7 @@ export default function PanelEfectivo({
                           type="button"
                           onClick={() => deshacer(abono.id)}
                           disabled={pendiente}
+                          aria-busy={pendiente}
                           className="text-[12px] font-semibold text-red-400 disabled:opacity-40"
                         >
                           Confirmar

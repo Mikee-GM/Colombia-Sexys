@@ -105,6 +105,7 @@ export default function ViajeAhora({
             <button
               type="button"
               disabled={pendiente}
+              aria-busy={pendiente}
               onClick={() =>
                 avanzar(
                   () => marcarLlegadaDelViaje(viaje.id),
@@ -120,6 +121,7 @@ export default function ViajeAhora({
           <button
             type="button"
             disabled={pendiente}
+            aria-busy={pendiente}
             onClick={() =>
               avanzar(
                 () => marcarRecogidaDelViaje(viaje.id),
@@ -142,6 +144,7 @@ export default function ViajeAhora({
           <button
             type="button"
             disabled={pendiente}
+            aria-busy={pendiente}
             onClick={() =>
               avanzar(() => finalizarElViaje(viaje.id), "Viaje finalizado.")
             }

@@ -526,6 +526,7 @@ export default function ModelModal({
           <button
             onClick={onClose}
             disabled={saving || uploading}
+            aria-busy={saving}
             className="text-zinc-600 hover:text-[#C5A55A] transition-colors disabled:opacity-40"
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -712,6 +713,7 @@ export default function ModelModal({
                 <button
                   type="button"
                   disabled={uploading}
+                  aria-busy={uploading}
                   className="bg-[#C5A55A] text-black font-bold text-xs px-4 py-2 uppercase tracking-wider hover:bg-[#D4AF37] transition-colors"
                 >
                   {uploading ? "Subiendo..." : "+ Subir Foto Exclusiva"}
@@ -720,6 +722,7 @@ export default function ModelModal({
                   type="file"
                   accept="image/*"
                   disabled={uploading}
+                  aria-busy={uploading}
                   onChange={handleUploadPrivatePhoto}
                   className="absolute inset-0 opacity-0 cursor-pointer"
                 />
@@ -1156,6 +1159,7 @@ export default function ModelModal({
                         type="file"
                         accept="image/*"
                         disabled={saving}
+                        aria-busy={saving}
                         onChange={handleUploadPrincipal}
                         className="absolute inset-0 opacity-0 cursor-pointer"
                       />
@@ -1183,6 +1187,7 @@ export default function ModelModal({
                         accept="image/*"
                         multiple
                         disabled={saving || galleryItems.length >= MAX_FOTOS_GALERIA}
+                        aria-busy={saving}
                         onChange={handleUploadGaleria}
                         className="absolute inset-0 opacity-0 cursor-pointer"
                       />
@@ -1299,6 +1304,7 @@ export default function ModelModal({
             <button
               type="submit"
               disabled={saving || uploading}
+              aria-busy={saving}
               className="flex-1 bg-[#C5A55A] text-black font-black text-xs tracking-[0.2em] uppercase py-4 hover:bg-[#D4AF37] transition-colors duration-300 disabled:opacity-50"
             >
               {saving ? "Guardando..." : "Guardar Perfil"}
