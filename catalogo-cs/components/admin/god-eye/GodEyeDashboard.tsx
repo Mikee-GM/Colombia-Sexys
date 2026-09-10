@@ -50,8 +50,16 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
+import type { NombreDeSeccion } from "./secciones";
 import {
   getGodEyeOverviewAction,
   getGodEyeActorsAction,
@@ -289,11 +297,24 @@ export function ServiceProblemBadges({ service }: { service: any }) {
   );
 }
 
+type SeccionesDelGodEye = Record<NombreDeSeccion, ReactNode>;
+
+/*
+ * El God Eye era un solo bloque del tablero: desde "Tablero detallado" hacia
+ * abajo, tres mil lineas que solo se podian mover u ocultar enteras. Partirlo
+ * en cuatro componentes de verdad habria obligado a sacar sus treinta y dos
+ * estados a un contexto y a reescribir el archivo entero. Esto consigue lo
+ * mismo sin tocar el JSX: el componente sigue siendo uno, y lo que se reparte
+ * son las secciones ya construidas.
+ */
+const SeccionesContexto = createContext<SeccionesDelGodEye | null>(null);
+
 export default function GodEyeDashboard({
   initialOverview,
   initialActors,
   initialAppeals,
-}: Props) {
+  children,
+}: Props & { children?: ReactNode }) {
   const router = useRouter();
   const [overview, setOverview] = useState<GodEyeOverview>(initialOverview);
   const [actors, setActors] = useState<GodEyeActorSummary>(initialActors);
@@ -603,20 +624,17 @@ export default function GodEyeDashboard({
 
   const { metrics } = overview;
 
-  return (
-    <div className="flex flex-col gap-6 font-body text-white">
-      {/* Toast Notification */}
-      {notification && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 rounded-xl px-5 py-3 text-sm font-semibold shadow-2xl transition-all ${notification.type === "success"
-            ? "border border-[#C5A55A] bg-zinc-950 text-[#C5A55A]"
-            : "border border-red-500 bg-red-950/90 text-red-200"
-            }`}
-        >
-          {notification.msg}
-        </div>
-      )}
-
+  /*
+   * Cada seccion, guardada aparte.
+   *
+   * El JSX no se mueve de sitio: sigue escrito aqui dentro y sigue viendo las
+   * variables locales del componente. Lo unico que cambia es que en vez de ir
+   * uno detras de otro dentro de un `div`, cada uno queda en una constante que
+   * viaja por contexto hasta donde el tablero decida ponerlo.
+   */
+  const secciones: SeccionesDelGodEye = {
+    indicadores: (
+      <div className="flex flex-col gap-6">
       {/* BARRA SUPERIOR: KPIs EN TIEMPO REAL */}
       <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-6">
         <Link
@@ -876,6 +894,10 @@ export default function GodEyeDashboard({
         </button>
       </div>
 
+      </div>
+    ),
+    actores: (
+      <div className="flex flex-col gap-6 font-body text-white">
       {/* FILA 1: ACTORES DEL SISTEMA (IZQUIERDA) & EXPEDIENTE 360° (DERECHA) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* COLUMNA 1: 1. ACTORES DEL SISTEMA (4 Cols) */}
@@ -2280,6 +2302,10 @@ export default function GodEyeDashboard({
         </div>
       </div>
 
+      </div>
+    ),
+    servicios: (
+      <div className="flex flex-col gap-6 font-body text-white">
       {/* FILA 2: SERVICIOS & DIAGNÓSTICO (IZQUIERDA) & INTERCEPTOR DE CHAT (DERECHA) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* COLUMNA IZQUIERDA: 2. SERVICIOS & TRIANGULACIÓN + DIAGNÓSTICO CAUSAL (6 Cols) */}
@@ -2641,6 +2667,10 @@ export default function GodEyeDashboard({
         </div>
       </div>
 
+      </div>
+    ),
+    apelaciones: (
+      <div className="flex flex-col gap-6 font-body text-white">
       {/* FILA 3: BANDEJA DE APELACIONES & RESOLUCIÓN (ANCHO COMPLETO) */}
       <div className="rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-2xl">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3.5">
@@ -2709,6 +2739,30 @@ export default function GodEyeDashboard({
           )}
         </div>
       </div>
+
+      </div>
+    ),
+  };
+
+  return (
+    <SeccionesContexto.Provider value={secciones}>
+      {/*
+        El aviso flotante y los modales se pintan una sola vez y fuera de las
+        secciones: son capas fijas sobre la pantalla, asi que no les importa en
+        que parte del arbol viven, y meterlos dentro de un widget los haria
+        desaparecer al ocultarlo.
+      */}
+      {/* Toast Notification */}
+      {notification && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 rounded-xl px-5 py-3 text-sm font-semibold shadow-2xl transition-all ${notification.type === "success"
+            ? "border border-[#C5A55A] bg-zinc-950 text-[#C5A55A]"
+            : "border border-red-500 bg-red-950/90 text-red-200"
+            }`}
+        >
+          {notification.msg}
+        </div>
+      )}
 
       {/* MODAL DE SANCIÓN DIRECTA */}
       {showSanctionModal && (
@@ -3122,6 +3176,20 @@ export default function GodEyeDashboard({
           }}
         />
       )}
-    </div>
+      {children}
+    </SeccionesContexto.Provider>
   );
 }
+
+/**
+ * Coloca una seccion del God Eye donde el tablero la haya puesto.
+ *
+ * Tiene que quedar por debajo de `GodEyeDashboard` en el arbol; si no, no hay
+ * contexto que leer y no pinta nada en vez de reventar.
+ */
+export function SeccionGodEye({ nombre }: { nombre: NombreDeSeccion }) {
+  const secciones = useContext(SeccionesContexto);
+  if (!secciones) return null;
+  return <>{secciones[nombre]}</>;
+}
+

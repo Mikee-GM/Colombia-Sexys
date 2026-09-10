@@ -13,7 +13,10 @@ import LiveMapDynamic from "@/components/dashboard/LiveMapDynamic";
 import { getEmployees } from "@/lib/data/employees";
 import { getDrivers } from "@/lib/data/drivers";
 import { getDashboardLayout } from "@/lib/actions/dashboard-layout";
-import GodEyeDashboard from "@/components/admin/god-eye/GodEyeDashboard";
+import GodEyeDashboard, {
+  SeccionGodEye,
+} from "@/components/admin/god-eye/GodEyeDashboard";
+import { SECCIONES_DEL_GOD_EYE } from "@/components/admin/god-eye/secciones";
 import AvisosDeChoferes from "@/components/admin/AvisosDeChoferes";
 import {
   getGodEyeOverviewAction,
@@ -128,20 +131,30 @@ export default async function DashboardPage() {
           ),
         } satisfies BloqueTablero,
         {
-          id: "tablero-detallado",
-          titulo: "Tablero detallado",
+          id: "separador-detallado",
+          titulo: "Separador del tablero detallado",
           anchoCompleto: true,
-          contenido: (
-            <div className="flex flex-col gap-6">
-              <SeparadorTableroDetallado />
-              <GodEyeDashboard
-                initialOverview={overview}
-                initialActors={actors}
-                initialAppeals={appeals}
-              />
-            </div>
-          ),
-        },
+          contenido: <SeparadorTableroDetallado />,
+        } satisfies BloqueTablero,
+        /*
+         * El God Eye, repartido en cuatro bloques.
+         *
+         * Antes entraba entero como un solo bloque llamado "Tablero
+         * detallado": desde ahi hacia abajo eran tres mil lineas que solo se
+         * podian mover u ocultar a la vez. Cada seccion es ahora un widget
+         * propio, aunque las cuatro siguen saliendo del mismo componente y
+         * comparten su estado --seleccionar un actor a la izquierda sigue
+         * abriendo su expediente a la derecha--.
+         */
+        ...SECCIONES_DEL_GOD_EYE.map(
+          (seccion) =>
+            ({
+              id: `god-eye-${seccion.nombre}`,
+              titulo: seccion.titulo,
+              anchoCompleto: true,
+              contenido: <SeccionGodEye nombre={seccion.nombre} />,
+            }) satisfies BloqueTablero,
+        ),
       ],
     },
   ];
@@ -153,7 +166,18 @@ export default async function DashboardPage() {
         description="Estado de la operacion, alertas y accesos a cada modulo"
       />
 
-      <TableroPersonalizable grupos={grupos} layoutInicial={layout} />
+      {/*
+        El God Eye envuelve al tablero porque es quien tiene el estado de sus
+        cuatro secciones: cada bloque solo coloca la que le toca, y para eso
+        tiene que quedar por debajo en el arbol.
+      */}
+      <GodEyeDashboard
+        initialOverview={overview}
+        initialActors={actors}
+        initialAppeals={appeals}
+      >
+        <TableroPersonalizable grupos={grupos} layoutInicial={layout} />
+      </GodEyeDashboard>
 
       {/* No pinta nada: escucha los rechazos de ofertas y levanta el aviso. */}
       <AvisosDeChoferes />
