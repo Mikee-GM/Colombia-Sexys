@@ -51,6 +51,26 @@ describe('RealtimeEventsService', () => {
     second.unsubscribe();
   });
 
+  /**
+   * Lo emitido al canal compartido llegaba solo a los administradores, asi que
+   * en el panel de un jefe no aparecia nada de lo general --una modelo que
+   * queda libre, un chofer que rechaza, una sancion-- hasta recargar a mano.
+   */
+  it('entrega al jefe tambien lo que va al canal compartido', () => {
+    const service = new RealtimeEventsService(busDeMentira());
+    const eventos: unknown[] = [];
+    const subscription = service
+      .getBossStream('boss-1')
+      .subscribe((event) => eventos.push(event.data));
+
+    service.emitToJefes({ type: 'employee_availability_updated' });
+
+    expect(eventos).toContainEqual({
+      type: 'employee_availability_updated',
+    });
+    subscription.unsubscribe();
+  });
+
   it('publica para las demás réplicas además de entregar en local', () => {
     const bus = busDeMentira();
     const service = new RealtimeEventsService(bus);
