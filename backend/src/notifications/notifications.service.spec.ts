@@ -27,8 +27,9 @@ function proveedorDeMentira(
   respuestas: Record<string, ResultadoEnvio>,
   configurado = true,
 ) {
-  const enviar = jest.fn((d: { endpoint: string }) =>
-    Promise.resolve(respuestas[d.endpoint] ?? { estado: 'enviado' }),
+  const enviar = jest.fn(
+    (d: { endpoint: string }, _carga: Record<string, unknown>) =>
+      Promise.resolve(respuestas[d.endpoint] ?? { estado: 'enviado' }),
   );
   const proveedor = {
     estaConfigurado: () => configurado,

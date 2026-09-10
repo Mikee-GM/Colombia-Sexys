@@ -3045,19 +3045,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const ofertaExpiraEn = new Date(Date.now() + DISPATCH_OFFER_TTL_MS);
     await this.viajesRepository.update(viajeId, { ofertaExpiraEn });
 
-    // La oferta hasta ahora solo llegaba por Telegram: el portal del chofer no
-    // se enteraba de nada aunque estuviera abierto en ese momento.
-    this.realtimeEventsService.emitToDriver(nearestDriver.id, {
-      type: 'driver.trip_offer',
-      data: {
-        viajeId: viaje.id,
-        tipo: viaje.tipo,
-        empleadaNombre: viaje.servicio.empleada.nombreArtistico,
-        distanciaKm: Number(distancia.toFixed(2)),
-        expiraEn: ofertaExpiraEn.toISOString(),
-      },
-    });
-
     /*
      * Aviso push de la oferta.
      *

@@ -4,7 +4,9 @@ import { PushSubscription } from './entities/push-subscription.entity';
 
 describe('PushSubscriptionsService', () => {
   it('da de alta por endpoint, de modo que un navegador no genere dos destinos', async () => {
-    const query = jest.fn(() => Promise.resolve([]));
+    const query = jest.fn((_sql: string, _params?: unknown[]) =>
+      Promise.resolve([]),
+    );
     const service = new PushSubscriptionsService({
       query,
     } as unknown as Repository<PushSubscription>);
