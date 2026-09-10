@@ -65,6 +65,8 @@ import {
   sanitizeAiReply,
   stripControlMarkers,
   stripFrontDeskOffer,
+  faltaCondicionDeHigiene,
+  pickRecordatorioDeHigiene,
   trimChatHistory,
   TRIO_REQUEST_COOLDOWN_MS,
   type ProhibitedCategory,
@@ -209,6 +211,8 @@ interface SessionData {
   ultimaPeticionTrioAt?: string;
   /** Último desvío en personaje usado, para no repetirlo seguido. */
   ultimoDesvio?: string;
+  /** El ultimo recordatorio de higiene usado, para variar el siguiente. */
+  ultimoRecordatorioHigiene?: string;
   groupRequestId?: string;
   extraSelection?: {
     servicioId: string;
@@ -1693,6 +1697,41 @@ export class TelegramBookingUpdate {
       });
     }
     return boss;
+  }
+
+  /**
+   * Espera lo que tardaria en escribir ese mensaje, con el "escribiendo" puesto.
+   *
+   * Existe aparte de `sendDelayedReply` porque el resumen de la reserva se
+   * manda con `ctx.telegram.sendMessage` y no con `ctx.reply`: quien cierra la
+   * reserva puede ser el jefe desde su propio chat, asi que el destinatario se
+   * pasa a mano. La espera es un poco mas larga que la de una respuesta
+   * cualquiera, porque el mensaje tambien es mas largo.
+   */
+  private async pausaComoSiLoEstuvieraEscribiendo(
+    ctx: BotContext,
+    telegramId: string,
+    texto: string,
+  ): Promise<void> {
+    try {
+      const lectura = 2200 + Math.floor(Math.random() * 900);
+      const escritura = Math.min(Math.max(texto.length * 42, 2500), 7000);
+      const total = Math.min(lectura + escritura, 11000);
+
+      await ctx.telegram
+        .sendChatAction(telegramId, 'typing')
+        .catch(() => undefined);
+      // Telegram apaga el "escribiendo" a los cinco segundos, asi que se
+      // refresca por el camino en vez de dejar el chat quieto.
+      const mitad = Math.floor(total / 2);
+      await new Promise((resolve) => setTimeout(resolve, mitad));
+      await ctx.telegram
+        .sendChatAction(telegramId, 'typing')
+        .catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, total - mitad));
+    } catch {
+      // Una pausa que falla no puede impedir que el resumen salga.
+    }
   }
 
   async sendDelayedReply(ctx: BotContext, text: string) {
@@ -5970,36 +6009,67 @@ export class TelegramBookingUpdate {
       );
       const total = totalBase + transportCharge;
 
-      let msgExito = isProgramado
-        ? `*Resumen de nuestra cita programada:*\n\n`
-        : `*Resumen de nuestra cita:*\n\n`;
-      if (isProgramado && nuevoServicio.fechaProgramada) {
-        msgExito += `*Fecha y hora:* ${new Date(nuevoServicio.fechaProgramada).toLocaleString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}\n`;
-      }
-      if (isOpenEnded) {
-        msgExito += `*Tiempo:* indefinido (se cuenta al terminar)\n`;
-        msgExito += `*Tarifa:* ${formatoMoneda.format(ratePerHour)} por hora\n`;
-        if (transportCharge > 0) {
-          msgExito += `*Transporte:* ${formatoMoneda.format(transportCharge)}\n`;
-        }
-        msgExito += `*Cobro:* al finalizar, redondeando hacia arriba a partir de los 15 minutos\n`;
-      } else {
-        msgExito += `*Tiempo:* ${duracionPactadaHoras} hora(s)\n`;
-        if (transportCharge > 0) {
-          msgExito += `*Total a pagar:* ${formatoMoneda.format(total)} (incluye transporte)\n`;
-        } else {
-          msgExito += `*Total a pagar:* ${formatoMoneda.format(total)}\n`;
-        }
-      }
-      const ubicacionNombre =
-        nuevoServicio.locationNameSnapshot || 'Ubicación enviada';
-      msgExito += `*Lugar:* ${ubicacionNombre}\n`;
-      msgExito += `*Método de pago:* ${metodoPago.toUpperCase()}\n\n`;
+      /*
+       * El resumen, dicho por ella.
+       *
+       * Antes era un bloque con etiquetas en negrita --"*Tiempo:*",
+       * "*Total a pagar:*"-- que ademas salia sin `parse_mode`, asi que al
+       * cliente le llegaban los asteriscos en crudo. Leido desde el otro lado
+       * era un recibo emitido por una maquina justo en el momento en el que
+       * llevaba media hora hablando con una persona.
+       *
+       * Lleva exactamente los mismos datos: las horas, el lugar, la forma de
+       * pago y el total. Lo que cambia es que van dichos en una frase seguida,
+       * como los repetiria ella para confirmar que entendio bien.
+       */
+      const lugarDicho =
+        nuevoServicio.locationNameSnapshot ||
+        'el lugar que me mandaste en el pin';
+      const pagoDicho =
+        metodoPago === 'mixto'
+          ? 'una parte en transferencia y el resto en efectivo'
+          : metodoPago === 'efectivo'
+            ? 'en efectivo'
+            : metodoPago === 'tarjeta'
+              ? 'con tarjeta'
+              : 'por transferencia';
+
+      const cuando =
+        isProgramado && nuevoServicio.fechaProgramada
+          ? ` Nos vemos el ${new Date(nuevoServicio.fechaProgramada).toLocaleString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}.`
+          : '';
+
+      const horasDichas = isOpenEnded
+        ? `el tiempo lo dejamos abierto`
+        : duracionPactadaHoras === 1
+          ? `una horita`
+          : `${duracionPactadaHoras} horitas`;
+
+      const dineroDicho = isOpenEnded
+        ? `Te cobro ${formatoMoneda.format(ratePerHour)} por hora y las contamos al terminar, redondeando para arriba desde los quince minutos${transportCharge > 0 ? `, mas ${formatoMoneda.format(transportCharge)} del transporte` : ''}.`
+        : transportCharge > 0
+          ? `Serian ${formatoMoneda.format(total)} en total, ahi ya te va incluido el transporte.`
+          : `Serian ${formatoMoneda.format(total)} en total.`;
+
+      const cierre = esperaComprobante
+        ? 'Dejame checar los ultimos detallitos y ahorita te paso los datos por si quieres ir adelantando la transferencia.'
+        : 'Dejame checar los ultimos detallitos y en un momentico te confirmo por aqui.';
+
       // Nunca damos el servicio por aceptado: eso solo lo confirma la
-      // autorización posterior.
-      msgExito += esperaComprobante
-        ? `¿Todo correcto mor? Déjame checar los últimos detallitos. Ahorita te paso los datos por si quieres ir adelantando la transferencia 😘`
-        : `¿Todo correcto mor? Déjame checar los últimos detallitos y en un momentico te confirmo por aquí 😘`;
+      // autorización posterior, y por eso el cierre no promete nada.
+      const msgExito =
+        `Listo mi amor, entonces quedamos asi: ${horasDichas} conmigo en ${lugarDicho}, ` +
+        `y me pagas ${pagoDicho}.${cuando} ${dineroDicho} ${cierre}`;
+
+      /*
+       * Y no de inmediato.
+       *
+       * Salir en el mismo instante en que el cliente manda su ultimo dato es lo
+       * que mas delata que detras hay un sistema: nadie escribe un resumen
+       * completo en cero segundos. Se espera lo que tardaria en redactarlo, con
+       * el "escribiendo" puesto, igual que el resto de sus mensajes.
+       */
+      await this.pausaComoSiLoEstuvieraEscribiendo(ctx, telegramId, msgExito);
 
       const msg = await ctx.telegram.sendMessage(telegramId, msgExito, {
         ...Markup.removeKeyboard(),
@@ -8560,7 +8630,26 @@ export class TelegramBookingUpdate {
         const modelPhotoMatch = responseText.match(
           /\[SEND_MODEL_PHOTO:\s*(\{.*?\})\]/,
         );
-        const cleanText = this.dressAiReply(responseText, session);
+        /*
+         * La condicion de higiene no puede depender de que se acuerde.
+         *
+         * El prompt la pide en tres sitios y aun asi se la salta cuando recita
+         * la lista de extras con sus precios. Es lo que evita la discusion en
+         * el motel --el cliente llega creyendo que el extra esta pactado-- asi
+         * que si nombra un extra y no dice de que depende, se le añade aqui.
+         */
+        let cleanText = this.dressAiReply(responseText, session);
+        const nombresDeExtras = empleadaExtras.map((extra) => extra.nombre);
+        if (faltaCondicionDeHigiene(cleanText, nombresDeExtras)) {
+          const recordatorio = pickRecordatorioDeHigiene(
+            session.ultimoRecordatorioHigiene,
+          );
+          session.ultimoRecordatorioHigiene = recordatorio;
+          cleanText = `${cleanText} ${recordatorio}`.trim();
+          this.logger.warn(
+            'La IA cotizo un extra sin la condicion de higiene; se le añade.',
+          );
+        }
 
         const hasPhotoIntent =
           responseText.includes('[SEND_EXCLUSIVE_PHOTO]') &&

@@ -543,6 +543,51 @@ export function extrasYaCotizados(
   });
 }
 
+/**
+ * La condicion que acompaña siempre a un extra: la higiene.
+ *
+ * El prompt lo pide en tres sitios distintos y aun asi el modelo se la salta
+ * cuando recita la lista de extras con sus precios. Es la condicion que evita
+ * la discusion en el motel, asi que no puede depender de que se acuerde.
+ */
+const MENCIONA_HIGIENE =
+  /\b(higiene|aseo|aseado|asead|limpio|limpia|limpieza|banad|duchad|bañad)/;
+
+/**
+ * La respuesta nombra un extra pero no dice de que depende.
+ *
+ * Solo mira los extras del catalogo de esa modelo: si no ha nombrado ninguno,
+ * no hay condicion que recordar y el mensaje se queda como esta.
+ */
+export function faltaCondicionDeHigiene(
+  reply: string,
+  nombresDeExtras: string[],
+): boolean {
+  const normalizado = normalizeForMatch(reply);
+  if (!normalizado.trim()) return false;
+  if (MENCIONA_HIGIENE.test(normalizado)) return false;
+  return nombresDeExtras.some((nombre) => {
+    const limpio = normalizeForMatch(nombre).trim();
+    return limpio.length > 2 && normalizado.includes(limpio);
+  });
+}
+
+/**
+ * Como se recuerda la condicion. Varias formas para que no suene a plantilla
+ * pegada al final de cada mensaje.
+ */
+export const RECORDATORIOS_DE_HIGIENE: string[] = [
+  'Eso sí, todo eso es si llegas bien bañadito, mor.',
+  'Ah, y eso va siempre de la mano de que vengas bien aseado.',
+  'Todo eso depende de que llegues con buena higiene, papi.',
+  'Eso sí, con higiene impecable; si no, no hay nada de eso.',
+];
+
+export function pickRecordatorioDeHigiene(previo?: string | null): string {
+  const opciones = RECORDATORIOS_DE_HIGIENE.filter((o) => o !== previo);
+  return opciones[Math.floor(Math.random() * opciones.length)];
+}
+
 const INSEGURIDAD_PATTERNS: RegExp[] = [
   /\bmi primera vez\b|\bes la primera vez que\b|\bnunca (lo )?he (estado|hecho|ido)\b/,
   /\bprimerizo\b|\bsoy virgen\b|\bno tengo experiencia\b|\bsoy inexperto\b/,
