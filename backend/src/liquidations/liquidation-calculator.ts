@@ -117,7 +117,20 @@ export function calculateCut(
     if (record.cancelled) continue;
 
     const serviceTotal = toCents(record.serviceTotal);
-    const cards = (record.cardAmounts ?? []).reduce(
+    /*
+     * `card_amounts` es `jsonb` y su tipo lo garantiza el codigo, no la base:
+     * la columna admite cualquier JSON, asi que una fila con un numero suelto
+     * en vez de una lista hacia estallar el `.reduce` y devolvia un 500 en
+     * `/admin/dinero`, en el corte semanal y en el centro de mando a la vez.
+     * Una fila mal escrita no puede tumbar tres pantallas: si no es una lista,
+     * se trata como el importe unico que quiso decir.
+     */
+    const importesDeTarjeta = Array.isArray(record.cardAmounts)
+      ? record.cardAmounts
+      : record.cardAmounts == null
+        ? []
+        : [record.cardAmounts as unknown as number];
+    const cards = importesDeTarjeta.reduce(
       (sum, amount) => sum + toCents(amount),
       0,
     );
