@@ -100,11 +100,7 @@ export type Client = {
 };
 
 export type ServiceStatus =
-  | "pendiente"
-  | "agendado"
-  | "en_curso"
-  | "finalizado"
-  | "cancelado";
+  "pendiente" | "agendado" | "en_curso" | "finalizado" | "cancelado";
 
 export type Service = {
   id: string;
@@ -183,7 +179,15 @@ export type Trip = {
   unitNumber?: number;
   choferId: string | null;
   tipo: "ida" | "regreso";
-  estado: "notificado" | "aceptado" | "en_camino" | "llegado" | "en_curso" | "finalizado" | "rechazado" | "cancelado";
+  estado:
+    | "notificado"
+    | "aceptado"
+    | "en_camino"
+    | "llegado"
+    | "en_curso"
+    | "finalizado"
+    | "rechazado"
+    | "cancelado";
   proveedorTransporte: "interno" | "uber";
   zona?: TripZone;
   tarifa: string | number;
@@ -358,10 +362,7 @@ export type EmployeeReportCategory =
 export type EmployeeReportOrigin = "cliente" | "chofer";
 export type EmployeeReportPriority = "normal" | "alta" | "urgente";
 export type EmployeeReportStatus =
-  | "nuevo"
-  | "en_revision"
-  | "resuelto"
-  | "descartado";
+  "nuevo" | "en_revision" | "resuelto" | "descartado";
 
 export type ServiceExtension = {
   id: string;
@@ -444,7 +445,26 @@ export type DriverPortalTripItem = {
   driverPayout: number;
 };
 
-export type DriverPortalActiveTrip = {
+/**
+ * De donde a donde va un viaje.
+ *
+ * El portal solo decia la zona y el chofer tenia que buscar el mensaje del bot
+ * para dar con el enlace al mapa, justo cuando va conduciendo. En un viaje de
+ * ida recoge a la modelo y la lleva con el cliente; en uno de regreso es al
+ * reves, y esa regla ya viene resuelta desde el backend.
+ */
+export type DriverPortalTripPoints = {
+  recogidaLat: string | null;
+  recogidaLng: string | null;
+  destinoLat: string | null;
+  destinoLng: string | null;
+  /** Del servicio: solo existe si el cliente eligio un sitio preestablecido. */
+  lugar: string | null;
+  direccion: string | null;
+  habitacion: string | null;
+};
+
+export type DriverPortalActiveTrip = DriverPortalTripPoints & {
   id: string;
   tipo: "ida" | "regreso";
   estado: string;
@@ -460,7 +480,7 @@ export type DriverPortalActiveTrip = {
  * llegaba al portal en absoluto, asi que la unica forma de aceptar un viaje era
  * ver el mensaje del bot a tiempo.
  */
-export type DriverPortalOffer = {
+export type DriverPortalOffer = DriverPortalTripPoints & {
   id: string;
   tipo: "ida" | "regreso";
   zona: string;
@@ -532,7 +552,8 @@ export type ScreeningQuestion = {
   createdAt: string;
 };
 
-export type CandidateScreeningStatus = "pendiente" | "en_progreso" | "completado";
+export type CandidateScreeningStatus =
+  "pendiente" | "en_progreso" | "completado";
 
 export type CandidateScreeningAnswer = {
   id: string;
@@ -849,7 +870,6 @@ export type CreateManualServiceInput = {
   presetLocationId?: string;
   clienteTelegramId?: string;
 };
-
 
 /**
  * Nombres de las personas del sistema, indexados por tipo e id.

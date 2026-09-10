@@ -27,7 +27,6 @@ async function portalHeaders(token?: string) {
   return headers;
 }
 
-
 export async function getDriverPortalData(
   token?: string,
 ): Promise<{ success: boolean; data?: DriverPortalData; error?: string }> {
@@ -119,7 +118,7 @@ export async function aceptarOfertaDeViaje(
 export async function rechazarOfertaDeViaje(
   tripId: string,
   token?: string,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; rechazado?: boolean }> {
   return avanzarViaje(tripId, "reject", token);
 }
 
@@ -135,7 +134,12 @@ async function avanzarViaje(
   tripId: string,
   paso: "arrived" | "picked-up" | "finished" | "accept" | "reject",
   token?: string,
-): Promise<{ success: boolean; error?: string; aceptado?: boolean }> {
+): Promise<{
+  success: boolean;
+  error?: string;
+  aceptado?: boolean;
+  rechazado?: boolean;
+}> {
   try {
     const cookie = await getBackendCookieHeader();
     const csrf = await getCsrfToken();
@@ -164,11 +168,20 @@ async function avanzarViaje(
         error: err.message || "No se pudo marcar el avance del viaje",
       };
     }
-    // `accept` responde si se gano la carrera; los demas pasos no dicen nada.
+    /*
+     * `accept` responde si se gano la carrera y `reject` si la oferta seguia
+     * siendo suya; los demas pasos no dicen nada. Los dos casos negativos son
+     * respuestas normales, no fallos.
+     */
     const cuerpo = (await response.json().catch(() => ({}))) as {
       aceptado?: boolean;
+      rechazado?: boolean;
     };
-    return { success: true, aceptado: cuerpo.aceptado };
+    return {
+      success: true,
+      aceptado: cuerpo.aceptado,
+      rechazado: cuerpo.rechazado,
+    };
   } catch (error: any) {
     console.error("Error al marcar el avance del viaje:", error);
     return {
@@ -230,11 +243,14 @@ export async function getCalificacionesApelables(
   token?: string,
 ): Promise<CalificacionApelable[]> {
   try {
-    const response = await fetch(portalUrl("/driver-portal/ratings/appealable", token), {
-      method: "GET",
-      cache: "no-store",
-      headers: await portalHeaders(token),
-    });
+    const response = await fetch(
+      portalUrl("/driver-portal/ratings/appealable", token),
+      {
+        method: "GET",
+        cache: "no-store",
+        headers: await portalHeaders(token),
+      },
+    );
     if (!response.ok) return [];
     return (await response.json()) as CalificacionApelable[];
   } catch (error) {

@@ -3166,10 +3166,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      viaje.choferId = null;
-      viaje.telegramChoferMsgOfertaId = null;
-      viaje.ofertaExpiraEn = null;
-      await this.viajesRepository.save(viaje);
+      /* Mismo motivo que en el rechazo: `save` con la relacion cargada no
+       * suelta el chofer. Aqui el sintoma era mas callado --la oferta caducada
+       * seguia figurando como suya-- pero es el mismo fallo. */
+      await this.viajesRepository.update(viajeId, {
+        choferId: null,
+        telegramChoferMsgOfertaId: null,
+        ofertaExpiraEn: null,
+      });
 
       await this.dispatchViaje(viajeId);
     }
@@ -3204,7 +3208,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async rechazarOfertaManual(viajeId: string, choferId: string): Promise<void> {
+  /**
+   * Devuelve si la oferta era suya y se pudo rechazar.
+   *
+   * Con `void` el portal respondia "rechazado" incluso cuando el viaje ya no
+   * era de ese chofer, y no habia forma de distinguir un rechazo de un toque
+   * repetido sobre una tarjeta vieja.
+   */
+  async rechazarOfertaManual(
+    viajeId: string,
+    choferId: string,
+  ): Promise<boolean> {
     this.clearDispatchTimeout(viajeId);
 
     const viaje = await this.viajesRepository.findOne({
@@ -3230,10 +3244,25 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      viaje.choferId = null;
-      viaje.telegramChoferMsgOfertaId = null;
-      viaje.ofertaExpiraEn = null;
-      await this.viajesRepository.save(viaje);
+      /*
+       * Se sueltan las columnas con un `update` y no guardando la entidad.
+       *
+       * El viaje se carga con la relacion `chofer` para poder editarle el
+       * mensaje del chat, y TypeORM da precedencia al objeto de la relacion
+       * sobre la columna: poner `viaje.choferId = null` y llamar a `save` volvia
+       * a escribir el chofer que traia cargado, asi que el nulo se perdia sin
+       * ningun error.
+       *
+       * El efecto era que la oferta se quedaba pegada al mismo chofer: no
+       * desaparecia de su portal, y cada vez que la rechazaba pasaba otra vez el
+       * control de "esta oferta es tuya" y le contaba un rechazo mas. Tres
+       * toques al mismo boton bastaban para llevarse la multa.
+       */
+      await this.viajesRepository.update(viajeId, {
+        choferId: null,
+        telegramChoferMsgOfertaId: null,
+        ofertaExpiraEn: null,
+      });
 
       // El conteo va aparte y aislado: avisar al chofer o multarlo no puede
       // retrasar ni impedir que la oferta salga al siguiente.
@@ -3247,7 +3276,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
 
       await this.dispatchViaje(viajeId);
+      return true;
     }
+
+    return false;
   }
 
   /**

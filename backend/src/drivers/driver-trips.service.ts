@@ -231,9 +231,20 @@ export class DriverTripsService {
    * `ServicesService`; aqui solo se le devuelve la disponibilidad, que es lo
    * que hacia el manejador del chat despues de llamarlo.
    */
-  async rechazarOferta(viajeId: string, choferId: string): Promise<void> {
-    await this.servicesService.rechazarOfertaManual(viajeId, choferId);
-    await this.choferes.update(choferId, { disponible: true });
+  async rechazarOferta(viajeId: string, choferId: string): Promise<boolean> {
+    const rechazado = await this.servicesService.rechazarOfertaManual(
+      viajeId,
+      choferId,
+    );
+    /*
+     * Solo se le devuelve la disponibilidad si de verdad era su oferta. Un
+     * toque repetido sobre una tarjeta que ya no vale no puede marcarlo como
+     * libre en medio de otro viaje.
+     */
+    if (rechazado) {
+      await this.choferes.update(choferId, { disponible: true });
+    }
+    return rechazado;
   }
 
   /**

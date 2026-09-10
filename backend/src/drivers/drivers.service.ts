@@ -33,7 +33,30 @@ export interface DriverPortalTripItem {
  * Aparte del viaje activo a proposito: aquel es el que ya acepto, y esto es lo
  * que aun puede aceptar o rechazar.
  */
-export interface DriverPortalOffer {
+/**
+ * De donde a donde va un viaje.
+ *
+ * El portal solo decia la zona --"montecarlo"-- y el chofer tenia que buscar el
+ * mensaje del bot para encontrar el enlace al mapa, justo cuando va
+ * conduciendo. Las coordenadas ya estaban en el servicio; lo unico que faltaba
+ * era traerlas hasta aqui.
+ *
+ * En un viaje de ida recoge a la modelo y la lleva con el cliente; en uno de
+ * regreso es al reves. Los dos puntos van resueltos desde el backend para que
+ * el portal no tenga que saber esa regla.
+ */
+export interface DriverPortalTripPoints {
+  recogidaLat: string | null;
+  recogidaLng: string | null;
+  destinoLat: string | null;
+  destinoLng: string | null;
+  /** Del servicio: solo existe si el cliente eligio un sitio preestablecido. */
+  lugar: string | null;
+  direccion: string | null;
+  habitacion: string | null;
+}
+
+export interface DriverPortalOffer extends DriverPortalTripPoints {
   id: string;
   tipo: 'ida' | 'regreso';
   zona: string;
@@ -41,7 +64,7 @@ export interface DriverPortalOffer {
   expiraEn: string | null;
 }
 
-export interface DriverPortalActiveTrip {
+export interface DriverPortalActiveTrip extends DriverPortalTripPoints {
   id: string;
   tipo: 'ida' | 'regreso';
   estado: string;
@@ -178,6 +201,46 @@ export class DriversService {
     }
 
     return result;
+  }
+
+  /**
+   * Los dos puntos de cada viaje, resueltos desde el servicio.
+   *
+   * En un viaje de ida recoge a la modelo donde este y la deja con el cliente;
+   * en uno de regreso es al reves. La regla se resuelve aqui, en SQL, para que
+   * el portal reciba "recogida" y "destino" ya decididos y no tenga que
+   * repetirla.
+   */
+  private async puntosDeViajes(
+    viajeIds: string[],
+  ): Promise<Map<string, DriverPortalTripPoints>> {
+    const mapa = new Map<string, DriverPortalTripPoints>();
+    if (viajeIds.length === 0) return mapa;
+
+    const filas: Array<
+      { id: string } & Record<keyof DriverPortalTripPoints, string | null>
+    > = await this.dataSource.query(
+      `SELECT
+         v.id,
+         CASE WHEN v.tipo = 'ida' THEN e.ubicacion_lat ELSE s.ubicacion_cliente_lat END AS "recogidaLat",
+         CASE WHEN v.tipo = 'ida' THEN e.ubicacion_lng ELSE s.ubicacion_cliente_lng END AS "recogidaLng",
+         CASE WHEN v.tipo = 'ida' THEN s.ubicacion_cliente_lat ELSE e.ubicacion_lat END AS "destinoLat",
+         CASE WHEN v.tipo = 'ida' THEN s.ubicacion_cliente_lng ELSE e.ubicacion_lng END AS "destinoLng",
+         s.location_name_snapshot AS "lugar",
+         s.location_address_snapshot AS "direccion",
+         s.habitacion AS "habitacion"
+       FROM viajes v
+       JOIN servicios s ON s.id = v.servicio_id
+       LEFT JOIN empleadas e ON e.id = s.empleada_id
+       WHERE v.id = ANY($1::uuid[])`,
+      [viajeIds],
+    );
+
+    for (const fila of filas) {
+      const { id, ...puntos } = fila;
+      mapa.set(id, puntos as DriverPortalTripPoints);
+    }
+    return mapa;
   }
 
   async findAll(): Promise<Choferes[]> {
@@ -629,15 +692,6 @@ export class DriversService {
     const activeTripEntity = trips.find((t) =>
       ['aceptado', 'en_camino', 'en_curso', 'llegado'].includes(t.estado),
     );
-    const activeTrip: DriverPortalActiveTrip | null = activeTripEntity
-      ? {
-          id: activeTripEntity.id,
-          tipo: activeTripEntity.tipo,
-          estado: activeTripEntity.estado,
-          zona: activeTripEntity.zona,
-          proveedorTransporte: activeTripEntity.proveedorTransporte,
-        }
-      : null;
 
     /*
      * Las ofertas que todavia puede tomar.
@@ -648,19 +702,51 @@ export class DriversService {
      * quedaba sin chofer. Se descartan las ya vencidas, que el barrido
      * periodico retira poco despues.
      */
-    const pendingOffers = trips
-      .filter(
-        (t) =>
-          t.estado === 'notificado' &&
-          (!t.ofertaExpiraEn || t.ofertaExpiraEn.getTime() > now.getTime()),
-      )
-      .map((t) => ({
-        id: t.id,
-        tipo: t.tipo,
-        zona: t.zona,
-        proveedorTransporte: t.proveedorTransporte,
-        expiraEn: t.ofertaExpiraEn ? t.ofertaExpiraEn.toISOString() : null,
-      }));
+    const ofertasVivas = trips.filter(
+      (t) =>
+        t.estado === 'notificado' &&
+        (!t.ofertaExpiraEn || t.ofertaExpiraEn.getTime() > now.getTime()),
+    );
+
+    /*
+     * Los puntos de los viajes que el chofer tiene delante: el que lleva ahora
+     * y las ofertas que puede tomar. Se piden en una sola consulta y solo para
+     * esos, que como mucho son un puñado; el historico no los necesita.
+     */
+    const puntosPorViaje = await this.puntosDeViajes(
+      [activeTripEntity?.id, ...ofertasVivas.map((t) => t.id)].filter(
+        (id): id is string => Boolean(id),
+      ),
+    );
+    const sinPuntos: DriverPortalTripPoints = {
+      recogidaLat: null,
+      recogidaLng: null,
+      destinoLat: null,
+      destinoLng: null,
+      lugar: null,
+      direccion: null,
+      habitacion: null,
+    };
+
+    const activeTrip: DriverPortalActiveTrip | null = activeTripEntity
+      ? {
+          ...(puntosPorViaje.get(activeTripEntity.id) ?? sinPuntos),
+          id: activeTripEntity.id,
+          tipo: activeTripEntity.tipo,
+          estado: activeTripEntity.estado,
+          zona: activeTripEntity.zona,
+          proveedorTransporte: activeTripEntity.proveedorTransporte,
+        }
+      : null;
+
+    const pendingOffers: DriverPortalOffer[] = ofertasVivas.map((t) => ({
+      ...(puntosPorViaje.get(t.id) ?? sinPuntos),
+      id: t.id,
+      tipo: t.tipo,
+      zona: t.zona,
+      proveedorTransporte: t.proveedorTransporte,
+      expiraEn: t.ofertaExpiraEn ? t.ofertaExpiraEn.toISOString() : null,
+    }));
 
     const weekBounds = (() => {
       const d = new Date(now);

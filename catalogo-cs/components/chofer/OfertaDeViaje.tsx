@@ -9,6 +9,9 @@ import {
   aceptarOfertaDeViaje,
   rechazarOfertaDeViaje,
 } from "@/lib/actions/driver-portal";
+import PuntoDelViaje, {
+  detalleDelDestino,
+} from "@/components/chofer/PuntoDelViaje";
 import type { DriverPortalOffer } from "@/lib/types";
 
 /**
@@ -21,7 +24,11 @@ import type { DriverPortalOffer } from "@/lib/types";
  * Va por encima de todo lo demas y con la cuenta atras a la vista, porque es
  * lo unico de esta pantalla que caduca.
  */
-export default function OfertaDeViaje({ oferta }: { oferta: DriverPortalOffer }) {
+export default function OfertaDeViaje({
+  oferta,
+}: {
+  oferta: DriverPortalOffer;
+}) {
   const router = useRouter();
   const [pendiente, startTransition] = useTransition();
   const [restante, setRestante] = useState<number | null>(null);
@@ -39,7 +46,12 @@ export default function OfertaDeViaje({ oferta }: { oferta: DriverPortalOffer })
   }, [oferta.expiraEn]);
 
   function responder(
-    accion: () => Promise<{ success: boolean; error?: string; aceptado?: boolean }>,
+    accion: () => Promise<{
+      success: boolean;
+      error?: string;
+      aceptado?: boolean;
+      rechazado?: boolean;
+    }>,
   ) {
     startTransition(async () => {
       const resultado = await accion();
@@ -48,13 +60,18 @@ export default function OfertaDeViaje({ oferta }: { oferta: DriverPortalOffer })
         return;
       }
       /*
-       * `aceptado: false` no es un fallo: la misma oferta va a varios choferes
-       * y otro llego antes. Se dice tal cual, que es menos confuso que un error.
+       * Ni `aceptado: false` ni `rechazado: false` son fallos: la misma oferta
+       * va a varios choferes y puede haber dejado de ser suya. Se dice tal
+       * cual, que es menos confuso que un error.
        */
       if (resultado.aceptado === false) {
         toast.error("Otro chofer tomó este viaje primero.");
       } else if (resultado.aceptado) {
         toast.success("Viaje asignado. Ya avisamos a la empleada.");
+      } else if (resultado.rechazado === false) {
+        toast.error("Esa oferta ya no está disponible.");
+      } else if (resultado.rechazado) {
+        toast.success("Oferta rechazada. Se la ofrecemos a otro chofer.");
       }
       router.refresh();
     });
@@ -87,6 +104,26 @@ export default function OfertaDeViaje({ oferta }: { oferta: DriverPortalOffer })
           {" · "}
           <span className="capitalize">{oferta.tipo}</span>
         </span>
+      </div>
+
+      {/*
+        Donde recoge y a donde lleva, antes de decidir. Sin esto la unica pista
+        era la zona, y para saber si le queda cerca habia que aceptar primero o
+        volver al chat a buscar el enlace del bot.
+      */}
+      <div className="flex flex-col gap-2.5 px-4 pb-3.5">
+        <PuntoDelViaje
+          etiqueta="Recogida"
+          lat={oferta.recogidaLat}
+          lng={oferta.recogidaLng}
+          detalle={oferta.tipo === "regreso" ? detalleDelDestino(oferta) : null}
+        />
+        <PuntoDelViaje
+          etiqueta="Destino"
+          lat={oferta.destinoLat}
+          lng={oferta.destinoLng}
+          detalle={oferta.tipo === "ida" ? detalleDelDestino(oferta) : null}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 px-4 pb-4">

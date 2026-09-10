@@ -16,6 +16,9 @@ import {
   marcarLlegadaDelViaje,
   marcarRecogidaDelViaje,
 } from "@/lib/actions/driver-portal";
+import PuntoDelViaje, {
+  detalleDelDestino,
+} from "@/components/chofer/PuntoDelViaje";
 import type { DriverPortalActiveTrip } from "@/lib/types";
 
 /**
@@ -59,7 +62,9 @@ export default function ViajeAhora({
     return (
       <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3.5">
         <CheckCircle2 size={18} className="shrink-0 text-gray-600" />
-        <p className="text-sm text-gray-400">No tienes ningún viaje ahora mismo.</p>
+        <p className="text-sm text-gray-400">
+          No tienes ningún viaje ahora mismo.
+        </p>
       </div>
     );
   }
@@ -97,6 +102,27 @@ export default function ViajeAhora({
             {viaje.tipo}
           </span>
         </div>
+      </div>
+
+      {/*
+        Los dos puntos, en el orden en que los necesita: primero a donde va
+        ahora. Antes de recoger a la modelo eso es el punto de recogida; una vez
+        arriba, el destino. Se enseñan los dos siempre porque tener el siguiente
+        a la vista es lo que evita volver al chat en mitad del trayecto.
+      */}
+      <div className="flex flex-col gap-2.5 px-4 py-3.5">
+        <PuntoDelViaje
+          etiqueta={viaje.tipo === "ida" ? "Recoges a la modelo" : "Recogida"}
+          lat={viaje.recogidaLat}
+          lng={viaje.recogidaLng}
+          detalle={viaje.tipo === "regreso" ? detalleDelDestino(viaje) : null}
+        />
+        <PuntoDelViaje
+          etiqueta="Destino"
+          lat={viaje.destinoLat}
+          lng={viaje.destinoLng}
+          detalle={viaje.tipo === "ida" ? detalleDelDestino(viaje) : null}
+        />
       </div>
 
       {viaje.estado === "aceptado" || viaje.estado === "llegado" ? (

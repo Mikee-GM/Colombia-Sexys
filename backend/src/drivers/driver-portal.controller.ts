@@ -91,8 +91,21 @@ export class DriverPortalController {
     @Param('tripId', new ParseUUIDPipe()) tripId: string,
   ) {
     const choferId = await this.driverTripsService.choferDeUsuario(userId);
-    await this.driverTripsService.rechazarOferta(tripId, choferId);
-    return { rechazado: true };
+    const rechazado = await this.driverTripsService.rechazarOferta(
+      tripId,
+      choferId,
+    );
+    /*
+     * `false` no es un fallo: la oferta ya no era suya --caduco, la tomo otro,
+     * o es un segundo toque sobre la misma tarjeta--. El portal lo dice tal
+     * cual en vez de fingir que acaba de rechazarla.
+     */
+    return {
+      rechazado,
+      mensaje: rechazado
+        ? 'Oferta rechazada.'
+        : 'Esa oferta ya no esta disponible.',
+    };
   }
 
   /**
