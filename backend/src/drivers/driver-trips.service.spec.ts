@@ -126,7 +126,7 @@ function montar(trip: Viajes | null, afectadas = 1) {
 
   return {
     service,
-    realtime: dependencias.realtime,
+    realtime: dependencias.realtime as Record<string, jest.Mock>,
     update,
     enviados,
     borrados,

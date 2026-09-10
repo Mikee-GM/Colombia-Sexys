@@ -162,6 +162,13 @@ interface SessionData {
    */
   fueraDeCobertura?: boolean;
   /**
+   * Ya se le enseño la lista de moteles en esta conversacion.
+   *
+   * Se ofrecia con cada respuesta mientras faltara la ubicacion, asi que el
+   * cliente la leia una y otra vez seguidas. Es un dato que se da una vez.
+   */
+  motelesYaOfrecidos?: boolean;
+  /**
    * Mensajes que lleva la modelo sin usar un emoji. Sostiene la cadencia entre
    * turnos: sin este contador cada respuesta se juzga sola y todas acaban
    * llevando carita.
@@ -1446,6 +1453,16 @@ export class TelegramBookingUpdate {
       // El teclado de "Compartir mi Ubicación" sobra: mandar otro pin de alla
       // no va a cambiar la respuesta.
       ctx.session.quitarTecladoPendiente = true;
+      /*
+       * Y se deja de esperar la ubicacion.
+       *
+       * Con el paso en `AWAITING_LOCATION` la conversacion quedaba enganchada:
+       * a partir de ahi cada mensaje --un saludo, una despedida, lo que fuera--
+       * salia con el pin pedido otra vez y el listado de moteles detras. Aqui ya
+       * no hay ubicacion que esperar: se le acaba de decir que no se llega hasta
+       * alla.
+       */
+      ctx.session.step = undefined;
       const history = trimChatHistory(ctx.session.chatHistory || []);
       history.push({ role: 'model', parts: [{ text: respuesta }] });
       ctx.session.chatHistory = history;
@@ -3145,12 +3162,25 @@ export class TelegramBookingUpdate {
     const delayMs = 2500 + Math.floor(Math.random() * 1500);
     await new Promise((resolve) => setTimeout(resolve, delayMs));
 
-    const locations = await this.transportOperations.activeLocations();
+    /*
+     * El listado de moteles se ofrece una vez por conversacion.
+     *
+     * Mientras faltara la ubicacion se pegaba detras de CADA respuesta, asi que
+     * el cliente lo leia tres y cuatro veces seguidas: al saludar, al despedirse
+     * y hasta despues de que se le dijera que su pin quedaba fuera de zona. El
+     * boton nativo de compartir ubicacion sigue ahi todo el rato, que es lo que
+     * de verdad hace falta.
+     */
+    const yaOfrecidos = Boolean(ctx.session?.motelesYaOfrecidos);
+    const locations = yaOfrecidos
+      ? []
+      : await this.transportOperations.activeLocations();
     const listado = locations.length
       ? `\n\nTambién puedo verte en alguno de los moteles donde atiendo:\n${locations
           .map((location) => `• ${location.name}`)
           .join('\n')}\n\nSi prefieres alguno, solo dime su nombre.`
       : '';
+    if (listado && ctx.session) ctx.session.motelesYaOfrecidos = true;
 
     const base =
       introduction?.trim() ||
