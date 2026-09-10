@@ -3,6 +3,7 @@ import {
   clientAskedForOtherModels,
   clientAskedForOwnPhotos,
   clientEndorsedTrioModel,
+  clienteNombroALaModelo,
   detectArrivalTimeQuestion,
   detectBotProbe,
   detectProhibitedRequest,
@@ -531,5 +532,36 @@ describe('detectaClienteEnFuga', () => {
     expect(detectaClienteEnFuga('okey va, una hora')).toBe(false);
     expect(detectaClienteEnFuga('tengo muchas ganas de verte')).toBe(false);
     expect(detectaClienteEnFuga('ahorita te mando el pin')).toBe(false);
+  });
+});
+
+/*
+ * La red de seguridad del trio se apoya solo en el nombre.
+ *
+ * Sin marca del modelo, el nombre es lo unico que dice a quien quiere el
+ * cliente: un "dale" ahi podria ser la respuesta a cualquier otra cosa y
+ * acabaria mandandole al jefe una autorizacion que nadie pidio.
+ */
+describe('clienteNombroALaModelo', () => {
+  it('reconoce el nombre suelto de un nombre compuesto', () => {
+    expect(
+      clienteNombroALaModelo(['uyuyuy la catalina'], 'Catalina Velez'),
+    ).toBe(true);
+  });
+
+  it('reconoce el nombre completo', () => {
+    expect(
+      clienteNombroALaModelo(['quiero con Catalina Velez'], 'Catalina Velez'),
+    ).toBe(true);
+  });
+
+  it('no se conforma con un si suelto', () => {
+    expect(
+      clienteNombroALaModelo(['dale', 'esa misma'], 'Catalina Velez'),
+    ).toBe(false);
+  });
+
+  it('no casa con un trozo de otra palabra', () => {
+    expect(clienteNombroALaModelo(['catalogo de precios'], 'Cata')).toBe(false);
   });
 });

@@ -47,6 +47,7 @@ import {
   clientAskedForOtherModels,
   clientAskedForOwnPhotos,
   clientEndorsedTrioModel,
+  clienteNombroALaModelo,
   detectaClienteEnFuga,
   detectaInseguridad,
   detectArrivalTimeQuestion,
@@ -8875,6 +8876,56 @@ export class TelegramBookingUpdate {
             }
           } catch (trioErr) {
             this.logger.error('Error parsing TRIO_REQUEST data:', trioErr);
+          }
+        }
+
+        /*
+         * La red de seguridad del trio: pedirlo aunque no venga la marca.
+         *
+         * El aviso al jefe colgaba por completo de que el modelo escribiera
+         * `[TRIO_REQUEST]`. Cuando no la escribia --y no siempre lo hace-- el
+         * cliente leia "dejame checar con ella y te aviso en un ratico" y ahi
+         * moria: ningun aviso, ninguna autorizacion, nadie esperando nada. Es
+         * el mismo agujero que tenia el cierre de la reserva.
+         *
+         * Se dispara solo si el cliente nombro a UNA de las companeras que se
+         * le ofrecieron para trio. Con dos nombradas no se adivina cual quiere,
+         * y con ninguna no hay peticion que trasladar.
+         */
+        if (!trioMatch && session.trioStatus !== 'pending_boss') {
+          const nombradas = availableTrioModels.filter((modelo) =>
+            clienteNombroALaModelo(recentClientMessages, modelo.nombre),
+          );
+
+          const lastTrioAt = session.ultimaPeticionTrioAt
+            ? new Date(session.ultimaPeticionTrioAt).getTime()
+            : 0;
+          const dentroDelCupo =
+            (session.peticionesTrio ?? 0) < MAX_TRIO_REQUESTS_PER_SESSION &&
+            Date.now() - lastTrioAt > TRIO_REQUEST_COOLDOWN_MS;
+
+          if (nombradas.length === 1 && dentroDelCupo) {
+            const elegida = await this.empleadasRepository.findOne({
+              where: { id: nombradas[0].id, catalogoActivo: true },
+            });
+            if (elegida) {
+              this.logger.warn(
+                `Trio sin marca del modelo: se traslada al jefe la peticion de ${elegida.nombreArtistico}.`,
+              );
+              session.peticionesTrio = (session.peticionesTrio ?? 0) + 1;
+              session.ultimaPeticionTrioAt = new Date().toISOString();
+              session.trioSelectedEmployeeId = elegida.id;
+              session.trioSelectedEmployeeName = elegida.nombreArtistico;
+              session.trioStatus = 'pending_boss';
+
+              history.push({ role: 'model', parts: [{ text: cleanText }] });
+              session.chatHistory = history;
+
+              await this.sendDelayedReply(ctx, cleanText);
+              await this.recordDraftConversation(ctx, 'ia', cleanText);
+              await this.notifyBossAboutTrioRequest(ctx, empleada, elegida);
+              return;
+            }
           }
         }
 

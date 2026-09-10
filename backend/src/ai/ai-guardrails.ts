@@ -422,6 +422,36 @@ export function clientEndorsedTrioModel(
 }
 
 /**
+ * El cliente nombro a esta modelo, con nombre y apellido o solo con el nombre.
+ *
+ * Se distingue de `clientEndorsedTrioModel` en que NO acepta un "si" suelto.
+ * Aquel se usa cuando el modelo ya dijo a quien se refiere y solo hace falta
+ * comprobar que el cliente estuvo de acuerdo; este se usa cuando no hay marca
+ * del modelo y el nombre es lo unico que dice a quien quiere: un "dale" ahi
+ * podria ser la respuesta a cualquier otra cosa --al metodo de pago, a la
+ * hora-- y acabaria mandandole al jefe una autorizacion que nadie pidio.
+ *
+ * Se compara por palabras sueltas de cuatro letras o mas: el catalogo guarda
+ * "Catalina Velez" y el cliente escribe "la catalina". Las palabras cortas se
+ * descartan porque un "de" o "la" dentro de un nombre compuesto casaria con
+ * cualquier frase.
+ */
+export function clienteNombroALaModelo(
+  messages: string[],
+  modelName: string,
+): boolean {
+  const distintivas = normalizeForMatch(modelName)
+    .split(/\s+/)
+    .filter((palabra) => palabra.length >= 4);
+  if (distintivas.length === 0) return false;
+
+  return messages.some((message) => {
+    const palabras = new Set(normalizeForMatch(message).split(/\s+/));
+    return distintivas.some((palabra) => palabras.has(palabra));
+  });
+}
+
+/**
  * Cada cuantos mensajes de la modelo se permite un emoji.
  *
  * El prompt ya lo pedia ("maximo 1 emoji cada 2 o 3 mensajes") y el modelo lo
