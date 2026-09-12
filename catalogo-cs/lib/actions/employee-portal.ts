@@ -290,11 +290,19 @@ export async function getAvailableExtras(
  *
  * En el chat esto son tres mensajes encadenados porque no cabe un formulario;
  * aqui la modelo elige extra y metodo de pago a la vez y va en una peticion.
+ *
+ * O bien un extra de su catalogo, o bien un precio escrito a mano para lo que
+ * no esta en el. El backend cuelga ese cobro libre del comodin de la modelo.
  */
 export async function addServiceExtra(
   servicioId: string,
-  extraCatalogoId: string,
-  metodoPago: "tarjeta" | "transferencia" | "efectivo",
+  cobro: {
+    /** Extra del catalogo. Se omite cuando el precio se escribe a mano. */
+    extraCatalogoId?: string;
+    /** Precio acordado que no sale del catalogo. */
+    precioCobrado?: number;
+    metodoPago: "tarjeta" | "transferencia" | "efectivo";
+  },
   token?: string,
 ): Promise<{
   success: boolean;
@@ -312,7 +320,7 @@ export async function addServiceExtra(
           ...(await portalHeaders(token)),
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ extraCatalogoId, metodoPago }),
+        body: JSON.stringify(cobro),
       },
     );
 

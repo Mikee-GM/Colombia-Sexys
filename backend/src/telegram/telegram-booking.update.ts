@@ -3915,38 +3915,26 @@ export class TelegramBookingUpdate {
       return;
     }
 
-    let finalExtraId = extraId;
-    if (amount !== undefined) {
-      if (!user.empleadas) {
-        await ctx.answerCbQuery(
-          'Solo las empleadas pueden usar montos personalizados.',
-          { show_alert: true },
-        );
-        return;
-      }
-      let genericExtra = await this.extrasCatalogoRepository.findOne({
-        where: { empleadaId: user.empleadas.id, nombre: 'Extra' },
-      });
-      if (!genericExtra) {
-        genericExtra = this.extrasCatalogoRepository.create({
-          empleadaId: user.empleadas.id,
-          nombre: 'Extra',
-          precio: amount,
-          activo: true,
-          // No es una oferta suya: es el ancla de los montos libres, y sin
-          // esto le aparecia en el portal a un precio que no significa nada.
-          esGenerico: true,
-        });
-        await this.extrasCatalogoRepository.save(genericExtra);
-      }
-      finalExtraId = genericExtra.id;
+    if (amount !== undefined && !user.empleadas) {
+      await ctx.answerCbQuery(
+        'Solo las empleadas pueden usar montos personalizados.',
+        { show_alert: true },
+      );
+      return;
     }
 
     let resultado: Awaited<ReturnType<ServicesService['addServiceExtra']>>;
     try {
+      /*
+       * El comodin al que se cuelgan los montos libres lo resuelve el servicio.
+       *
+       * Se buscaba y se creaba aqui dentro, asi que desde el portal no habia
+       * forma de cobrar un precio escrito a mano; y copiar el trozo alli habria
+       * dejado a las dos vias creando comodines distintos para la misma modelo.
+       */
       resultado = await this.servicesService.addServiceExtra({
         servicioId,
-        extraCatalogoId: finalExtraId!,
+        extraCatalogoId: extraId,
         metodoPago,
         actorUserId: user.id,
         precioCobrado: amount,

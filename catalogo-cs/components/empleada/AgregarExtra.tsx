@@ -20,11 +20,28 @@ const METODOS = [
 type Metodo = (typeof METODOS)[number]["id"];
 
 /**
+ * Lo elegido: un extra de su catalogo, o un precio escrito a mano.
+ *
+ * El precio libre no apunta a nada del catalogo; el backend lo cuelga del
+ * comodin de la modelo, que no es una oferta suya y por eso no aparece en esta
+ * lista.
+ */
+type Seleccion =
+  | { tipo: "catalogo"; extra: ExtraDisponible }
+  | { tipo: "libre" };
+
+/**
  * Agregar un extra al servicio en curso.
  *
  * En el chat esto son tres mensajes encadenados, porque en Telegram no cabe un
  * formulario y hay que ir preguntando de uno en uno. Aqui se elige el extra y
  * el metodo de pago en la misma pantalla y se manda de una vez.
+ *
+ * **Solo se ven precios, nunca el nombre del extra.** Esta pantalla se abre con
+ * el cliente delante, y el nombre de lo que se esta cobrando no es algo que
+ * tenga que quedar a la vista de quien mire el telefono de reojo. Ella reconoce
+ * los suyos por el importe. El nombre sigue viajando en la respuesta --lo
+ * necesitan el corte y el panel-- pero aqui no se pinta en ningun sitio.
  *
  * El catalogo se pide al abrir y no al cargar el portal: son extras de un
  * servicio en curso, y la mayoria de las veces no se abre esto en toda la
@@ -40,11 +57,22 @@ export default function AgregarExtra({
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
   const [extras, setExtras] = useState<ExtraDisponible[] | null>(null);
-  const [elegido, setElegido] = useState<ExtraDisponible | null>(null);
+  const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
+  const [precioLibre, setPrecioLibre] = useState("");
   const [metodo, setMetodo] = useState<Metodo>("efectivo");
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState<string | null>(null);
   const [cargando, startTransition] = useTransition();
+
+  const montoLibre = Number(precioLibre);
+  const libreValido =
+    seleccion?.tipo === "libre" &&
+    Number.isFinite(montoLibre) &&
+    montoLibre > 0 &&
+    Math.abs(Math.round(montoLibre * 100) - montoLibre * 100) < 1e-8;
+  const listoParaAgregar =
+    seleccion?.tipo === "catalogo" ||
+    (seleccion?.tipo === "libre" && libreValido);
 
   const abrir = () => {
     setAbierto(true);
@@ -62,18 +90,25 @@ export default function AgregarExtra({
 
   const cerrar = () => {
     setAbierto(false);
-    setElegido(null);
+    setSeleccion(null);
+    setPrecioLibre("");
     setError(null);
   };
 
   const agregar = () => {
-    if (!elegido) return;
+    if (!seleccion || !listoParaAgregar) return;
+    const cobrado =
+      seleccion.tipo === "catalogo" ? seleccion.extra.precio : montoLibre;
     setError(null);
     startTransition(async () => {
       const resultado = await addServiceExtra(
         servicioId,
-        elegido.id,
-        metodo,
+        {
+          ...(seleccion.tipo === "catalogo"
+            ? { extraCatalogoId: seleccion.extra.id }
+            : { precioCobrado: montoLibre }),
+          metodoPago: metodo,
+        },
         token,
       );
       if (!resultado.success) {
@@ -81,11 +116,12 @@ export default function AgregarExtra({
         return;
       }
       setExito(
-        `${elegido.nombre} agregado. Total de extras: ${formatCurrency(
+        `Cobrado ${formatCurrency(cobrado)}. Total de extras: ${formatCurrency(
           resultado.totalExtras ?? 0,
         )}.`,
       );
-      setElegido(null);
+      setSeleccion(null);
+      setPrecioLibre("");
       setAbierto(false);
       router.refresh();
     });
@@ -115,34 +151,98 @@ export default function AgregarExtra({
 
       {extras === null ? (
         <p className="text-xs text-gray-400">Cargando tu catalogo</p>
-      ) : extras.length === 0 ? (
-        <p className="text-xs leading-relaxed text-gray-400">
-          No tienes extras registrados en tu catalogo. Pidele a administracion
-          que los configure.
-        </p>
       ) : (
         <>
-          <div className="space-y-1.5">
-            {extras.map((extra) => (
-              <button
-                key={extra.id}
-                type="button"
-                onClick={() => setElegido(extra)}
-                className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
-                  elegido?.id === extra.id
-                    ? "border-[#C5A55A] bg-[#C5A55A]/15 text-white"
-                    : "border-white/10 text-gray-300 hover:border-[#C5A55A]/40"
-                }`}
-              >
-                <span className="truncate">{extra.nombre}</span>
-                <span className="shrink-0 font-semibold text-[#E8D5A3]">
-                  {formatCurrency(extra.precio)}
-                </span>
-              </button>
-            ))}
-          </div>
+          {/*
+            Solo importes, en rejilla: son etiquetas cortas y asi caben varias
+            por fila en el telefono, que es donde se usa esto.
+          */}
+          {extras.length > 0 ? (
+            <>
+              <p className="text-[11px] uppercase tracking-wider text-gray-400">
+                Precios de tu catalogo
+              </p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {extras.map((extra) => {
+                  const elegido =
+                    seleccion?.tipo === "catalogo" &&
+                    seleccion.extra.id === extra.id;
+                  return (
+                    <button
+                      key={extra.id}
+                      type="button"
+                      aria-label={`Cobrar ${formatCurrency(extra.precio)}`}
+                      aria-pressed={elegido}
+                      onClick={() => {
+                        setSeleccion({ tipo: "catalogo", extra });
+                        setPrecioLibre("");
+                      }}
+                      className={`rounded-lg border px-2 py-2.5 text-center text-xs font-semibold tabular-nums transition-colors ${
+                        elegido
+                          ? "border-[#C5A55A] bg-[#C5A55A] text-black"
+                          : "border-white/10 text-[#E8D5A3] hover:border-[#C5A55A]/50"
+                      }`}
+                    >
+                      {formatCurrency(extra.precio)}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p className="text-xs leading-relaxed text-gray-400">
+              No tienes extras registrados en tu catalogo. Puedes cobrar un
+              precio a mano.
+            </p>
+          )}
 
-          {elegido ? (
+          {/*
+            El precio a mano.
+
+            Es lo que se cobra cuando lo acordado no esta en su catalogo, que
+            antes solo se podia hacer desde el chat.
+          */}
+          {seleccion?.tipo === "libre" ? (
+            <div className="space-y-1.5">
+              <label
+                className="block text-[11px] uppercase tracking-wider text-gray-400"
+                htmlFor={`precio-libre-${servicioId}`}
+              >
+                Precio acordado
+              </label>
+              <div className="flex gap-1.5">
+                <input
+                  id={`precio-libre-${servicioId}`}
+                  value={precioLibre}
+                  onChange={(evento) => setPrecioLibre(evento.target.value)}
+                  inputMode="decimal"
+                  autoFocus
+                  placeholder="0.00"
+                  className="min-w-0 flex-1 rounded-lg border border-[#C5A55A]/50 bg-black px-3 py-2 text-sm tabular-nums text-white outline-none placeholder:text-gray-600 focus:border-[#C5A55A]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSeleccion(null);
+                    setPrecioLibre("");
+                  }}
+                  className="rounded-lg border border-white/10 px-3 text-[11px] font-semibold text-gray-400 transition-colors hover:text-white"
+                >
+                  Quitar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSeleccion({ tipo: "libre" })}
+              className="w-full rounded-lg border border-dashed border-[#C5A55A]/50 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#E8D5A3] transition-colors hover:border-[#C5A55A]"
+            >
+              Otro precio
+            </button>
+          )}
+
+          {listoParaAgregar ? (
             <div className="space-y-2">
               <p className="text-[11px] uppercase tracking-wider text-gray-400">
                 Como lo paga el cliente
@@ -174,7 +274,7 @@ export default function AgregarExtra({
         <button
           type="button"
           onClick={agregar}
-          disabled={cargando || !elegido}
+          disabled={cargando || !listoParaAgregar}
           aria-busy={cargando}
           className="flex-1 rounded-lg border border-[#C5A55A] bg-[#C5A55A]/10 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#E8D5A3] transition-colors hover:bg-[#C5A55A] hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
         >

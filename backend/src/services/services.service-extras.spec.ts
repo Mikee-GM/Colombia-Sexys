@@ -46,7 +46,12 @@ describe('ServicesService extras de servicio', () => {
     usuariosRepository = {
       findOneBy: jest.fn().mockResolvedValue({ id: USUARIO }),
     };
-    extrasCatalogoRepository = { find: jest.fn(), findOne: jest.fn() };
+    extrasCatalogoRepository = {
+      find: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn((valor) => valor),
+      save: jest.fn(),
+    };
     extrasServicioRepository = {
       create: jest.fn((valor) => valor),
       save: jest.fn().mockResolvedValue(undefined),
@@ -244,6 +249,101 @@ describe('ServicesService extras de servicio', () => {
       expect(extrasServicioRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({ precioCobrado: 1800 }),
       );
+    });
+
+    /*
+     * Un precio escrito a mano, sin elegir nada del catalogo.
+     *
+     * Es lo que se cobra cuando lo acordado no esta en su catalogo. El cobro se
+     * cuelga del comodin de la modelo, que no es una oferta suya y por eso no
+     * se le enseña en la lista. Resolverlo vivia dentro del manejador de
+     * Telegram, asi que desde el portal no se podia cobrar nada libre.
+     */
+    it('cuelga del comodín un precio escrito a mano', async () => {
+      serviciosRepository.findOne
+        .mockResolvedValueOnce(enCurso())
+        .mockResolvedValueOnce(enCurso({ extrasServicios: [] }));
+      extrasCatalogoRepository.findOne.mockResolvedValue(
+        extra({ id: 'comodin-1', nombre: 'Extra', esGenerico: true }),
+      );
+
+      const resultado = await service.addServiceExtra({
+        servicioId: 'srv-1',
+        metodoPago: 'efectivo',
+        actorUserId: USUARIO,
+        precioCobrado: 1500,
+      });
+
+      expect(extrasCatalogoRepository.save).not.toHaveBeenCalled();
+      expect(resultado.precioCobrado).toBe(1500);
+      expect(extrasServicioRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          extraCatalogoId: 'comodin-1',
+          precioCobrado: 1500,
+        }),
+      );
+    });
+
+    /** La primera vez no hay comodín: se crea uno y no se le enseña a nadie. */
+    it('crea el comodín la primera vez que se cobra un precio libre', async () => {
+      serviciosRepository.findOne
+        .mockResolvedValueOnce(enCurso())
+        .mockResolvedValueOnce(enCurso({ extrasServicios: [] }));
+      extrasCatalogoRepository.findOne.mockResolvedValue(null);
+      extrasCatalogoRepository.save.mockImplementation((valor: any) =>
+        Promise.resolve({ ...valor, id: 'comodin-nuevo' }),
+      );
+
+      await service.addServiceExtra({
+        servicioId: 'srv-1',
+        metodoPago: 'efectivo',
+        actorUserId: USUARIO,
+        precioCobrado: 700,
+      });
+
+      expect(extrasCatalogoRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({ empleadaId: EMPLEADA, esGenerico: true }),
+      );
+      expect(extrasServicioRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          extraCatalogoId: 'comodin-nuevo',
+          precioCobrado: 700,
+        }),
+      );
+    });
+
+    it('no acepta un precio de cero ni con mas de dos decimales', async () => {
+      serviciosRepository.findOne.mockResolvedValue(enCurso());
+
+      await expect(
+        service.addServiceExtra({
+          servicioId: 'srv-1',
+          metodoPago: 'efectivo',
+          actorUserId: USUARIO,
+          precioCobrado: 0,
+        }),
+      ).rejects.toThrow(/mayor que cero/);
+
+      await expect(
+        service.addServiceExtra({
+          servicioId: 'srv-1',
+          metodoPago: 'efectivo',
+          actorUserId: USUARIO,
+          precioCobrado: 10.999,
+        }),
+      ).rejects.toThrow(/decimales/);
+
+      expect(extrasServicioRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('exige elegir un extra o escribir un precio', async () => {
+      await expect(
+        service.addServiceExtra({
+          servicioId: 'srv-1',
+          metodoPago: 'efectivo',
+          actorUserId: USUARIO,
+        }),
+      ).rejects.toThrow(/Elige un extra/);
     });
 
     it('imputa el extra a la participante en un servicio grupal', async () => {

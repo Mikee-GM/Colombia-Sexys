@@ -4050,11 +4050,24 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    */
   async addServiceExtra(input: {
     servicioId: string;
-    extraCatalogoId: string;
+    /**
+     * Extra del catalogo. Se puede omitir cuando se cobra un monto libre: en
+     * ese caso el cobro se cuelga del comodin de la modelo.
+     */
+    extraCatalogoId?: string;
     metodoPago: 'tarjeta' | 'transferencia' | 'efectivo';
     actorUserId: string;
     precioCobrado?: number;
   }): Promise<AddServiceExtraResult> {
+    if (!input.extraCatalogoId && input.precioCobrado === undefined) {
+      throw new BadRequestException(
+        'Elige un extra del catálogo o escribe un precio',
+      );
+    }
+    if (input.precioCobrado !== undefined) {
+      this.assertPrecioDeExtra(input.precioCobrado);
+    }
+
     const servicio = await this.serviciosRepository.findOne({
       where: { id: input.servicioId },
       relations: { empleada: { usuario: true } },
@@ -4069,9 +4082,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       input.actorUserId,
     );
 
-    const extra = await this.extrasCatalogoRepository.findOne({
-      where: { id: input.extraCatalogoId },
-    });
+    const extra = input.extraCatalogoId
+      ? await this.extrasCatalogoRepository.findOne({
+          where: { id: input.extraCatalogoId },
+        })
+      : await this.resolverExtraComodin(employeeId, input.precioCobrado!);
     if (!extra) throw new NotFoundException('Extra no encontrado');
     if (extra.empleadaId !== employeeId) {
       throw new ForbiddenException('Ese extra no pertenece a tu catálogo');
@@ -4126,6 +4141,65 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         0,
       ),
     };
+  }
+
+  /**
+   * Un precio escrito a mano tiene que ser dinero de verdad.
+   *
+   * Mismo criterio que el resto de importes de la casa: positivo y con dos
+   * decimales como mucho, porque debajo se opera en centavos enteros.
+   */
+  private assertPrecioDeExtra(precio: number): void {
+    if (
+      !Number.isFinite(precio) ||
+      precio <= 0 ||
+      Math.abs(Math.round(precio * 100) - precio * 100) > 1e-8
+    ) {
+      throw new BadRequestException(
+        'El precio debe ser mayor que cero y admite máximo dos decimales',
+      );
+    }
+  }
+
+  /**
+   * El extra comodin de una modelo, al que se cuelgan los montos libres.
+   *
+   * No es una oferta de su catalogo --por eso nace con `esGenerico` y queda
+   * fuera de la lista que se le enseña-- sino el ancla que necesita el cobro
+   * para apuntar a algo. Se busca por esa marca y no por el nombre: una modelo
+   * con un extra suyo llamado "Extra" acabaria viendo sus montos libres
+   * mezclados con el.
+   *
+   * Vivia dentro del manejador de Telegram, asi que desde el portal no habia
+   * forma de cobrar un monto libre; y copiarlo habria dejado a las dos vias
+   * creando comodines distintos para la misma modelo.
+   */
+  private async resolverExtraComodin(
+    empleadaId: string,
+    precio: number,
+  ): Promise<ExtrasCatalogo> {
+    const existente = await this.extrasCatalogoRepository.findOne({
+      where: [
+        { empleadaId, esGenerico: true },
+        // Los comodines creados antes de que existiera la marca: se reconocen
+        // por el nombre con el que se creaban.
+        { empleadaId, nombre: 'Extra' },
+      ],
+      order: { esGenerico: 'DESC' },
+    });
+    if (existente) return existente;
+
+    return this.extrasCatalogoRepository.save(
+      this.extrasCatalogoRepository.create({
+        empleadaId,
+        nombre: 'Extra',
+        // El precio del comodin no significa nada: lo que se cobra viaja en
+        // cada extra del servicio. Se guarda el primero por no dejarlo en cero.
+        precio,
+        activo: true,
+        esGenerico: true,
+      }),
+    );
   }
 
   /**

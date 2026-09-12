@@ -124,6 +124,7 @@ export class EmployeePortalController {
     const resultado = await this.servicesService.addServiceExtra({
       servicioId,
       extraCatalogoId: dto.extraCatalogoId,
+      precioCobrado: dto.precioCobrado,
       metodoPago: dto.metodoPago,
       actorUserId: userId,
     });
