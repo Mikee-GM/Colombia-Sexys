@@ -103,6 +103,30 @@ export class Usuarios {
   })
   jornadaActualizadaAt: Date | null;
 
+  /**
+   * Por que cerro su jornada, si lo dijo.
+   *
+   * Puede escribirlo ella al cerrar o contestarlo despues, cuando el jefe se lo
+   * pregunta por el canal. Es opcional en los dos casos: el boton de cerrar no
+   * puede depender de que rellene nada, porque quien lo pulsa normalmente ya
+   * termino por hoy. Se limpia al volver a jornada, que es cuando deja de
+   * describir nada.
+   */
+  @Column('text', { name: 'jornada_motivo', nullable: true })
+  @ApiPropertyOptional({ description: 'Motivo del cierre de jornada' })
+  jornadaMotivo: string | null;
+
+  @Column('timestamp with time zone', {
+    name: 'jornada_motivo_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Cuando dio el motivo del cierre',
+    type: String,
+    format: 'date-time',
+  })
+  jornadaMotivoAt: Date | null;
+
   @Column('bigint', { name: 'telegram_chat_id', nullable: true, unique: true })
   @ApiPropertyOptional({
     description: 'Telegram Chat Id',

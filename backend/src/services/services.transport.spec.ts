@@ -259,7 +259,22 @@ describe('ServicesService transport settlement', () => {
     expect(viajesRepository.update).not.toHaveBeenCalled();
   });
 
-  it('no cierra el regreso en Uber hasta que se confirme la tarifa', async () => {
+  /*
+   * El cierre de la liquidacion se comprueba sobre el servicio entero.
+   *
+   * Antes lo decidia cada paso por su cuenta mirando solo el viaje que tenia
+   * delante, y de ahi salian las dos formas de romperlo: cerrar con el Uber de
+   * ida sin tarifa, o no cerrar nunca por haber hecho los pasos en otro orden.
+   */
+  const servicioConViajes = (viajes: Record<string, unknown>[]) => ({
+    id: 'service',
+    jefeId: 'boss',
+    estado: 'finalizado',
+    estadoLiquidacion: 'transporte_pendiente',
+    viajes,
+  });
+
+  const llegadaDelRegreso = () => {
     viajesRepository.findOne.mockResolvedValue({
       id: 'trip',
       servicioId: 'service',
@@ -278,6 +293,20 @@ describe('ServicesService transport settlement', () => {
       id: 'employee-user',
       rol: 'empleada',
     });
+  };
+
+  it('no cierra el regreso en Uber hasta que se confirme la tarifa', async () => {
+    llegadaDelRegreso();
+    serviciosRepository.findOne.mockResolvedValue(
+      servicioConViajes([
+        {
+          tipo: 'regreso',
+          estado: 'finalizado',
+          proveedorTransporte: 'uber',
+          fareConfirmedAt: null,
+        },
+      ]),
+    );
 
     await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
 
@@ -285,38 +314,63 @@ describe('ServicesService transport settlement', () => {
       'trip',
       expect.objectContaining({ estado: 'finalizado' }),
     );
-    expect(serviciosRepository.update).toHaveBeenCalledWith(
-      'service',
-      expect.not.objectContaining({ estadoLiquidacion: 'cerrada' }),
-    );
-  });
-
-  it('cierra el regreso en Uber si la tarifa ya estaba confirmada al llegar', async () => {
-    viajesRepository.findOne.mockResolvedValue({
-      id: 'trip',
-      servicioId: 'service',
-      tipo: 'regreso',
-      estado: 'en_curso',
-      proveedorTransporte: 'uber',
-      fareConfirmedAt: new Date(),
-      servicio: {
-        jefeId: 'boss',
-        clienteId: 'client',
-        empleadaId: 'employee',
-        empleada: { usuarioId: 'employee-user', usuario: {} },
-      },
-    });
-    usuariosRepository.findOneBy.mockResolvedValue({
-      id: 'employee-user',
-      rol: 'empleada',
-    });
-
-    await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
-
-    expect(serviciosRepository.update).toHaveBeenCalledWith(
+    expect(serviciosRepository.update).not.toHaveBeenCalledWith(
       'service',
       expect.objectContaining({ estadoLiquidacion: 'cerrada' }),
     );
+  });
+
+  it('no cierra mientras el Uber de ida siga sin tarifa', async () => {
+    llegadaDelRegreso();
+    serviciosRepository.findOne.mockResolvedValue(
+      servicioConViajes([
+        {
+          tipo: 'ida',
+          estado: 'finalizado',
+          proveedorTransporte: 'uber',
+          fareConfirmedAt: null,
+        },
+        {
+          tipo: 'regreso',
+          estado: 'finalizado',
+          proveedorTransporte: 'uber',
+          fareConfirmedAt: new Date(),
+        },
+      ]),
+    );
+
+    await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
+
+    expect(serviciosRepository.update).not.toHaveBeenCalledWith(
+      'service',
+      expect.objectContaining({ estadoLiquidacion: 'cerrada' }),
+    );
+  });
+
+  it('cierra cuando los dos viajes estan terminados y con tarifa', async () => {
+    llegadaDelRegreso();
+    serviciosRepository.findOne.mockResolvedValue(
+      servicioConViajes([
+        {
+          tipo: 'ida',
+          estado: 'finalizado',
+          proveedorTransporte: 'uber',
+          fareConfirmedAt: new Date(),
+        },
+        {
+          tipo: 'regreso',
+          estado: 'finalizado',
+          proveedorTransporte: 'uber',
+          fareConfirmedAt: new Date(),
+        },
+      ]),
+    );
+
+    await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
+
+    expect(serviciosRepository.update).toHaveBeenCalledWith('service', {
+      estadoLiquidacion: 'cerrada',
+    });
   });
 
   it('permite repetir la llegada si el viaje ya se guardó como finalizado', async () => {

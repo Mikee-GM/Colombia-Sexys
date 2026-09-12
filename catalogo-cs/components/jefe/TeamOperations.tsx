@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { ButtonHTMLAttributes, Dispatch, ReactNode, SetStateAction } from "react";
-import { Award, Banknote, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, Copy, ExternalLink, FileCheck2, MapPin, MessageCircle, Navigation, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { Award, Banknote, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, Copy, ExternalLink, FileCheck2, Hourglass, LogOut, MapPin, MessageCircle, Navigation, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
@@ -39,6 +39,8 @@ import type { CashObligationSummary, ConversationMessage, Employee, Service, Tri
 import { formatAvailabilityTime } from "@/lib/availability";
 import GroupServiceOrganizer from "@/components/jefe/GroupServiceOrganizer";
 import UberScreenshotUploader from "@/components/jefe/uber-screenshot-uploader";
+import CanalConModelo from "@/components/jefe/CanalConModelo";
+import { preguntarMotivoDeJornada } from "@/lib/actions/team-channel";
 import type { GroupServiceRequest } from "@/lib/types";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
@@ -62,6 +64,8 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   const [creatingService, setCreatingService] = useState(false);
   const [selectedEvaluationUser, setSelectedEvaluationUser] = useState<{ id: string; name: string } | null>(null);
   const [photosEmployee, setPhotosEmployee] = useState<Employee | null>(null);
+  // El canal con una modelo: opcional, se abre desde su ficha.
+  const [canalEmpleada, setCanalEmpleada] = useState<Employee | null>(null);
   // Se guarda el id y no la empleada: si se guardara el objeto, al cambiar la
   // disponibilidad desde la propia hoja esta seguiria mostrando el estado
   // anterior, porque la lista se actualiza pero la copia de la hoja no.
@@ -75,16 +79,23 @@ export default function TeamOperations({ initialEmployees, initialServices, init
 
   const visibleEmployees = useMemo(() => employees.filter((employee) => employee.nombreArtistico.toLowerCase().includes(query.toLowerCase())), [employees, query]);
   const detalleEmpleada = detalleEmpleadaId ? employees.find((employee) => employee.id === detalleEmpleadaId) ?? null : null;
+  /*
+   * Un servicio terminado sigue en "Activos" mientras le falte papeleo de
+   * transporte, y eso es a propósito: es lo único que recuerda que hay una
+   * tarifa de Uber sin confirmar. Lo que estaba mal era cómo se comprobaba.
+   *
+   * La captura se daba por ausente cuando había llegado por Telegram --que la
+   * guarda en `telegramUberFileId` y no en `uberScreenshotUrl`--, así que la
+   * ficha decía "Captura recibida" y la lista seguía contándola como pendiente
+   * para siempre. Y los viajes cancelados entraban en la cuenta aunque ya no
+   * haya nada que confirmar en ellos.
+   */
   const active = services.filter(
     (service) =>
       ["pendiente", "agendado", "en_curso"].includes(service.estado) ||
       (service.estado === "finalizado" &&
         (service.estadoLiquidacion === "transporte_pendiente" ||
-          (service.viajes ?? []).some(
-            (trip) =>
-              trip.proveedorTransporte === "uber" &&
-              (!trip.uberScreenshotUrl || !trip.fareConfirmedAt),
-          ))),
+          (service.viajes ?? []).some((trip) => transporteSinCerrar(trip)))),
   );
   const history = services.filter((service) => ["finalizado", "cancelado"].includes(service.estado));
   const filteredHistory = historyEmployeeId === "all" ? history : history.filter((service) => service.empleadaId === historyEmployeeId);
@@ -103,8 +114,18 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     toast.success("Servicio actualizado correctamente.");
   }
 
+  /*
+   * Falla en silencio, como los demás refrescos de fondo.
+   *
+   * Avisaba con un error rojo, y este refresco se dispara con cada evento que
+   * llega por SSE: una racha de eventos --las posiciones de un traslado en
+   * marcha llegan cada pocos segundos-- llenaba la pantalla de "No se pudo
+   * actualizar la disponibilidad" seguidos, hablando además de algo que el jefe
+   * no había tocado. Lo que sí avisa es la acción que él pulsa, que está en
+   * `toggleAvailability`.
+   */
   async function reloadEmployees() {
-    try { setEmployees(await getJefeEmployees()); } catch { toast.error("No se pudo actualizar la disponibilidad"); }
+    try { setEmployees(await getJefeEmployees()); } catch { /* silenciar error en refresco secundario */ }
   }
 
   async function reloadGroupRequests() {
@@ -117,6 +138,44 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   async function reloadCashSummary() {
     try { setCashSummary(await getJefeCashObligations()); } catch { /* silenciar error en refresco secundario */ }
   }
+
+  /*
+   * Eventos que solo mueven el mapa.
+   *
+   * La posición de una modelo o de un chofer llega cada pocos segundos mientras
+   * hay un traslado en marcha, y cada una disparaba los cuatro refrescos del
+   * panel: cuatro Server Actions por ping, encoladas una detrás de otra, con su
+   * ida y vuelta al backend. De ahí venían los errores en ráfaga y la sesión que
+   * se reiniciaba sola al caducar el token con la cola todavía llena. El mapa
+   * las sigue recibiendo por el evento de ventana, que se emite antes.
+   */
+  const SOLO_MAPA = useMemo(
+    () => new Set(["EMPLOYEE_LOCATION_UPDATE", "DRIVER_LOCATION_UPDATE", "heartbeat"]),
+    [],
+  );
+
+  const recargaProgramada = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /*
+   * Junta en una sola pasada los refrescos de una ráfaga de eventos.
+   *
+   * Un servicio que arranca emite varios eventos casi a la vez y no tiene
+   * sentido releer cuatro veces lo mismo. Medio segundo es imperceptible para
+   * quien mira el panel y convierte la ráfaga en una sola tanda.
+   */
+  const programarRecarga = useCallback(() => {
+    if (recargaProgramada.current) return;
+    recargaProgramada.current = setTimeout(() => {
+      recargaProgramada.current = null;
+      void reloadServices();
+      void reloadEmployees();
+      void reloadGroupRequests();
+      void reloadCashSummary();
+    }, 500);
+    // Las funciones de recarga son estables dentro del componente: no se
+    // declaran como dependencia porque se redefinen en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let source: EventSource | null = null;
@@ -148,7 +207,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
           window.dispatchEvent(
             new CustomEvent("jefe-realtime-event", { detail: payload }),
           );
-          if (payload.type === "heartbeat") return;
+          if (SOLO_MAPA.has(payload.type)) return;
 
           /*
             El avance del traslado se dice, no solo se recarga.
@@ -191,10 +250,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
             }
             void reloadServices();
           } else {
-            void reloadServices();
-            void reloadEmployees();
-            void reloadGroupRequests();
-            void reloadCashSummary();
+            programarRecarga();
           }
         } catch { /* La siguiente actualización válida reconciliará el estado. */ }
       };
@@ -218,8 +274,10 @@ export default function TeamOperations({ initialEmployees, initialServices, init
 
     return () => {
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (recargaProgramada.current) clearTimeout(recargaProgramada.current);
       if (source) source.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function toggleAvailability(employee: Employee) {
@@ -317,8 +375,11 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     <CreateServiceDialog open={creatingService} onClose={() => setCreatingService(false)} initialEmployees={employees} onCreated={() => { reloadServices(); }} />
     {cancellingService && <CancelServiceDialog serviceLabel={cancellingService.empleada?.nombreArtistico || "este servicio"} disabled={pending} onConfirm={(reason, note) => cancelService(cancellingService, reason, note)} onCancel={() => setCancellingService(null)} />}
     <EvaluationHistorySheet userId={selectedEvaluationUser?.id ?? null} workerName={selectedEvaluationUser?.name} open={Boolean(selectedEvaluationUser)} onOpenChange={(open) => !open && setSelectedEvaluationUser(null)} />
+    {canalEmpleada && <CanalConModelo employee={canalEmpleada} onClose={() => setCanalEmpleada(null)} />}
+
     {detalleEmpleada && <EmployeeSheet
       employee={detalleEmpleada}
+      onCanal={() => { setDetalleEmpleadaId(null); setCanalEmpleada(detalleEmpleada); }}
       disabled={pending}
       aria-busy={pending}
       onToggle={toggleAvailability}
@@ -515,6 +576,35 @@ function DestinoDelServicio({ service }: { service: Service }) {
   );
 }
 
+/**
+ * Se está esperando a que la modelo avise de que ya puede salir.
+ *
+ * Es el paso que separa autorizar de pedir el Uber: el coche llegaba mientras
+ * ella se arreglaba y esperaba con el taxímetro corriendo. Solo aplica al viaje
+ * de ida y solo con Uber; al chofer propio se le sigue despachando igual.
+ */
+/**
+ * Al viaje le falta papeleo antes de poder dar el servicio por cerrado.
+ *
+ * Mismo criterio que usa el backend para cerrar la liquidación: un Uber vivo
+ * cuenta como pendiente mientras no esté terminado, con captura y con tarifa.
+ * Uno cancelado no cuenta: no hay nada que confirmar en él.
+ */
+function transporteSinCerrar(trip: Trip) {
+  if (trip.proveedorTransporte !== "uber") return false;
+  if (["cancelado", "rechazado"].includes(trip.estado)) return false;
+  const conCaptura = Boolean(trip.uberScreenshotUrl || trip.telegramUberFileId);
+  return !conCaptura || !trip.fareConfirmedAt;
+}
+
+function esperandoAlistado(service: Service) {
+  return (
+    service.estado === "en_curso" &&
+    service.transporteAgendado === "uber" &&
+    !service.empleadaListaAt
+  );
+}
+
 function ServiceCard({ service, previous, employees, disabled, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { service: Service; previous?: Service; employees: Employee[]; disabled: boolean; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   const programado = service.tipoAgenda === "programado";
   const pendiente = service.estado === "pendiente";
@@ -539,6 +629,13 @@ function ServiceCard({ service, previous, employees, disabled, onRequestAccept, 
         </div>
         <ServiceStatusBadge status={service.estado} />
       </div>
+
+      {esperandoAlistado(service) && (
+        <p className="mt-3 flex items-center gap-2 rounded-xl border border-[#C5A55A]/40 bg-[#C5A55A]/10 px-3 py-2.5 text-xs font-semibold text-[#E8D5A3]">
+          <Hourglass size={15} className="shrink-0" />
+          {`${service.empleada?.nombreArtistico || "La modelo"} se está alistando. El Uber se pide cuando ella avise.`}
+        </p>
+      )}
 
       {programado && service.fechaProgramada && (
         <p className="mt-3 flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-2.5 text-xs font-semibold text-purple-300">
@@ -848,7 +945,7 @@ function EmployeeList({ employees, disabled, onToggle, onOpen }: { employees: Em
  * Ficha de la empleada: hoja inferior en movil, dialogo centrado a partir de
  * `sm`. Recoge lo que salio de la tarjeta y no es del dia a dia.
  */
-function EmployeeSheet({ employee, disabled, onToggle, onPhotos, onExams, onClose }: { employee: Employee; disabled: boolean; onToggle: (employee: Employee) => void; onPhotos: () => void; onExams: () => void; onClose: () => void }) {
+function EmployeeSheet({ employee, disabled, onToggle, onPhotos, onExams, onCanal, onClose }: { employee: Employee; disabled: boolean; onToggle: (employee: Employee) => void; onPhotos: () => void; onExams: () => void; onCanal: () => void; onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-3"
@@ -877,6 +974,17 @@ function EmployeeSheet({ employee, disabled, onToggle, onPhotos, onExams, onClos
           {employee.disponible ? "Marcar no disponible" : "Marcar disponible"}
         </button>
 
+        <EstadoDeJornada employee={employee} />
+
+        <button
+          type="button"
+          onClick={onCanal}
+          className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 py-3.5 text-xs font-bold uppercase tracking-wider text-zinc-200 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
+        >
+          <MessageCircle size={18} />
+          Escribirle
+        </button>
+
         <div className="mt-2.5 grid grid-cols-2 gap-2.5">
           <button type="button" onClick={onPhotos} className="flex h-24 flex-col items-start justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 p-3.5 text-left transition-colors hover:border-[#C5A55A]">
             <Camera size={20} className="text-[#C5A55A]" />
@@ -888,6 +996,68 @@ function EmployeeSheet({ employee, disabled, onToggle, onPhotos, onExams, onClos
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Si cerró su jornada, por qué, y cómo preguntárselo si no lo dijo.
+ *
+ * El aviso de cierre llegaba al chat y ahí se acababa: el jefe se enteraba de
+ * que alguien había terminado su día y no tenía forma de preguntar el motivo
+ * sin salirse del sistema. La pregunta sale por el canal, así que la respuesta
+ * vuelve al mismo sitio y queda escrita.
+ */
+function EstadoDeJornada({ employee }: { employee: Employee }) {
+  const [preguntando, setPreguntando] = useState(false);
+  const [preguntado, setPreguntado] = useState(false);
+
+  // Sin el dato del usuario no se puede afirmar nada: se calla, antes que
+  // decir que está en jornada a quien cerró hace horas.
+  if (employee.usuario?.enJornada !== false) return null;
+
+  const motivo = employee.usuario?.jornadaMotivo;
+
+  async function preguntar() {
+    setPreguntando(true);
+    const resultado = await preguntarMotivoDeJornada(employee.id);
+    setPreguntando(false);
+    if (!resultado.success) {
+      toast.error(resultado.error);
+      return;
+    }
+    setPreguntado(true);
+    toast.success("Se lo preguntamos. Te llega la respuesta en cuanto conteste");
+  }
+
+  return (
+    <div className="mt-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3.5">
+      <p className="flex items-center gap-2 text-xs font-semibold text-amber-300">
+        <LogOut size={15} className="shrink-0" />
+        Fuera de jornada
+      </p>
+      {motivo ? (
+        <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{`Motivo: ${motivo}`}</p>
+      ) : preguntado ? (
+        <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
+          Ya se lo preguntamos. La respuesta llega por el canal.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">
+            No dijo por qué. Puedes preguntárselo sin que sepa quién pregunta.
+          </p>
+          <button
+            type="button"
+            disabled={preguntando}
+            aria-busy={preguntando}
+            onClick={preguntar}
+            className="mt-3 w-full rounded-lg border border-amber-500/40 py-2.5 text-[11px] font-bold uppercase tracking-wider text-amber-300 transition-colors hover:bg-amber-500/10 disabled:opacity-50"
+          >
+            {preguntando ? "Preguntando" : "Preguntar la razón"}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -925,8 +1095,13 @@ function TripCard({ trip, service, onRefresh, onRun }: { trip: Trip; service?: S
   const canChangeTransport = (!trip.choferId || trip.estado === "notificado") && ["notificado", "aceptado", "llegado"].includes(trip.estado);
   const hasScreenshot = Boolean(trip.uberScreenshotUrl || trip.telegramUberFileId);
   const uberDeeplink = getUberDeeplink(trip, service);
+  /*
+   * Solo el viaje de ida se retiene: el de vuelta se pide con ella delante, ahí
+   * no hay nada que esperar.
+   */
+  const retenido = trip.tipo === "ida" && Boolean(service && esperandoAlistado(service));
   const changeButton = canChangeTransport && <button type="button" onClick={() => onRun(() => changeTripTransport(trip.id, trip.proveedorTransporte === "uber" ? "chofer" : "uber"), "Método de transporte actualizado")} className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#C5A55A] px-3 py-3 text-xs font-semibold text-[#C5A55A]"><Repeat2 size={15} />Cambiar a {trip.proveedorTransporte === "uber" ? "chofer" : "Uber"}</button>;
-  return <article className="overflow-hidden rounded-xl border border-zinc-800 bg-black"><header className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3"><div className="flex items-center gap-2"><span className="rounded-lg bg-[#C5A55A]/10 p-2 text-[#C5A55A]"><Car size={17} /></span><div><p className="text-sm font-semibold capitalize">Viaje de {trip.tipo}</p><p className="text-[10px] uppercase tracking-wider text-zinc-600">{trip.proveedorTransporte}</p></div></div><span className="rounded-full border border-zinc-800 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-400">{trip.estado}</span></header>{trip.proveedorTransporte === "uber" ? <div className="space-y-5 p-4"><a href={uberDeeplink} target="_blank" rel="noopener noreferrer" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black"><Smartphone size={16} />Pedir Uber</a>{hasScreenshot ? <div className="rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3 text-xs text-[#E8D5A3]">Captura recibida{trip.uberScreenshotUrl && <a href={trip.uberScreenshotUrl} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 font-semibold text-[#C5A55A]">Ver captura <ExternalLink size={12} /></a>}</div> : <UberScreenshotUploader tripId={trip.id} onRefresh={onRefresh} />}<UberFareEditor trip={trip} onRefresh={onRefresh} />{changeButton}</div> : <div className="space-y-4 p-4"><p className="text-sm text-zinc-500">El viaje será gestionado por un chofer interno.</p>{changeButton}</div>}</article>;
+  return <article className="overflow-hidden rounded-xl border border-zinc-800 bg-black"><header className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3"><div className="flex items-center gap-2"><span className="rounded-lg bg-[#C5A55A]/10 p-2 text-[#C5A55A]"><Car size={17} /></span><div><p className="text-sm font-semibold capitalize">Viaje de {trip.tipo}</p><p className="text-[10px] uppercase tracking-wider text-zinc-600">{trip.proveedorTransporte}</p></div></div><span className="rounded-full border border-zinc-800 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-400">{trip.estado}</span></header>{trip.proveedorTransporte === "uber" ? <div className="space-y-5 p-4">{retenido ? <div className="rounded-xl border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-4 text-xs text-[#E8D5A3]"><p className="flex items-center gap-2 font-semibold"><Hourglass size={15} className="shrink-0" />Esperando a que se aliste</p><p className="mt-1.5 leading-relaxed text-zinc-400">{`En cuanto ${service?.empleada?.nombreArtistico || "ella"} avise que está lista aparece aquí el botón de pedir el Uber. Si no puedes esperar, cambia el viaje a chofer.`}</p></div> : <a href={uberDeeplink} target="_blank" rel="noopener noreferrer" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black"><Smartphone size={16} />Pedir Uber</a>}{hasScreenshot ? <div className="rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3 text-xs text-[#E8D5A3]">Captura recibida{trip.uberScreenshotUrl && <a href={trip.uberScreenshotUrl} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 font-semibold text-[#C5A55A]">Ver captura <ExternalLink size={12} /></a>}</div> : <UberScreenshotUploader tripId={trip.id} onRefresh={onRefresh} />}<UberFareEditor trip={trip} onRefresh={onRefresh} />{changeButton}</div> : <div className="space-y-4 p-4"><p className="text-sm text-zinc-500">El viaje será gestionado por un chofer interno.</p>{changeButton}</div>}</article>;
 }
 
 function UberFareEditor({ trip, onRefresh }: { trip: Trip; onRefresh: () => Promise<void> }) {

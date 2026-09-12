@@ -13,6 +13,7 @@ import { TelegramAuthUpdate } from './telegram-auth.update';
 import { TelegramBookingUpdate } from './telegram-booking.update';
 import { TelegramDriverUpdate } from './telegram-driver.update';
 import { TelegramAdminUpdate } from './telegram-admin.update';
+import { TelegramTeamChannelUpdate } from './telegram-team-channel.update';
 import { TelegramBookingService } from './telegram-booking.service';
 import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from '../clients/entities/client.entity';
@@ -53,6 +54,7 @@ import { TelegramSessionStore } from './telegram-session.store';
 import { serializeBySessionKey } from './telegram-session.lock';
 import { TelegramLinkAttempt } from './entities/telegram-link-attempt.entity';
 import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
+import { TeamChannelModule } from '../team-channel/team-channel.module';
 
 @Module({
   imports: [
@@ -88,6 +90,9 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
     forwardRef(() => WeeklyContentModule),
     CandidateScreeningModule,
     ManualServicesModule,
+    // El canal con las modelos manda por el bot y el bot le cede el texto de
+    // quien pulsa "Responder": los dos lados se necesitan.
+    forwardRef(() => TeamChannelModule),
     TelegrafModule.forRootAsync({
       imports: [ConfigModule, TypeOrmModule.forFeature([TelegramSession])],
       useFactory: (
@@ -139,6 +144,7 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
     TelegramBookingUpdate,
     TelegramDriverUpdate,
     TelegramAdminUpdate,
+    TelegramTeamChannelUpdate,
     TelegramBookingService,
     TelegramOnboardingService,
     TelegramOnboardingUpdate,

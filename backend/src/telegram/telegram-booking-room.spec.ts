@@ -48,6 +48,9 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
     update.manualServiceWizard = {
       manejarTexto: jest.fn().mockResolvedValue(false),
     };
+    update.teamChannelUpdate = {
+      manejarTexto: jest.fn().mockResolvedValue(false),
+    };
     update.clienteBloqueado = jest.fn().mockResolvedValue(false);
   });
 

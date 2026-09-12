@@ -39,6 +39,7 @@ import { ClientAlertsModule } from './client-alerts/client-alerts.module';
 import { ServiceExtensionsModule } from './service-extensions/service-extensions.module';
 import { UserPreferencesModule } from './user-preferences/user-preferences.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { TeamChannelModule } from './team-channel/team-channel.module';
 
 @Module({
   imports: [
@@ -194,6 +195,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     ServiceExtensionsModule,
     UserPreferencesModule,
     NotificationsModule,
+    TeamChannelModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1179,6 +1179,24 @@ export class EmployeesService {
         // Cuantas prorrogas ha gastado: el portal necesita saber si el boton
         // sigue teniendo sentido, y decirle cuantas le quedan antes de tocarlo.
         prorrogasUsadas: activeOrUpcoming.prorrogasUsadas ?? 0,
+        /*
+         * Los datos con los que decide como alistarse.
+         *
+         * Estaban solo en el mensaje de Telegram, asi que quien usa el portal
+         * --que es desde donde ahora avisa que ya esta lista-- tenia que ir a
+         * buscar el chat para leer las notas del jefe.
+         */
+        notasJefe: activeOrUpcoming.notasJefe || null,
+        habitacion: activeOrUpcoming.habitacion || null,
+        destino: activeOrUpcoming.locationNameSnapshot || null,
+        destinoDireccion: activeOrUpcoming.locationAddressSnapshot || null,
+        esperandoAlistado:
+          activeOrUpcoming.estado === 'en_curso' &&
+          activeOrUpcoming.transporteAgendado === 'uber' &&
+          !activeOrUpcoming.empleadaListaAt,
+        empleadaListaAt: activeOrUpcoming.empleadaListaAt
+          ? new Date(activeOrUpcoming.empleadaListaAt).toISOString()
+          : null,
         transporte: activeTrip
           ? {
               id: activeTrip.id,

@@ -76,7 +76,7 @@ export class UsersController {
   @Patch('me/jornada')
   @UseGuards(JwtAuthGuard)
   setMyWorkShift(@Body() dto: WorkShiftStatusDto, @Req() req: any) {
-    return this.workShiftStatus.setStatus(req.user, dto.enJornada);
+    return this.workShiftStatus.setStatus(req.user, dto.enJornada, dto.motivo);
   }
 
   /** Personal fuera de jornada, para el panel de admin. */

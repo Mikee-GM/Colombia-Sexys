@@ -569,6 +569,28 @@ export class Servicios {
   })
   transporteAgendado: 'chofer' | 'uber' | null;
 
+  /**
+   * Cuando la modelo aviso que ya estaba lista para salir.
+   *
+   * El Uber se pedia en el mismo momento en que el jefe autorizaba, asi que el
+   * coche llegaba mientras ella se arreglaba y la tarifa corria esperando. Con
+   * esta marca el enlace del Uber no aparece hasta que ella dice que puede
+   * salir. Nulo mientras se la espera.
+   *
+   * Solo aplica al traslado de ida con Uber: al chofer propio se le sigue
+   * despachando igual, porque ahi no hay taximetro corriendo.
+   */
+  @Column('timestamp with time zone', {
+    name: 'empleada_lista_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Cuando la empleada avisó que ya estaba lista para salir',
+    type: String,
+    format: 'date-time',
+  })
+  empleadaListaAt: Date | null;
+
   @Column('text', { name: 'notas', nullable: true })
   @ApiPropertyOptional({ description: 'Notas', example: 'Ejemplo' })
   notas: string | null;

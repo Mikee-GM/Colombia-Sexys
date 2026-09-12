@@ -46,6 +46,23 @@ export interface EmployeePortalActiveService {
   gananciaEstimada: number;
   /** Prorrogas de espera ya gastadas, de un maximo de tres. */
   prorrogasUsadas?: number;
+  /** Notas que dejo el jefe al autorizar. Es lo que tiene que leer antes de salir. */
+  notasJefe?: string | null;
+  /** Habitacion, cuando el cliente la dio. */
+  habitacion?: string | null;
+  /** A donde va: nombre del sitio, si se reservo sobre una ubicacion conocida. */
+  destino?: string | null;
+  /** Direccion del destino, para poder abrirla en el mapa. */
+  destinoDireccion?: string | null;
+  /**
+   * Se esta esperando a que avise que esta lista, y hasta entonces no hay Uber.
+   *
+   * Solo pasa con Uber en el viaje de ida: es el paso que separa autorizar de
+   * pedir el coche, para que no llegue mientras ella se arregla.
+   */
+  esperandoAlistado?: boolean;
+  /** Cuando aviso que estaba lista, si ya lo hizo. */
+  empleadaListaAt?: string | null;
   transporte?: {
     /** Id del viaje: es lo que el portal necesita para marcar el avance. */
     id: string;

@@ -7,6 +7,8 @@ import { isRedirectError } from "@/lib/auth";
 export type WorkShiftStatus = {
   enJornada: boolean;
   jornadaActualizadaAt: string | null;
+  /** Por qué cerró, si lo dijo. Siempre opcional. */
+  jornadaMotivo: string | null;
 };
 
 export type OffDutyPerson = {
@@ -15,6 +17,7 @@ export type OffDutyPerson = {
   nombre: string;
   email: string;
   jornadaActualizadaAt: string | null;
+  jornadaMotivo: string | null;
 };
 
 export async function getMyWorkShift(): Promise<WorkShiftStatus | null> {
@@ -31,11 +34,11 @@ export async function getMyWorkShift(): Promise<WorkShiftStatus | null> {
  * Cierra o reabre la jornada de quien lo pide. El backend decide a quien avisa
  * segun el rol: al jefe si es una modelo, al panel de admin si no.
  */
-export async function setMyWorkShift(enJornada: boolean) {
+export async function setMyWorkShift(enJornada: boolean, motivo?: string) {
   try {
     const status = await apiFetch<WorkShiftStatus>("/users/me/jornada", {
       method: "PATCH",
-      body: JSON.stringify({ enJornada }),
+      body: JSON.stringify({ enJornada, motivo: motivo?.trim() || undefined }),
     });
     revalidatePath("/jefe");
     revalidatePath("/admin/dashboard");

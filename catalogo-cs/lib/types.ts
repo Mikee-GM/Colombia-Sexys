@@ -17,6 +17,11 @@ export type ApiUser = AuthUser & {
   telegramChatId?: string | null;
   createdAt?: string;
   lastLoginAt?: string | null;
+  /** Sigue dentro de su jornada de hoy. Distinto de estar disponible ahora. */
+  enJornada?: boolean;
+  jornadaActualizadaAt?: string | null;
+  /** Por qué cerró, si lo dijo o si se lo preguntaron. */
+  jornadaMotivo?: string | null;
 };
 
 export type EmployeePhoto = {
@@ -156,6 +161,13 @@ export type Service = {
   tipoAgenda?: "inmediato" | "programado";
   notificacionPreviaEnviada?: boolean;
   transporteAgendado?: "chofer" | "uber" | null;
+  /**
+   * Cuando la modelo avisó que ya estaba lista para salir.
+   *
+   * Con Uber el enlace no se entrega hasta que esta marca existe: el coche
+   * llegaba mientras ella se arreglaba y esperaba cobrando.
+   */
+  empleadaListaAt?: string | null;
   createdAt: string;
   calculationStatus: "provisional" | "ready" | "paid";
   pendingReason: string | null;
@@ -674,6 +686,20 @@ export type EmployeePortalActiveService = {
   gananciaEstimada: number;
   /** Prorrogas de espera ya gastadas, de un maximo de tres. */
   prorrogasUsadas?: number;
+  /** Notas que dejó el jefe al autorizar: es lo que tiene que leer antes de salir. */
+  notasJefe?: string | null;
+  /** Habitación, cuando el cliente la dio. */
+  habitacion?: string | null;
+  /** A dónde va, si la reserva se hizo sobre una ubicación conocida. */
+  destino?: string | null;
+  destinoDireccion?: string | null;
+  /**
+   * Se está esperando a que avise de que ya puede salir, y hasta entonces no
+   * se le pide el Uber. Solo pasa con Uber en el viaje de ida.
+   */
+  esperandoAlistado?: boolean;
+  /** Cuándo avisó de que estaba lista, si ya lo hizo. */
+  empleadaListaAt?: string | null;
   transporte?: {
     /** Id del viaje: es lo que el portal necesita para marcar el avance. */
     id: string;
@@ -1045,3 +1071,29 @@ export interface ClientDossier {
     createdAt: string;
   }>;
 }
+
+/**
+ * Un mensaje del canal entre la modelo y quien la coordina, tal y como lo ve
+ * ella: sin autor.
+ *
+ * El canal es anónimo de su lado a propósito. El backend nunca manda quién
+ * escribió; aquí no hay campo donde guardarlo aunque llegara.
+ */
+export type MensajeDelCanal = {
+  id: string;
+  emisor: "empleada" | "coordinacion";
+  cuerpo: string;
+  tipo: "duda" | "jornada";
+  createdAt: string;
+};
+
+/** El mismo mensaje visto por el jefe, que sí sabe con quién habla. */
+export type MensajeDelCanalJefe = {
+  id: string;
+  emisor: "empleada" | "jefe";
+  autor: string | null;
+  cuerpo: string;
+  tipo: "duda" | "jornada";
+  leidoAt: string | null;
+  createdAt: string;
+};

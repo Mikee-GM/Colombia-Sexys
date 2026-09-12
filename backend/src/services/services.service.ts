@@ -59,6 +59,7 @@ import { ServiceParticipant } from '../group-services/entities/service-participa
 import { TelegramSession } from '../telegram/entities/telegram-session.entity';
 import { formatServiceDuration, roundOpenEndedHours } from './service-duration';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
+import type { InlineKeyboardButton } from 'telegraf/types';
 
 /**
  * Si una persona del equipo puede hacerse cargo de algo ahora.
@@ -1451,7 +1452,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     tipoTransporte: 'chofer' | 'uber' = 'chofer',
     bossNotes?: string,
     habitacion?: string,
-  ): Promise<Servicios & { uberLink?: string; viajeId?: string }> {
+  ): Promise<
+    Servicios & {
+      uberLink?: string;
+      viajeId?: string;
+      /** El Uber queda retenido hasta que la modelo avise que esta lista. */
+      esperandoAlistado?: boolean;
+    }
+  > {
     const servicio = await this.serviciosRepository.findOne({
       where: { id },
       relations: { cliente: true, empleada: { usuario: true } },
@@ -1605,6 +1613,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             notasJefe: servicio.notasJefe,
             habitacion: servicio.habitacion,
             horaInicioServicio: servicio.horaInicioServicio,
+            /*
+             * El transporte elegido se guardaba solo en la rama de las citas
+             * programadas: en la autorizacion normal --que es la mayoria-- la
+             * columna se quedaba nula y el dato vivia unicamente dentro del
+             * viaje. Con eso, nada fuera del viaje podia saber que el servicio
+             * iba en Uber, incluida la espera a que la modelo se aliste.
+             */
+            transporteAgendado: tipoTransporte,
           },
           manager,
         );
@@ -1628,6 +1644,18 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
     }
     servicio.estado = 'en_curso';
+    servicio.transporteAgendado = tipoTransporte;
+
+    /*
+     * Con Uber se espera a que la modelo avise que ya puede salir.
+     *
+     * Antes el enlace salia en el mismo instante de la autorizacion, asi que el
+     * coche llegaba mientras ella se estaba arreglando: o esperaba con el
+     * taximetro corriendo, o se cancelaba y se pedia otro. El chofer propio no
+     * pasa por aqui porque ahi nada cobra por esperar.
+     */
+    const esperandoAlistado =
+      tipoTransporte === 'uber' && !servicio.empleadaListaAt;
 
     // 2. Crear viaje (viaje de ida para la empleada) sin chofer asignado inicialmente
     const nuevoViaje = this.viajesRepository.create({
@@ -1683,19 +1711,41 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             ),
           ]);
 
+          /*
+           * Con Uber, primero el aviso para alistarse.
+           *
+           * Los botones del traslado --ya subi, ya llegue-- no sirven de nada
+           * mientras no haya coche, y el coche no se pide hasta que ella avise.
+           * Aparecen cuando pulsa "Ya estoy lista", que es el momento en que el
+           * jefe recibe el enlace.
+           */
           if (tipoTransporte === 'uber') {
-            inlineButtons.unshift([
-              Markup.button.callback(
-                'Ya estoy en el Uber',
-                `eu:${viajeGuardado.id}:i`,
-              ),
-              Markup.button.callback('Ya llegué', `eu:${viajeGuardado.id}:f`),
-            ]);
+            inlineButtons.unshift(
+              esperandoAlistado
+                ? [
+                    Markup.button.callback(
+                      'Ya estoy lista',
+                      `lista_servicio:${servicio.id}`,
+                    ),
+                  ]
+                : [
+                    Markup.button.callback(
+                      'Ya estoy en el Uber',
+                      `eu:${viajeGuardado.id}:i`,
+                    ),
+                    Markup.button.callback(
+                      'Ya llegué',
+                      `eu:${viajeGuardado.id}:f`,
+                    ),
+                  ],
+            );
           }
 
           const empMsg = await this.bot.telegram.sendMessage(
             targetChatId,
-            `💼 *¡Servicio en Curso!* 🟢\n\n` +
+            (esperandoAlistado
+              ? `*Servicio autorizado. Alístate.*\n\n`
+              : `💼 *¡Servicio en Curso!* 🟢\n\n`) +
               `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
               `• *Duración:* ${servicio.duracionPactadaHoras} horas\n` +
               `• *Método de Pago:* ${servicio.metodoPago.toUpperCase()}\n\n` +
@@ -1705,7 +1755,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               (servicio.notasJefe
                 ? `• *Notas del jefe:* ${servicio.notasJefe}\n\n`
                 : '') +
-              `Cuando hayas terminado el servicio, presiona el botón de abajo para finalizarlo:`,
+              (esperandoAlistado
+                ? 'Cuando estés lista para salir, tócalo abajo y en ese momento te pedimos el Uber. No se pide antes para que no te espere con el taxímetro corriendo.'
+                : 'Cuando hayas terminado el servicio, presiona el botón de abajo para finalizarlo:'),
             {
               message_thread_id: threadId,
               parse_mode: 'Markdown',
@@ -1746,7 +1798,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     // 5. Iniciar despacho de choferes por proximidad
     let uberLink: string | undefined;
     if (tipoTransporte === 'uber') {
-      uberLink = this.buildUberLinkForTrip(servicio, 'ida');
+      // Retenido a proposito: lo entrega `marcarEmpleadaLista`, que es quien
+      // sabe que ella ya puede salir.
+      if (!esperandoAlistado) {
+        uberLink = this.buildUberLinkForTrip(servicio, 'ida');
+      }
     } else {
       try {
         await this.dispatchViaje(viajeGuardado.id);
@@ -1769,7 +1825,260 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ...servicio,
       uberLink,
       viajeId: viajeGuardado.id,
+      esperandoAlistado,
     };
+  }
+
+  /**
+   * La modelo avisa que ya esta lista para salir, y hasta entonces no hay Uber.
+   *
+   * Es el paso que faltaba entre autorizar y pedir el coche. El jefe autorizaba
+   * y el enlace del Uber aparecia en el acto, asi que el coche llegaba mientras
+   * ella se arreglaba: o esperaba cobrando, o habia que cancelarlo y pedir
+   * otro. Ahora el enlace nace aqui.
+   *
+   * Solo puede marcarlo ella. Si tarda, el jefe no la puede saltar --esa fue la
+   * decision-- pero le quedan las dos salidas de siempre: cambiar el viaje a
+   * chofer propio o cancelar el servicio.
+   *
+   * Es idempotente: dos toques devuelven el mismo enlace y avisan una sola vez.
+   */
+  async marcarEmpleadaLista(
+    servicioId: string,
+    actorUserId: string,
+  ): Promise<{ uberLink?: string; viajeId?: string; yaEstaba: boolean }> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: { empleada: { usuario: true }, cliente: true },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+
+    if (servicio.empleada?.usuarioId !== actorUserId) {
+      throw new ForbiddenException('Este servicio no es tuyo');
+    }
+    if (servicio.estado !== 'en_curso') {
+      throw new ConflictException('Este servicio ya no está activo');
+    }
+    if (servicio.transporteAgendado !== 'uber') {
+      throw new ConflictException(
+        'Este servicio no va en Uber, no hay nada que esperar',
+      );
+    }
+
+    const viaje = await this.viajesRepository.findOne({
+      where: { servicioId: servicio.id, tipo: 'ida' },
+      order: { horaNotificacion: 'DESC' },
+    });
+
+    if (servicio.empleadaListaAt) {
+      return {
+        uberLink: this.buildUberLinkForTrip(servicio, 'ida'),
+        viajeId: viaje?.id,
+        yaEstaba: true,
+      };
+    }
+
+    /*
+     * La condicion sobre `empleada_lista_at` hace el trabajo del cerrojo: dos
+     * toques seguidos --o el boton del chat y el del portal a la vez-- solo
+     * pueden cuajar una vez, y el segundo se va por la rama de arriba.
+     */
+    const marcado = await this.serviciosRepository
+      .createQueryBuilder()
+      .update(Servicios)
+      .set({ empleadaListaAt: () => 'now()' })
+      .where('id = :id AND empleada_lista_at IS NULL', { id: servicio.id })
+      .execute();
+    if (!marcado.affected) {
+      return {
+        uberLink: this.buildUberLinkForTrip(servicio, 'ida'),
+        viajeId: viaje?.id,
+        yaEstaba: true,
+      };
+    }
+    servicio.empleadaListaAt = new Date();
+
+    const uberLink = this.buildUberLinkForTrip(servicio, 'ida');
+    await this.avisarAlJefeDeQueEstaLista(servicio, viaje?.id, uberLink);
+    await this.cambiarBotonesDeLaEmpleada(servicio, viaje?.id);
+
+    return { uberLink, viajeId: viaje?.id, yaEstaba: false };
+  }
+
+  /**
+   * Le dice al jefe que ya puede pedir el Uber, con el enlace puesto.
+   *
+   * Va por los tres canales --chat, panel y aviso push-- porque es el momento
+   * en el que alguien tiene que hacer algo y no se sabe donde esta mirando. El
+   * aviso no lleva `tipo` a proposito: no es de los que se pueden silenciar.
+   */
+  private async avisarAlJefeDeQueEstaLista(
+    servicio: Servicios,
+    viajeId: string | undefined,
+    uberLink: string,
+  ): Promise<void> {
+    const nombre = servicio.empleada?.nombreArtistico ?? 'La modelo';
+
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'employee_ready_for_service',
+      data: {
+        serviceId: servicio.id,
+        employeeId: servicio.empleadaId,
+        employeeName: nombre,
+        tripId: viajeId,
+      },
+    });
+
+    try {
+      await this.notificationsService.notificar(servicio.jefeId, {
+        titulo: `${nombre} ya está lista`,
+        cuerpo: 'Ya puedes pedirle el Uber. Toca para hacerlo.',
+        url: '/jefe',
+        tag: `lista-${servicio.id}`,
+        requireInteraction: true,
+      });
+    } catch (error) {
+      this.logger.error('No se pudo avisar al jefe de que está lista:', error);
+    }
+
+    const jefe = await this.usuariosRepository.findOneBy({
+      id: servicio.jefeId,
+    });
+    if (!jefe?.telegramChatId) return;
+
+    const botones: InlineKeyboardButton[][] = [
+      [Markup.button.url('Pedir Uber', uberLink)],
+    ];
+    if (viajeId) {
+      botones.push([
+        Markup.button.callback('Adjuntar captura', `uber_attach:${viajeId}`),
+      ]);
+      botones.push([
+        Markup.button.callback(
+          'Cambiar a chofer',
+          `cambiar_transporte:${viajeId}:interno`,
+        ),
+      ]);
+    }
+
+    try {
+      await this.bot.telegram.sendMessage(
+        jefe.telegramChatId,
+        `${nombre} ya está lista para salir. Ahora sí, pídele el Uber.`,
+        { ...Markup.inlineKeyboard(botones) },
+      );
+    } catch (error) {
+      this.logger.error(
+        'No se pudo avisar por Telegram de que la modelo está lista:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Cambia el boton de "ya estoy lista" por los del traslado.
+   *
+   * Sin esto el boton se queda ahi puesto y ella lo vuelve a pulsar pensando
+   * que no llego; y los botones que de verdad necesita --ya subi, ya llegue--
+   * no aparecerian hasta que alguien le mandara otro mensaje.
+   */
+  private async cambiarBotonesDeLaEmpleada(
+    servicio: Servicios,
+    viajeId: string | undefined,
+  ): Promise<void> {
+    const chatId = servicio.empleada?.usuario?.telegramChatId;
+    const mensajeId = servicio.telegramEmpleadaMensajeId;
+    if (!chatId || !mensajeId || !viajeId) return;
+
+    const botones: InlineKeyboardButton[][] = [
+      [
+        Markup.button.callback('Ya estoy en el Uber', `eu:${viajeId}:i`),
+        Markup.button.callback('Ya llegué', `eu:${viajeId}:f`),
+      ],
+      [
+        Markup.button.callback(
+          'Finalizar Servicio',
+          `finalizar_servicio:${servicio.id}`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          'Agregar Extra',
+          `agregar_extra_list:${servicio.id}`,
+        ),
+      ],
+    ];
+
+    try {
+      await this.bot.telegram.editMessageReplyMarkup(
+        chatId,
+        Number(mensajeId),
+        undefined,
+        Markup.inlineKeyboard(botones).reply_markup,
+      );
+    } catch (error) {
+      // El mensaje pudo borrarlo ella, o ser demasiado viejo para editarlo.
+      this.logger.warn(
+        `No se pudieron cambiar los botones del servicio ${servicio.id}: ${describeError(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Cierra la liquidacion del transporte cuando ya no falta nada por confirmar.
+   *
+   * Antes esto vivia partido en dos sitios y los dos miraban solo el viaje de
+   * regreso: uno cerraba al marcar la llegada a casa --si la tarifa ya estaba
+   * confirmada-- y el otro al confirmar esa tarifa --si la llegada ya estaba
+   * marcada--. Con eso, un servicio cuyo Uber de IDA quedaba sin tarifa se
+   * cerraba igual, y al reves: hacer los pasos en otro orden dejaba servicios
+   * terminados hace dias colgados para siempre en la pestaña de activos del
+   * jefe, sin que nada dijera que faltaba.
+   *
+   * La condicion es la misma que usa la liquidacion de oficina para decidir si
+   * sus numeros son definitivos: existe el viaje de regreso y ningun Uber vivo
+   * esta sin terminar o sin tarifa.
+   */
+  private async cerrarLiquidacionSiProcede(servicioId: string): Promise<void> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: { viajes: true },
+    });
+    if (!servicio) return;
+    if (servicio.estado !== 'finalizado') return;
+    if (servicio.estadoLiquidacion === 'cerrada') return;
+
+    const viajes = servicio.viajes ?? [];
+    const regreso = viajes.find((viaje) => viaje.tipo === 'regreso');
+    if (!regreso || regreso.estado !== 'finalizado') return;
+
+    const uberPendiente = viajes.some(
+      (viaje) =>
+        viaje.proveedorTransporte === 'uber' &&
+        !['cancelado', 'rechazado'].includes(viaje.estado) &&
+        (viaje.estado !== 'finalizado' || !viaje.fareConfirmedAt),
+    );
+    if (uberPendiente) return;
+
+    await this.serviciosRepository.update(servicioId, {
+      estadoLiquidacion: 'cerrada',
+    });
+
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'service_settlement_closed',
+      data: { serviceId: servicioId },
+    });
+
+    // El tema del grupo se retira detras del cierre, no antes: mientras quede
+    // algo por confirmar sigue siendo el sitio donde se habla de ello.
+    setTimeout(() => {
+      this.deleteServiceTopic(servicio).catch((error) =>
+        this.logger.error(
+          `[ServicesService] No se pudo cerrar el tema del servicio ${servicioId}:`,
+          error,
+        ),
+      );
+    }, 1500);
   }
 
   /**
@@ -4876,20 +5185,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     await this.liquidationSync.syncOfficeRecord(trip.servicioId);
     if (trip.tipo === 'regreso') {
       await this.sendFinalReceiptAndAward(trip.servicioId);
-      if (trip.estado === 'finalizado') {
-        await this.serviciosRepository.update(trip.servicioId, {
-          estadoLiquidacion: 'cerrada',
-        });
-        setTimeout(() => {
-          this.deleteServiceTopic(trip.servicio).catch((error) =>
-            this.logger.error(
-              `[ServicesService] No se pudo cerrar el tema del servicio ${trip.servicioId}:`,
-              error,
-            ),
-          );
-        }, 1500);
-      }
     }
+    await this.cerrarLiquidacionSiProcede(trip.servicioId);
     const updated = await this.serviciosRepository.findOneBy({
       id: trip.servicioId,
     });
@@ -5275,12 +5572,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       if (trip.tipo === 'regreso') {
         await this.serviciosRepository.update(trip.servicioId, {
           ...(trip.servicio.horaLlegadaCasa ? {} : { horaLlegadaCasa: now }),
-          // El servicio solo se cierra aquí si ya no falta que el jefe suba
-          // la captura ni confirme la tarifa del Uber de regreso; si sigue
-          // pendiente, se cierra en confirmUberFare para no desaparecer del
-          // panel de "Activos" antes de tiempo.
-          ...(trip.fareConfirmedAt ? { estadoLiquidacion: 'cerrada' } : {}),
         });
+        // Quien decide si ya se puede cerrar es `cerrarLiquidacionSiProcede`,
+        // que mira TODOS los viajes: aqui solo se sabe de este.
+        await this.cerrarLiquidacionSiProcede(trip.servicioId);
         await this.liquidationSync
           .syncOfficeRecord(trip.servicioId)
           .catch((error) =>

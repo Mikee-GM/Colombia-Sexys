@@ -17,6 +17,7 @@ import {
 } from "@/lib/actions/employee-portal";
 import CerrarSesion from "@/components/ui/CerrarSesion";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
+import CanalCoordinacion from "@/components/empleada/CanalCoordinacion";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
 import type { WeeklyPhotoSubmissionItem } from "@/lib/types";
 import SubirFotosSemanales, {
@@ -37,6 +38,7 @@ import {
   Clock,
   Crown,
   Info,
+  MessageCircle,
   Star,
   Trophy,
 } from "lucide-react";
@@ -55,7 +57,7 @@ interface EmployeePortalViewProps {
   seccionInicial?: TabType;
 }
 
-type TabType = "resumen" | "ranking" | "servicios" | "reputacion" | "fotos";
+type TabType = "resumen" | "ranking" | "servicios" | "reputacion" | "fotos" | "canal";
 
 export default function EmployeePortalView({
   initialData,
@@ -201,6 +203,7 @@ export default function EmployeePortalView({
             { id: "servicios", label: "Servicios", icono: <ClipboardList size={14} />, title: "Mis Servicios" },
             { id: "reputacion", label: "Reseñas", icono: <Star size={14} />, title: "Reputación" },
             { id: "fotos", label: "Mis Fotos", icono: <Camera size={14} />, title: "Fotos" },
+            { id: "canal", label: "Coordinación", icono: <MessageCircle size={14} />, title: "Canal con coordinación" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -814,6 +817,19 @@ export default function EmployeePortalView({
         )}
 
         {/* ================= TAB 5: MIS FOTOS ================= */}
+        {/*
+          El canal con coordinación.
+
+          Va en su propia pestaña y no suelto en el resumen porque es opcional:
+          se entra cuando hay algo que preguntar, no cada vez que se abre la
+          aplicación. Del otro lado nunca aparece un nombre.
+        */}
+        {activeTab === "canal" && (
+          <div className="animate-fadeIn">
+            <CanalCoordinacion token={token} />
+          </div>
+        )}
+
         {activeTab === "fotos" && (
           <div className="space-y-6 animate-fadeIn">
             {/* Contenido de la semana: aviso, subida y lo ya enviado. */}

@@ -29,7 +29,7 @@ interface PageProps {
 }
 
 /** Pestañas a las que puede apuntar un enlace. Nada mas abre el portal por defecto. */
-const SECCIONES = ["resumen", "ranking", "servicios", "reputacion", "fotos"] as const;
+const SECCIONES = ["resumen", "ranking", "servicios", "reputacion", "fotos", "canal"] as const;
 type Seccion = (typeof SECCIONES)[number];
 
 export default async function EmployeePortalPage({ searchParams }: PageProps) {

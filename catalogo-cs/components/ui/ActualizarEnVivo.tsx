@@ -49,6 +49,17 @@ export default function ActualizarEnVivo({
           // El latido solo mantiene viva la conexion; refrescar con el seria
           // pedir la pantalla entera cada quince segundos para nada.
           if (payload.type === "heartbeat") return;
+          /*
+           * El evento se reemite tal cual para quien tenga estado propio.
+           *
+           * `router.refresh()` recarga lo que vino del servidor, pero un
+           * componente que carga sus datos por su cuenta --la conversacion con
+           * coordinacion, sin ir mas lejos-- no se entera de nada. Asi puede
+           * escuchar sin abrir una segunda conexion.
+           */
+          window.dispatchEvent(
+            new CustomEvent("portal-realtime-event", { detail: payload }),
+          );
           router.refresh();
         } catch {
           // Un evento ilegible no dice que no haya pasado nada: se refresca.

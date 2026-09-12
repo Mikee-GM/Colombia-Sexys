@@ -79,10 +79,42 @@ describe('WorkShiftStatusService', () => {
   it('le avisa por Telegram al jefe cuando la modelo cierra su jornada', async () => {
     await service.setStatus(modelo, false);
 
-    expect(telegram.sendMessage).toHaveBeenCalledWith(
-      '111',
-      expect.stringContaining('cerro su jornada'),
+    const [chatId, texto] = telegram.sendMessage.mock.calls[0];
+    expect(chatId).toBe('111');
+    expect(texto).toContain('cerró su jornada');
+  });
+
+  /*
+   * El motivo es opcional en los dos sentidos: si lo escribe, viaja en el mismo
+   * aviso; si no, el jefe recibe con que preguntarlo. Antes no habia ninguna de
+   * las dos cosas y el jefe tenia que salirse del sistema para enterarse.
+   */
+  it('manda el motivo dentro del aviso cuando ella lo escribe', async () => {
+    await service.setStatus(modelo, false, 'Me siento mal');
+
+    const [, texto, opciones] = telegram.sendMessage.mock.calls[0];
+    expect(texto).toContain('Me siento mal');
+    expect(opciones?.buttons).toBeUndefined();
+
+    const [, cambios] = usuarios.update.mock.calls[0];
+    expect(cambios.jornadaMotivo).toBe('Me siento mal');
+  });
+
+  it('le ofrece al jefe preguntar la razón cuando ella no la dio', async () => {
+    await service.setStatus(modelo, false);
+
+    const [, , opciones] = telegram.sendMessage.mock.calls[0];
+    expect(opciones.buttons[0][0].callback_data).toBe('jornada_motivo:emp-1');
+  });
+
+  it('borra el motivo al volver a la jornada', async () => {
+    await service.setStatus(
+      { ...modelo, enJornada: false, jornadaMotivo: 'Me siento mal' },
+      true,
     );
+
+    const [, cambios] = usuarios.update.mock.calls[0];
+    expect(cambios.jornadaMotivo).toBeNull();
   });
 
   it('marca tambien en el panel de admin el cambio de una modelo', async () => {

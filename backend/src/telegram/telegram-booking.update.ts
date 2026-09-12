@@ -91,6 +91,7 @@ import {
   RegistroManualEnCurso,
   TelegramManualServiceWizard,
 } from './telegram-manual-service.wizard';
+import { TelegramTeamChannelUpdate } from './telegram-team-channel.update';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
 import type { InlineKeyboardButton } from 'telegraf/types';
@@ -300,6 +301,17 @@ interface SessionData {
   >;
   /** Formulario a medias de un servicio que se registra a posteriori. */
   registroManual?: RegistroManualEnCurso;
+  /**
+   * Respuesta pendiente en el canal entre la modelo y quien la coordina.
+   *
+   * Guarda de que lado escribe quien pulso "Responder": el mismo boton existe
+   * en los dos extremos y el texto que llegue despues tiene que ir al que toca.
+   */
+  canalEquipo?: {
+    empleadaId: string;
+    lado: 'jefe' | 'empleada';
+    startedAt: number;
+  };
 }
 
 export type { SessionData as TelegramSessionData };
@@ -883,6 +895,8 @@ export class TelegramBookingUpdate {
     private readonly locationsService: LocationsService,
     private readonly callbackGuard: TelegramCallbackGuard,
     private readonly manualServiceWizard: TelegramManualServiceWizard,
+    @Inject(forwardRef(() => TelegramTeamChannelUpdate))
+    private readonly teamChannelUpdate: TelegramTeamChannelUpdate,
   ) {}
 
   private async createReceiptEvidence(
@@ -4041,6 +4055,46 @@ export class TelegramBookingUpdate {
     }
   }
 
+  /**
+   * La modelo avisa que ya esta lista y con eso se destraba el Uber.
+   *
+   * El boton vive en el mismo mensaje con el que se le anuncia el servicio, que
+   * es donde tiene los datos y las notas del jefe delante. Quien puede pulsarlo
+   * lo comprueba `marcarEmpleadaLista`: es suyo o no es de nadie.
+   */
+  @Action(/^lista_servicio:(.+)$/)
+  async onEmpleadaLista(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
+    const servicioId = (ctx as any).match?.[1] as string | undefined;
+    if (!servicioId) return;
+
+    const telegramId = ctx.from?.id?.toString();
+    if (!telegramId) return;
+    const usuario = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId, rol: 'empleada' },
+    });
+    if (!usuario) {
+      await ctx.answerCbQuery('Este aviso no es tuyo.', { show_alert: true });
+      return;
+    }
+
+    try {
+      const resultado = await this.servicesService.marcarEmpleadaLista(
+        servicioId,
+        usuario.id,
+      );
+      await ctx.answerCbQuery(
+        resultado.yaEstaba
+          ? 'Ya habíamos avisado. Tu Uber está en camino.'
+          : 'Listo, ya le avisé. En un momento tienes tu Uber.',
+      );
+    } catch (error: any) {
+      await ctx.answerCbQuery(error?.message || 'No se pudo avisar', {
+        show_alert: true,
+      });
+    }
+  }
+
   @Action(/^finalizar_servicio:(.+)$/)
   async onFinalizarServicio(@Ctx() ctx: Context) {
     const telegramId = ctx.from?.id.toString();
@@ -6517,6 +6571,13 @@ export class TelegramBookingUpdate {
      * los `@Update()`, que no es algo sobre lo que se deba construir nada.
      */
     if (await this.manualServiceWizard.manejarTexto(ctx)) return;
+
+    /*
+     * El canal con coordinacion va justo detras, y por la misma razon: quien
+     * acaba de pulsar "Responder" espera que su siguiente mensaje salga por
+     * ahi, no que lo conteste la IA del catalogo.
+     */
+    if (await this.teamChannelUpdate.manejarTexto(ctx)) return;
 
     const remitente = ctx.from?.id?.toString();
     if (

@@ -80,6 +80,22 @@ const AVISOS_DEL_JEFE: Record<string, AvisoDeEvento> = {
     soloSi: (evento) =>
       (evento.data as { emisor?: string } | undefined)?.emisor === 'cliente',
   },
+  /*
+   * Lo que escribe una modelo por el canal de dudas.
+   *
+   * Es de nivel 2 --conviene enterarse, pero nada se rompe si tarda-- y por eso
+   * sale por aqui y se puede silenciar. Lo que la modelo recibe cuando le
+   * escriben a ella va enganchado en el propio canal, que es el unico sitio
+   * donde se sabe a quien toca.
+   */
+  team_channel_message: {
+    titulo: 'Mensaje de una modelo',
+    cuerpo: 'Te escribió por el canal. Toca para leerlo.',
+    url: '/jefe',
+    asunto: 'canal',
+    soloSi: (evento) =>
+      (evento.data as { emisor?: string } | undefined)?.emisor === 'empleada',
+  },
   service_cancelled: {
     titulo: 'Servicio cancelado',
     cuerpo: 'Se canceló un servicio de tu equipo.',
@@ -220,6 +236,9 @@ export class NotificationsBridge implements OnModuleInit {
       'servicioId',
       'requestId',
       'tripId',
+      // El canal de dudas no cuelga de ningun servicio: sus avisos se agrupan
+      // por modelo, que es lo que los hace ser "la misma conversacion".
+      'empleadaId',
       'id',
     ]) {
       const valor = data?.[clave];

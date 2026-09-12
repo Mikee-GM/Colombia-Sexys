@@ -26,21 +26,33 @@ export default function WorkShiftToggle({
   className?: string;
 }) {
   const [status, setStatus] = useState<WorkShiftStatus>(
-    initialStatus ?? { enJornada: true, jornadaActualizadaAt: null },
+    initialStatus ?? { enJornada: true, jornadaActualizadaAt: null, jornadaMotivo: null },
   );
+  /*
+   * El motivo se pregunta al cerrar, nunca se exige.
+   *
+   * Quien cierra su jornada normalmente ya terminó por hoy, así que condicionar
+   * el botón a rellenar algo sería ponerle un trámite justo cuando menos ganas
+   * tiene. Pero decirlo en el momento ahorra la pregunta que el jefe tendría que
+   * hacer después, así que la casilla está a la vista y se puede cerrar
+   * dejándola vacía.
+   */
+  const [pidiendoMotivo, setPidiendoMotivo] = useState(false);
+  const [motivo, setMotivo] = useState("");
   const [pending, startTransition] = useTransition();
 
-  const cambiar = () => {
+  const cambiar = (siguiente: boolean, razon?: string) => {
     if (pending) return;
-    const siguiente = !status.enJornada;
 
     startTransition(async () => {
-      const result = await setMyWorkShift(siguiente);
+      const result = await setMyWorkShift(siguiente, razon);
       if (!result.success) {
         toast.error(result.error);
         return;
       }
       setStatus(result.status);
+      setPidiendoMotivo(false);
+      setMotivo("");
       toast.success(
         siguiente
           ? "Estas de vuelta en jornada"
@@ -57,7 +69,10 @@ export default function WorkShiftToggle({
         type="button"
         disabled={pending}
         aria-busy={pending}
-        onClick={cambiar}
+        onClick={() =>
+          status.enJornada ? setPidiendoMotivo((abierto) => !abierto) : cambiar(true)
+        }
+        aria-expanded={status.enJornada ? pidiendoMotivo : undefined}
         aria-pressed={!status.enJornada}
         className={`inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 ${
           status.enJornada
@@ -69,11 +84,55 @@ export default function WorkShiftToggle({
         {status.enJornada ? "Terminar mi jornada" : "Volver a mi jornada"}
       </button>
 
+      {status.enJornada && pidiendoMotivo && (
+        <div className="mt-2 rounded-xl border border-zinc-800 bg-black p-3">
+          <label className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]" htmlFor="motivo-jornada">
+            ¿Por qué cierras? Opcional
+          </label>
+          <textarea
+            id="motivo-jornada"
+            value={motivo}
+            onChange={(event) => setMotivo(event.target.value)}
+            maxLength={500}
+            rows={2}
+            placeholder="Si no quieres decirlo, cierra sin escribir nada"
+            className="mt-2 w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-[#C5A55A]"
+          />
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => cambiar(false, motivo.trim() || undefined)}
+              className="rounded-lg bg-[#C5A55A] px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-black disabled:opacity-50"
+            >
+              Cerrar jornada
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setPidiendoMotivo(false);
+                setMotivo("");
+              }}
+              className="rounded-lg border border-zinc-800 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
       <p className="mt-2 text-center text-[11px] leading-relaxed text-zinc-500">
         {status.enJornada
           ? "Estas dentro de tu jornada."
           : `Fuera de jornada${desde ? ` desde las ${desde}` : ""}.`}
       </p>
+
+      {!status.enJornada && status.jornadaMotivo && (
+        <p className="mt-1 text-center text-[11px] leading-relaxed text-zinc-600">
+          {`Motivo: ${status.jornadaMotivo}`}
+        </p>
+      )}
     </div>
   );
 }

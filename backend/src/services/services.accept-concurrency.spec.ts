@@ -17,6 +17,8 @@ describe('ServicesService.aceptar (concurrencia)', () => {
   let updateBuilder: any;
   let empleadasRepository: any;
   let service: ServicesService;
+  /* El doble se guarda aparte para poder mirarlo sin sacar el metodo de su objeto. */
+  let despachoDeChoferes: jest.SpyInstance;
 
   const servicioPendiente = () => ({
     id: 'srv-1',
@@ -120,7 +122,9 @@ describe('ServicesService.aceptar (concurrencia)', () => {
       serviceParticipantsRepository: {},
     });
     // El despacho de choferes no es lo que se prueba aqui.
-    jest.spyOn(service as any, 'dispatchViaje').mockResolvedValue(undefined);
+    despachoDeChoferes = jest
+      .spyOn(service as any, 'dispatchViaje')
+      .mockResolvedValue(undefined);
   });
 
   it('acepta el servicio cuando la empleada esta libre y la fila sigue pendiente', async () => {
@@ -131,6 +135,45 @@ describe('ServicesService.aceptar (concurrencia)', () => {
     expect(empleadasRepository.update).toHaveBeenCalledWith('emp-1', {
       disponible: false,
     });
+  });
+
+  /*
+   * El transporte elegido tiene que quedar guardado en el servicio.
+   *
+   * Se guardaba solo en la rama de las citas programadas: en la autorizacion
+   * normal la columna se quedaba nula y el dato vivia unicamente dentro del
+   * viaje, asi que nada fuera de el podia saber que el servicio iba en Uber.
+   * De eso depende que se espere a que la modelo se aliste antes de pedirlo.
+   */
+  it('guarda en el servicio el transporte con el que se autorizo', async () => {
+    const resultado = await service.aceptar('srv-1', 'jefe-1', 'uber');
+
+    expect(resultado.transporteAgendado).toBe('uber');
+    expect(updateBuilder.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estado: 'en_curso',
+        transporteAgendado: 'uber',
+      }),
+    );
+  });
+
+  /*
+   * Con Uber, el enlace no se entrega al autorizar: el coche llegaba mientras
+   * ella se arreglaba y esperaba con el taximetro corriendo.
+   */
+  it('no entrega el enlace del Uber hasta que la modelo avise', async () => {
+    const resultado = await service.aceptar('srv-1', 'jefe-1', 'uber');
+
+    expect(resultado.esperandoAlistado).toBe(true);
+    expect(resultado.uberLink).toBeUndefined();
+  });
+
+  /** Con chofer propio no se espera a nada: ahi nada cobra por esperar. */
+  it('con chofer propio despacha en el acto', async () => {
+    const resultado = await service.aceptar('srv-1', 'jefe-1', 'chofer');
+
+    expect(resultado.esperandoAlistado).toBe(false);
+    expect(despachoDeChoferes).toHaveBeenCalledWith('trip-1');
   });
 
   /** La segunda pulsacion: el UPDATE condicionado ya no encuentra la fila. */

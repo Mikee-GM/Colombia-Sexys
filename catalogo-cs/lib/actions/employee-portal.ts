@@ -6,6 +6,7 @@ import { getBackendCookieHeader, getCsrfToken } from "@/lib/auth";
 import type {
   EmployeePortalData,
   EmployeeWeeklyContent,
+  MensajeDelCanal,
   WeeklyPhotoSubmissionItem,
 } from "@/lib/types";
 
@@ -478,6 +479,110 @@ export async function registrarMiUbicacion(
     // Un envio perdido no se avisa: el siguiente lo corrige.
     console.error("Error al registrar la ubicacion:", error);
     return { success: false };
+  }
+}
+
+/**
+ * Avisa que ya esta lista para salir.
+ *
+ * Es lo que destraba el Uber: hasta que ella lo marca, el jefe no tiene enlace
+ * con el que pedirlo. Se metio este paso porque el coche llegaba en el mismo
+ * momento de la autorizacion, mientras ella se estaba arreglando, y esperaba
+ * con el taximetro corriendo.
+ *
+ * Que el servicio sea suyo lo comprueba el backend.
+ */
+export async function marcarListaParaSalir(
+  servicioId: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string; yaEstaba?: boolean }> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/services/${servicioId}/lista`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: await portalHeaders(token),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo avisar que ya estas lista",
+      };
+    }
+    const datos = await response.json();
+    return { success: true, yaEstaba: Boolean(datos.yaEstaba) };
+  } catch (error: any) {
+    console.error("Error al marcar que ya esta lista:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
+
+/**
+ * Lee el canal con coordinacion.
+ *
+ * Es anonimo de su lado a proposito: ella no ve nunca quien le escribe, solo
+ * que viene de coordinacion. Lo garantiza el backend, que no manda el autor.
+ */
+export async function leerCanal(
+  token?: string,
+): Promise<{ success: boolean; mensajes: MensajeDelCanal[]; error?: string }> {
+  try {
+    const response = await fetch(portalUrl("/employee-portal/channel", token), {
+      cache: "no-store",
+      headers: await portalHeaders(token),
+    });
+    if (!response.ok) {
+      return { success: false, mensajes: [], error: "No se pudo abrir el canal" };
+    }
+    return { success: true, mensajes: await response.json() };
+  } catch (error: any) {
+    console.error("Error al leer el canal:", error);
+    return {
+      success: false,
+      mensajes: [],
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
+
+/** Escribe en el canal. Le llega a sus jefes por chat, panel y aviso. */
+export async function escribirEnCanal(
+  cuerpo: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string; mensaje?: MensajeDelCanal }> {
+  const texto = cuerpo.trim();
+  if (!texto) return { success: false, error: "Escribe algo primero" };
+
+  try {
+    const response = await fetch(portalUrl("/employee-portal/channel", token), {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        ...(await portalHeaders(token)),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ cuerpo: texto }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo enviar tu mensaje",
+      };
+    }
+    return { success: true, mensaje: await response.json() };
+  } catch (error: any) {
+    console.error("Error al escribir en el canal:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
   }
 }
 

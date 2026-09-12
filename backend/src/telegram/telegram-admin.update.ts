@@ -11,6 +11,16 @@ import { ServicesService } from '../services/services.service';
 import type { TelegramSessionData } from './telegram-booking.update';
 import { TelegramCallbackGuard } from './telegram-callback-guard';
 
+/**
+ * Lo que se le dice al jefe cuando el Uber queda retenido.
+ *
+ * No es un fallo ni una demora del sistema: es el paso que se metio a proposito
+ * entre autorizar y pedir el coche, y hay que decirlo con esas palabras para
+ * que no lo lea como que algo se atasco.
+ */
+const ESPERANDO_ALISTADO =
+  'El Uber se pide cuando ella avise que está lista. Te llega el enlace en ese momento.';
+
 /** El jefe tambien tiene sesion de Telegram; aqui solo interesa una clave. */
 type BossContext = Context & { session?: TelegramSessionData };
 
@@ -276,7 +286,8 @@ export class TelegramAdminUpdate {
       }
 
       await ctx.editMessageText(
-        `Servicio aceptado.\nNotas internas: ${pending.notes}`,
+        `Servicio aceptado.\nNotas internas: ${pending.notes}` +
+          (res.esperandoAlistado ? `\n\n${ESPERANDO_ALISTADO}` : ''),
         inlineButtons.length > 0
           ? Markup.inlineKeyboard(inlineButtons)
           : undefined,
@@ -590,6 +601,7 @@ export class TelegramAdminUpdate {
     try {
       let uberLink: string | undefined;
       let viajeId: string | undefined;
+      let esperandoAlistado = false;
       if (accept) {
         const res = await this.servicesService.aceptar(
           serviceId,
@@ -598,6 +610,7 @@ export class TelegramAdminUpdate {
         );
         uberLink = res.uberLink;
         viajeId = res.viajeId;
+        esperandoAlistado = Boolean(res.esperandoAlistado);
         await ctx.answerCbQuery('🟢 Servicio Aceptado exitosamente.');
       } else {
         await this.servicesService.rechazar(serviceId, user.id);
@@ -660,6 +673,9 @@ export class TelegramAdminUpdate {
       }
 
       let resolutionMsg = `\n\n📢 *Resolución:* ${statusLabel} por ${user.email}`;
+      if (accept && esperandoAlistado) {
+        resolutionMsg += `\n${ESPERANDO_ALISTADO}`;
+      }
       if (accept && transportType === 'uber' && uberLink) {
         resolutionMsg += `\n🔗 *Enlace Uber:* [Pedir Uber](${uberLink})`;
       }

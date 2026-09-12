@@ -28,6 +28,8 @@ import {
 import { ExtendServiceDto } from './dto/extend-service.dto';
 import { PortalUser } from '../auth/decorators/portal-user.decorator';
 import { LocationsService } from '../locations/locations.service';
+import { TeamChannelService } from '../team-channel/team-channel.service';
+import { EnviarMensajeEquipoDto } from '../team-channel/dto/team-channel.dto';
 import { RegistrarUbicacionDto } from '../locations/dto/registrar-ubicacion.dto';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
 import {
@@ -49,6 +51,7 @@ export class EmployeePortalController {
     private readonly disciplineService: DisciplineService,
     private readonly groupServicesService: GroupServicesService,
     private readonly locationsService: LocationsService,
+    private readonly teamChannel: TeamChannelService,
   ) {}
 
   @Get('me')
@@ -298,6 +301,50 @@ export class EmployeePortalController {
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     return this.servicesService.solicitarProrroga(servicioId, userId);
+  }
+
+  /**
+   * Avisa que ya esta lista para salir, y con eso el jefe puede pedirle el Uber.
+   *
+   * Es el paso intermedio entre autorizar y pedir el coche: antes el Uber salia
+   * en el mismo instante de la autorizacion y llegaba mientras ella se
+   * arreglaba. Quien puede marcarlo es solo ella, y eso lo comprueba
+   * `marcarEmpleadaLista`.
+   */
+  @Post('services/:servicioId/lista')
+  @HttpCode(200)
+  async marcarLista(
+    @PortalUser() userId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    const resultado = await this.servicesService.marcarEmpleadaLista(
+      servicioId,
+      userId,
+    );
+    // El enlace del Uber es cosa del jefe: a ella no le sirve de nada y no
+    // tiene por que salir del backend hacia su portal.
+    return { lista: true, yaEstaba: resultado.yaEstaba };
+  }
+
+  /**
+   * Canal con coordinacion: lo que hay escrito.
+   *
+   * Es anonimo de su lado a proposito. Ningun mensaje que sale por aqui lleva
+   * quien lo escribio, solo si viene de ella o de coordinacion.
+   */
+  @Get('channel')
+  async leerCanal(@PortalUser() userId: string) {
+    return this.teamChannel.listarParaEmpleada(userId);
+  }
+
+  /** Escribe en el canal. Le llega a sus jefes por chat, panel y aviso. */
+  @Post('channel')
+  @HttpCode(201)
+  async escribirEnCanal(
+    @PortalUser() userId: string,
+    @Body() dto: EnviarMensajeEquipoDto,
+  ) {
+    return this.teamChannel.enviarDesdeEmpleada(userId, dto.cuerpo, dto.tipo);
   }
 
   /**

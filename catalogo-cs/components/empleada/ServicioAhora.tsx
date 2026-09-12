@@ -14,6 +14,7 @@ import AccionesDelViaje from "@/components/empleada/AccionesDelViaje";
 import AgregarExtra from "@/components/empleada/AgregarExtra";
 import FinalizarServicio from "@/components/empleada/FinalizarServicio";
 import ExtenderServicio from "@/components/empleada/ExtenderServicio";
+import MarcarLista from "@/components/empleada/MarcarLista";
 import PedirProrroga from "@/components/empleada/PedirProrroga";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
@@ -75,6 +76,14 @@ export default function ServicioAhora({
   // desaparecia en ese hueco y volvia a aparecer sola despues, y desde fuera
   // parecia que el servicio se habia perdido.
   const esperandoTransporte = enRegreso && !servicio.transporte;
+  /*
+   * Se está esperando a que avise de que ya puede salir.
+   *
+   * Mientras esto sea cierto no hay Uber pedido: el enlace del jefe nace cuando
+   * ella toca el botón. Es lo primero que tiene que ver al abrir, así que sale
+   * también en el resumen del portal y no solo en la pantalla del servicio.
+   */
+  const alistandose = Boolean(servicio.esperandoAlistado);
 
   return (
     <section className="overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-black shadow-lg">
@@ -84,13 +93,19 @@ export default function ServicioAhora({
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
             {enRegreso
               ? "Tu regreso"
-              : enCurso
-                ? "Servicio en curso"
-                : "Servicio asignado"}
+              : alistandose
+                ? "Alístate"
+                : enCurso
+                  ? "Servicio en curso"
+                  : "Servicio asignado"}
           </span>
         </span>
         <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
-          {enRegreso ? "de vuelta" : servicio.estado.replaceAll("_", " ")}
+          {enRegreso
+            ? "de vuelta"
+            : alistandose
+              ? "sin salir"
+              : servicio.estado.replaceAll("_", " ")}
         </span>
       </header>
 
@@ -111,6 +126,8 @@ export default function ServicioAhora({
             {formatCurrency(servicio.gananciaEstimada)}
           </span>
         </p>
+
+        {alistandose && <MarcarLista servicio={servicio} token={token} />}
 
         {esperandoTransporte && (
           <p className="rounded-lg border border-[#C5A55A]/25 bg-[#C5A55A]/5 px-3 py-2 text-center text-[11px] text-[#E8D5A3]">
@@ -174,7 +191,7 @@ export default function ServicioAhora({
           via, no un reemplazo, y el estado que decide cual mostrar sale del
           propio viaje, asi que las dos se mantienen sincronizadas solas.
         */}
-        {!enlaceAPantallaPropia && servicio.transporte && (
+        {!enlaceAPantallaPropia && servicio.transporte && !alistandose && (
           <AccionesDelViaje transporte={servicio.transporte} token={token} />
         )}
 

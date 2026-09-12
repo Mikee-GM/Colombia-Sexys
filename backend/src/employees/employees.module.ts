@@ -15,6 +15,7 @@ import { UploadModule } from '../upload/upload.module';
 import { WeeklyContentModule } from '../weekly-content/weekly-content.module';
 import { AuthModule } from '../auth/auth.module';
 import { ServicesModule } from '../services/services.module';
+import { TeamChannelModule } from '../team-channel/team-channel.module';
 
 @Module({
   imports: [
@@ -37,6 +38,9 @@ import { ServicesModule } from '../services/services.module';
     // servicio. Va con forwardRef porque services ya alcanza a employees por
     // la cadena de liquidaciones.
     forwardRef(() => ServicesModule),
+    // El canal con coordinacion tiene su puerta de ella en este controlador: entra
+    // con el pase del portal, no con la sesion del panel.
+    TeamChannelModule,
   ],
   controllers: [EmployeesController, EmployeePortalController],
   providers: [EmployeesService],
