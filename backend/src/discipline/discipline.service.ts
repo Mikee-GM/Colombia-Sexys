@@ -2,16 +2,19 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, LessThanOrEqual, MoreThan, Repository } from 'typeorm';
 import { RealtimeEventsService } from '../realtime/realtime.service';
+import { TelegramService } from '../telegram/telegram.service';
 import {
   CloseConductReportDto,
   CreateConductReportDto,
@@ -45,6 +48,21 @@ const RATING_SUBJECT_COLUMN: Record<ReportPersonType, string> = {
   driver: 'driver_id',
 };
 type Actor = { id: string; rol: 'jefe' | 'empleada' | 'chofer' | 'admin' };
+
+/** Un reporte que esta persona levanto contra otra, con el nombre resuelto. */
+type ReporteHecho = {
+  id: string;
+  category: string;
+  description: string;
+  status: 'nuevo' | 'en_revision' | 'cerrado';
+  outcome: 'confirmado' | 'no_sustentado' | null;
+  priority: 'normal' | 'alta' | 'urgente';
+  createdAt: Date;
+  subjectType: ReportPersonType;
+  subjectId: string;
+  serviceId: string | null;
+  subjectName: string | null;
+};
 type ResolvedInteraction = {
   serviceId: string | null;
   tripId: string | null;
@@ -77,6 +95,11 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeEventsService,
     private readonly configService: ConfigService,
+    // Por el aviso a quien fue reportado o calificado mal: el chat es el unico
+    // canal que tiene todo el mundo. Con forwardRef porque Telegram ya alcanza
+    // a disciplina para levantar reportes desde el bot.
+    @Inject(forwardRef(() => TelegramService))
+    private readonly telegram: TelegramService,
   ) {}
 
   onModuleInit() {
@@ -176,11 +199,37 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
           interaction.subjectType,
           interaction.subjectId,
         );
-        await this.avisar(usuarioId, interaction.subjectType, {
-          titulo: 'Te calificaron',
-          cuerpo: `Recibiste ${dto.stars} ${dto.stars === 1 ? 'estrella' : 'estrellas'}. Toca para verlo.`,
-          tag: `calificacion-${saved.id}`,
-        });
+        /*
+         * Una calificacion baja no es una opinion mas: alimenta el score de
+         * confianza y puede acabar en una sancion con multa. El aviso lo dice
+         * con esas palabras y no se puede silenciar, porque apelarla es su
+         * unica defensa y el plazo corre desde ya. Con tres estrellas o mas
+         * sigue siendo lo de antes, un aviso de los que se pueden apagar.
+         */
+        const esBaja = dto.stars <= 2;
+        await this.avisar(
+          usuarioId,
+          interaction.subjectType,
+          {
+            titulo: esBaja ? 'Te calificaron mal' : 'Te calificaron',
+            cuerpo: esBaja
+              ? `Recibiste ${dto.stars} ${dto.stars === 1 ? 'estrella' : 'estrellas'}. Puedes apelar y dar tu versión desde tu portal.`
+              : `Recibiste ${dto.stars} ${dto.stars === 1 ? 'estrella' : 'estrellas'}. Toca para verlo.`,
+            tag: `calificacion-${saved.id}`,
+          },
+          { silenciable: !esBaja },
+        );
+        if (esBaja) {
+          await this.avisarPorChat(
+            usuarioId,
+            interaction.subjectType,
+            `Recibiste una calificación de ${dto.stars} ${dto.stars === 1 ? 'estrella' : 'estrellas'}.` +
+              (dto.comment?.trim()
+                ? `\n\nComentario: ${dto.comment.trim()}`
+                : '') +
+              '\n\nSi no estás de acuerdo, puedes apelarla y contar tu versión desde tu portal.',
+          );
+        }
       }
       if (dto.direction === 'client_to_employee' && dto.stars <= 2) {
         await this.autoCreateReportFromBadRating(dto, interaction, saved.id);
@@ -194,6 +243,14 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Una calificacion de una o dos estrellas deja ademas un reporte abierto.
+   *
+   * No pasa por `persistReport` --ni avisa-- a proposito: el aviso ya salio con
+   * la calificacion, y mandar un segundo por el reporte que nace de ella seria
+   * decirle dos veces lo mismo. Su version la puede dar igual desde el portal,
+   * que es donde aterriza ese aviso.
+   */
   private async autoCreateReportFromBadRating(
     dto: CreateRatingDto,
     interaction: ResolvedInteraction,
@@ -289,7 +346,147 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       reportId: saved.id,
       priority: saved.priority,
     });
+    await this.avisarAlReportado(saved);
     return saved;
+  }
+
+  /**
+   * Le dice a la persona señalada que hay un reporte contra ella.
+   *
+   * No se le decia nada: se enteraba, si acaso, cuando ya tenia una sancion
+   * encima, y para entonces la decision estaba tomada con un solo relato
+   * delante. El aviso no se puede silenciar --de el depende que pueda
+   * defenderse-- y sale por los dos canales, porque no hay forma de saber cual
+   * mira: el portal si tiene la aplicacion instalada, el chat siempre.
+   *
+   * Solo a modelos y choferes. A un cliente reportado no se le avisa: no tiene
+   * portal donde defenderse y avisarle solo serviria para que se escondiera.
+   */
+  private async avisarAlReportado(report: ConductReport): Promise<void> {
+    if (report.subjectType !== 'employee' && report.subjectType !== 'driver') {
+      return;
+    }
+    const usuarioId = await this.usuarioDelSujeto(
+      report.subjectType,
+      report.subjectId,
+    );
+
+    await this.avisar(
+      usuarioId,
+      report.subjectType,
+      {
+        titulo: 'Hay un reporte sobre ti',
+        cuerpo:
+          'Puedes contar tu versión desde tu portal antes de que se resuelva.',
+        tag: `reporte-${report.id}`,
+      },
+      { silenciable: false },
+    );
+
+    await this.avisarPorChat(
+      usuarioId,
+      report.subjectType,
+      'Se levantó un reporte sobre un servicio tuyo.' +
+        `\n\nMotivo: ${report.description}` +
+        '\n\nAntes de que se resuelva puedes contar tu versión desde tu portal, en Reputación.',
+    );
+  }
+
+  /**
+   * Su version de un reporte, escrita por ella o por el.
+   *
+   * Solo la persona señalada, y solo mientras el reporte siga abierto: una vez
+   * cerrado, la decision ya se tomo y anadirle texto por detras haria parecer
+   * que se leyo algo que nadie leyo. Se puede corregir lo escrito mientras siga
+   * abierto, que es lo mismo que puede hacer quien reporto.
+   */
+  async responderReporte(actor: Actor, reportId: string, statement: string) {
+    const identity = await this.identityForActor(actor);
+    if (
+      !identity ||
+      (identity.type !== 'employee' && identity.type !== 'driver')
+    ) {
+      throw new ForbiddenException('No tienes reportes que responder');
+    }
+
+    const report = await this.reports.findOneBy({ id: reportId });
+    if (!report) throw new NotFoundException('Reporte no encontrado');
+    if (
+      report.subjectType !== identity.type ||
+      report.subjectId !== identity.id
+    ) {
+      throw new ForbiddenException('Ese reporte no es sobre ti');
+    }
+    if (report.status === 'cerrado') {
+      throw new ConflictException(
+        'Este reporte ya se resolvió y no admite más versiones',
+      );
+    }
+
+    const texto = statement.trim().slice(0, 2000);
+    const ahora = new Date();
+    report.subjectStatement = texto;
+    report.subjectStatementAt = ahora;
+    report.updatedAt = ahora;
+    report.history = [
+      ...(report.history ?? []),
+      {
+        at: ahora.toISOString(),
+        action: 'subject_statement',
+        actorType: identity.type,
+        actorId: identity.id,
+      },
+    ];
+    const saved = await this.reports.save(report);
+
+    // Quien decide tiene que enterarse de que ya hay dos versiones sobre la
+    // mesa: hasta ahora el reporte solo cambiaba al cerrarse.
+    this.realtime.emitToJefes({
+      type: 'discipline.report.answered',
+      reportId: saved.id,
+      subjectType: saved.subjectType,
+      subjectId: saved.subjectId,
+      serviceId: saved.serviceId,
+    });
+
+    return saved;
+  }
+
+  /**
+   * Los reportes abiertos que hay sobre quien pregunta.
+   *
+   * Con su descargo dentro, si ya lo escribio: el portal necesita poder
+   * enseñarle lo que dijo y dejarle corregirlo, no solo un formulario en blanco
+   * que no recuerda nada.
+   */
+  async listarReportesPropios(actor: Actor) {
+    const identity = await this.identityForActor(actor);
+    if (
+      !identity ||
+      (identity.type !== 'employee' && identity.type !== 'driver')
+    ) {
+      return [];
+    }
+
+    return this.reports.find({
+      where: {
+        subjectType: identity.type,
+        subjectId: identity.id,
+      },
+      order: { createdAt: 'DESC' },
+      take: 20,
+      select: {
+        id: true,
+        category: true,
+        description: true,
+        status: true,
+        outcome: true,
+        createdAt: true,
+        subjectStatement: true,
+        subjectStatementAt: true,
+        serviceId: true,
+      },
+    });
   }
 
   async listReports(actor: Actor, filters: Record<string, string | undefined>) {
@@ -424,16 +621,59 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     usuarioId: string | null,
     tipo: 'employee' | 'driver',
     aviso: { titulo: string; cuerpo: string; tag: string },
+    /*
+     * Casi todo lo disciplinario se puede apagar desde los ajustes, y esta
+     * bien: son cosas que conviene saber pero que no hay que atender al
+     * momento. Lo que abre un plazo para defenderse, no: si ese aviso no llega,
+     * la decision se toma sin la otra parte.
+     */
+    opciones: { silenciable?: boolean } = {},
   ): Promise<void> {
     if (!usuarioId) return;
+    const silenciable = opciones.silenciable ?? true;
     try {
       await this.notifications.notificar(usuarioId, {
         ...aviso,
-        tipo: AVISO_SANCION,
-        url: tipo === 'employee' ? '/empleada/portal' : '/chofer/portal',
+        ...(silenciable ? { tipo: AVISO_SANCION } : {}),
+        requireInteraction: !silenciable,
+        url:
+          tipo === 'employee'
+            ? '/empleada/portal?seccion=reputacion'
+            : '/chofer/portal',
       });
     } catch (err) {
       this.logger.error(`Error enviando el aviso push "${aviso.titulo}":`, err);
+    }
+  }
+
+  /**
+   * El mismo aviso, por el chat.
+   *
+   * El push depende de que tenga la aplicacion instalada y los avisos
+   * concedidos; el chat lo tiene todo el mundo, porque es por donde entra a
+   * trabajar. Para algo de lo que depende su defensa hacen falta los dos.
+   *
+   * Nunca lanza: el reporte o la calificacion ya estan guardados y que el aviso
+   * falle no puede deshacerlos.
+   */
+  private async avisarPorChat(
+    usuarioId: string | null,
+    tipo: 'employee' | 'driver',
+    texto: string,
+  ): Promise<void> {
+    if (!usuarioId) return;
+    try {
+      const [fila] = await this.dataSource.query<
+        Array<{ telegramChatId: string | null }>
+      >(
+        `SELECT telegram_chat_id AS "telegramChatId" FROM usuarios WHERE id = $1`,
+        [usuarioId],
+      );
+      const chatId = fila?.telegramChatId;
+      if (!chatId) return;
+      await this.telegram.sendMessage(chatId, texto);
+    } catch (err) {
+      this.logger.error(`Error avisando por chat a ${tipo} ${usuarioId}:`, err);
     }
   }
 
@@ -807,7 +1047,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     if (actor.rol === 'jefe') {
       await this.assertBossScope(actor.id, subjectType, subjectId);
     }
-    const [ratings, reports, sanctions] = await Promise.all([
+    const [ratings, reports, reportsMade, sanctions] = await Promise.all([
       this.ratingSummary(subjectType, subjectId),
       subjectType === 'boss'
         ? Promise.resolve([])
@@ -815,12 +1055,87 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
             where: { subjectType, subjectId, outcome: 'confirmado' },
             order: { createdAt: 'DESC' },
           }),
+      this.listarReportesHechos(subjectType, subjectId),
       this.sanctions.find({
         where: { subjectType, subjectId },
         order: { createdAt: 'DESC' },
       }),
     ]);
-    return { subjectType, subjectId, ratings, reports, sanctions };
+    return {
+      subjectType,
+      subjectId,
+      ratings,
+      reports,
+      reportsMade,
+      reportsMadeSummary: this.resumirReportesHechos(reportsMade),
+      sanctions,
+    };
+  }
+
+  /**
+   * Todo lo que esta persona ha reportado, contra quien y en que quedo.
+   *
+   * El expediente solo miraba lo que le habian puesto a ella. Falta la otra
+   * mitad, y en un cliente es la que mas dice: un reporte suyo se lee distinto
+   * si es el primero en un ano que si es el cuarto contra una modelo distinta
+   * cada vez, todos desestimados. Sin esto habia que ir reporte por reporte por
+   * la lista general para darse cuenta.
+   *
+   * El nombre del reportado se resuelve aqui: el panel no puede pedir un
+   * expediente por cada fila solo para poner un nombre donde hay un UUID.
+   */
+  private async listarReportesHechos(
+    reporterType: PersonType,
+    reporterId: string,
+  ): Promise<ReporteHecho[]> {
+    // Un jefe no levanta reportes; no tiene sentido preguntar por los suyos.
+    if (reporterType === 'boss') return [];
+
+    return this.dataSource.query<ReporteHecho[]>(
+      `SELECT
+         r.id,
+         r.category,
+         r.description,
+         r.status,
+         r.outcome,
+         r.priority,
+         r.created_at AS "createdAt",
+         r.subject_type AS "subjectType",
+         r.subject_id AS "subjectId",
+         COALESCE(r.service_id, v.servicio_id) AS "serviceId",
+         COALESCE(e.nombre_artistico, ch.nombre, c.nombre_telegram)
+           AS "subjectName"
+       FROM conduct_reports r
+       LEFT JOIN viajes v ON v.id = r.trip_id
+       LEFT JOIN empleadas e
+         ON r.subject_type = 'employee' AND e.id = r.subject_id
+       LEFT JOIN choferes ch
+         ON r.subject_type = 'driver' AND ch.id = r.subject_id
+       LEFT JOIN clientes c
+         ON r.subject_type = 'client' AND c.id = r.subject_id
+       WHERE r.reporter_type = $1 AND r.reporter_id = $2
+       ORDER BY r.created_at DESC
+       LIMIT 50`,
+      [reporterType, reporterId],
+    );
+  }
+
+  /**
+   * El resumen que se lee de un vistazo antes de entrar en el detalle.
+   *
+   * `personasDistintas` es el numero que de verdad importa para deliberar: diez
+   * reportes contra la misma persona son un conflicto; diez contra diez
+   * personas distintas son un patron de quien reporta.
+   */
+  private resumirReportesHechos(reportes: ReporteHecho[]) {
+    return {
+      total: reportes.length,
+      confirmados: reportes.filter((r) => r.outcome === 'confirmado').length,
+      desestimados: reportes.filter((r) => r.outcome === 'no_sustentado')
+        .length,
+      abiertos: reportes.filter((r) => r.status !== 'cerrado').length,
+      personasDistintas: new Set(reportes.map((r) => r.subjectId)).size,
+    };
   }
 
   async ownReputation(actor: Actor) {
@@ -1069,6 +1384,8 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
            r.status,
            r.outcome,
            r.resolution,
+           r.subject_statement AS "subjectStatement",
+           r.subject_statement_at AS "subjectStatementAt",
            r.created_at AS "createdAt"
          FROM conduct_reports r
          LEFT JOIN viajes v ON v.id = r.trip_id

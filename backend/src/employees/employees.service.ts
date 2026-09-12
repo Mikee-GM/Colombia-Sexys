@@ -23,6 +23,7 @@ import { UploadService } from '../upload/upload.service';
 import { EmployeeOnboarding } from '../employee-onboarding/entities/employee-onboarding.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { WeeklyContentService } from '../weekly-content/weekly-content.service';
+import { TeamChannelService } from '../team-channel/team-channel.service';
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 
 @Injectable()
@@ -113,6 +114,9 @@ export class EmployeesService {
     private readonly dataSource: DataSource,
     private readonly uploadService: UploadService,
     private readonly weeklyContentService: WeeklyContentService,
+    // Por el contador de mensajes sin leer del portal: es parte de lo que ella
+    // ve al entrar, asi que se resuelve aqui y no en una peticion aparte.
+    private readonly teamChannel: TeamChannelService,
   ) {}
 
   async create(createEmployeeDto: CreateEmployeeDto): Promise<Empleadas> {
@@ -908,6 +912,16 @@ export class EmployeesService {
 
     const [withTrust] = await this.attachTrustScores([empleada]);
     /*
+     * Lo que le espera sin leer en el canal con coordinacion.
+     *
+     * Es lo que enciende el aviso del boton flotante: sin este numero el canal
+     * quedaba escondido en una pestaña y ella no tenia forma de saber que le
+     * habian escrito sin entrar a mirar.
+     */
+    const canalSinLeer = await this.teamChannel.sinLeerParaEmpleada(
+      empleada.usuarioId,
+    );
+    /*
      * El detalle del ciclo --recordatorios gastados, cuantos quedan y si ya
      * cayo la multa-- se resuelve por empleada. La version por lotes solo
      * devuelve la etiqueta, y el portal necesita poder decirle por que esta
@@ -1313,6 +1327,7 @@ export class EmployeesService {
         trustScore: Number(withTrust?.trustScore || 1.0),
         reviews: reviews.slice(0, 15),
       },
+      canalSinLeer,
     };
   }
 }

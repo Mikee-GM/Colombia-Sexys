@@ -137,6 +137,99 @@ type Props = {
   directorio: Directorio;
 };
 
+/**
+ * Los reportes que ha levantado una persona, con en que quedo cada uno.
+ *
+ * El numero que de verdad decide es `personasDistintas`: diez reportes contra
+ * la misma persona son un conflicto entre dos; diez contra diez personas
+ * distintas describen a quien reporta, no a los reportados.
+ */
+function HistorialDeReportes({ dossier }: { dossier: Dossier }) {
+  const hechos = dossier.reportsMade ?? [];
+  const resumen = dossier.reportsMadeSummary;
+
+  if (hechos.length === 0) {
+    return (
+      <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-3">
+        <p className="text-[11px] uppercase tracking-[0.06em] text-zinc-500">
+          Reportes que ha hecho
+        </p>
+        <p className="mt-1.5 text-[13px] text-zinc-500">
+          No ha reportado a nadie.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <p className="text-[11px] uppercase tracking-[0.06em] text-zinc-500">
+          Reportes que ha hecho
+        </p>
+        {resumen ? (
+          <p className="text-[11px] text-zinc-500">
+            {`${resumen.total} en total contra ${resumen.personasDistintas} ${
+              resumen.personasDistintas === 1 ? "persona" : "personas"
+            } - ${resumen.confirmados} confirmados, ${resumen.desestimados} desestimados`}
+            {resumen.abiertos > 0 ? `, ${resumen.abiertos} sin resolver` : ""}
+          </p>
+        ) : null}
+      </div>
+
+      <ul className="mt-3 flex flex-col gap-2">
+        {hechos.map((reporte) => (
+          <li
+            key={reporte.id}
+            className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-zinc-800/80 bg-black/40 px-3 py-2.5"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[12.5px] text-zinc-300">
+                <span className="font-semibold text-white">
+                  {reporte.subjectName ?? PERSONA_LABEL[reporte.subjectType]}
+                </span>
+                {" - "}
+                {MOTIVO_LABEL[reporte.category] ??
+                  reporte.category.replaceAll("_", " ")}
+              </p>
+              <p
+                className="mt-0.5 truncate text-[11px] text-zinc-500"
+                title={reporte.description}
+              >
+                {reporte.description}
+              </p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
+              {reporte.outcome ? (
+                <StatusBadge
+                  tone={reporte.outcome === "confirmado" ? "green" : "zinc"}
+                >
+                  {reporte.outcome === "confirmado"
+                    ? "Confirmado"
+                    : "Desestimado"}
+                </StatusBadge>
+              ) : (
+                <StatusBadge tone={ESTADO_TONE[reporte.status]}>
+                  {ESTADO_LABEL[reporte.status]}
+                </StatusBadge>
+              )}
+              <span className="text-[11px] text-zinc-600">
+                {fecha(reporte.createdAt)}
+              </span>
+              {reporte.serviceId ? (
+                <RecordLink href={`/admin/reports/caso/${reporte.serviceId}`}>
+                  {codigoServicio(reporte.serviceId)}
+                </RecordLink>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function DisciplinaClient({
   role,
   initialReports,
@@ -733,6 +826,24 @@ export default function DisciplinaClient({
                       >
                         {report.description}
                       </span>
+                      {/*
+                        Que la otra parte ya contesto se ve desde la lista: es
+                        lo que decide si el caso esta listo para resolverse o
+                        todavia falta escuchar a alguien. El texto entero esta
+                        en el caso del servicio.
+                      */}
+                      {report.subjectStatement ? (
+                        <span
+                          className="mt-1 inline-flex items-center gap-1 rounded-full border border-[#C5A55A]/40 bg-[#C5A55A]/10 px-2 py-0.5 text-[10px] font-semibold text-[#E8D5A3]"
+                          title={report.subjectStatement}
+                        >
+                          Con su versión
+                        </span>
+                      ) : report.status !== "cerrado" ? (
+                        <span className="mt-1 block text-[10px] text-zinc-600">
+                          Sin su versión
+                        </span>
+                      ) : null}
                     </Td>
 
                     <Td>
@@ -1052,6 +1163,17 @@ export default function DisciplinaClient({
               </button>
             </div>
           ) : null}
+
+          {/*
+            Lo que esta persona ha reportado.
+
+            El expediente solo miraba lo que le habian puesto a ella, y en un
+            cliente la otra mitad es la que mas dice: un reporte suyo se lee
+            distinto si es el primero en un año que si es el cuarto contra una
+            modelo distinta cada vez, todos desestimados. Es exactamente lo que
+            hace falta para deliberar el reporte que se tiene delante.
+          */}
+          <HistorialDeReportes dossier={selected} />
 
           {selected.sanctions.length ? (
             <div className="flex flex-col gap-2">

@@ -84,7 +84,7 @@ import { TeamChannelModule } from '../team-channel/team-channel.module';
     EmployeeReportsModule,
     ExtensionsModule,
     TransportOperationsModule,
-    DisciplineModule,
+    forwardRef(() => DisciplineModule),
     forwardRef(() => GroupServicesModule),
     UploadModule,
     forwardRef(() => WeeklyContentModule),

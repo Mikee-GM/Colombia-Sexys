@@ -7,6 +7,7 @@ import type {
   EmployeePortalData,
   EmployeeWeeklyContent,
   MensajeDelCanal,
+  ReporteSobreMi,
   WeeklyPhotoSubmissionItem,
 } from "@/lib/types";
 
@@ -373,6 +374,65 @@ export async function getCalificacionesApelables(
   } catch (error) {
     console.error("Error al leer las calificaciones apelables:", error);
     return [];
+  }
+}
+
+/**
+ * Los reportes que hay sobre ella, con su version si ya la escribio.
+ *
+ * Antes no tenia forma de saber que existian: se enteraba, si acaso, cuando ya
+ * habia una sancion encima y la decision se habia tomado con un solo relato
+ * delante.
+ */
+export async function getReportesSobreMi(
+  token?: string,
+): Promise<ReporteSobreMi[]> {
+  try {
+    const response = await fetch(
+      portalUrl("/employee-portal/reports/mine", token),
+      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+    );
+    if (!response.ok) return [];
+    return (await response.json()) as ReporteSobreMi[];
+  } catch (error) {
+    console.error("Error al leer los reportes propios:", error);
+    return [];
+  }
+}
+
+/** Manda su version de un reporte abierto. Se puede corregir mientras siga abierto. */
+export async function responderReporte(
+  reportId: string,
+  statement: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/reports/${reportId}/statement`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          ...(await portalHeaders(token)),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ statement }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const mensaje = Array.isArray(err.message)
+        ? err.message.join(". ")
+        : err.message;
+      return { success: false, error: mensaje || "No se pudo enviar tu versión" };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al responder el reporte:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
   }
 }
 

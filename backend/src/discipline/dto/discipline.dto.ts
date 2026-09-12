@@ -78,6 +78,17 @@ export class AppealRatingDto {
   reason: string;
 }
 
+/** El minimo para que un descargo diga algo. Mismo criterio que la apelacion. */
+export const MIN_LARGO_DESCARGO = 15;
+
+/** La version de quien fue reportado, escrita por ella o por el. */
+export class ReportStatementDto {
+  @IsString()
+  @MinLength(MIN_LARGO_DESCARGO)
+  @MaxLength(2000)
+  statement: string;
+}
+
 export class ResolveAppealDto {
   @IsIn(['upheld', 'overturned'])
   decision: 'upheld' | 'overturned';

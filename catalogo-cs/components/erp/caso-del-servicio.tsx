@@ -296,25 +296,48 @@ export default function CasoDelServicioPanel({
             Involucrados
           </span>
 
+          {/*
+            Cada parte lleva a su expediente.
+
+            Un reporte se lee distinto sabiendo lo que hay detras de quien lo
+            puso: si el cliente ya reporto a otras tres modelos y las tres veces
+            se desestimo, eso cambia la decision. Antes habia que salir a la
+            lista general y buscar a mano, asi que en la practica no se miraba.
+          */}
           {[
-            { nombre: servicio.empleadaNombre, rol: "Empleada" },
-            { nombre: servicio.clienteNombre, rol: "Cliente" },
+            {
+              id: servicio.empleadaId,
+              nombre: servicio.empleadaNombre,
+              tipo: "employee" as PersonType,
+              rol: "Empleada",
+            },
+            {
+              id: servicio.clienteId,
+              nombre: servicio.clienteNombre,
+              tipo: "client" as PersonType,
+              rol: "Cliente",
+            },
             ...(servicio.choferes ?? []).map((chofer) => ({
+              id: chofer.id,
               nombre: chofer.nombre,
+              tipo: "driver" as PersonType,
               rol: "Chofer",
             })),
           ]
-            .filter((persona) => persona.nombre)
+            .filter((persona) => persona.nombre && persona.id)
             .map((persona) => (
-              <span
-                key={`${persona.rol}-${persona.nombre}`}
-                className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5"
+              <Link
+                key={`${persona.rol}-${persona.id}`}
+                href={`/admin/reports?expediente=${persona.tipo}:${persona.id}`}
+                title={`Ver el expediente de ${persona.nombre}`}
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5 transition-colors hover:border-[#C5A55A]"
               >
                 <span className="text-[12.5px] font-semibold text-white">
                   {persona.nombre}
                 </span>
                 <span className="text-[11px] text-zinc-600">{persona.rol}</span>
-              </span>
+                <ArrowRight className="h-3 w-3 text-[#8B7635]" />
+              </Link>
             ))}
         </div>
       </div>
@@ -394,9 +417,41 @@ export default function CasoDelServicioPanel({
                     report.category.replaceAll("_", " ")}
                 </h3>
 
-                <p className="flex-1 text-[12.5px] leading-relaxed text-zinc-400">
+                <p className="text-[12.5px] leading-relaxed text-zinc-400">
                   {report.description}
                 </p>
+
+                {/*
+                  Las dos versiones, una debajo de la otra.
+
+                  El reporte se cerraba leyendo solo a quien lo levanto: quien
+                  lo recibia ni siquiera sabia que existia. Cuando falta, se
+                  dice que falta, porque no es lo mismo que no tenga nada que
+                  decir a que no se le haya avisado.
+                */}
+                <div className="flex-1 rounded-lg border border-zinc-800/80 bg-black/40 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8B7635]">
+                    {`Versión de ${nombre(report.subjectType, report.subjectId)}`}
+                  </p>
+                  {report.subjectStatement ? (
+                    <>
+                      <p className="mt-1.5 text-[12.5px] leading-relaxed text-zinc-300">
+                        {report.subjectStatement}
+                      </p>
+                      {report.subjectStatementAt ? (
+                        <p className="mt-1.5 text-[11px] text-zinc-600">
+                          {fechaHora(report.subjectStatementAt)}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-600">
+                      {report.status === "cerrado"
+                        ? "Se cerró sin que diera su versión."
+                        : "Todavía no ha dado su versión. Ya se le avisó."}
+                    </p>
+                  )}
+                </div>
 
                 <div className="flex flex-col gap-2 border-t border-zinc-800/60 pt-3">
                   <div className="flex items-center justify-between gap-2">

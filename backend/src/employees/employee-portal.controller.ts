@@ -24,6 +24,7 @@ import {
   AppealRatingDto,
   CreateConductReportDto,
   CreateRatingDto,
+  ReportStatementDto,
 } from '../discipline/dto/discipline.dto';
 import { ExtendServiceDto } from './dto/extend-service.dto';
 import { PortalUser } from '../auth/decorators/portal-user.decorator';
@@ -385,6 +386,36 @@ export class EmployeePortalController {
       { id: userId, rol: 'empleada' },
       ratingId,
       dto.reason,
+    );
+  }
+
+  /**
+   * Los reportes que hay sobre ella, con su versión si ya la escribió.
+   *
+   * Antes no tenía forma de saber que existían: se enteraba, si acaso, cuando
+   * ya había una sanción encima, y la decisión se había tomado con un solo
+   * relato delante.
+   */
+  @Get('reports/mine')
+  reportesSobreMi(@PortalUser() userId: string) {
+    return this.disciplineService.listarReportesPropios({
+      id: userId,
+      rol: 'empleada',
+    });
+  }
+
+  /** Su versión de un reporte abierto. Se puede corregir mientras siga abierto. */
+  @Post('reports/:reportId/statement')
+  @HttpCode(200)
+  responderReporte(
+    @PortalUser() userId: string,
+    @Param('reportId', new ParseUUIDPipe()) reportId: string,
+    @Body() dto: ReportStatementDto,
+  ) {
+    return this.disciplineService.responderReporte(
+      { id: userId, rol: 'empleada' },
+      reportId,
+      dto.statement,
     );
   }
 

@@ -7,9 +7,12 @@ import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import CompartirUbicacion from "@/components/ui/CompartirUbicacion";
 import ApelarCalificacion from "@/components/ui/ApelarCalificacion";
+import MiVersionDelReporte from "@/components/ui/MiVersionDelReporte";
 import ReportarConducta from "@/components/ui/ReportarConducta";
 import {
   apelarCalificacion,
+  getReportesSobreMi,
+  responderReporte,
   getCalificacionesApelables,
   registrarMiUbicacion,
   reportarConducta,
@@ -540,6 +543,15 @@ export default function DriverPortalView({
             <ApelarCalificacion
               cargar={getCalificacionesApelables}
               apelar={apelarCalificacion}
+            />
+
+            {/*
+              Un reporte abierto tambien admite su version, y hasta ahora no
+              habia forma de darla: se resolvia con un solo relato delante.
+            */}
+            <MiVersionDelReporte
+              cargar={getReportesSobreMi}
+              responder={responderReporte}
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

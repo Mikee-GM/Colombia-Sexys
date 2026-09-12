@@ -8,16 +8,19 @@ import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import CompartirUbicacion from "@/components/ui/CompartirUbicacion";
 import ApelarCalificacion from "@/components/ui/ApelarCalificacion";
+import MiVersionDelReporte from "@/components/ui/MiVersionDelReporte";
 import ReportarConducta from "@/components/ui/ReportarConducta";
 import {
   apelarCalificacion,
+  getReportesSobreMi,
+  responderReporte,
   getCalificacionesApelables,
   registrarMiUbicacion,
   reportarConducta,
 } from "@/lib/actions/employee-portal";
 import CerrarSesion from "@/components/ui/CerrarSesion";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
-import CanalCoordinacion from "@/components/empleada/CanalCoordinacion";
+import BotonCanal from "@/components/empleada/BotonCanal";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
 import type { WeeklyPhotoSubmissionItem } from "@/lib/types";
 import SubirFotosSemanales, {
@@ -54,10 +57,16 @@ interface EmployeePortalViewProps {
    * Pestaña inicial. El boton de Telegram trae `?seccion=fotos` para aterrizar
    * directamente donde se suben, que es el motivo por el que se mando el aviso.
    */
-  seccionInicial?: TabType;
+  seccionInicial?: SeccionInicial;
 }
 
-type TabType = "resumen" | "ranking" | "servicios" | "reputacion" | "fotos" | "canal";
+/**
+ * El canal ya no es una pestaña --vive en el botón fijo-- pero `canal` se sigue
+ * admitiendo como sección inicial: es a donde apunta el aviso push, y al
+ * aterrizar con él la conversación se abre sola.
+ */
+type TabType = "resumen" | "ranking" | "servicios" | "reputacion" | "fotos";
+type SeccionInicial = TabType | "canal";
 
 export default function EmployeePortalView({
   initialData,
@@ -66,7 +75,9 @@ export default function EmployeePortalView({
   weeklyPhotos = [],
   seccionInicial = "resumen",
 }: EmployeePortalViewProps) {
-  const [activeTab, setActiveTab] = useState<TabType>(seccionInicial);
+  const [activeTab, setActiveTab] = useState<TabType>(
+    seccionInicial === "canal" ? "resumen" : seccionInicial,
+  );
   const data = initialData;
 
   useEffect(() => {
@@ -203,7 +214,6 @@ export default function EmployeePortalView({
             { id: "servicios", label: "Servicios", icono: <ClipboardList size={14} />, title: "Mis Servicios" },
             { id: "reputacion", label: "Reseñas", icono: <Star size={14} />, title: "Reputación" },
             { id: "fotos", label: "Mis Fotos", icono: <Camera size={14} />, title: "Fotos" },
-            { id: "canal", label: "Coordinación", icono: <MessageCircle size={14} />, title: "Canal con coordinación" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -748,6 +758,16 @@ export default function EmployeePortalView({
               token={token}
             />
 
+            {/*
+              Y lo mismo con un reporte abierto: mientras no se resuelva, su
+              version todavia cuenta. Se dibuja solo si hay alguno.
+            */}
+            <MiVersionDelReporte
+              cargar={getReportesSobreMi}
+              responder={responderReporte}
+              token={token}
+            />
+
             {/* Header de reputación */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-[#141721] p-5 rounded-xl border border-white/5 text-center space-y-1 sm:col-span-1">
@@ -817,19 +837,6 @@ export default function EmployeePortalView({
         )}
 
         {/* ================= TAB 5: MIS FOTOS ================= */}
-        {/*
-          El canal con coordinación.
-
-          Va en su propia pestaña y no suelto en el resumen porque es opcional:
-          se entra cuando hay algo que preguntar, no cada vez que se abre la
-          aplicación. Del otro lado nunca aparece un nombre.
-        */}
-        {activeTab === "canal" && (
-          <div className="animate-fadeIn">
-            <CanalCoordinacion token={token} />
-          </div>
-        )}
-
         {activeTab === "fotos" && (
           <div className="space-y-6 animate-fadeIn">
             {/* Contenido de la semana: aviso, subida y lo ya enviado. */}
@@ -923,6 +930,19 @@ export default function EmployeePortalView({
         uso del bot no permite crear nada.
       */}
       {workShift !== undefined && workShift !== null && <SolicitarServicio />}
+
+      {/*
+        El canal con coordinación, a la vista.
+
+        Estaba dentro de una pestaña y ahí no lo encontraba nadie. Va del lado
+        contrario al de solicitar servicio, con la marca de lo que tiene sin
+        leer: de otro modo, saber si le habían escrito exigía entrar a mirar.
+      */}
+      <BotonCanal
+        token={token}
+        sinLeer={data.canalSinLeer ?? 0}
+        abrirAlEntrar={seccionInicial === "canal"}
+      />
 
       {/* FOOTER */}
       <footer className="mt-auto border-t border-white/5 py-4 text-center text-[11px] text-gray-500">

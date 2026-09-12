@@ -26,6 +26,14 @@ export type ConductReport = {
   status: "nuevo" | "en_revision" | "cerrado";
   outcome: "confirmado" | "no_sustentado" | null;
   resolution: string | null;
+  /**
+   * La versión de la persona señalada, cuando la escribió.
+   *
+   * Un reporte se resolvía con un solo relato delante. Esto es la otra parte,
+   * y por eso se pinta junto a la descripción y no escondida en el historial.
+   */
+  subjectStatement?: string | null;
+  subjectStatementAt?: string | null;
   createdAt: string;
 };
 
@@ -88,6 +96,27 @@ export async function getCasoDelServicio(serviceId: string) {
   return apiFetch<CasoDelServicio>(`/discipline/cases/${serviceId}`);
 }
 
+/**
+ * Un reporte que esta persona levantó contra otra.
+ *
+ * Trae resuelto el nombre de la persona reportada: sin él la lista serían
+ * UUIDs, y lo que hay que ver de un vistazo es justamente contra quién va cada
+ * uno y si siempre es la misma persona o nunca.
+ */
+export type ReporteHecho = {
+  id: string;
+  category: string;
+  description: string;
+  status: "nuevo" | "en_revision" | "cerrado";
+  outcome: "confirmado" | "no_sustentado" | null;
+  priority: "normal" | "alta" | "urgente";
+  createdAt: string;
+  subjectType: PersonType;
+  subjectId: string;
+  serviceId: string | null;
+  subjectName: string | null;
+};
+
 export type Dossier = {
   subjectType: PersonType;
   subjectId: string;
@@ -96,7 +125,18 @@ export type Dossier = {
     average: number;
     count: number;
   }>;
+  /** Reportes confirmados en su contra. */
   reports: ConductReport[];
+  /** Lo que esta persona ha reportado, contra quién y en qué quedó. */
+  reportsMade?: ReporteHecho[];
+  reportsMadeSummary?: {
+    total: number;
+    confirmados: number;
+    desestimados: number;
+    abiertos: number;
+    /** Contra cuántas personas distintas. Es el número que delata un patrón. */
+    personasDistintas: number;
+  };
   sanctions: DisciplinarySanction[];
 };
 

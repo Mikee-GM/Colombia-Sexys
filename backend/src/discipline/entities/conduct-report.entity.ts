@@ -60,6 +60,20 @@ export class ConductReport {
   @Column('text', { nullable: true })
   resolution: string | null;
 
+  /**
+   * La version de la persona señalada.
+   *
+   * El reporte se resolvia con un solo relato delante, el de quien lo levanto.
+   * Aqui va lo que cuenta quien fue reportado, para que quien decide lea las dos
+   * partes. Es opcional: nadie esta obligado a defenderse, y el reporte se puede
+   * cerrar sin descargo si no llega a tiempo.
+   */
+  @Column('text', { name: 'subject_statement', nullable: true })
+  subjectStatement: string | null;
+
+  @Column('timestamptz', { name: 'subject_statement_at', nullable: true })
+  subjectStatementAt: Date | null;
+
   @Column('jsonb', { default: () => "'[]'::jsonb" })
   history: Array<Record<string, unknown>>;
 

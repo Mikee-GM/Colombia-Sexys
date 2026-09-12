@@ -797,6 +797,14 @@ export type EmployeePortalData = {
   activeService: EmployeePortalActiveService | null;
   recentServices: EmployeePortalServiceItem[];
   reputation: EmployeePortalReputation;
+  /**
+   * Mensajes de coordinación que todavía no ha abierto.
+   *
+   * Viaja con el resto del portal y no en una petición aparte porque enciende
+   * la marca del botón fijo: pedirlo por separado lo dejaría sin marca durante
+   * el primer instante, que es justo cuando ella mira.
+   */
+  canalSinLeer?: number;
 };
 
 export type ChallengeParticipantType = "employee" | "driver";
@@ -1096,4 +1104,23 @@ export type MensajeDelCanalJefe = {
   tipo: "duda" | "jornada";
   leidoAt: string | null;
   createdAt: string;
+};
+
+/**
+ * Un reporte de conducta levantado contra quien mira su portal.
+ *
+ * Lleva su propia versión dentro cuando ya la escribió: el portal tiene que
+ * poder enseñársela y dejarle corregirla, no un formulario en blanco que no
+ * recuerda nada.
+ */
+export type ReporteSobreMi = {
+  id: string;
+  category: string;
+  description: string;
+  status: "nuevo" | "en_revision" | "cerrado";
+  outcome: "confirmado" | "no_sustentado" | null;
+  createdAt: string;
+  subjectStatement: string | null;
+  subjectStatementAt: string | null;
+  serviceId: string | null;
 };

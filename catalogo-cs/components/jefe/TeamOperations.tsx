@@ -40,7 +40,7 @@ import { formatAvailabilityTime } from "@/lib/availability";
 import GroupServiceOrganizer from "@/components/jefe/GroupServiceOrganizer";
 import UberScreenshotUploader from "@/components/jefe/uber-screenshot-uploader";
 import CanalConModelo from "@/components/jefe/CanalConModelo";
-import { preguntarMotivoDeJornada } from "@/lib/actions/team-channel";
+import { getCanalSinLeer, preguntarMotivoDeJornada } from "@/lib/actions/team-channel";
 import type { GroupServiceRequest } from "@/lib/types";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
@@ -66,6 +66,14 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   const [photosEmployee, setPhotosEmployee] = useState<Employee | null>(null);
   // El canal con una modelo: opcional, se abre desde su ficha.
   const [canalEmpleada, setCanalEmpleada] = useState<Employee | null>(null);
+  /*
+   * Mensajes sin leer de cada modelo.
+   *
+   * El canal avisaba por Telegram y por push, pero dentro del panel no se veia
+   * nada: había que abrir la conversación de cada una para descubrir quién
+   * había escrito. Con esto la marca está donde ya se mira.
+   */
+  const [canalSinLeer, setCanalSinLeer] = useState<Record<string, number>>({});
   // Se guarda el id y no la empleada: si se guardara el objeto, al cambiar la
   // disponibilidad desde la propia hoja esta seguiria mostrando el estado
   // anterior, porque la lista se actualiza pero la copia de la hoja no.
@@ -139,6 +147,10 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     try { setCashSummary(await getJefeCashObligations()); } catch { /* silenciar error en refresco secundario */ }
   }
 
+  async function reloadCanalSinLeer() {
+    try { setCanalSinLeer(await getCanalSinLeer()); } catch { /* silenciar error en refresco secundario */ }
+  }
+
   /*
    * Eventos que solo mueven el mapa.
    *
@@ -171,6 +183,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
       void reloadEmployees();
       void reloadGroupRequests();
       void reloadCashSummary();
+      void reloadCanalSinLeer();
     }, 500);
     // Las funciones de recarga son estables dentro del componente: no se
     // declaran como dependencia porque se redefinen en cada render.
@@ -192,6 +205,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
         void reloadEmployees();
         void reloadGroupRequests();
         void reloadCashSummary();
+        void reloadCanalSinLeer();
         if (chatServiceRef.current) {
           void getServiceMessages(chatServiceRef.current.id)
             .then(setMessages)
@@ -366,7 +380,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     {tab === "historial" && <label className="mb-5 block"><span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Filtrar por empleada</span><select value={historyEmployeeId} onChange={(event) => setHistoryEmployeeId(event.target.value)} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-[#C5A55A] sm:max-w-sm"><option value="all">Todas las empleadas</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.nombreArtistico}</option>)}</select></label>}
     {tab === "equipo" ? <section>
       <label className="mb-4 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-3.5 text-sm text-white outline-none placeholder:text-zinc-600" /></label>
-      <EmployeeList employees={visibleEmployees} disabled={pending} onToggle={toggleAvailability} onOpen={(employee) => setDetalleEmpleadaId(employee.id)} />
+      <EmployeeList employees={visibleEmployees} sinLeer={canalSinLeer} disabled={pending} onToggle={toggleAvailability} onOpen={(employee) => setDetalleEmpleadaId(employee.id)} />
     </section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList employees={employees} services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />}
 
     {chatService && <ChatPanel service={chatService} messages={messages} setMessages={setMessages} onClose={() => setChatService(null)} />}
@@ -380,6 +394,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     {detalleEmpleada && <EmployeeSheet
       employee={detalleEmpleada}
       onCanal={() => { setDetalleEmpleadaId(null); setCanalEmpleada(detalleEmpleada); }}
+      sinLeer={canalSinLeer[detalleEmpleada.id] ?? 0}
       disabled={pending}
       aria-busy={pending}
       onToggle={toggleAvailability}
@@ -595,6 +610,24 @@ function transporteSinCerrar(trip: Trip) {
   if (["cancelado", "rechazado"].includes(trip.estado)) return false;
   const conCaptura = Boolean(trip.uberScreenshotUrl || trip.telegramUberFileId);
   return !conCaptura || !trip.fareConfirmedAt;
+}
+
+/**
+ * Mensajes sin leer de una modelo.
+ *
+ * No se dibuja cuando no hay ninguno: un cero permanente deja de significar
+ * nada y quita sitio al nombre en una pantalla estrecha.
+ */
+function ContadorMensajes({ cantidad }: { cantidad: number }) {
+  if (cantidad <= 0) return null;
+  return (
+    <span
+      aria-label={`${cantidad} ${cantidad === 1 ? "mensaje sin leer" : "mensajes sin leer"}`}
+      className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#C5A55A] px-1.5 text-[10px] font-bold tabular-nums text-black"
+    >
+      {cantidad > 9 ? "9+" : cantidad}
+    </span>
+  );
 }
 
 function esperandoAlistado(service: Service) {
@@ -906,7 +939,7 @@ function fondoEmpleada(employee: Employee) {
  * dos consultas que casi nunca se abren. Ahora la fila mide 68px y se ven
  * siete; disponibilidad se cambia desde aqui y el resto vive en la ficha.
  */
-function EmployeeList({ employees, disabled, onToggle, onOpen }: { employees: Employee[]; disabled: boolean; onToggle: (employee: Employee) => void; onOpen: (employee: Employee) => void }) {
+function EmployeeList({ employees, sinLeer, disabled, onToggle, onOpen }: { employees: Employee[]; sinLeer: Record<string, number>; disabled: boolean; onToggle: (employee: Employee) => void; onOpen: (employee: Employee) => void }) {
   if (!employees.length) return <div className="rounded-2xl border border-dashed border-zinc-800 py-16 text-center text-sm text-zinc-500">No hay empleadas que coincidan con la búsqueda.</div>;
   return (
     <ul className="flex flex-col gap-2">
@@ -919,8 +952,12 @@ function EmployeeList({ employees, disabled, onToggle, onOpen }: { employees: Em
               <span className="block h-12 w-12 rounded-xl border border-zinc-800 bg-cover bg-center" style={fondoEmpleada(employee)} />
               <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-zinc-950 ${employee.availabilityStatus === "ocupada" ? "bg-[#8B7635]" : employee.disponible ? "bg-emerald-400" : "bg-zinc-700"}`} />
             </span>
-            <span className="min-w-0">
-              <span className="block truncate font-heading text-[17px] font-semibold leading-tight text-white">{employee.nombreArtistico}</span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-heading text-[17px] font-semibold leading-tight text-white">{employee.nombreArtistico}</span>
+                {/* Quién escribió se ve desde la lista, sin abrir nada. */}
+                <ContadorMensajes cantidad={sinLeer[employee.id] ?? 0} />
+              </span>
               <span className={`mt-1 block truncate text-[11px] ${employee.availabilityStatus === "ocupada" ? "text-[#E8D5A3]" : "text-zinc-500"}`}>{resumenEmpleada(employee)}</span>
             </span>
           </button>
@@ -945,7 +982,7 @@ function EmployeeList({ employees, disabled, onToggle, onOpen }: { employees: Em
  * Ficha de la empleada: hoja inferior en movil, dialogo centrado a partir de
  * `sm`. Recoge lo que salio de la tarjeta y no es del dia a dia.
  */
-function EmployeeSheet({ employee, disabled, onToggle, onPhotos, onExams, onCanal, onClose }: { employee: Employee; disabled: boolean; onToggle: (employee: Employee) => void; onPhotos: () => void; onExams: () => void; onCanal: () => void; onClose: () => void }) {
+function EmployeeSheet({ employee, sinLeer, disabled, onToggle, onPhotos, onExams, onCanal, onClose }: { employee: Employee; sinLeer: number; disabled: boolean; onToggle: (employee: Employee) => void; onPhotos: () => void; onExams: () => void; onCanal: () => void; onClose: () => void }) {
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-3"
@@ -982,7 +1019,8 @@ function EmployeeSheet({ employee, disabled, onToggle, onPhotos, onExams, onCana
           className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900/60 py-3.5 text-xs font-bold uppercase tracking-wider text-zinc-200 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
         >
           <MessageCircle size={18} />
-          Escribirle
+          {sinLeer > 0 ? `Leer sus ${sinLeer === 1 ? "mensaje" : "mensajes"}` : "Escribirle"}
+          <ContadorMensajes cantidad={sinLeer} />
         </button>
 
         <div className="mt-2.5 grid grid-cols-2 gap-2.5">

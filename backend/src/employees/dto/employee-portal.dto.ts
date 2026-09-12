@@ -150,4 +150,12 @@ export interface EmployeePortalData {
   activeService: EmployeePortalActiveService | null;
   recentServices: EmployeePortalServiceItem[];
   reputation: EmployeePortalReputation;
+  /**
+   * Mensajes de coordinacion que todavia no ha abierto.
+   *
+   * Viaja con el resto del portal y no por una peticion aparte porque es un
+   * numero que hay que pintar en cuanto entra --el aviso del boton-- y pedirlo
+   * por separado dejaria el boton sin marca durante el primer instante.
+   */
+  canalSinLeer: number;
 }
