@@ -1301,12 +1301,82 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     await this.liquidationSync.syncCancelledRecord(service.id);
 
     await this.notifyServiceCancelled(service, estadoPrevio, viajesActivos);
+    // La conversacion del cliente con esa modelo se acaba aqui: si no, el bot
+    // le sigue contestando en nombre de ella.
+    await this.cerrarConversacionDelCliente(service);
 
     this.realtimeEventsService.emitToBoss(service.jefeId, {
       type: 'service_cancelled',
       data: { id: service.id },
     });
     return { cancelled: true };
+  }
+
+  /**
+   * Cierra en la sesion del cliente la conversacion del servicio cancelado.
+   *
+   * La cancelacion cambiaba estados y avisaba, pero no tocaba la sesion de
+   * Telegram del cliente: seguia con su `step` de conversacion puesto y
+   * apuntando a la misma modelo. El efecto era que el bot le contestaba en
+   * nombre de ella como si el servicio siguiera vivo, y al pedir otra desde el
+   * catalogo --si la nueva no estaba disponible y solo se le ofrecia la lista--
+   * se quedaba atrapado hablando con la primera.
+   *
+   * Solo se limpia si la sesion sigue apuntando a esa modelo. Si el cliente ya
+   * esta negociando con otra, lo suyo es mas nuevo que esta cancelacion y no se
+   * toca.
+   *
+   * La escritura es condicional por `version`, el mismo protocolo que usa el
+   * almacen de sesiones: si alguien escribio entre la lectura y esto, se deja
+   * estar. Nunca lanza; la cancelacion ya ocurrio y no puede deshacerse porque
+   * una sesion no se pudiera limpiar.
+   */
+  private async cerrarConversacionDelCliente(
+    service: Servicios,
+  ): Promise<void> {
+    const chatId =
+      service.cliente?.telegramChatId ?? service.clienteTelegramId ?? null;
+    if (!chatId || !service.empleadaId) return;
+
+    /*
+     * En un chat privado el emisor y el chat son el mismo id, y ese es el unico
+     * sitio donde un cliente habla con el bot, asi que la clave se arma con el
+     * id repetido. Las claves de tres partes son de la epoca de los bots por
+     * modelo y ya no se crean.
+     */
+    const key = `${chatId}:${chatId}`;
+
+    try {
+      const fila = await this.telegramSessionRepository.findOne({
+        where: { key },
+      });
+      if (!fila?.data) return;
+      if (fila.data.empleadaId !== service.empleadaId) return;
+
+      /*
+       * Se conserva lo que describe al cliente y no a la contratacion: borrar
+       * `rechazoAvisadoServicioId` haria que la explicacion del rechazo se le
+       * repitiera en cada mensaje.
+       */
+      const limpia = fila.data.rechazoAvisadoServicioId
+        ? { rechazoAvisadoServicioId: fila.data.rechazoAvisadoServicioId }
+        : {};
+
+      await this.telegramSessionRepository
+        .createQueryBuilder()
+        .update(TelegramSession)
+        .set({ data: limpia, version: () => 'version + 1' })
+        .where('key = :key AND version = :version', {
+          key,
+          version: fila.version,
+        })
+        .execute();
+    } catch (error) {
+      this.logger.error(
+        `No se pudo cerrar la conversacion del cliente del servicio ${service.id}:`,
+        error,
+      );
+    }
   }
 
   /**
@@ -3884,6 +3954,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         }
       }
     }
+
+    /*
+     * Aqui abajo se le ofrecen otras modelos, asi que la conversacion con esta
+     * tiene que quedar cerrada antes: si no, lo que escriba despues lo sigue
+     * contestando ella, la que acaba de no llegar.
+     */
+    await this.cerrarConversacionDelCliente(servicio);
 
     if (servicio.cliente?.telegramChatId) {
       try {

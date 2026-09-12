@@ -2397,6 +2397,29 @@ export class TelegramBookingUpdate {
    * responde con un mensaje que deja al cliente sin salida: se le ofrece a
    * quien si esta libre, que es lo unico que le sirve en ese momento.
    */
+  /**
+   * Da por terminada la contratacion que hubiera en la sesion.
+   *
+   * Hacia falta porque decirle al cliente "ella no puede, estas si" no bastaba:
+   * la sesion seguia apuntando a la modelo anterior, con su `step` de
+   * conversacion puesto, asi que el siguiente mensaje que escribiera lo
+   * contestaba ELLA. El cliente acababa de pedir a otra --o de ver cancelado su
+   * servicio-- y el bot le respondia como si nada hubiera pasado, en nombre de
+   * quien ya no estaba en la conversacion.
+   *
+   * Se conserva lo que describe al cliente y no a la contratacion: si se borrara
+   * `rechazoAvisadoServicioId`, la explicacion del rechazo se le repetiria en
+   * cada mensaje.
+   */
+  private terminarContratacionEnSesion(ctx: BotContext): void {
+    const previa = ctx.session;
+    ctx.session = {
+      ...(previa?.rechazoAvisadoServicioId
+        ? { rechazoAvisadoServicioId: previa.rechazoAvisadoServicioId }
+        : {}),
+    };
+  }
+
   async startHireSession(ctx: any, empleadaId: string) {
     const empleada = await this.empleadasRepository.findOne({
       where: { id: empleadaId },
@@ -2404,6 +2427,10 @@ export class TelegramBookingUpdate {
     });
 
     if (!empleada || !empleada.catalogoActivo) {
+      // La contratacion anterior se cierra antes de ofrecerle otras: si no, lo
+      // que escriba despues lo sigue contestando la modelo de antes.
+      this.terminarContratacionEnSesion(ctx);
+      await this.persistSession(ctx);
       await ctx.reply(
         'Esa chica no esta disponible por ahora. Estas son las que si pueden atenderte:',
       );
@@ -2421,6 +2448,8 @@ export class TelegramBookingUpdate {
      * comprueba antes que `disponible` para no proponer una espera imposible.
      */
     if (empleada.usuario && empleada.usuario.enJornada === false) {
+      this.terminarContratacionEnSesion(ctx);
+      await this.persistSession(ctx);
       await ctx.reply(
         `${empleada.nombreArtistico} ya termino por hoy y no va a tomar mas servicios. Estas si estan disponibles ahora:`,
       );
@@ -2429,6 +2458,8 @@ export class TelegramBookingUpdate {
     }
 
     if (!activeService && !empleada.disponible) {
+      this.terminarContratacionEnSesion(ctx);
+      await this.persistSession(ctx);
       await ctx.reply(
         `${empleada.nombreArtistico} no puede atenderte en este momento. Estas si estan disponibles:`,
       );
@@ -7885,8 +7916,16 @@ export class TelegramBookingUpdate {
     if (!ctx.session) ctx.session = {};
     const yaExplicado = ctx.session.rechazoAvisadoServicioId === ultimo.id;
 
+    /*
+     * Se cierra la contratacion del servicio rechazado antes de ofrecerle otras.
+     *
+     * Sin esto se le enseñaba la lista pero la sesion seguia apuntando a la
+     * modelo que no pudo tomarlo: el siguiente mensaje del cliente lo
+     * contestaba ella, hablando de un servicio que ya no existia.
+     */
     if (!yaExplicado) {
-      ctx.session.rechazoAvisadoServicioId = ultimo.id;
+      this.terminarContratacionEnSesion(ctx);
+      ctx.session!.rechazoAvisadoServicioId = ultimo.id;
       await this.persistSession(ctx);
     }
 
