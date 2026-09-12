@@ -17,8 +17,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * al resto de su jornada; el intercambio de preguntas y respuestas que lleva a
  * el si vive en este canal, marcado con tipo 'jornada'.
  */
-export class CreateTeamChannel1793200000000 implements MigrationInterface {
-  name = 'CreateTeamChannel1793200000000';
+export class CreateTeamChannel1803000000000 implements MigrationInterface {
+  name = 'CreateTeamChannel1803000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

@@ -12,8 +12,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * Vale para las dos partes que pueden ser señaladas, modelo y chofer: el
  * reporte no distingue, y la columna tampoco.
  */
-export class AddReportSubjectStatement1793400000000 implements MigrationInterface {
-  name = 'AddReportSubjectStatement1793400000000';
+export class AddReportSubjectStatement1803200000000 implements MigrationInterface {
+  name = 'AddReportSubjectStatement1803200000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
