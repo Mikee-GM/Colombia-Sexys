@@ -38,7 +38,12 @@ describe('AuthService.refresh', () => {
     } as AuthSession;
     store.set(full.id, full);
 
+    const update = jest.fn();
     const revokeAll = jest.fn().mockResolvedValue(undefined);
+    // Se guarda la condicion del UPDATE: lo que hay que comprobar no es solo
+    // que se revoque, sino hasta donde llega la revocacion.
+    const revokeWhere: Array<{ sql: string; params: Record<string, unknown> }> =
+      [];
     const sessions = {
       findOne: jest.fn(({ where }) =>
         Promise.resolve(store.get(where.id) ?? null),
@@ -52,10 +57,15 @@ describe('AuthService.refresh', () => {
           store.set(s.id, s);
         return Promise.resolve(value);
       }),
-      update: jest.fn(),
+      update,
       createQueryBuilder: jest.fn(() => ({
         update: () => ({
-          set: () => ({ where: () => ({ execute: revokeAll }) }),
+          set: () => ({
+            where: (sql: string, params: Record<string, unknown>) => {
+              revokeWhere.push({ sql, params });
+              return { execute: revokeAll };
+            },
+          }),
         }),
       })),
     } as unknown as Repository<AuthSession>;
@@ -103,7 +113,7 @@ describe('AuthService.refresh', () => {
       jwtService: jwt,
       configService: { getOrThrow: () => 'secreto-de-prueba' },
     });
-    return { service, store, revokeAll, full };
+    return { service, store, revokeAll, revokeWhere, update, full };
   }
 
   it('rota la sesión y marca la anterior como reemplazada', async () => {
@@ -116,9 +126,9 @@ describe('AuthService.refresh', () => {
     expect(store.get(full.id)?.replacedBySessionId).toBeDefined();
   });
 
-  it('revoca todas las sesiones si se reutiliza un refresh token viejo', async () => {
+  it('corta la familia si se reutiliza un refresh token viejo', async () => {
     // Revocada hace mucho: fuera de la ventana de gracia, es reuso.
-    const { service, revokeAll } = build({
+    const { service, revokeAll, revokeWhere } = build({
       revokedAt: new Date(Date.now() - 120_000),
       replacedBySessionId: 'sid-2',
     });
@@ -127,18 +137,28 @@ describe('AuthService.refresh', () => {
       UnauthorizedException,
     );
     expect(revokeAll).toHaveBeenCalled();
+    expect(revokeWhere[0].sql).toContain('family_id');
+    expect(revokeWhere[0].params).toEqual({ familyId: 'fam-1' });
   });
 
-  it('revoca todo si el hash del token no coincide con el guardado', async () => {
-    const { service, revokeAll } = build({ refreshTokenHash: hash('otro') });
+  it('corta la familia si el hash del token no coincide con el guardado', async () => {
+    const { service, revokeAll, revokeWhere } = build({
+      refreshTokenHash: hash('otro'),
+    });
 
     await expect(service.refresh('token-valido')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
     expect(revokeAll).toHaveBeenCalled();
+    expect(revokeWhere[0].sql).toContain('family_id');
   });
 
-  it('revoca todo si la sesión ya caducó', async () => {
+  /*
+   * Una sesion vencida no es un ataque: es una sesion vencida. Revocando por
+   * usuario, abrir un panel que llevaba dias sin usarse echaba a esa cuenta de
+   * todos los demas sitios donde estuviera abierta.
+   */
+  it('si la sesión caducó, no toca las demás sesiones de la persona', async () => {
     const { service, revokeAll } = build({
       expiresAt: new Date(Date.now() - 1),
     });
@@ -146,7 +166,19 @@ describe('AuthService.refresh', () => {
     await expect(service.refresh('token-valido')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
-    expect(revokeAll).toHaveBeenCalled();
+    expect(revokeAll).not.toHaveBeenCalled();
+  });
+
+  it('la sesión caducada sí queda cerrada', async () => {
+    const { service, update } = build({ expiresAt: new Date(Date.now() - 1) });
+
+    await expect(service.refresh('token-valido')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(update).toHaveBeenCalledWith(
+      'sid-1',
+      expect.objectContaining({ revokedAt: expect.any(Date) }),
+    );
   });
 
   /**

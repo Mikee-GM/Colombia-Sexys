@@ -175,13 +175,31 @@ export class AuthService {
         current.replacedBySessionId !== null &&
         Date.now() - current.revokedAt.getTime() < 30000;
 
-      const compromised =
-        !current ||
-        current.userId !== payload.sub ||
-        current.familyId !== payload.familyId ||
-        (current.revokedAt !== null && !isRecentlyReplaced) ||
-        current.expiresAt.getTime() <= Date.now() ||
-        current.refreshTokenHash !== this.hashToken(refreshToken);
+      /*
+       * Caducar no es lo mismo que estar comprometida.
+       *
+       * Antes iban juntas bajo un unico `compromised`, y la respuesta a las dos
+       * era revocar TODAS las sesiones del usuario. Con eso, abrir un panel que
+       * llevaba dias sin usarse --su refresco ya vencido-- echaba a esa misma
+       * cuenta de todos los demas sitios donde estuviera abierta, telefono y
+       * ordenador incluidos. Una sesion vencida no protege a nadie tirando las
+       * otras: se acabo, y ya esta.
+       */
+      const caducada =
+        Boolean(current) && current!.expiresAt.getTime() <= Date.now();
+
+      /*
+       * Esto si es reuso: el token no es el que se guardo, la fila dice otro
+       * dueño u otra familia, o es un refresco ya gastado fuera de la ventana
+       * de gracia. Alguien tiene en la mano un token que no deberia.
+       */
+      const reutilizado =
+        Boolean(current) &&
+        !caducada &&
+        (current!.userId !== payload.sub ||
+          current!.familyId !== payload.familyId ||
+          (current!.revokedAt !== null && !isRecentlyReplaced) ||
+          current!.refreshTokenHash !== this.hashToken(refreshToken));
 
       // Dos peticiones que renuevan a la vez --dos pestanas, o la pagina y su
       // fetch-- mandan el mismo refresco: la primera lo rota y la segunda llega
@@ -194,16 +212,37 @@ export class AuthService {
         return this.renovacionEnCarrera(manager, current, payload.sub);
       }
 
-      if (compromised) {
+      if (reutilizado) {
+        /*
+         * Se corta la FAMILIA, no la cuenta entera.
+         *
+         * Una familia es una cadena de refrescos que nace en un login y se va
+         * rotando: si uno de sus eslabones aparece reutilizado, lo que hay que
+         * dar por perdido es esa cadena. Las demas sesiones de la persona
+         * nacieron de otros logins y no tienen nada que ver, asi que tirarlas
+         * solo conseguia sacarla de todas partes por un problema de una.
+         *
+         * La familia se lee de la fila y no del token: si el token miente sobre
+         * a cual pertenece, la verdad esta en la base.
+         */
         await sessions
           .createQueryBuilder()
           .update()
           .set({ revokedAt: new Date() })
-          .where('user_id = :userId AND revoked_at IS NULL', {
-            userId: payload.sub,
+          .where('family_id = :familyId AND revoked_at IS NULL', {
+            familyId: current!.familyId,
           })
           .execute();
         throw new UnauthorizedException('La sesión fue revocada por seguridad');
+      }
+
+      if (!current || caducada) {
+        // Solo se cierra la que vencio. Quien la tenia vuelve a entrar; el
+        // resto de sus sesiones siguen donde estaban.
+        if (current && current.revokedAt === null) {
+          await sessions.update(current.id, { revokedAt: new Date() });
+        }
+        throw new UnauthorizedException('La sesión expiró, vuelve a entrar');
       }
 
       const user = await manager.getRepository(Usuarios).findOne({
