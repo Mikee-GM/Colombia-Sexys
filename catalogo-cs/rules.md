@@ -10,9 +10,13 @@ Estas reglas son obligatorias para todo código nuevo de autenticación y para c
 
 ## 2. Diseño de tokens
 
-- Usar dos tokens: `access_token` con TTL de 5 a 15 minutos y `refresh_token` con TTL de 7 a 30 días.
+- Usar dos tokens: un `access_token` de vida corta y un `refresh_token` de vida larga, persistido y revocable.
+- El TTL del `access_token` de este proyecto es de **12 horas**, y no de los 5 a 15 minutos de la recomendación genérica. Se puede porque `JwtStrategy` comprueba la fila de la sesión en cada petición: el token va atado a un `sid` y se rechaza en el acto si esa sesión está revocada o caducada, dure lo que dure el token. Sin esa comprobación en cada petición, esta excepción deja de ser válida y hay que volver a un TTL corto.
+- La razón de subirlo es operativa: cada renovación es una rotación, y cada rotación es una oportunidad de perder la sesión. Estos paneles viven instalados en el teléfono y tienen que seguir despiertos para recibir avisos.
 - Rotar el `refresh_token` después de cada uso.
-- Si se presenta nuevamente un `refresh_token` ya usado o rotado, tratarlo como comprometido y revocar todas las sesiones del usuario.
+- Si se presenta nuevamente un `refresh_token` ya usado o rotado, tratarlo como comprometido y revocar **la familia** de ese login. No todas las sesiones del usuario: las demás nacieron de otros logins y tirarlas sacaba a la persona de todos sus dispositivos por un problema de uno solo.
+- Una sesión simplemente caducada no es un compromiso: se cierra esa y ninguna más.
+- Un `access_token` cuya sesión acaba de rotar sigue valiendo 30 segundos. Cubre a la petición que ya iba en camino con el token anterior; se exige `replacedBySessionId`, así que un cierre de sesión o una revocación por seguridad siguen cortando en el acto.
 - Firmar `access_token` y `refresh_token` con secretos diferentes. Usar claves asimétricas RS256 cuando varios servicios deban verificar los tokens.
 - Persistir en la base de datos los refresh tokens, preferiblemente sus hashes, asociados a `userId` y `deviceId` o `sessionId`, para permitir la revocación individual de sesiones.
 
@@ -22,7 +26,7 @@ Estas reglas son obligatorias para todo código nuevo de autenticación y para c
 - Usar `secure: true` en producción. Para pruebas locales cross-origin, usar HTTPS.
 - Usar `sameSite: "lax"` cuando frontend y backend sean del mismo sitio.
 - Usar `sameSite: "none"` junto con `secure: true` cuando sean cross-site.
-- Restringir la cookie del refresh token con `path: "/api/auth/refresh"`.
+- La cookie del refresh token va con `path: "/"`, no acotada a la ruta de refresco. Acotarla es la recomendación genérica, pero aquí dejaba la sesión sin poder renovarse: el navegador solo manda una cookie cuyo `Path` cubre la ruta pedida, y la renovación ocurre al pintar la página, no solo contra el endpoint. Sigue siendo `httpOnly`, firmada y `Secure` en producción.
 - Definir `domain` explícitamente solo cuando se utilicen subdominios y nunca con un alcance mayor al necesario.
 - Usar `signed: true` junto con `cookie-parser` y un secreto para detectar alteraciones.
 - Hacer coincidir `maxAge` con el `exp` real del token; nunca permitir que la cookie dure más que el token.

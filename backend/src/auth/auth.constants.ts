@@ -4,17 +4,23 @@ export const ACCESS_COOKIE = 'access_token';
 export const REFRESH_COOKIE = 'refresh_token';
 export const CSRF_COOKIE = 'csrf_token';
 /**
- * El access token sigue siendo corto a proposito: no se puede revocar por si
- * mismo --cerrar sesion invalida el refresh, no este-- asi que su ventana de
- * riesgo tiene que ser pequeña. La sesion larga la sostiene el refresh token,
- * que si vive en base de datos y se puede invalidar.
+ * Doce horas, y la razon de que se pueda es que el token no vale por si solo.
  *
- * Una hora en vez de quince minutos: la renovacion es transparente cuando
- * funciona, pero cada una es una oportunidad de que algo salga mal, y de las
- * cuatro que habia por hora ahora queda una. Subirlo mas empieza a pesar del
- * lado equivocado de la balanza.
+ * La idea de tenerlo corto venia de que un access token no se puede revocar:
+ * cerrar sesion invalida el refresh, no este. Eso dejo de ser cierto cuando
+ * `JwtStrategy` paso a comprobar la fila de la sesion EN CADA PETICION: el
+ * token va atado a un `sid`, y si esa sesion esta revocada o caducada se
+ * rechaza en el acto, dure lo que dure el token. Un cierre de sesion o una
+ * revocacion por seguridad siguen surtiendo efecto al instante.
+ *
+ * Lo que si pesa es lo otro: cada renovacion es una rotacion, y cada rotacion
+ * es una oportunidad de que algo salga mal --una peticion en camino con el
+ * token anterior, una carrera entre dos pestañas, un bache de red justo en ese
+ * segundo--. Pasar de una hora a doce deja una rotacion al dia en vez de doce,
+ * y estos paneles viven instalados en el telefono y tienen que seguir
+ * despiertos para recibir avisos.
  */
-export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60; // 1 hora
+export const ACCESS_TOKEN_TTL_SECONDS = 12 * 60 * 60; // 12 horas
 export const REFRESH_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60; // 1 año de sesión por defecto
 
 /**

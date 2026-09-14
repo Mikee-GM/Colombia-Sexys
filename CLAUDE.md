@@ -135,8 +135,10 @@ Reglas completas y no negociables en `catalogo-cs/rules.md`. Lo esencial:
 
 - Los tokens viven solo en cookies `httpOnly` **firmadas** que emite NestJS
   (`backend/src/auth/auth.constants.ts`). Nunca en `localStorage`.
-- `access_token` de 15 min; `refresh_token` de larga vida, persistido en base y
-  restringido a `path: /auth/refresh`.
+- `access_token` de 12 h; `refresh_token` de larga vida, persistido en base y
+  con `path: /`, no acotado a la ruta de refresco: el navegador solo manda una
+  cookie cuyo `Path` cubre la ruta pedida, y con cualquier alcance mas estrecho
+  la renovacion en servidor es imposible.
 - Cookie CSRF no-`httpOnly` más header `x-csrf-token`, verificado por
   `CsrfGuard` en las peticiones que mutan estado.
 - Autorización con `JwtAuthGuard` + `RolesGuard` y `@Roles(...)`. Roles:

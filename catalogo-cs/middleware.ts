@@ -64,6 +64,47 @@ async function renovarSesion(
 }
 
 /**
+ * Renueva la sesion si al navegador ya se le caduco el acceso.
+ *
+ * El access token dura doce horas y el navegador borra su cookie al vencer; el
+ * refresco vive un año. Este es el punto donde una cosa se convierte en la
+ * otra, y por eso tiene que correr en TODAS las rutas que la sesion sostiene,
+ * no solo en las paginas del panel: los portales de modelo y chofer no
+ * renovaban nunca --su rama devolvia antes de llegar aqui-- asi que su sesion
+ * moria a la hora, y el proxy de `/api` tampoco, de modo que el canal de avisos
+ * se quedaba reconectando contra un 401 para siempre. Son justo las dos
+ * pantallas que tienen que seguir vivas para que lleguen las notificaciones.
+ *
+ * Devuelve las cookies nuevas, o `null` si no hizo falta renovar o no se pudo.
+ * Cuando renueva, las deja tambien sobre la peticion, para que lo que venga
+ * detras --el render, el proxy-- ya vea la sesion buena sin otro viaje.
+ */
+async function renovarSiHaceFalta(
+  request: NextRequest,
+): Promise<ParsedCookie[] | null> {
+  if (request.cookies.has(ACCESS_COOKIE)) return null;
+
+  const renovadas = await renovarSesion(request);
+  if (!renovadas) return null;
+
+  for (const { name, value } of renovadas) {
+    request.cookies.set(name, value);
+  }
+  return renovadas;
+}
+
+/** Copia sobre la respuesta las cookies que devolvio la renovacion. */
+function conCookies(
+  respuesta: NextResponse,
+  renovadas: ParsedCookie[] | null,
+): NextResponse {
+  for (const { name, value, options } of renovadas ?? []) {
+    respuesta.cookies.set(name, value, options);
+  }
+  return respuesta;
+}
+
+/**
  * Rol de la sesion, segun el backend.
  *
  * Se pregunta a `/auth/me` en vez de leer el JWT aqui: el backend verifica la
@@ -72,23 +113,35 @@ async function renovarSesion(
  * cookie. Una decision de autorizacion no puede apoyarse en un dato sin
  * verificar.
  */
-async function rolDeLaSesion(cookieHeader: string): Promise<string | null> {
-  if (!cookieHeader) return null;
-  const destino = new URL(
-    `${BACKEND_API_PREFIX}/auth/me`,
-    backendUrl(),
-  );
+type Sesion =
+  | { estado: "ok"; rol: string }
+  | { estado: "sin-sesion" }
+  /** El backend no contesto. No dice nada sobre si la sesion es buena. */
+  | { estado: "incomunicado" };
+
+async function rolDeLaSesion(cookieHeader: string): Promise<Sesion> {
+  if (!cookieHeader) return { estado: "sin-sesion" };
+  const destino = new URL(`${BACKEND_API_PREFIX}/auth/me`, backendUrl());
   try {
     const response = await fetch(destino, {
       cache: "no-store",
       headers: { Cookie: cookieHeader },
     });
-    if (!response.ok) return null;
+    if (!response.ok) return { estado: "sin-sesion" };
     const data = (await response.json()) as { rol?: unknown };
-    return typeof data?.rol === "string" ? data.rol : null;
+    return typeof data?.rol === "string"
+      ? { estado: "ok", rol: data.rol }
+      : { estado: "sin-sesion" };
   } catch {
-    // Backend inalcanzable: sin poder comprobar el rol no se deja pasar.
-    return null;
+    /*
+     * Backend caido, reiniciandose o con la red a medias.
+     *
+     * Antes esto se trataba igual que no tener sesion y mandaba al login: un
+     * bache de unos segundos echaba del panel a todo el mundo, y volver a
+     * entrar exige la contraseña. No dice nada sobre si la sesion es valida,
+     * asi que no puede ser motivo para cerrarla.
+     */
+    return { estado: "incomunicado" };
   }
 }
 
@@ -165,7 +218,17 @@ export async function middleware(request: NextRequest) {
         return respuesta;
       }
     }
-    return NextResponse.next();
+    /*
+     * Y si no habia token que canjear, se renueva como en cualquier otra ruta.
+     *
+     * Esta rama devolvia aqui mismo, asi que la sesion de los portales no se
+     * renovaba nunca: a la hora, cuando el navegador borraba la cookie de
+     * acceso, la modelo o el chofer se encontraban con el login del panel.
+     */
+    return conCookies(
+      NextResponse.next({ request: { headers: request.headers } }),
+      await renovarSiHaceFalta(request),
+    );
   }
 
   // 1. Proxy /api/* requests to NestJS backend (excluding Next.js internal API routes)
@@ -188,6 +251,15 @@ export async function middleware(request: NextRequest) {
      * paginas piden sus datos en el servidor con `apiFetch`, que arma el
      * prefijo bien, y las rutas propias de Next quedan excluidas arriba.
      */
+    /*
+     * Renovar antes de reenviar.
+     *
+     * Es el unico camino por el que el navegador llega al backend sin pasar por
+     * un render, asi que si aqui no se renueva, una peticion hecha justo
+     * despues de caducar el acceso se va con la cookie vacia y vuelve 401.
+     */
+    const renovadasApi = await renovarSiHaceFalta(request);
+
     const apiPath = pathname.replace(/^\/api/, BACKEND_API_PREFIX);
     const targetUrl = new URL(`${apiPath}${search}`, backendUrl());
     /*
@@ -204,7 +276,10 @@ export async function middleware(request: NextRequest) {
      */
     const cabeceras = new Headers(request.headers);
     cabeceras.set("cookie", buildCookieHeader(request));
-    return NextResponse.rewrite(targetUrl, { request: { headers: cabeceras } });
+    return conCookies(
+      NextResponse.rewrite(targetUrl, { request: { headers: cabeceras } }),
+      renovadasApi,
+    );
   }
 
   // 2. Auth checks for /admin and /jefe routes
@@ -227,18 +302,12 @@ export async function middleware(request: NextRequest) {
      * su panel. Si no hay sesion, sigue sirviendose el login como siempre.
      */
     if (pathname === "/admin") {
-      let renovadas: ParsedCookie[] | null = null;
-      if (!request.cookies.has(ACCESS_COOKIE)) {
-        renovadas = await renovarSesion(request);
-        if (renovadas) {
-          for (const { name, value } of renovadas) {
-            request.cookies.set(name, value);
-          }
-        }
-      }
+      const renovadas = await renovarSiHaceFalta(request);
 
-      const rol = await rolDeLaSesion(buildCookieHeader(request));
-      if (!rol) {
+      const sesion = await rolDeLaSesion(buildCookieHeader(request));
+      // Sin rol confirmado se sirve el login, como siempre: aqui no hay nada
+      // que cerrar, solo se decide si hace falta enseñarlo.
+      if (sesion.estado !== "ok") {
         if (!renovadas) return NextResponse.next();
         // La renovacion pudo dejar cookies nuevas aunque el rol no se haya
         // podido confirmar (backend inestable); se guardan igual en vez de
@@ -252,38 +321,23 @@ export async function middleware(request: NextRequest) {
         return sinRol;
       }
 
-      const destino = redirectFromRequest(request, inicioParaRol(rol));
-      if (renovadas) {
-        for (const { name, value, options } of renovadas) {
-          destino.cookies.set(name, value, options);
-        }
-      }
-      return destino;
+      return conCookies(
+        redirectFromRequest(request, inicioParaRol(sesion.rol)),
+        renovadas,
+      );
     }
 
     // B) Rutas protegidas de /admin/* y /jefe/*.
-    let renovadas: ParsedCookie[] | null = null;
-
+    /*
+     * Sin access token, pero eso no significa que la sesion haya terminado: la
+     * cookie tiene la vida corta del token y el navegador la borra sola al
+     * caducar. Ese es justo el momento de renovar. Las cookies nuevas van a dos
+     * sitios: a la peticion, para que el render de esta misma pagina ya vea la
+     * sesion renovada, y a la respuesta, para que el navegador las guarde.
+     */
+    const renovadas = await renovarSiHaceFalta(request);
     if (!request.cookies.has(ACCESS_COOKIE)) {
-      /*
-       * Sin access token, pero eso no significa que la sesion haya terminado:
-       * la cookie tiene la vida corta del token y el navegador la borra sola al
-       * caducar. Ese es justo el momento de renovar, y lo que antes faltaba: se
-       * redirigia al login a quien tenia sesion perfectamente valida, cada vez
-       * que recargaba pasados quince minutos.
-       */
-      renovadas = await renovarSesion(request);
-      if (!renovadas) {
-        return redirectFromRequest(request, "/admin");
-      }
-      /*
-       * Las cookies nuevas van a dos sitios: a la peticion, para que el render
-       * de esta misma pagina ya vea la sesion renovada y no haga falta un viaje
-       * de ida y vuelta; y a la respuesta, para que el navegador las guarde.
-       */
-      for (const { name, value } of renovadas) {
-        request.cookies.set(name, value);
-      }
+      return redirectFromRequest(request, "/admin");
     }
 
     /*
@@ -296,27 +350,42 @@ export async function middleware(request: NextRequest) {
      * ya autenticado sin haber hecho nada raro.
      */
     const area = isAdminRoute ? "admin" : "jefe";
-    const rol = await rolDeLaSesion(buildCookieHeader(request));
-    if (!rol) {
+    const sesion = await rolDeLaSesion(buildCookieHeader(request));
+    if (sesion.estado === "sin-sesion") {
       return redirectFromRequest(request, "/admin");
     }
-    if (!puedeEntrarEn(area, rol)) {
-      return redirectFromRequest(request, inicioParaRol(rol));
+    /*
+     * Con el backend incomunicado se deja pasar en vez de mandar al login.
+     *
+     * No se puede comprobar el rol, pero tampoco se puede servir ningun dato:
+     * todo lo que pinta la pagina sale del mismo backend que no contesta, asi
+     * que lo que se ve es una pantalla degradada, no informacion de otro rol. A
+     * cambio, un bache de unos segundos deja de costar la sesion de todos.
+     */
+    if (sesion.estado === "ok" && !puedeEntrarEn(area, sesion.rol)) {
+      return redirectFromRequest(request, inicioParaRol(sesion.rol));
     }
 
-    if (!renovadas) {
-      return NextResponse.next();
-    }
-    const response = NextResponse.next({
-      request: { headers: request.headers },
-    });
-    for (const { name, value, options } of renovadas) {
-      response.cookies.set(name, value, options);
-    }
-    return response;
+    return conCookies(
+      NextResponse.next({ request: { headers: request.headers } }),
+      renovadas,
+    );
   }
 
-  return NextResponse.next();
+  /*
+   * Todo lo demas del matcher, que renueva igual.
+   *
+   * Aqui caen los ajustes de cada portal y, sobre todo, `/api/realtime/sse`:
+   * la rama de arriba lo excluye a proposito --lo sirve una ruta propia de
+   * Next-- y es el canal por el que llegan los avisos en vivo. Se reconecta
+   * solo cada vez que se cae, asi que sin renovar, en cuanto caducaba el acceso
+   * esa reconexion chocaba con un 401 una y otra vez y las notificaciones se
+   * apagaban en silencio hasta que alguien navegara a otra pagina.
+   */
+  return conCookies(
+    NextResponse.next({ request: { headers: request.headers } }),
+    await renovarSiHaceFalta(request),
+  );
 }
 
 /*

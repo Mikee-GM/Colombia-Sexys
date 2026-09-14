@@ -3,13 +3,19 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Usuarios } from '../../users/entities/user.entity';
 import { AuthSession } from '../entities/auth-session.entity';
 import { ACCESS_COOKIE } from '../auth.constants';
 
 const cookieExtractor = (request: { signedCookies?: Record<string, string> }) =>
   request?.signedCookies?.[ACCESS_COOKIE] ?? null;
+
+/**
+ * Cuanto sigue valiendo un access token cuya sesion acaba de rotar. Es el mismo
+ * margen que `AuthService.refresh` da a dos renovaciones que se cruzan.
+ */
+const GRACIA_DE_ROTACION_MS = 30_000;
 
 type AccessPayload = {
   sub: string;
@@ -51,10 +57,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Token sin sesión asociada');
     }
     const session = await this.sessionsRepository.findOne({
-      where: { id: payload.sid, userId: payload.sub, revokedAt: IsNull() },
-      select: { id: true, expiresAt: true },
+      where: { id: payload.sid, userId: payload.sub },
+      select: {
+        id: true,
+        expiresAt: true,
+        revokedAt: true,
+        replacedBySessionId: true,
+      },
     });
     if (!session || session.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException('La sesión ya no es válida');
+    }
+    if (session.revokedAt && !this.esRotacionReciente(session)) {
       throw new UnauthorizedException('La sesión ya no es válida');
     }
 
@@ -65,5 +79,25 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Usuario no válido o inactivo');
     }
     return user;
+  }
+
+  /**
+   * La sesion acaba de rotar, que no es lo mismo que haberse cerrado.
+   *
+   * Al renovar, la sesion vieja se marca revocada en el mismo instante en que
+   * nace la nueva. Cualquier peticion que ya iba en camino con el access token
+   * anterior --o la del segundo que tarda el navegador en guardar la cookie
+   * nueva-- llegaba con un `sid` recien revocado y se respondia 401. El panel
+   * lee ese 401 como sesion caida y manda al login: la persona se veia echada
+   * justo en el momento en que su sesion se estaba renovando bien.
+   *
+   * La ventana solo cubre eso. Se exige `replacedBySessionId`, que unicamente
+   * pone la rotacion: un cierre de sesion o una revocacion por seguridad dejan
+   * ese campo vacio y siguen cortando en el acto, que es lo que tienen que
+   * hacer.
+   */
+  private esRotacionReciente(session: AuthSession): boolean {
+    if (!session.revokedAt || !session.replacedBySessionId) return false;
+    return Date.now() - session.revokedAt.getTime() < GRACIA_DE_ROTACION_MS;
   }
 }
