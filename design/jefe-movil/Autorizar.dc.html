@@ -1,0 +1,143 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #000000;
+      color: #ffffff;
+      font-family: "Montserrat", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .h { font-family: "Cinzel", "Cormorant Garamond", serif; }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+    button { font-family: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
+  </style>
+</helmet>
+
+<!-- Aceptar es la decision con mas consecuencias del panel: reserva a la
+     modelo, arranca el cronometro y dispara el traslado. Por eso se abre en
+     una hoja propia en vez de resolverse con un menu, y el transporte se
+     elige aqui mismo: antes era un segundo dialogo encadenado. -->
+<div style="display: flex; flex-direction: column; height: 844px; width: 390px; background: #000000; overflow: hidden;">
+
+  <div style="flex-grow: 1; background: #000000; opacity: 0.55;"></div>
+
+  <div style="border-top-left-radius: 24px; border-top-right-radius: 24px; border: 1px solid #27272a; border-bottom: 0; background: #050505; padding: 20px 18px 26px;">
+    <div style="width: 38px; height: 4px; border-radius: 999px; background: #27272a; margin: 0 auto 18px;"></div>
+
+    <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.18em; color: #C5A55A;">AUTORIZAR SERVICIO</span>
+    <h1 class="h" style="margin: 8px 0 0; font-size: 30px; font-weight: 600; line-height: 1.1;">Camila Vega</h1>
+
+    <div style="display: flex; flex-direction: column; gap: 1px; margin-top: 18px; border-radius: 14px; overflow: hidden; background: #1c1c1f;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: #09090b;">
+        <span style="font-size: 12px; color: #71717a;">Cliente</span>
+        <span style="font-size: 13.5px; font-weight: 600;">Yakult</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: #09090b;">
+        <span style="font-size: 12px; color: #71717a;">Duración</span>
+        <span style="font-size: 13.5px; font-weight: 600;">2 horas</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: #09090b;">
+        <span style="font-size: 12px; color: #71717a;">Pago</span>
+        <span style="font-size: 13.5px; font-weight: 600;">Efectivo</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: #09090b;">
+        <span style="font-size: 12px; color: #71717a;">Destino</span>
+        <span style="font-size: 13.5px; font-weight: 600; text-align: right;">Montecarlo · Hab. 204</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: #09090b;">
+        <span style="font-size: 12px; color: #71717a;">Total</span>
+        <span class="h" style="font-size: 20px; font-weight: 600; color: #E8D5A3; font-variant-numeric: tabular-nums;">$6,000</span>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px;">
+      <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.16em; color: #71717a;">¿CÓMO SE TRASLADA?</span>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px;">
+        <button onClick="{{ elegirChofer }}" style="{{ estiloChofer }}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 17h14M6 17V9l2-4h8l2 4v8"></path>
+            <circle cx="8" cy="17" r="1.6"></circle>
+            <circle cx="16" cy="17" r="1.6"></circle>
+          </svg>
+          Chofer
+        </button>
+        <button onClick="{{ elegirUber }}" style="{{ estiloUber }}">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2.5" width="14" height="19" rx="3"></rect>
+            <path d="M10.5 18.5h3"></path>
+          </svg>
+          Uber
+        </button>
+      </div>
+      <p style="{{ avisoUber }}">
+        El Uber no se pide ahora: se pide cuando ella avise que ya está lista.
+      </p>
+    </div>
+
+    <div style="margin-top: 18px;">
+      <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.16em; color: #71717a;">NOTAS PARA ELLA · OPCIONAL</span>
+      <div style="margin-top: 10px; padding: 12px 14px; border: 1px solid #27272a; border-radius: 12px; background: #09090b; font-size: 13px; color: #52525b;">
+        Escribe una instrucción interna
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr; gap: 9px; margin-top: 22px;">
+      <button style="display: flex; align-items: center; justify-content: center; gap: 9px; height: 52px; border-radius: 14px; background: #C5A55A; color: #000000; font-size: 13px; font-weight: 700; letter-spacing: 0.1em;">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6 9 17l-5-5"></path>
+        </svg>
+        ACEPTAR EL SERVICIO
+      </button>
+      <button style="display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 14px; border: 1px solid #27272a; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: #a1a1aa;">
+        Rechazar
+      </button>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { transporte: 'uber' };
+  }
+
+  opcionStyle(activa) {
+    const base =
+      'display: flex; align-items: center; justify-content: center; gap: 8px;' +
+      ' height: 50px; border-radius: 12px; font-size: 13px; font-weight: 600;';
+    return activa
+      ? base + ' border: 1px solid #C5A55A; background: rgba(197,165,90,0.12); color: #E8D5A3;'
+      : base + ' border: 1px solid #27272a; background: #09090b; color: #a1a1aa;';
+  }
+
+  renderVals() {
+    const esUber = this.state.transporte === 'uber';
+    const aviso =
+      'margin: 10px 0 0; font-size: 11.5px; line-height: 1.45; color: #C5A55A;';
+    return {
+      estiloChofer: this.opcionStyle(!esUber),
+      estiloUber: this.opcionStyle(esUber),
+      // El aviso solo tiene sentido con Uber elegido; con chofer se oculta sin
+      // mover nada de sitio, para que la hoja no salte al cambiar de opcion.
+      avisoUber: esUber ? aviso : aviso + ' visibility: hidden;',
+      elegirChofer: () => this.setState({ transporte: 'chofer' }),
+      elegirUber: () => this.setState({ transporte: 'uber' }),
+    };
+  }
+}
+</script>
+</body>
+</html>

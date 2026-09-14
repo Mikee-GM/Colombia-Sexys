@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #000000;
+      color: #ffffff;
+      font-family: "Montserrat", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .h { font-family: "Cinzel", "Cormorant Garamond", serif; }
+    a { color: #C5A55A; text-decoration: none; }
+    a:hover { color: #E8D5A3; }
+    button { font-family: inherit; cursor: pointer; border: 0; background: none; color: inherit; }
+  </style>
+</helmet>
+
+<!-- Sin servicios la pantalla no puede parecer rota ni vacia por error: dice
+     que no hay nada, dice quien esta lista por si entra algo, y deja a mano
+     lo unico que el jefe puede empezar por su cuenta. -->
+<div style="display: flex; flex-direction: column; height: 844px; width: 390px; background: #000000; overflow: hidden;">
+
+  <div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #1c1c1f; background: #050505;">
+    <div style="display: flex; align-items: center; gap: 9px; flex-grow: 1; min-width: 0;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C5A55A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 21s-7.5-4.6-7.5-10A4.5 4.5 0 0 1 12 8a4.5 4.5 0 0 1 7.5 3c0 5.4-7.5 10-7.5 10z"></path>
+      </svg>
+      <span class="h" style="font-size: 15px; font-weight: 600; letter-spacing: 0.16em; color: #E8D5A3;">JEFE</span>
+      <span style="display: inline-flex; align-items: center; gap: 5px; margin-left: 4px; padding: 4px 9px; border: 1px solid #1f2d22; border-radius: 999px; background: #0c150f;">
+        <span style="width: 6px; height: 6px; border-radius: 999px; background: #34d399;"></span>
+        <span style="font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: #6ee7b7;">EN JORNADA</span>
+      </span>
+    </div>
+    <button aria-label="Avisos" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; border: 1px solid #27272a;">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+        <path d="M13.7 21a2 2 0 0 1-3.4 0"></path>
+      </svg>
+    </button>
+    <button aria-label="Menú" style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; border: 1px solid #27272a;">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" stroke-width="1.7" stroke-linecap="round">
+        <path d="M4 7h16M4 12h16M4 17h16"></path>
+      </svg>
+    </button>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 10px 16px; background: #050505; border-bottom: 1px solid #1c1c1f;">
+    <button style="display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 12px; background: #C5A55A; color: #000000; font-size: 12px; font-weight: 600; letter-spacing: 0.04em;">Activos</button>
+    <button style="display: flex; align-items: center; justify-content: center; gap: 6px; height: 44px; border-radius: 12px; background: #0f0f11; border: 1px solid #1c1c1f; color: #a1a1aa; font-size: 12px; font-weight: 600; letter-spacing: 0.04em;">
+      Equipo
+      <span style="min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #C5A55A; color: #000000; font-size: 10px; font-weight: 700; line-height: 18px; text-align: center;">1</span>
+    </button>
+    <button style="display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 12px; background: #0f0f11; border: 1px solid #1c1c1f; color: #a1a1aa; font-size: 12px; font-weight: 600; letter-spacing: 0.04em;">Caja</button>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center; gap: 26px; padding: 16px 20px 30px;">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#27272a" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M12 7v5l3 2"></path>
+      </svg>
+      <div>
+        <h1 class="h" style="margin: 0; font-size: 26px; font-weight: 600;">Sin servicios ahora</h1>
+        <p style="margin: 8px 0 0; font-size: 13px; line-height: 1.55; color: #71717a;">
+          En cuanto entre una solicitud aparece aquí arriba y te llega el aviso.
+        </p>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #27272a; border-radius: 16px; background: #09090b; padding: 14px;">
+      <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.18em; color: #71717a;">LISTAS PARA TOMAR SERVICIO</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px;">
+        <span style="padding: 7px 12px; border: 1px solid rgba(197,165,90,0.4); border-radius: 999px; background: rgba(197,165,90,0.07); font-size: 12px; color: #E8D5A3;">Camila Vega</span>
+        <span style="padding: 7px 12px; border: 1px solid rgba(197,165,90,0.4); border-radius: 999px; background: rgba(197,165,90,0.07); font-size: 12px; color: #E8D5A3;">Isabella Moretti</span>
+        <span style="padding: 7px 12px; border: 1px solid rgba(197,165,90,0.4); border-radius: 999px; background: rgba(197,165,90,0.07); font-size: 12px; color: #E8D5A3;">Valeria Sanz</span>
+      </div>
+    </div>
+
+    <button style="display: flex; align-items: center; justify-content: center; gap: 9px; height: 52px; border-radius: 14px; border: 1px solid #C5A55A; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: #E8D5A3;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M12 5v14M5 12h14"></path>
+      </svg>
+      REGISTRAR UN SERVICIO A MANO
+    </button>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 8px 10px 22px; border-top: 1px solid #1c1c1f; background: #050505;">
+    <button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 52px; border-radius: 12px; background: rgba(197,165,90,0.12); color: #C5A55A; font-size: 10px; font-weight: 600;">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 10.5 12 3l9 7.5"></path>
+        <path d="M5 9.8V20h14V9.8"></path>
+      </svg>
+      <span>Hoy</span>
+    </button>
+    <button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 52px; border-radius: 12px; color: #52525b; font-size: 10px; font-weight: 600;">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"></path>
+        <circle cx="12" cy="10" r="3"></circle>
+      </svg>
+      <span>Mapa</span>
+    </button>
+    <button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 52px; border-radius: 12px; color: #52525b; font-size: 10px; font-weight: 600;">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 4h11l5 5v11H4z"></path>
+        <path d="M12 10v4M12 17h.01"></path>
+      </svg>
+      <span>Reportes</span>
+    </button>
+    <button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 52px; border-radius: 12px; color: #52525b; font-size: 10px; font-weight: 600;">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 4h6v3H9z"></path>
+        <path d="M6 5h1v15h10V5h1"></path>
+        <path d="M9 12h6M9 16h4"></path>
+      </svg>
+      <span>Registros</span>
+    </button>
+    <button style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 52px; border-radius: 12px; color: #52525b; font-size: 10px; font-weight: 600;">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 4h10v5a5 5 0 0 1-10 0z"></path>
+        <path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"></path>
+        <path d="M10 20h4M12 14v6"></path>
+      </svg>
+      <span>Retos</span>
+    </button>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>
