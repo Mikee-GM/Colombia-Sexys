@@ -12,6 +12,7 @@ import {
   deleteImageAction,
 } from "@/lib/actions/upload";
 import {
+  getModeloAction,
   getWeeklySubmissionsAction,
   reviewWeeklySubmissionAction,
   getPrivatePhotosAction,
@@ -31,6 +32,14 @@ interface ModelModalProps {
   modelos?: Modelo[];
   onClose: () => void;
   onSave: (payload: ModeloPayload, id?: string) => Promise<void>;
+  /**
+   * Se llama cuando una revisión de fotos cambió algo del lado del servidor.
+   *
+   * El panel de detrás pinta "N por validar" y el conteo de fotos con los datos
+   * que trajo al abrirse: sin este aviso, el rótulo se queda puesto aunque la
+   * cola ya esté vacía.
+   */
+  onFotosRevisadas?: () => void;
   showNotification: (msg: string, type: "success" | "error") => void;
   jefes: { id: string; email: string }[];
   apartments: { id: string; name: string }[];
@@ -85,6 +94,7 @@ export default function ModelModal({
   modelos = [],
   onClose,
   onSave,
+  onFotosRevisadas,
   showNotification,
   jefes,
   apartments,
@@ -223,6 +233,40 @@ export default function ModelModal({
       setPorRechazar(null);
       showNotification(actionLabels[action], "success");
       await fetchWeeklySubmissions();
+
+      /*
+       * Aprobar una foto la mete en la galería del catálogo o en las
+       * exclusivas, y hasta ahora nada de eso se volvía a leer: la galería
+       * seguía mostrando la lista con la que se abrió el modal.
+       *
+       * Eso no era solo que no se viera. Al guardar, el formulario manda la
+       * galería que tiene en pantalla y el backend BORRA las fotos que no
+       * vengan en esa lista, archivo incluido: guardar después de aprobar
+       * destruía la foto recién aprobada. Por eso se relee aquí y no solo al
+       * cerrar.
+       */
+      if (action !== "rechazar" && modelo?._id) {
+        try {
+          const actualizada = await getModeloAction(modelo._id);
+          setForm((previo) => ({ ...previo, fotos: [...actualizada.fotos] }));
+          setGalleryItems(
+            actualizada.fotos.map((url: string, i: number) => ({
+              id: `url-${i}-${url}`,
+              type: "url" as const,
+              url,
+            })),
+          );
+          if (action === "aprobar_privada") await fetchPrivatePhotos();
+        } catch {
+          // La lista se recupera al reabrir; el aviso ya salió y la foto está
+          // guardada en el servidor, que es lo que importa.
+        }
+      }
+
+      // El panel de detrás muestra "N por validar" y el contador de fotos con
+      // los datos con los que se pintó: sin esto, el aviso se queda puesto
+      // aunque la cola ya esté vacía.
+      onFotosRevisadas?.();
     } catch (err: any) {
       showNotification(err.message || "Error al procesar la foto", "error");
     }

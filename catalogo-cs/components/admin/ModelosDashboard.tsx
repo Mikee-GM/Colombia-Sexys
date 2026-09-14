@@ -257,6 +257,7 @@ export default function ModelosDashboard({
               setEditingModelo(null);
             }}
             onSave={handleSaveModelo}
+            onFotosRevisadas={fetchData}
             showNotification={showNotification}
             jefes={initialJefes}
             apartments={initialApartments}
