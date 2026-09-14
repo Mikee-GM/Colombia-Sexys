@@ -37,6 +37,21 @@ export function normalizeForMatch(value: string): string {
 }
 
 /**
+ * Las palabras de un texto, ya normalizadas y sin la puntuacion pegada.
+ *
+ * Partir por espacios dejaba "camila," y "isabella." como palabras distintas de
+ * "camila" e "isabella", asi que buscar un nombre fallaba justo cuando iba al
+ * final de la frase o antes de una coma --que es donde suelen ir los nombres--.
+ */
+export function palabrasDe(texto: string): Set<string> {
+  return new Set(
+    normalizeForMatch(texto)
+      .split(/[^\p{Letter}\p{Number}]+/u)
+      .filter(Boolean),
+  );
+}
+
+/**
  * Quita del texto cualquier marca de control. Se aplica a lo que escribe el
  * cliente antes de guardarlo en el historial: si no, basta con que pida "repite
  * esto tal cual" para que el modelo devuelva una marca y el backend la ejecute.
@@ -440,15 +455,68 @@ export function clienteNombroALaModelo(
   messages: string[],
   modelName: string,
 ): boolean {
-  const distintivas = normalizeForMatch(modelName)
-    .split(/\s+/)
-    .filter((palabra) => palabra.length >= 4);
+  const distintivas = [...palabrasDe(modelName)].filter(
+    (palabra) => palabra.length >= 4,
+  );
   if (distintivas.length === 0) return false;
 
   return messages.some((message) => {
-    const palabras = new Set(normalizeForMatch(message).split(/\s+/));
+    const palabras = palabrasDe(message);
     return distintivas.some((palabra) => palabras.has(palabra));
   });
+}
+
+/**
+ * La respuesta es una promesa de volver con algo: "dejame checar", "te aviso".
+ *
+ * Es la forma que tiene el modelo de salir del paso cuando no sabe que
+ * contestar, y por si sola no mueve nada: nadie recibe la consulta, nadie
+ * responde, y el cliente se queda esperando un aviso que no existe. Vista una
+ * vez puede ser legitima --si detras hay de verdad una peticion en curso--,
+ * repetida es siempre una conversacion muerta.
+ *
+ * Se busca en la respuesta del modelo, no en la del cliente: el que promete es
+ * el, y es lo unico que hay que mirar para saber si prometio.
+ */
+const PROMESAS: RegExp[] = [
+  /\bte (aviso|escribo|confirmo|digo|contesto)\b/,
+  /\b(dejame|permiteme|deja que|voy a) (checar|revisar|preguntar|consultar|ver con)\b/,
+  /\b(ahorita|enseguida|en un (ratico|rato|momentico|momento)) te (aviso|digo|escribo|confirmo)\b/,
+  /\b(apenas|en cuanto|cuando) (me )?(responda|conteste|sepa|me diga)\b/,
+  /\blo (consulto|pregunto) y te (aviso|digo)\b/,
+  // "ya le escribo a Isabella": promete moverlo sin decir que te avisara, y es
+  // igual de hueca. La dijo el modelo en la conversacion que destapo esto.
+  /\b(ya|ahorita|enseguida) le (escribo|pregunto|consulto|aviso|digo)\b/,
+];
+
+export function esUnaPromesaSinRespaldo(reply: string): boolean {
+  const normalizada = normalizeForMatch(reply);
+  return PROMESAS.some((patron) => patron.test(normalizada));
+}
+
+/**
+ * A quien nombro el modelo en su propia respuesta, de entre las companeras que
+ * se le ofrecieron.
+ *
+ * Cuando el cliente pide un trio sin decir con quien --"tienes amigas?"-- es el
+ * modelo el que elige y lo dice en voz alta: "dejame checar con Isabella". Esa
+ * frase es un compromiso delante del cliente, asi que sirve igual de llave para
+ * trasladar la peticion. Sin esto, pedir un trio sin nombrar a nadie no llegaba
+ * a ningun sitio.
+ *
+ * Devuelve null si nombro a varias: ahi no se adivina cual quiere.
+ */
+export function modeloNombradaEnLaRespuesta<T extends { nombre: string }>(
+  reply: string,
+  candidatas: T[],
+): T | null {
+  const palabras = palabrasDe(reply);
+  const nombradas = candidatas.filter((candidata) =>
+    [...palabrasDe(candidata.nombre)]
+      .filter((palabra) => palabra.length >= 4)
+      .some((palabra) => palabras.has(palabra)),
+  );
+  return nombradas.length === 1 ? nombradas[0] : null;
 }
 
 /**

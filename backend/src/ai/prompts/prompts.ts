@@ -24,6 +24,18 @@ export interface EmpleadaPromptParams {
     nombre: string;
     precioCombinadoHora: number;
   } | null;
+  /**
+   * La peticion de trio ya se le traslado a alguien y se espera respuesta.
+   *
+   * Es lo que separa un "te aviso" cierto de uno hueco: con esto puesto hay de
+   * verdad alguien a quien se le pregunto, y el modelo puede decirlo sin
+   * inventarse plazos.
+   */
+  trioEnConsulta?: {
+    nombre: string;
+    /** A quien se le pregunto: a la compañera o al jefe. */
+    aQuien: 'modelo' | 'jefe';
+  } | null;
   ubicacionesPreestablecidas?: string[];
   costoTransporteExterno?: number;
   duracionPactada?: number;
@@ -347,6 +359,24 @@ ATENCIÓN A PAREJAS:
 TARIFA COMBINADA PARA AMBAS: $${params.trioConfirmado.precioCombinadoHora}/hr.\n`
     : '';
 
+  /*
+   * La peticion de trio esta en consulta.
+   *
+   * Sin esto, el modelo volvia a prometer "dejame checar" en cada turno como si
+   * no hubiera preguntado nunca, y el cliente leia la misma frase media hora.
+   * Ahora sabe que ya esta preguntado y que lo unico honesto es decir eso.
+   */
+  const trioEnConsultaHeader = params.trioEnConsulta
+    ? `\nATENCIÓN: YA SE LE PREGUNTÓ ${
+        params.trioEnConsulta.aQuien === 'modelo'
+          ? `A ${params.trioEnConsulta.nombre.toUpperCase()}`
+          : 'A LA OFICINA'
+      } POR EL TRÍO Y ESTÁ PENDIENTE DE RESPUESTA.
+- No vuelvas a decir que vas a consultarlo: ya está hecho.
+- Si el cliente insiste, dile una sola vez que ya preguntaste y que le avisas en cuanto te respondan, y sigue con lo demás del servicio.
+- NO des por hecho que aceptó ni prometas una hora concreta.\n`
+    : '';
+
   const politicaBesos =
     params.politicaBesos && params.politicaBesos !== 'sin_dato'
       ? params.politicaBesos
@@ -418,7 +448,7 @@ ATENCIÓN: EL CLIENTE SE ESTÁ DESPIDIENDO SIN CERRAR
 TU FICHA PERSONAL Y EL ESTADO DE ESTA CONVERSACIÓN
 ═══════════════════════════════════════════════
 Te llamas ${params.nombreArtistico}.
-Tarifa por hora: $${params.precioBaseHora}/hr.${trioConfirmedHeader}
+Tarifa por hora: $${params.precioBaseHora}/hr.${trioConfirmedHeader}${trioEnConsultaHeader}
 Descripción de tu perfil (ESTA ES TU FICHA PERSONAL: estatura, peso, medidas, cuerpo, carácter y gustos):
 ${params.descripcion || 'Una persona hermosa y carismática'}.
 

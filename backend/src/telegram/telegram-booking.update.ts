@@ -48,6 +48,8 @@ import {
   clientAskedForOwnPhotos,
   clientEndorsedTrioModel,
   clienteNombroALaModelo,
+  esUnaPromesaSinRespaldo,
+  modeloNombradaEnLaRespuesta,
   detectaClienteEnFuga,
   detectaInseguridad,
   detectArrivalTimeQuestion,
@@ -286,7 +288,15 @@ interface SessionData {
   bossGroupId?: string;
   trioSelectedEmployeeId?: string;
   trioSelectedEmployeeName?: string;
-  trioStatus?: 'pending_boss' | 'confirmed' | 'rejected';
+  /**
+   * En que punto esta la peticion de trio.
+   *
+   * `pending_boss` es que el jefe la tiene delante; `pending_employee`, que el
+   * jefe ya le pregunto a la compañera y se espera SU respuesta. Los dos
+   * cuentan como algo en marcha: hay alguien de quien va a llegar un si o un
+   * no, y por eso el "te aviso" del modelo deja de ser una promesa hueca.
+   */
+  trioStatus?: 'pending_boss' | 'pending_employee' | 'confirmed' | 'rejected';
   trioCombinedRatePerHour?: number;
   /**
    * Notas que el jefe esta redactando para un servicio, por id de servicio.
@@ -3401,20 +3411,34 @@ export class TelegramBookingUpdate {
       `💰 *Tarifa Combinada:* $${combinedRate}/hr\n\n` +
       `¿Deseas autorizar la participación de *${trioEmployee.nombreArtistico}* en este servicio?`;
 
+    /*
+     * Preguntarle a ella va primero y solo.
+     *
+     * Es lo que hay que hacer casi siempre --nadie sabe mejor que ella si
+     * puede-- y antes no existia: el jefe solo podia confirmar por su cuenta,
+     * asi que o se comprometia sin preguntar o dejaba la peticion parada.
+     * Confirmar sigue ahi para cuando el jefe ya sabe que ella puede.
+     */
     const inlineKeyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
-          '✅ Confirmar Trío',
+          `Preguntarle a ${trioEmployee.nombreArtistico}`,
+          `trio_boss:ask:${sessionKey}:${trioEmployee.id}`,
+        ),
+      ],
+      [
+        Markup.button.callback(
+          'Confirmar sin preguntar',
           `trio_boss:confirm:${sessionKey}:${trioEmployee.id}`,
         ),
         Markup.button.callback(
-          '❌ Rechazar Trío',
+          'Rechazar',
           `trio_boss:reject:${sessionKey}:${trioEmployee.id}`,
         ),
       ],
       [
         Markup.button.callback(
-          '🔄 Cambiar de Modelo',
+          'Cambiar de modelo',
           `trio_boss:change:${sessionKey}:${trioEmployee.id}`,
         ),
       ],
@@ -3449,12 +3473,277 @@ export class TelegramBookingUpdate {
     }
   }
 
-  @Action(/^trio_boss:(confirm|reject|change):([^:]+):(.+)$/)
+  /**
+   * Deja resuelta la peticion de trio y se lo cuenta al cliente.
+   *
+   * Lo usan los dos caminos que pueden resolverla --el jefe decidiendo y la
+   * propia modelo contestando-- porque lo que hay que hacer es lo mismo: dejar
+   * la sesion como quede, decirselo al cliente en personaje y guardar ese
+   * mensaje en su historial y en la conversacion, para que ni la IA ni el panel
+   * se enteren de menos. Escrito dos veces, uno de los dos se habria quedado
+   * atras al primer cambio.
+   */
+  private async aplicarRespuestaDeTrio(input: {
+    sessionEntity: TelegramSession;
+    clientTelegramId: string;
+    mainEmployee: Empleadas;
+    trioEmployee: Empleadas;
+    acepta: boolean;
+  }): Promise<void> {
+    const {
+      sessionEntity,
+      clientTelegramId,
+      mainEmployee,
+      trioEmployee,
+      acepta,
+    } = input;
+    const sessionData = sessionEntity.data;
+    const combinedRate =
+      Number(mainEmployee.precioBaseHora) + Number(trioEmployee.precioBaseHora);
+
+    if (acepta) {
+      sessionData.trioStatus = 'confirmed';
+      sessionData.trioSelectedEmployeeId = trioEmployee.id;
+      sessionData.trioSelectedEmployeeName = trioEmployee.nombreArtistico;
+      sessionData.trioCombinedRatePerHour = combinedRate;
+    } else {
+      sessionData.trioStatus = 'rejected';
+      sessionData.trioSelectedEmployeeId = undefined;
+      sessionData.trioSelectedEmployeeName = undefined;
+      sessionData.trioCombinedRatePerHour = undefined;
+    }
+
+    const clientMsg = acepta
+      ? `¡Listo mi amor! Ya hablé con *${trioEmployee.nombreArtistico}* y me confirmó que nos acompaña 🔥 La tarifa por nosotras dos es de $${combinedRate}/hr. Ahora sí mi amor, dime: ¿cuántas horitas nos vas a contratar y cómo prefieres pagar?`
+      : `Ay papi, me acaban de avisar que por el momento no se va a poder armar el trío, pero tú y yo la vamos a pasar riquísimo a solas 😘 Dime, ¿cuántas horas quieres y cómo prefieres pagar?`;
+
+    try {
+      await this.bot.telegram.sendMessage(clientTelegramId, clientMsg, {
+        parse_mode: 'Markdown',
+      });
+    } catch (err) {
+      this.logger.error(
+        'No se pudo avisarle al cliente de la respuesta del trio:',
+        err,
+      );
+    }
+
+    if (!sessionData.chatHistory) sessionData.chatHistory = [];
+    sessionData.chatHistory.push({
+      role: 'model',
+      parts: [{ text: clientMsg }],
+    });
+    await this.telegramSessionRepository.save(sessionEntity);
+
+    const client = await this.clientesRepository.findOne({
+      where: { telegramChatId: clientTelegramId },
+    });
+    if (client) {
+      await this.conversationsRepository.save(
+        this.conversationsRepository.create({
+          clienteId: client.id,
+          servicioId: null,
+          bookingSessionId: sessionData.bookingSessionId || null,
+          emisor: 'ia',
+          mensaje: clientMsg,
+          iaActiva: true,
+        }),
+      );
+    }
+  }
+
+  /**
+   * Le pregunta a la compañera si puede, con los dos botones puestos.
+   *
+   * Devuelve si se le pudo entregar la pregunta. Que no se pueda --no tiene
+   * Telegram vinculado, o el chat rechaza el envio-- no puede quedarse en
+   * silencio: quien pregunto tiene que enterarse para decidir el mismo, o la
+   * peticion se muere ahi y el cliente espera para siempre.
+   */
+  private async preguntarleALaModeloPorElTrio(
+    sessionKey: string,
+    mainEmployee: Empleadas,
+    trioEmployee: Empleadas,
+  ): Promise<boolean> {
+    const chatId = trioEmployee.usuario?.telegramChatId;
+    if (!chatId || chatId === '111111111') return false;
+
+    const combinedRate =
+      Number(mainEmployee.precioBaseHora) + Number(trioEmployee.precioBaseHora);
+
+    try {
+      await this.bot.telegram.sendMessage(
+        chatId,
+        `*¿Puedes un servicio en trío?*\n\n` +
+          `Sería junto con *${mainEmployee.nombreArtistico}*.\n` +
+          `Tarifa combinada de las dos: $${combinedRate}/hr.\n\n` +
+          `Hay un cliente esperando respuesta, así que contesta lo antes que puedas.`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                'Sí puedo',
+                `trio_emp:yes:${sessionKey}:${trioEmployee.id}`,
+              ),
+              Markup.button.callback(
+                'Ahora no',
+                `trio_emp:no:${sessionKey}:${trioEmployee.id}`,
+              ),
+            ],
+          ]),
+        },
+      );
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `No se pudo preguntarle a ${trioEmployee.nombreArtistico} por el trio:`,
+        err,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * La compañera contesta si puede o no.
+   *
+   * Solo ella: se comprueba que quien pulsa sea la modelo por la que se
+   * pregunto, no vale que el boton le llegue reenviado a otra persona. Su
+   * respuesta resuelve la peticion igual que la del jefe, y ademas se la
+   * devuelve a quien pregunto, que si no se queda sin saber en que quedo.
+   */
+  @Action(/^trio_emp:(yes|no):([^:]+):(.+)$/)
+  async onTrioEmployeeAnswer(@Ctx() ctx: BotContext) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
+    const match = (ctx as any).match;
+    const acepta = match[1] === 'yes';
+    const sessionKey = match[2] as string;
+    const modelId = match[3] as string;
+
+    const telegramId = ctx.from?.id?.toString();
+    if (!telegramId) return;
+
+    const empleadaQueResponde = await this.empleadasRepository.findOne({
+      where: { id: modelId, usuario: { telegramChatId: telegramId } },
+      relations: { usuario: true },
+    });
+    if (!empleadaQueResponde) {
+      await ctx.answerCbQuery('Esta pregunta no es para ti.', {
+        show_alert: true,
+      });
+      return;
+    }
+
+    const sessionEntity = await this.telegramSessionRepository.findOne({
+      where: { key: sessionKey },
+    });
+    if (!sessionEntity?.data) {
+      await ctx.answerCbQuery('Esa conversación ya no está activa.', {
+        show_alert: true,
+      });
+      return;
+    }
+    const sessionData = sessionEntity.data;
+
+    /*
+     * Si ya se resolvio --el jefe se adelanto, o ella toco dos veces-- no se
+     * vuelve a mover nada, pero se le dice en que quedo para que no se quede
+     * pensando que su respuesta no llego.
+     */
+    if (sessionData.trioStatus !== 'pending_employee') {
+      await ctx.answerCbQuery(
+        sessionData.trioStatus === 'confirmed'
+          ? 'Esto ya estaba confirmado.'
+          : 'Esta petición ya se resolvió.',
+        { show_alert: true },
+      );
+      return;
+    }
+
+    const mainEmployee = await this.empleadasRepository.findOne({
+      where: { id: sessionData.empleadaId },
+      relations: { usuario: true, jefe: true },
+    });
+    if (!mainEmployee) {
+      await ctx.answerCbQuery('No se encontró el servicio.', {
+        show_alert: true,
+      });
+      return;
+    }
+
+    const clientTelegramId = parseSessionKey(sessionKey)?.fromId;
+    if (!clientTelegramId) {
+      await ctx.answerCbQuery('No se pudo ubicar al cliente.', {
+        show_alert: true,
+      });
+      return;
+    }
+
+    await this.aplicarRespuestaDeTrio({
+      sessionEntity,
+      clientTelegramId,
+      mainEmployee,
+      trioEmployee: empleadaQueResponde,
+      acepta,
+    });
+
+    await ctx.answerCbQuery(
+      acepta ? 'Listo, quedas apuntada.' : 'Listo, se lo decimos.',
+    );
+    try {
+      await ctx.editMessageText(
+        acepta
+          ? `Dijiste que *sí* al trío con ${mainEmployee.nombreArtistico}. Te avisamos cuando se cierre el servicio.`
+          : `Dijiste que *ahora no*. No pasa nada, se lo decimos al cliente.`,
+        { parse_mode: 'Markdown' },
+      );
+    } catch {
+      // El mensaje pudo borrarlo ella; la respuesta ya quedo registrada.
+    }
+
+    await this.avisarAlJefeDeLaRespuestaDelTrio(
+      mainEmployee,
+      empleadaQueResponde,
+      acepta,
+    );
+  }
+
+  /** Le devuelve a quien pregunto lo que contesto la compañera. */
+  private async avisarAlJefeDeLaRespuestaDelTrio(
+    mainEmployee: Empleadas,
+    trioEmployee: Empleadas,
+    acepta: boolean,
+  ): Promise<void> {
+    let boss = mainEmployee.jefe;
+    if (!boss && mainEmployee.jefeId) {
+      boss = await this.usuariosRepository.findOne({
+        where: { id: mainEmployee.jefeId, activo: true },
+      });
+    }
+    const destino = boss?.grupoTelegramId || boss?.telegramChatId;
+    if (!destino) return;
+
+    try {
+      await this.bot.telegram.sendMessage(
+        destino,
+        acepta
+          ? `${trioEmployee.nombreArtistico} aceptó el trío con ${mainEmployee.nombreArtistico}. Ya se le dijo al cliente.`
+          : `${trioEmployee.nombreArtistico} no puede tomar el trío. Se le dijo al cliente que sigue con ${mainEmployee.nombreArtistico} sola.`,
+      );
+    } catch (err) {
+      this.logger.error(
+        'No se pudo avisar al jefe de la respuesta del trio:',
+        err,
+      );
+    }
+  }
+
+  @Action(/^trio_boss:(confirm|reject|change|ask):([^:]+):(.+)$/)
   async onBossTrioAction(@Ctx() ctx: BotContext) {
     if (await this.callbackGuard.esRepetido(ctx)) return;
     await ctx.answerCbQuery();
     const match = (ctx as any).match;
-    const action = match[1] as 'confirm' | 'reject' | 'change';
+    const action = match[1] as 'confirm' | 'reject' | 'change' | 'ask';
     const sessionKey = match[2];
     const modelId = match[3];
 
@@ -3466,7 +3755,16 @@ export class TelegramBookingUpdate {
       return;
     }
     const sessionData = sessionEntity.data;
-    const clientTelegramId = sessionKey.split(':')[0];
+    /*
+     * Con `parseSessionKey`, no partiendo la clave a mano: en las sesiones que
+     * guardo un bot dedicado el primer trozo es el id de la EMPLEADA, y el
+     * mensaje al cliente salia hacia un destinatario que no existe.
+     */
+    const clientTelegramId = parseSessionKey(sessionKey)?.fromId;
+    if (!clientTelegramId) {
+      await ctx.reply('No se pudo ubicar al cliente de esta conversación.');
+      return;
+    }
 
     const [mainEmployee, trioEmployee] = await Promise.all([
       this.empleadasRepository.findOne({
@@ -3487,21 +3785,77 @@ export class TelegramBookingUpdate {
     const combinedRate =
       Number(mainEmployee.precioBaseHora) + Number(trioEmployee.precioBaseHora);
 
-    if (action === 'confirm') {
-      sessionData.trioStatus = 'confirmed';
+    if (action === 'ask') {
+      /*
+       * Preguntarle a ella. La peticion queda marcada como que espera SU
+       * respuesta: con eso la IA sabe que hay algo en marcha de verdad y deja
+       * de prometer al aire.
+       */
+      sessionData.trioStatus = 'pending_employee';
       sessionData.trioSelectedEmployeeId = trioEmployee.id;
       sessionData.trioSelectedEmployeeName = trioEmployee.nombreArtistico;
-      sessionData.trioCombinedRatePerHour = combinedRate;
       await this.telegramSessionRepository.save(sessionEntity);
+
+      const entregada = await this.preguntarleALaModeloPorElTrio(
+        sessionKey,
+        mainEmployee,
+        trioEmployee,
+      );
+
+      if (!entregada) {
+        /*
+         * No se le pudo preguntar. Se deshace la marca y se dice por que: si
+         * quedara en "esperando su respuesta", nadie responderia nunca y el
+         * cliente esperaria para siempre.
+         */
+        sessionData.trioStatus = 'pending_boss';
+        await this.telegramSessionRepository.save(sessionEntity);
+        try {
+          await ctx.editMessageText(
+            `No se le pudo preguntar a ${trioEmployee.nombreArtistico}: no tiene el chat vinculado. Decide tú si entra al trío.`,
+            {
+              ...Markup.inlineKeyboard([
+                [
+                  Markup.button.callback(
+                    'Confirmar sin preguntar',
+                    `trio_boss:confirm:${sessionKey}:${trioEmployee.id}`,
+                  ),
+                  Markup.button.callback(
+                    'Rechazar',
+                    `trio_boss:reject:${sessionKey}:${trioEmployee.id}`,
+                  ),
+                ],
+              ]),
+            },
+          );
+        } catch (editErr) {
+          this.logger.debug('Error al editar el mensaje del trio:', editErr);
+        }
+        return;
+      }
 
       try {
         await ctx.editMessageText(
-          `✅ *Trío Confirmado*\n\n` +
-            `👤 *Cliente:* ${clientTelegramId}\n` +
-            `👠 *Modelos:* ${mainEmployee.nombreArtistico} & ${trioEmployee.nombreArtistico}\n` +
-            `💰 *Tarifa Combinada:* $${combinedRate}/hr\n` +
-            `Confirmado por administración.`,
-          { parse_mode: 'Markdown' },
+          `Se le preguntó a ${trioEmployee.nombreArtistico} si puede el trío con ${mainEmployee.nombreArtistico}. Te aviso en cuanto conteste.`,
+        );
+      } catch (editErr) {
+        this.logger.debug('Error al editar el mensaje del trio:', editErr);
+      }
+    } else if (action === 'confirm') {
+      /* El jefe responde por ella: ya sabe que puede y no hace falta preguntar. */
+      await this.aplicarRespuestaDeTrio({
+        sessionEntity,
+        clientTelegramId,
+        mainEmployee,
+        trioEmployee,
+        acepta: true,
+      });
+
+      try {
+        await ctx.editMessageText(
+          `Trío confirmado.\n\n` +
+            `Modelos: ${mainEmployee.nombreArtistico} y ${trioEmployee.nombreArtistico}\n` +
+            `Tarifa combinada: $${combinedRate}/hr`,
         );
       } catch (editErr) {
         this.logger.debug(
@@ -3510,15 +3864,18 @@ export class TelegramBookingUpdate {
         );
       }
 
+      /*
+       * Se le avisa porque se la comprometio sin preguntarle: enterarse de que
+       * tiene un trio cuando el servicio ya esta cerrado es la peor forma.
+       */
       const trioUserChatId = trioEmployee.usuario?.telegramChatId;
       if (trioUserChatId && trioUserChatId !== '111111111') {
         try {
           await this.bot.telegram.sendMessage(
             trioUserChatId,
-            `🔔 *Aviso de Servicio en Trío*\n\n` +
-              `Hola *${trioEmployee.nombreArtistico}*, fuiste confirmada para un servicio en *Trío* junto con *${mainEmployee.nombreArtistico}*.\n` +
-              `Tarifa combinada acordada: $${combinedRate}/hr.\n` +
-              `Mantente atenta a los detalles finales del servicio cuando se concrete la ubicación y hora. 🔥`,
+            `*Te apuntaron a un servicio en trío*\n\n` +
+              `Sería junto con *${mainEmployee.nombreArtistico}*, tarifa combinada de $${combinedRate}/hr.\n` +
+              `Si no puedes, avisa cuanto antes.`,
             { parse_mode: 'Markdown' },
           );
         } catch (sendErr) {
@@ -3528,79 +3885,23 @@ export class TelegramBookingUpdate {
           );
         }
       }
-
-      const clientMsg = `¡Listo mi amor! Ya hablé con *${trioEmployee.nombreArtistico}* y me confirmó que nos acompaña 🔥 La tarifa por nosotras dos es de $${combinedRate}/hr. Ahora sí mi amor, dime: ¿cuántas horitas nos vas a contratar y cómo prefieres pagar?`;
-      await ctx.telegram.sendMessage(clientTelegramId, clientMsg, {
-        parse_mode: 'Markdown',
-      });
-
-      if (!sessionData.chatHistory) sessionData.chatHistory = [];
-      sessionData.chatHistory.push({
-        role: 'model',
-        parts: [{ text: clientMsg }],
-      });
-      await this.telegramSessionRepository.save(sessionEntity);
-
-      const client = await this.clientesRepository.findOne({
-        where: { telegramChatId: clientTelegramId },
-      });
-      if (client) {
-        await this.conversationsRepository.save(
-          this.conversationsRepository.create({
-            clienteId: client.id,
-            servicioId: null,
-            bookingSessionId: sessionData.bookingSessionId || null,
-            emisor: 'ia',
-            mensaje: clientMsg,
-            iaActiva: true,
-          }),
-        );
-      }
     } else if (action === 'reject') {
-      sessionData.trioStatus = 'rejected';
-      sessionData.trioSelectedEmployeeId = undefined;
-      sessionData.trioSelectedEmployeeName = undefined;
-      sessionData.trioCombinedRatePerHour = undefined;
-      await this.telegramSessionRepository.save(sessionEntity);
+      await this.aplicarRespuestaDeTrio({
+        sessionEntity,
+        clientTelegramId,
+        mainEmployee,
+        trioEmployee,
+        acepta: false,
+      });
 
       try {
         await ctx.editMessageText(
-          `❌ *Trío Rechazado*\n\n` +
-            `Se informó al cliente que no se pudo concretar el trío y se continuará con servicio individual.`,
-          { parse_mode: 'Markdown' },
+          'Trío rechazado. Se le dijo al cliente que sigue con el servicio individual.',
         );
       } catch (editErr) {
         this.logger.debug(
           'Error al editar mensaje de rechazo de trío:',
           editErr,
-        );
-      }
-
-      const clientMsg = `Ay papi, me acaban de avisar que por el momento no se va a poder armar el trío, pero tú y yo la vamos a pasar riquísimo a solas 😘 Dime, ¿cuántas horas quieres y cómo prefieres pagar?`;
-      await ctx.telegram.sendMessage(clientTelegramId, clientMsg, {
-        parse_mode: 'Markdown',
-      });
-
-      if (!sessionData.chatHistory) sessionData.chatHistory = [];
-      sessionData.chatHistory.push({
-        role: 'model',
-        parts: [{ text: clientMsg }],
-      });
-      await this.telegramSessionRepository.save(sessionEntity);
-
-      const client = await this.clientesRepository.findOne({
-        where: { telegramChatId: clientTelegramId },
-      });
-      if (client) {
-        await this.conversationsRepository.save(
-          this.conversationsRepository.create({
-            clienteId: client.id,
-            servicioId: null,
-            bookingSessionId: sessionData.bookingSessionId || null,
-            emisor: 'ia',
-            mensaje: clientMsg,
-            iaActiva: true,
-          }),
         );
       }
     } else if (action === 'change') {
@@ -8243,6 +8544,26 @@ export class TelegramBookingUpdate {
    * Persiste la sesión actual del cliente para que las acciones disparadas
    * desde otros chats (jefe, empleada) vean el estado más reciente.
    */
+  /**
+   * Hay algo en marcha que puede cumplir una promesa de "te aviso".
+   *
+   * Sirve para distinguir la promesa cierta de la que no lleva nada detras. Lo
+   * que cuenta es que exista alguien --el jefe, una modelo ocupada, un cobro en
+   * revision-- de quien vaya a llegar de verdad una respuesta; si no hay nada
+   * de eso, el aviso prometido no lo va a dar nadie.
+   */
+  private hayAlgoEnMarcha(session: SessionData): boolean {
+    return Boolean(
+      session.trioStatus === 'pending_boss' ||
+      session.trioStatus === 'pending_employee' ||
+      session.esperandoEmpleadaId ||
+      session.servicioPendienteComprobanteId ||
+      session.servicioCobroFinalId ||
+      session.groupRequestId ||
+      session.humanTakeover,
+    );
+  }
+
   private async persistSession(ctx: BotContext): Promise<void> {
     // La clave se construye igual que en el middleware de sesion. Antes se
     // armaba aqui a mano y sin el prefijo del bot dedicado, asi que en el bot
@@ -8646,6 +8967,24 @@ export class TelegramBookingUpdate {
         }
       }
 
+      /*
+       * Lo que esta preguntado y sin responder. Se resuelve igual que el trio
+       * confirmado, y por el mismo motivo: el modelo no tiene forma de saberlo
+       * si no se le dice en cada turno.
+       */
+      let trioEnConsulta: { nombre: string; aQuien: 'modelo' | 'jefe' } | null =
+        null;
+      if (
+        (session.trioStatus === 'pending_boss' ||
+          session.trioStatus === 'pending_employee') &&
+        session.trioSelectedEmployeeName
+      ) {
+        trioEnConsulta = {
+          nombre: session.trioSelectedEmployeeName,
+          aQuien: session.trioStatus === 'pending_employee' ? 'modelo' : 'jefe',
+        };
+      }
+
       const extrasData = empleadaExtras.map((e) => {
         const linkedIds = Array.isArray(e.modelosVinculadasIds)
           ? e.modelosVinculadasIds
@@ -8748,6 +9087,7 @@ export class TelegramBookingUpdate {
         })),
         otrasModelosDisponibles,
         trioConfirmado,
+        trioEnConsulta,
         ubicacionesPreestablecidas: ubicacionesData,
         ciudadOperacion: coverageArea?.ciudad ?? null,
         clienteFueraDeCobertura: Boolean(session.fueraDeCobertura),
@@ -8981,9 +9321,24 @@ export class TelegramBookingUpdate {
          * y con ninguna no hay peticion que trasladar.
          */
         if (!trioMatch && session.trioStatus !== 'pending_boss') {
+          /*
+           * Vale el nombre que dijo el cliente y, si no dijo ninguno, el que
+           * dijo el propio modelo.
+           *
+           * "Tienes amigas para un trio?" no nombra a nadie, asi que la red se
+           * quedaba quieta mientras el modelo contestaba "dejame checar con
+           * Isabella y te aviso": el cliente se quedaba media hora esperando un
+           * aviso que no existia. Esa frase es un compromiso delante del
+           * cliente y sirve igual de llave para trasladar la peticion.
+           */
           const nombradas = availableTrioModels.filter((modelo) =>
             clienteNombroALaModelo(recentClientMessages, modelo.nombre),
           );
+          const porLaModelo =
+            nombradas.length === 0
+              ? modeloNombradaEnLaRespuesta(cleanText, availableTrioModels)
+              : null;
+          const candidatas = porLaModelo ? [porLaModelo] : nombradas;
 
           const lastTrioAt = session.ultimaPeticionTrioAt
             ? new Date(session.ultimaPeticionTrioAt).getTime()
@@ -8992,9 +9347,9 @@ export class TelegramBookingUpdate {
             (session.peticionesTrio ?? 0) < MAX_TRIO_REQUESTS_PER_SESSION &&
             Date.now() - lastTrioAt > TRIO_REQUEST_COOLDOWN_MS;
 
-          if (nombradas.length === 1 && dentroDelCupo) {
+          if (candidatas.length === 1 && dentroDelCupo) {
             const elegida = await this.empleadasRepository.findOne({
-              where: { id: nombradas[0].id, catalogoActivo: true },
+              where: { id: candidatas[0].id, catalogoActivo: true },
             });
             if (elegida) {
               this.logger.warn(
@@ -9181,6 +9536,45 @@ export class TelegramBookingUpdate {
           )
         ) {
           return;
+        }
+
+        /*
+         * Una promesa que no mueve nada no se repite dos veces.
+         *
+         * "Dejame checar y te aviso" es como sale del paso el modelo cuando no
+         * sabe que contestar, y por si sola no despierta a nadie: ni el jefe se
+         * entera, ni hay nada que vaya a producir ese aviso. Ya paso --un trio
+         * pedido sin nombrar a nadie se quedo media hora en "te aviso apenas me
+         * responda"-- y esa es la peor forma de perder a un cliente, porque
+         * desde fuera parece que todo va bien.
+         *
+         * La primera vez se deja pasar: puede haber de verdad algo en marcha.
+         * La segunda contesta una persona. Solo cuenta cuando NO hay nada
+         * detras que vaya a cumplirla; con una peticion de trio ya trasladada,
+         * una reserva esperando comprobante o una espera de modelo en curso, la
+         * promesa es cierta y no se toca.
+         */
+        if (
+          esUnaPromesaSinRespaldo(cleanText) &&
+          !this.hayAlgoEnMarcha(session)
+        ) {
+          const aplazamientos = (session.aplazamientosSeguidos ?? 0) + 1;
+          session.aplazamientosSeguidos = aplazamientos;
+
+          if (
+            aplazamientos >= TelegramBookingUpdate.MAX_APLAZAMIENTOS_SEGUIDOS
+          ) {
+            session.aplazamientosSeguidos = 0;
+            await this.entregarConversacionAlJefe(
+              ctx,
+              empleada,
+              'La IA le prometió al cliente que iba a consultar algo y volver, y no hay nada en marcha que vaya a cumplirlo.',
+            );
+            return;
+          }
+        } else if (!esUnaPromesaSinRespaldo(cleanText)) {
+          // Una respuesta de verdad rompe la racha.
+          session.aplazamientosSeguidos = 0;
         }
 
         history.push({ role: 'model', parts: [{ text: cleanText }] });
