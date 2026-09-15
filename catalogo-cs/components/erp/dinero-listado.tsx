@@ -84,7 +84,15 @@ export default function DineroListado({
     const texto = busqueda.trim().toLowerCase();
     return filas.filter((fila) => {
       if (filtro === "por_pagar" && fila.balance <= 0) return false;
-      if (filtro === "deben" && fila.debtOutstanding <= 0) return false;
+      /*
+       * Por el saldo, igual que la etiqueta "Debe" de la fila.
+       *
+       * Miraba solo `debtOutstanding` --préstamos y cargos-- así que quien
+       * tenía efectivo de la casa sin entregar salía en rojo en su fila y a la
+       * vez desaparecía de este filtro: "Nadie coincide" con quince mil pesos
+       * en la calle.
+       */
+      if (filtro === "deben" && fila.balance >= 0) return false;
       if (filtro === "sin_liquidar" && fila.settlementStatus !== "preview") {
         return false;
       }
@@ -209,9 +217,11 @@ export default function DineroListado({
                     )}
                   </Td>
                   <Td numeric>
-                    {fila.debtOutstanding ? (
+                    {fila.debtOutstanding || fila.remainingCashDebt ? (
                       <span className="text-red-400">
-                        {formatCurrency(fila.debtOutstanding)}
+                        {formatCurrency(
+                          fila.debtOutstanding + fila.remainingCashDebt,
+                        )}
                       </span>
                     ) : (
                       <Empty />
@@ -262,7 +272,10 @@ export default function DineroListado({
                 </Td>
                 <Td numeric>
                   {formatCurrency(
-                    visibles.reduce((s, f) => s + f.debtOutstanding, 0),
+                    visibles.reduce(
+                      (s, f) => s + f.debtOutstanding + f.remainingCashDebt,
+                      0,
+                    ),
                   )}
                 </Td>
                 <Td numeric>

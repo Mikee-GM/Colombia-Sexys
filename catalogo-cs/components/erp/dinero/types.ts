@@ -28,7 +28,14 @@ export interface MoneyOverviewRow {
   netEmployeePay: number;
   cashOutstanding: number;
   debtOutstanding: number;
-  /** Lo que se le paga menos lo que debe. El efectivo ya va dentro del neto. */
+  /**
+   * El efectivo que sigue en su poder después de compensarlo con su pago.
+   *
+   * Solo se puede compensar hasta donde llega ese pago: quien cobró en efectivo
+   * una semana en la que no generó nada tiene el importe entero por entregar.
+   */
+  remainingCashDebt: number;
+  /** Lo que se le paga, menos lo que debe, menos el efectivo sin entregar. */
   balance: number;
   settlementStatus: "preview" | "confirmed";
   confirmedAt: string | null;

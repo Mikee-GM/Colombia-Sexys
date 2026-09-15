@@ -240,7 +240,17 @@ export function calculateCut(
         : result < 0
           ? 'company_owes_employee'
           : 'settled',
-    count: records.length,
+    /*
+     * Servicios de verdad: ni multas ni cancelados.
+     *
+     * Era `records.length`, que mete en el mismo saco las multas y los
+     * servicios que no llegaron a ocurrir. En el panel de dinero eso se leia
+     * como "3 servicios" justo debajo de un ingreso de 0 --los tres estaban
+     * cancelados-- y en la hoja de la empleada inflaba su cuenta de trabajo.
+     * `rendimiento()` ya contaba asi; ahora lo hace un solo sitio.
+     */
+    count: records.filter((record) => !record.isFine && !record.cancelled)
+      .length,
     totalCollected: fromCents(totalCollected),
     rawExtrasTotal: fromCents(rawExtrasTotal),
     netCompanyShare: fromCents(netCompanyShare),

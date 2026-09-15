@@ -288,3 +288,39 @@ describe('liquidation calculator', () => {
     expect(result.netCompanyShare).toBe(850);
   });
 });
+
+/**
+ * "N servicios" tiene que significar lo mismo en todas partes.
+ *
+ * Contaba las filas del periodo, y ahi dentro van tambien las multas y los
+ * servicios cancelados. El panel de dinero llego a enseñar "3 servicios" justo
+ * debajo de un ingreso de cero: los tres estaban cancelados.
+ */
+describe('calculateCut: cuantos servicios cuenta', () => {
+  const base = {
+    serviceTotal: 1000,
+    companyPercentage: 40,
+    paymentMethod: 'efectivo' as const,
+    occurredAt: new Date('2026-09-01T10:00:00Z'),
+  };
+
+  it('no cuenta las multas ni los cancelados', () => {
+    const cut = calculateCut([
+      { ...base } as never,
+      { ...base, cancelled: true } as never,
+      { ...base, isFine: true, fineAmount: 200 } as never,
+    ]);
+
+    expect(cut.count).toBe(1);
+  });
+
+  it('un periodo entero de cancelados no cuenta ningun servicio', () => {
+    const cut = calculateCut([
+      { ...base, cancelled: true } as never,
+      { ...base, cancelled: true } as never,
+    ]);
+
+    expect(cut.count).toBe(0);
+    expect(cut.salesTotal).toBe(0);
+  });
+});

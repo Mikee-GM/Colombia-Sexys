@@ -209,6 +209,17 @@ export class EmployeeMoneyService {
         const netoEmpleada = confirmada
           ? Number(confirmada.netEmployeePay)
           : brutoEmpleada - compensado;
+        /*
+         * El efectivo que sigue en su poder despues de compensarlo.
+         *
+         * Solo se puede descontar de lo que se le paga hasta donde llegue ese
+         * pago: quien cobro 15.500 en efectivo y esta semana no genero nada
+         * tiene compensado 0 y los 15.500 enteros por entregar. Ese resto es
+         * dinero de la casa en su bolsillo, y sin contarlo aparecia "al dia".
+         */
+        const efectivoPorEntregar = confirmada
+          ? Number(confirmada.remainingCashDebt)
+          : Math.max(0, efectivoPendiente - compensado);
 
         return {
           employeeId: empleada.id,
@@ -225,12 +236,22 @@ export class EmployeeMoneyService {
           netEmployeePay: netoEmpleada,
           cashOutstanding: efectivoPendiente,
           debtOutstanding: deudaViva,
+          remainingCashDebt: efectivoPorEntregar,
           /*
            * El numero que responde "que hago hoy con esta persona": lo que se
-           * le paga menos lo que debe. El efectivo ya esta descontado dentro de
-           * `netEmployeePay`, asi que restarlo otra vez lo contaria dos veces.
+           * le paga, menos lo que debe, menos el efectivo que no ha entregado.
+           *
+           * `netEmployeePay` ya trae descontado el efectivo COMPENSADO, pero
+           * solo hasta donde llegaba su pago; lo que sobra de ahi no estaba en
+           * ninguna parte del saldo. Restarlo aqui no lo cuenta dos veces --son
+           * los dos tramos del mismo efectivo-- y es lo que hace que quien
+           * tiene dinero de la casa salga en rojo y no "al dia".
            */
-          balance: fromCents(toCents(netoEmpleada) - toCents(deudaViva)),
+          balance: fromCents(
+            toCents(netoEmpleada) -
+              toCents(deudaViva) -
+              toCents(efectivoPorEntregar),
+          ),
           settlementStatus: confirmada
             ? ('confirmed' as const)
             : ('preview' as const),

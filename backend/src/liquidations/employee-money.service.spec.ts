@@ -247,6 +247,58 @@ describe('Listado de dinero por empleada', () => {
     expect(fila.balance).toBe(400);
   });
 
+  /*
+   * El efectivo solo se compensa hasta donde llega su pago. Lo que sobra de ahi
+   * es dinero de la casa en su bolsillo, y sin contarlo el panel la daba por
+   * "al dia": quince mil pesos en la calle y el filtro de quien debe vacio.
+   */
+  it('deja en rojo a quien tiene efectivo por encima de lo que se le paga', async () => {
+    const servicio = montar({
+      empleadas: [empleada],
+      obligaciones: [
+        {
+          employeeId: 'emp-1',
+          amount: 15500,
+          paidAmount: 0,
+          status: 'pending',
+          calculationStatus: 'ready',
+        },
+      ],
+    });
+
+    const [fila] = await servicio.overview(semana, admin);
+
+    // Sin servicios esta semana no hay pago con el que compensar.
+    expect(fila.employeeGrossPay).toBe(0);
+    expect(fila.cashOffset).toBe(0);
+    expect(fila.remainingCashDebt).toBe(15500);
+    expect(fila.balance).toBe(-15500);
+  });
+
+  it('solo queda por entregar lo que el pago no alcanzo a cubrir', async () => {
+    const servicio = montar({
+      registros: [registro({ serviceTotal: 1000 })],
+      empleadas: [empleada],
+      obligaciones: [
+        {
+          employeeId: 'emp-1',
+          amount: 1000,
+          paidAmount: 0,
+          status: 'pending',
+          calculationStatus: 'ready',
+        },
+      ],
+    });
+
+    const [fila] = await servicio.overview(semana, admin);
+
+    // 600 brutos contra 1000 de efectivo: se compensan 600 y quedan 400.
+    expect(fila.cashOffset).toBe(600);
+    expect(fila.netEmployeePay).toBe(0);
+    expect(fila.remainingCashDebt).toBe(400);
+    expect(fila.balance).toBe(-400);
+  });
+
   it('resta del saldo la deuda viva de la empleada', async () => {
     const servicio = montar({
       registros: [registro({ serviceTotal: 1000 })],
