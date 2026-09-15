@@ -1,4 +1,8 @@
-import { APP_LOCALE, APP_TIME_ZONE } from '../common/locale';
+import {
+  APP_LOCALE,
+  APP_TIME_ZONE,
+  mismaSemanaOperativa,
+} from '../common/locale';
 import {
   Injectable,
   NotFoundException,
@@ -1036,11 +1040,9 @@ export class EmployeesService {
       return f1 === f2;
     };
 
-    const isSameWeek = (d1: Date, d2: Date) => {
-      const diffTime = Math.abs(d2.getTime() - d1.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays <= 7;
-    };
+    // Misma semana que la oficina --lunes a domingo, hora de Mexico-- y no los
+    // ultimos siete dias, que arrastraban la semana anterior ya liquidada.
+    const isSameWeek = mismaSemanaOperativa;
 
     let todayNet = 0;
     let weekNet = 0;

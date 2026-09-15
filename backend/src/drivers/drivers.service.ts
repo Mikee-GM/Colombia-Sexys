@@ -16,7 +16,11 @@ import { UpdateDriverDto } from './dto/update-driver.dto';
 import { Choferes } from './entities/driver.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { Viajes } from '../trips/entities/trip.entity';
-import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
+import {
+  APP_TIME_ZONE,
+  APP_LOCALE,
+  mismaSemanaOperativa,
+} from '../common/locale';
 
 export interface DriverPortalTripItem {
   id: string;
@@ -646,10 +650,10 @@ export class DriversService {
         }).format(d);
       return fmt(d1) === fmt(d2);
     };
-    const isSameWeek = (d1: Date, d2: Date) =>
-      Math.ceil(
-        Math.abs(d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24),
-      ) <= 7;
+    // La semana del negocio, de lunes a domingo, no los ultimos siete dias:
+    // un lunes, "la ganancia de la semana" incluia la semana anterior entera
+    // --ya liquidada y cobrada-- y no cuadraba con la hoja de la oficina.
+    const isSameWeek = mismaSemanaOperativa;
 
     let todayNet = 0;
     let weekNet = 0;
