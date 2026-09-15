@@ -17,19 +17,24 @@ export default async function JefePage({ searchParams }: PageProps) {
   const [employees, services, cashSummary, groupRequests, workShift] = await Promise.all([getJefeEmployees(), getJefeServices(), getJefeCashObligations(), getGroupServiceRequests(), getMyWorkShift()]);
   return (
     <>
-      {/* Cerrar la jornada avisa al panel de admin; no es lo mismo que estar ocupado. */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <div className="max-w-xs flex-1">
-          <WorkShiftToggle initialStatus={workShift} />
+      {/*
+        Estado y ajustes, en una sola linea y arriba del todo.
+
+        La jornada ocupaba un boton de ancho completo con su parrafo debajo, y
+        junto al titulo grande y la descripcion empujaban los servicios fuera de
+        la primera pantalla del telefono. Ninguna de las dos cosas es una tarea
+        del dia: se miran una vez y se dejan.
+      */}
+      <div className="mb-4 flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <WorkShiftToggle initialStatus={workShift} compacto />
         </div>
-        {/* La configuracion de avisos se hace una vez y vive en su pantalla:
-            ocupando sitio aqui competia cada dia con lo operativo. */}
         <Link
           href="/jefe/ajustes"
-          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-zinc-800 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
+          aria-label="Ajustes de avisos"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-800 text-zinc-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
         >
-          <Bell size={14} />
-          Avisos
+          <Bell size={16} />
         </Link>
       </div>
       <TeamOperations

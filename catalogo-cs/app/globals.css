@@ -40,15 +40,6 @@ body {
   background: #C5A55A;
 }
 
-/* Tabs scroll sin scrollbar visible en movil */
-.tabs-scroll {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.tabs-scroll::-webkit-scrollbar {
-  display: none;
-}
-
 /* Animaciones personalizadas */
 @keyframes fadeInUp {
   from {

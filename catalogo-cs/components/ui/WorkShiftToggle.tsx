@@ -21,9 +21,19 @@ import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 export default function WorkShiftToggle({
   initialStatus,
   className,
+  compacto = false,
 }: {
   initialStatus: WorkShiftStatus | null;
   className?: string;
+  /**
+   * Version de una linea, para cuando el estado de jornada comparte sitio con
+   * lo operativo.
+   *
+   * En el panel del jefe ocupaba un boton de ancho completo con su parrafo
+   * debajo, y eso empujaba los servicios fuera de la primera pantalla del
+   * telefono. Es un estado que se mira, no una tarea del dia.
+   */
+  compacto?: boolean;
 }) {
   const [status, setStatus] = useState<WorkShiftStatus>(
     initialStatus ?? { enJornada: true, jornadaActualizadaAt: null, jornadaMotivo: null },
@@ -62,6 +72,80 @@ export default function WorkShiftToggle({
   };
 
   const desde = formatHora(status.jornadaActualizadaAt);
+
+  if (compacto) {
+    return (
+      <div className={className}>
+        <button
+          type="button"
+          disabled={pending}
+          aria-busy={pending}
+          onClick={() =>
+            status.enJornada
+              ? setPidiendoMotivo((abierto) => !abierto)
+              : cambiar(true)
+          }
+          aria-expanded={status.enJornada ? pidiendoMotivo : undefined}
+          aria-pressed={!status.enJornada}
+          className={`inline-flex h-11 w-full items-center gap-2 rounded-xl border px-3 text-[11px] font-semibold uppercase tracking-wider transition-colors disabled:opacity-50 ${
+            status.enJornada
+              ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
+              : "border-zinc-800 bg-zinc-900/80 text-zinc-400"
+          }`}
+        >
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${status.enJornada ? "bg-emerald-400" : "bg-zinc-600"}`}
+          />
+          <span className="truncate">
+            {status.enJornada
+              ? "En jornada"
+              : `Fuera de jornada${desde ? ` desde las ${desde}` : ""}`}
+          </span>
+        </button>
+
+        {status.enJornada && pidiendoMotivo && (
+          <div className="mt-2 rounded-xl border border-zinc-800 bg-black p-3">
+            <label
+              className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]"
+              htmlFor="motivo-jornada-compacto"
+            >
+              ¿Cierras tu jornada? Di por qué si quieres
+            </label>
+            <textarea
+              id="motivo-jornada-compacto"
+              value={motivo}
+              onChange={(event) => setMotivo(event.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="Opcional"
+              className="mt-2 w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-[#C5A55A]"
+            />
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => cambiar(false, motivo.trim() || undefined)}
+                className="rounded-lg bg-[#C5A55A] px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-black disabled:opacity-50"
+              >
+                Cerrar jornada
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setPidiendoMotivo(false);
+                  setMotivo("");
+                }}
+                className="rounded-lg border border-zinc-800 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={className}>

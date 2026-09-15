@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ClipboardList, FileWarning, LogOut, MapPinned, ShieldCheck, Trophy, UsersRound } from "lucide-react";
+import { ClipboardList, FileWarning, LayoutGrid, LogOut, MapPinned, ShieldCheck, Trophy } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
 import SessionKeeper from "@/components/auth/session-keeper";
 import ComprobarVersion from "@/components/ui/ComprobarVersion";
@@ -13,7 +13,12 @@ import { broadcastLogout } from "@/lib/client-session";
 // "Registros a mano" no cabe en una columna de 78px y parte en dos lineas, que
 // era lo que descuadraba la altura de toda la barra.
 const links = [
-  { href: "/jefe", label: "Mi equipo", corto: "Equipo", icon: UsersRound },
+  /*
+   * "Hoy" y no "Equipo": el equipo es una de las vistas de DENTRO de esta
+   * pantalla, y tener la misma palabra para la seccion y para una de sus
+   * pestañas obligaba a mirar dos veces para saber donde estabas.
+   */
+  { href: "/jefe", label: "Hoy", corto: "Hoy", icon: LayoutGrid },
   { href: "/jefe/mapa", label: "Mapa", corto: "Mapa", icon: MapPinned },
   { href: "/jefe/reportes", label: "Reportes", corto: "Reportes", icon: FileWarning },
   { href: "/jefe/servicios-manuales", label: "Registros a mano", corto: "Registros", icon: ClipboardList },

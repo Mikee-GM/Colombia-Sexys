@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { ButtonHTMLAttributes, Dispatch, ReactNode, SetStateAction } from "react";
-import { Award, Banknote, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, Copy, ExternalLink, FileCheck2, Hourglass, LogOut, MapPin, MessageCircle, Navigation, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { Award, Banknote, ArrowLeft, ArrowRight, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, Copy, ExternalLink, FileCheck2, Hourglass, LogOut, MapPin, MessageCircle, Navigation, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
@@ -54,7 +54,13 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   );
   const [query, setQuery] = useState("");
   const [historyEmployeeId, setHistoryEmployeeId] = useState("all");
-  const [tab, setTab] = useState<"equipo" | "grupos" | "activos" | "historial" | "efectivo">(tabInicial ?? "equipo");
+  /*
+   * Se abre en Activos, no en la lista del equipo.
+   *
+   * Lo primero que hay que ver al entrar es lo que esta pasando y lo que espera
+   * una decision; quien esta disponible se consulta cuando hace falta.
+   */
+  const [tab, setTab] = useState<"equipo" | "grupos" | "activos" | "historial" | "efectivo">(tabInicial ?? "activos");
   const [cashSummary, setCashSummary] = useState(initialCashSummary);
   const [chatService, setChatService] = useState<Service | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -105,6 +111,14 @@ export default function TeamOperations({ initialEmployees, initialServices, init
         (service.estadoLiquidacion === "transporte_pendiente" ||
           (service.viajes ?? []).some((trip) => transporteSinCerrar(trip)))),
   );
+  /*
+   * Lo que espera decision y lo que ya esta rodando se miran distinto: lo
+   * primero tiene reloj corriendo --el cliente esta esperando una respuesta-- y
+   * lo segundo solo hay que vigilarlo. Mezclados en una sola lista, una
+   * solicitud nueva aparecia entre servicios en marcha sin destacar.
+   */
+  const pendientes = active.filter((service) => service.estado === "pendiente");
+  const enCurso = active.filter((service) => service.estado !== "pendiente");
   const history = services.filter((service) => ["finalizado", "cancelado"].includes(service.estado));
   const filteredHistory = historyEmployeeId === "all" ? history : history.filter((service) => service.empleadaId === historyEmployeeId);
 
@@ -339,49 +353,125 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   }
 
   return <>
-    <header className="mb-7 flex flex-wrap items-center justify-between gap-4">
-      <div>
+    {/*
+      En el telefono el titulo grande y su descripcion se comian, junto a la
+      jornada, casi toda la primera pantalla antes de enseñar un solo servicio.
+      En pantalla ancha sobra sitio y se quedan.
+    */}
+    <header className="mb-4 flex items-center justify-between gap-4 sm:mb-7">
+      <div className="hidden sm:block">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#C5A55A]">Operación diaria</p>
         <h1 className="font-heading text-4xl font-semibold sm:text-5xl">Mi equipo</h1>
         <p className="mt-2 text-sm text-zinc-500">Disponibilidad, servicios, transporte y conversaciones de tu equipo.</p>
       </div>
+      {/* Registrar a mano es cosa de una vez al dia: en el telefono se queda en
+          el icono y el texto vuelve en cuanto hay ancho. */}
       <button
         type="button"
         onClick={() => setCreatingService(true)}
-        className="flex items-center gap-2 rounded-2xl bg-[#C5A55A] px-5 py-3 text-xs font-bold uppercase tracking-wider text-zinc-950 shadow-lg shadow-amber-500/20 transition-all hover:bg-[#d8b769]"
+        aria-label="Crear servicio manual"
+        className="ml-auto flex h-11 items-center gap-2 rounded-2xl bg-[#C5A55A] px-3.5 text-xs font-bold uppercase tracking-wider text-zinc-950 shadow-lg shadow-amber-500/20 transition-all hover:bg-[#d8b769] sm:px-5 sm:py-3"
       >
         <Plus size={16} />
-        <span>Crear Servicio Manual</span>
+        <span className="hidden sm:inline">Crear Servicio Manual</span>
       </button>
     </header>
     {/*
-     * Una sola tira que se desliza, en vez de una rejilla de dos columnas.
+     * Tres vistas del mismo ancho, siempre enteras.
      *
-     * Con cinco pestañas en dos columnas salian tres filas y la ultima coja,
-     * y se comian 130px antes de que empezara el contenido. `tabs-scroll`
-     * esconde la barra de desplazamiento y ya existia en globals.css.
-     *
-     * Los contadores van como distintivo y no entre parentesis: asi el numero
-     * se lee de un vistazo y la etiqueta no cambia de ancho al actualizarse.
+     * Eran cinco en una tira que se deslizaba: la primera quedaba cortada por
+     * el borde, asi que no se veia en cual estabas ni que habia mas alla. Las
+     * otras dos no desaparecen -- los grupos se anuncian dentro de Activos, que
+     * es donde urgen, y el historial se abre desde el final de la lista -- pero
+     * dejan de competir por el sitio con lo que si tiene reloj corriendo.
      */}
-    <div className="tabs-scroll mb-5 flex items-center gap-2 overflow-x-auto">
-      {([['equipo', 'Disponibilidad', null], ['grupos', 'Grupos', groupRequests.length], ['activos', 'Activos', active.length], ['historial', 'Historial', null], ['efectivo', 'Efectivo', null]] as const).map(([value, label, count]) => (
+    <div className="mb-5 grid grid-cols-3 gap-1.5">
+      {([['activos', 'Activos', active.length], ['equipo', 'Equipo', null], ['efectivo', 'Caja', null]] as const).map(([value, label, count]) => (
         <button
           key={value}
           onClick={() => setTab(value)}
           aria-pressed={tab === value}
-          className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2.5 text-xs font-semibold transition-colors ${tab === value ? "border-[#C5A55A] bg-[#C5A55A] text-black" : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white"}`}
+          className={`flex h-11 items-center justify-center gap-1.5 rounded-xl border text-xs font-semibold transition-colors ${tab === value ? "border-[#C5A55A] bg-[#C5A55A] text-black" : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white"}`}
         >
           {label}
           {count !== null && count > 0 && <span className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold tabular-nums ${tab === value ? "bg-black/20 text-black" : "bg-[#C5A55A]/15 text-[#E8D5A3]"}`}>{count}</span>}
         </button>
       ))}
     </div>
+
+    {/* El historial y los grupos siguen siendo estados de esta pantalla; solo
+        se llega a ellos desde donde tienen sentido. Con uno abierto, la forma
+        de volver tiene que estar a la vista. */}
+    {(tab === "historial" || tab === "grupos") && (
+      <button
+        type="button"
+        onClick={() => setTab("activos")}
+        className="mb-4 inline-flex items-center gap-2 rounded-xl border border-zinc-800 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
+      >
+        <ArrowLeft size={14} />
+        {tab === "historial" ? "Volver a los activos" : "Volver"}
+      </button>
+    )}
+
     {tab === "historial" && <label className="mb-5 block"><span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">Filtrar por empleada</span><select value={historyEmployeeId} onChange={(event) => setHistoryEmployeeId(event.target.value)} className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-[#C5A55A] sm:max-w-sm"><option value="all">Todas las empleadas</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.nombreArtistico}</option>)}</select></label>}
     {tab === "equipo" ? <section>
       <label className="mb-4 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-3.5 text-sm text-white outline-none placeholder:text-zinc-600" /></label>
       <EmployeeList employees={visibleEmployees} sinLeer={canalSinLeer} disabled={pending} onToggle={toggleAvailability} onOpen={(employee) => setDetalleEmpleadaId(employee.id)} />
-    </section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : <ServiceList employees={employees} services={tab === "activos" ? active : filteredHistory} allServices={services} active={tab === "activos"} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />}
+    </section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : tab === "historial" ? <ServiceList employees={employees} services={filteredHistory} allServices={services} active={false} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} /> : <div className="flex flex-col gap-7">
+      {/* Los grupales se anuncian aqui, que es donde se mira lo urgente, en vez
+          de esperar en una pestaña que ya no esta a la vista. */}
+      {groupRequests.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setTab("grupos")}
+          className="flex items-center justify-between gap-3 rounded-2xl border border-[#C5A55A]/45 bg-[#C5A55A]/5 px-4 py-3.5 text-left transition-colors hover:border-[#C5A55A]"
+        >
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-[#E8D5A3]">{groupRequests.length === 1 ? "Una solicitud de servicio grupal" : `${groupRequests.length} solicitudes de servicio grupal`}</span>
+            <span className="mt-0.5 block text-[11px] text-zinc-500">Toca para organizarlas</span>
+          </span>
+          <ArrowRight size={16} className="shrink-0 text-[#C5A55A]" />
+        </button>
+      )}
+
+      {pendientes.length > 0 && (
+        <section>
+          <p className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#C5A55A]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#C5A55A]" />
+            {pendientes.length === 1 ? "Espera tu autorización" : "Esperan tu autorización"}
+          </p>
+          <ServiceList employees={employees} services={pendientes} allServices={services} active disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />
+        </section>
+      )}
+
+      {enCurso.length > 0 && (
+        <section>
+          <p className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            En curso
+          </p>
+          <ServiceList employees={employees} services={enCurso} allServices={services} active disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />
+        </section>
+      )}
+
+      {active.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-zinc-800 px-6 py-14 text-center">
+          <p className="font-heading text-2xl font-semibold text-zinc-300">Sin servicios ahora</p>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-500">En cuanto entre una solicitud aparece aquí arriba y te llega el aviso.</p>
+        </div>
+      )}
+
+      {/* El historial sale de la tira de pestañas pero no del alcance: se
+          consulta al terminar de revisar lo de hoy, que es cuando se busca. */}
+      <button
+        type="button"
+        onClick={() => setTab("historial")}
+        className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-zinc-800 px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
+      >
+        Ver el historial
+        <ArrowRight size={14} />
+      </button>
+    </div>}
 
     {chatService && <ChatPanel service={chatService} messages={messages} setMessages={setMessages} onClose={() => setChatService(null)} />}
     {acceptingService && <AcceptServiceDialog service={acceptingService} previousService={services.find((item) => item.id === acceptingService.servicioPrevioId)} disabled={pending} onClose={() => setAcceptingService(null)} onAccept={(transport, notes) => decide(acceptingService, "aceptar", transport, notes)} />}
