@@ -102,7 +102,12 @@ export class GodEyeService {
           WHERE estado IN ('pendiente', 'en_curso')) AS active_services,
         (SELECT COUNT(*)::int FROM empleadas) AS employees_total,
         (SELECT COUNT(*)::int FROM empleadas WHERE disponible = true) AS employees_available,
-        (SELECT COUNT(*)::int FROM empleadas WHERE disponible = false) AS employees_busy,
+        -- "En servicio" es estar atendiendo, no estar marcada como no
+        -- disponible: eso ultimo incluye a quien cerro su jornada, a la que
+        -- esta inactiva y a la que no sale en el catalogo. El panel decia
+        -- "N en servicio" contando a todas ellas.
+        (SELECT COUNT(DISTINCT empleada_id)::int FROM servicios
+          WHERE estado = 'en_curso') AS employees_busy,
         (SELECT COUNT(*)::int FROM choferes) AS drivers_total,
         (SELECT COUNT(*)::int FROM choferes WHERE disponible = true) AS drivers_active,
         (SELECT COUNT(*)::int FROM payment_receipt_validations
