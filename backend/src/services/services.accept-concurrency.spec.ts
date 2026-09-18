@@ -94,7 +94,13 @@ describe('ServicesService.aceptar (concurrencia)', () => {
       dispatchTimeouts: new Map(),
       serviciosRepository,
       viajesRepository,
-      choferesRepository: {},
+      choferesRepository: {
+        createQueryBuilder: jest.fn(() => ({
+          where: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getCount: jest.fn().mockResolvedValue(1),
+        })),
+      },
       usuariosRepository: {},
       conversationsRepository: {},
       bankAccountsRepository: {},
