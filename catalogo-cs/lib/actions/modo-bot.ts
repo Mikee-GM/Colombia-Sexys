@@ -1,33 +1,31 @@
 'use server';
 
-import { apiFetch } from '@/lib/api-server';
 import { revalidatePath } from 'next/cache';
+import { apiFetch } from '@/lib/api-server';
 
-/**
- * Activa o desactiva el modoBot de una empleada o chofer.
- *
- * modoBot = true  ? usa el app de Telegram normalmente
- * modoBot = false ? el sistema avanza automaticamente (modo simulacion)
- */
-export async function toggleModoBot(
-  id: string,
-  tipo: 'empleada' | 'chofer',
-  modoBot: boolean,
-): Promise<void> {
-  const endpoint = tipo === 'empleada' ? /employees/ : /drivers/;
-  await apiFetch(endpoint, {
-    method: 'PATCH',
-    authenticated: true,
-    body: JSON.stringify({ modoBot }),
-  });
+export async function toggleModoBot(id: string, tipo: 'empleada' | 'chofer', modoBot: boolean) {
+  try {
+    const endpoint =
+      tipo === 'empleada' ? `/employees/${id}` : `/drivers/${id}`;
 
-  // Revalidar las páginas del panel admin
-  if (tipo === 'empleada') {
-    revalidatePath(/admin/employees/);
-    revalidatePath('/admin/employees');
-  } else {
-    revalidatePath(/admin/drivers/);
-    revalidatePath('/admin/drivers');
-    revalidatePath('/admin/choferes');
+    await apiFetch(endpoint, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ modoBot }),
+    });
+
+    // Revalidar para que se actualice la data en el panel
+    if (tipo === 'empleada') {
+      revalidatePath(`/admin/employees/${id}`);
+      revalidatePath('/admin/employees');
+    } else {
+      revalidatePath(`/admin/drivers/${id}`);
+      revalidatePath('/admin/drivers');
+    }
+  } catch (error) {
+    console.error('Error toggling modoBot:', error);
+    throw error;
   }
 }

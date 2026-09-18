@@ -12,8 +12,8 @@ interface Props {
 /**
  * Toggle que activa/desactiva el modoBot de una empleada o chofer.
  *
- * modoBot = true  ? usa el app Telegram normalmente
- * modoBot = false ? el sistema avanza autom·ticamente (simulaciÛn)
+ * modoBot = true  -> usa el app Telegram normalmente
+ * modoBot = false -> el sistema avanza autom√°ticamente (simulaci√≥n)
  */
 export default function ToggleModoBot({ id, tipo, initialValue }: Props) {
   const [activo, setActivo] = useState(initialValue);
@@ -30,23 +30,29 @@ export default function ToggleModoBot({ id, tipo, initialValue }: Props) {
   return (
     <div className="flex items-center gap-3">
       <button
-        id={modo-bot-toggle-}
+        id={`modo-bot-toggle-${id}`}
         onClick={handleToggle}
         disabled={isPending}
-        className={elative h-6 w-11 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950  }
+        className={`relative h-6 w-11 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950 ${
+          activo
+            ? 'bg-emerald-500 focus:ring-emerald-500'
+            : 'bg-zinc-700 focus:ring-zinc-500'
+        } ${isPending ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         role="switch"
         aria-checked={activo}
         aria-label="Modo Bot"
       >
         <span
-          className={bsolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 }
+          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
+            activo ? 'translate-x-5' : 'translate-x-0'
+          }`}
         />
       </button>
       <span className="text-sm">
         {activo ? (
-          <span className="text-emerald-400 font-medium">?? Usa el app</span>
+          <span className="text-emerald-400 font-medium">ü§ñ Usa el app</span>
         ) : (
-          <span className="text-amber-400 font-medium">? Modo autom·tico</span>
+          <span className="text-amber-400 font-medium">‚ö° Modo autom√°tico</span>
         )}
       </span>
     </div>
