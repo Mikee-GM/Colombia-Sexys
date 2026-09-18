@@ -58,7 +58,8 @@ export class Choferes {
    */
   @Column('boolean', { name: 'modo_bot', default: () => 'true' })
   @ApiProperty({
-    description: 'Si true, el chofer recibe ofertas de viaje normalmente. Si false, el viaje se despacha como Uber automatico.',
+    description:
+      'Si true, el chofer recibe ofertas de viaje normalmente. Si false, el viaje se despacha como Uber automatico.',
     example: true,
   })
   modoBot: boolean;

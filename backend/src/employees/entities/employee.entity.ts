@@ -161,7 +161,8 @@ export class Empleadas {
    */
   @Column('boolean', { name: 'modo_bot', default: () => 'true' })
   @ApiProperty({
-    description: 'Si true, la empleada usa el app Telegram normalmente. Si false, el sistema la procesa automaticamente.',
+    description:
+      'Si true, la empleada usa el app Telegram normalmente. Si false, el sistema la procesa automaticamente.',
     example: true,
   })
   modoBot: boolean;

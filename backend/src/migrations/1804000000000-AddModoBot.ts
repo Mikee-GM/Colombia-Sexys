@@ -26,7 +26,11 @@ export class AddModoBot1804000000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`ALTER TABLE "choferes" DROP COLUMN IF EXISTS "modo_bot"`);
-    await queryRunner.query(`ALTER TABLE "empleadas" DROP COLUMN IF EXISTS "modo_bot"`);
+    await queryRunner.query(
+      `ALTER TABLE "choferes" DROP COLUMN IF EXISTS "modo_bot"`,
+    );
+    await queryRunner.query(
+      `ALTER TABLE "empleadas" DROP COLUMN IF EXISTS "modo_bot"`,
+    );
   }
 }

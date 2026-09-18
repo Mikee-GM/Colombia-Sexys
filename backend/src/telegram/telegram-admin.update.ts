@@ -1,5 +1,13 @@
 import { Inject, forwardRef, Logger } from '@nestjs/common';
-import { Update, Ctx, Action, Hears, Command, InjectBot, On } from 'nestjs-telegraf';
+import {
+  Update,
+  Ctx,
+  Action,
+  Hears,
+  Command,
+  InjectBot,
+  On,
+} from 'nestjs-telegraf';
 import { Context, Markup, Telegraf } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -1084,7 +1092,7 @@ export class TelegramAdminUpdate {
     if (!clientSession) {
       await ctx.reply(
         `⚠️ No se encontró sesión activa para el cliente ${clientTelegramId}.\n` +
-        `Puede que aún no haya escrito nada o la sesión haya expirado.`,
+          `Puede que aún no haya escrito nada o la sesión haya expirado.`,
       );
       return;
     }
@@ -1103,8 +1111,8 @@ export class TelegramAdminUpdate {
 
     await ctx.reply(
       `✅ Bot pausado para *${nombre}* (\`${clientTelegramId}\`)\n\n` +
-      `La IA ya no responderá. Puedes contestarle tú directamente.\n` +
-      `Usa /reanudarbot ${clientTelegramId} para reactivar la IA.`,
+        `La IA ya no responderá. Puedes contestarle tú directamente.\n` +
+        `Usa /reanudarbot ${clientTelegramId} para reactivar la IA.`,
       { parse_mode: 'Markdown' },
     );
   }
@@ -1134,7 +1142,9 @@ export class TelegramAdminUpdate {
     });
 
     if (!clientSession) {
-      await ctx.reply(`⚠️ No se encontró sesión para el cliente ${clientTelegramId}.`);
+      await ctx.reply(
+        `⚠️ No se encontró sesión para el cliente ${clientTelegramId}.`,
+      );
       return;
     }
 
@@ -1152,7 +1162,7 @@ export class TelegramAdminUpdate {
 
     await ctx.reply(
       `✅ IA reactivada para *${nombre}* (\`${clientTelegramId}\`)\n\n` +
-      `El bot volverá a responder normalmente.`,
+        `El bot volverá a responder normalmente.`,
       { parse_mode: 'Markdown' },
     );
   }
@@ -1189,8 +1199,8 @@ export class TelegramAdminUpdate {
         const estado = d.humanTakeover
           ? '⚠️ TAKEOVER'
           : d.iaActiva === false
-          ? '🔕 IA apagada'
-          : '🤖 IA activa';
+            ? '🔕 IA apagada'
+            : '🤖 IA activa';
         const paso = d.step ? ` · paso: ${d.step}` : '';
         return `${estado} · *${nombre}* (\`${clientTelegramId}\`)${paso}`;
       }),
@@ -1227,8 +1237,13 @@ export class TelegramAdminUpdate {
         parse_mode: 'Markdown',
       });
     } catch (error: any) {
-      this.logger.error(`Error enviando mensaje manual a ${clientTelegramId}`, error);
-      await ctx.reply(`❌ Fallo al enviar mensaje: ${error?.message || 'Error desconocido'}`);
+      this.logger.error(
+        `Error enviando mensaje manual a ${clientTelegramId}`,
+        error,
+      );
+      await ctx.reply(
+        `❌ Fallo al enviar mensaje: ${error?.message || 'Error desconocido'}`,
+      );
     }
   }
 
@@ -1259,8 +1274,13 @@ export class TelegramAdminUpdate {
             parse_mode: 'Markdown',
           });
         } catch (error: any) {
-          this.logger.error(`Error en Reply admin a ${clientTelegramId}`, error);
-          await ctx.reply(`❌ Fallo al responder: ${error?.message || 'Error desconocido'}`);
+          this.logger.error(
+            `Error en Reply admin a ${clientTelegramId}`,
+            error,
+          );
+          await ctx.reply(
+            `❌ Fallo al responder: ${error?.message || 'Error desconocido'}`,
+          );
         }
       }
     }

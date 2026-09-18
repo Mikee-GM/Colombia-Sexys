@@ -1891,7 +1891,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       if (hayChoferConBot === 0) {
         this.logger.log(
           `[dispatchViaje] Todos los choferes tienen modoBot=false. ` +
-          `Viaje ${viajeGuardado.id} registrado como Uber automatico.`,
+            `Viaje ${viajeGuardado.id} registrado como Uber automatico.`,
         );
         // Marca el viaje como Uber y actualiza el servicio
         await this.viajesRepository.update(viajeGuardado.id, {

@@ -7624,9 +7624,7 @@ export class TelegramBookingUpdate {
       if (spyChatId && spyChatId.trim()) {
         try {
           const clientName =
-            ctx.from?.first_name ||
-            ctx.from?.username ||
-            'Cliente';
+            ctx.from?.first_name || ctx.from?.username || 'Cliente';
           const takeoverMark =
             ctx.session?.humanTakeover || ctx.session?.iaActiva === false
               ? '⚠️ TAKEOVER · '
