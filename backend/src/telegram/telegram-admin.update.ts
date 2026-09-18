@@ -1,8 +1,9 @@
 import { Inject, forwardRef, Logger } from '@nestjs/common';
-import { Update, Ctx, Action, Hears } from 'nestjs-telegraf';
-import { Context, Markup } from 'telegraf';
+import { Update, Ctx, Action, Hears, Command, InjectBot, On } from 'nestjs-telegraf';
+import { Context, Markup, Telegraf } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { Clientes } from '../clients/entities/client.entity';
@@ -10,6 +11,8 @@ import { DisciplineService } from '../discipline/discipline.service';
 import { ServicesService } from '../services/services.service';
 import type { TelegramSessionData } from './telegram-booking.update';
 import { TelegramCallbackGuard } from './telegram-callback-guard';
+import { TelegramSession } from './entities/telegram-session.entity';
+import { parseSessionKey } from './telegram-session.key';
 
 /**
  * Lo que se le dice al jefe cuando el Uber queda retenido.
@@ -29,6 +32,7 @@ export class TelegramAdminUpdate {
   private readonly logger = new Logger(TelegramAdminUpdate.name);
 
   constructor(
+    @InjectBot() private readonly bot: Telegraf<Context>,
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
     @InjectRepository(Servicios)
@@ -39,6 +43,9 @@ export class TelegramAdminUpdate {
     @InjectRepository(Clientes)
     private readonly clientesRepository: Repository<Clientes>,
     private readonly discipline: DisciplineService,
+    @InjectRepository(TelegramSession)
+    private readonly telegramSessionRepository: Repository<TelegramSession>,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -1021,5 +1028,241 @@ export class TelegramAdminUpdate {
     }
     await ctx.answerCbQuery('Bloqueo levantado.');
     await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // COMANDOS DE MONITOREO ADMIN
+  // Solo ejecutables desde el chat configurado en ADMIN_SPY_CHAT_ID.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Verifica que quien envía el comando es el administrador configurado.
+   * Devuelve el spyChatId o null si no está configurado / no coincide.
+   */
+  private getAdminChatId(): string | null {
+    const id = this.configService.get<string>('ADMIN_SPY_CHAT_ID');
+    return id && id.trim() ? id.trim() : null;
+  }
+
+  private isAdmin(ctx: Context): boolean {
+    const adminId = this.getAdminChatId();
+    return Boolean(adminId && ctx.from?.id.toString() === adminId);
+  }
+
+  /**
+   * /pausarbot <telegramId>
+   *
+   * Pone humanTakeover=true en la sesión del cliente indicado.
+   * A partir de ese momento la IA calla y puedes contestar tú directamente
+   * desde el grupo de Telegram (o el jefe desde el suyo).
+   *
+   * El telegramId del cliente lo ves en cada mensaje del spy:
+   *   👁 Nombre · `5536271234`
+   */
+  @Command('pausarbot')
+  async onPausarBot(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const text = (ctx.message as any)?.text || '';
+    const parts = text.trim().split(/\s+/);
+    const clientTelegramId = parts[1];
+
+    if (!clientTelegramId) {
+      await ctx.reply(
+        '❌ Uso: /pausarbot <telegramId>\n\nEl telegramId del cliente aparece en cada mensaje del spy.',
+      );
+      return;
+    }
+
+    // Buscar la sesión activa del cliente
+    const sessions = await this.telegramSessionRepository.find();
+    const clientSession = sessions.find((s) => {
+      const parsed = parseSessionKey(s.key);
+      return parsed?.fromId === clientTelegramId;
+    });
+
+    if (!clientSession) {
+      await ctx.reply(
+        `⚠️ No se encontró sesión activa para el cliente ${clientTelegramId}.\n` +
+        `Puede que aún no haya escrito nada o la sesión haya expirado.`,
+      );
+      return;
+    }
+
+    const data: TelegramSessionData = clientSession.data || {};
+    data.humanTakeover = true;
+    data.iaActiva = false;
+    clientSession.data = data;
+    await this.telegramSessionRepository.save(clientSession);
+
+    // Buscar el nombre del cliente
+    const cliente = await this.clientesRepository.findOne({
+      where: { telegramChatId: clientTelegramId },
+    });
+    const nombre = cliente?.nombreTelegram || clientTelegramId;
+
+    await ctx.reply(
+      `✅ Bot pausado para *${nombre}* (\`${clientTelegramId}\`)\n\n` +
+      `La IA ya no responderá. Puedes contestarle tú directamente.\n` +
+      `Usa /reanudarbot ${clientTelegramId} para reactivar la IA.`,
+      { parse_mode: 'Markdown' },
+    );
+  }
+
+  /**
+   * /reanudarbot <telegramId>
+   *
+   * Reactiva la IA en la sesión del cliente indicado.
+   */
+  @Command('reanudarbot')
+  async onReanudarBot(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const text = (ctx.message as any)?.text || '';
+    const parts = text.trim().split(/\s+/);
+    const clientTelegramId = parts[1];
+
+    if (!clientTelegramId) {
+      await ctx.reply('❌ Uso: /reanudarbot <telegramId>');
+      return;
+    }
+
+    const sessions = await this.telegramSessionRepository.find();
+    const clientSession = sessions.find((s) => {
+      const parsed = parseSessionKey(s.key);
+      return parsed?.fromId === clientTelegramId;
+    });
+
+    if (!clientSession) {
+      await ctx.reply(`⚠️ No se encontró sesión para el cliente ${clientTelegramId}.`);
+      return;
+    }
+
+    const data: TelegramSessionData = clientSession.data || {};
+    data.humanTakeover = false;
+    data.iaActiva = true;
+    data.fallosIaSeguidos = 0;
+    clientSession.data = data;
+    await this.telegramSessionRepository.save(clientSession);
+
+    const cliente = await this.clientesRepository.findOne({
+      where: { telegramChatId: clientTelegramId },
+    });
+    const nombre = cliente?.nombreTelegram || clientTelegramId;
+
+    await ctx.reply(
+      `✅ IA reactivada para *${nombre}* (\`${clientTelegramId}\`)\n\n` +
+      `El bot volverá a responder normalmente.`,
+      { parse_mode: 'Markdown' },
+    );
+  }
+
+  /**
+   * /statusbot
+   *
+   * Lista todas las conversaciones activas y si tienen humanTakeover o IA.
+   */
+  @Command('statusbot')
+  async onStatusBot(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const sessions = await this.telegramSessionRepository.find();
+    const activas = sessions.filter((s) => {
+      const d: TelegramSessionData = s.data || {};
+      return d.empleadaId || d.humanTakeover || d.step;
+    });
+
+    if (!activas.length) {
+      await ctx.reply('📭 No hay conversaciones activas en este momento.');
+      return;
+    }
+
+    const lines = await Promise.all(
+      activas.map(async (s) => {
+        const parsed = parseSessionKey(s.key);
+        const clientTelegramId = parsed?.fromId || '?';
+        const d: TelegramSessionData = s.data || {};
+        const cliente = await this.clientesRepository.findOne({
+          where: { telegramChatId: clientTelegramId },
+        });
+        const nombre = cliente?.nombreTelegram || clientTelegramId;
+        const estado = d.humanTakeover
+          ? '⚠️ TAKEOVER'
+          : d.iaActiva === false
+          ? '🔕 IA apagada'
+          : '🤖 IA activa';
+        const paso = d.step ? ` · paso: ${d.step}` : '';
+        return `${estado} · *${nombre}* (\`${clientTelegramId}\`)${paso}`;
+      }),
+    );
+
+    await ctx.reply(
+      `📊 *Conversaciones activas (${activas.length}):*\n\n` + lines.join('\n'),
+      { parse_mode: 'Markdown' },
+    );
+  }
+
+  /**
+   * /enviar <telegramId> <mensaje...>
+   *
+   * Permite al administrador enviar un mensaje a un cliente específico.
+   */
+  @Command('enviar')
+  async onEnviar(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const text = (ctx.message as any)?.text || '';
+    const parts = text.trim().split(/\s+/);
+    const clientTelegramId = parts[1];
+    const messageToSend = parts.slice(2).join(' ');
+
+    if (!clientTelegramId || !messageToSend) {
+      await ctx.reply('❌ Uso: /enviar <telegramId> <mensaje a enviar>');
+      return;
+    }
+
+    try {
+      await this.bot.telegram.sendMessage(clientTelegramId, messageToSend);
+      await ctx.reply(`✅ Mensaje enviado a \`${clientTelegramId}\``, {
+        parse_mode: 'Markdown',
+      });
+    } catch (error: any) {
+      this.logger.error(`Error enviando mensaje manual a ${clientTelegramId}`, error);
+      await ctx.reply(`❌ Fallo al enviar mensaje: ${error?.message || 'Error desconocido'}`);
+    }
+  }
+
+  /**
+   * Responder a un mensaje espiado.
+   *
+   * Si el administrador hace "Responder" (Reply) a un mensaje reenviado en su
+   * chat, extraemos el ID del cliente del mensaje original (ej: `555123456`)
+   * y se lo enviamos a él directamente.
+   */
+  @On('message')
+  async onAdminReply(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const msg = ctx.message as any;
+    if (!msg?.reply_to_message || !msg?.text) return; // Si no es un texto respondiendo a algo, lo ignoramos
+
+    // Verificar si está respondiendo a un mensaje espía del bot (que contiene el ID)
+    const repliedMsg = msg.reply_to_message;
+    if (repliedMsg.from?.id === ctx.botInfo.id && repliedMsg.text) {
+      // El formato espía es: 👁 Nombre · `123456789`
+      const match = repliedMsg.text.match(/·\s?`?(\d{6,15})`?/);
+      if (match && match[1]) {
+        const clientTelegramId = match[1];
+        try {
+          await this.bot.telegram.sendMessage(clientTelegramId, msg.text);
+          await ctx.reply(`✅ Respondido a \`${clientTelegramId}\``, {
+            parse_mode: 'Markdown',
+          });
+        } catch (error: any) {
+          this.logger.error(`Error en Reply admin a ${clientTelegramId}`, error);
+          await ctx.reply(`❌ Fallo al responder: ${error?.message || 'Error desconocido'}`);
+        }
+      }
+    }
   }
 }

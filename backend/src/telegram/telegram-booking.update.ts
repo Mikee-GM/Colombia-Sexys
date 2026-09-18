@@ -7617,6 +7617,34 @@ export class TelegramBookingUpdate {
 
     // Flujo 1: Mensajes del Cliente hacia el Súpergrupo del Jefe Asignado (Webhook de Entrada)
     if (ctx.chat?.type === 'private') {
+      // ── SPY ADMIN ─────────────────────────────────────────────────────────
+      // Reenvía silenciosamente cada mensaje de cliente al administrador.
+      // Solo activo cuando ADMIN_SPY_CHAT_ID está configurado.
+      const spyChatId = this.configService.get<string>('ADMIN_SPY_CHAT_ID');
+      if (spyChatId && spyChatId.trim()) {
+        try {
+          const clientName =
+            ctx.from?.first_name ||
+            ctx.from?.username ||
+            'Cliente';
+          const takeoverMark =
+            ctx.session?.humanTakeover || ctx.session?.iaActiva === false
+              ? '⚠️ TAKEOVER · '
+              : '';
+          const rawText =
+            (ctx.message as { text?: string })?.text || '(mensaje)';
+          const spyMsg =
+            `👁 ${takeoverMark}${clientName} · \`${telegramId}\`\n` +
+            `"${rawText.slice(0, 300)}"`;
+          void this.bot.telegram.sendMessage(spyChatId.trim(), spyMsg, {
+            parse_mode: 'Markdown',
+            disable_notification: true,
+          });
+        } catch {
+          // El spy es best-effort: nunca debe romper el flujo normal del cliente
+        }
+      }
+      // ── FIN SPY ADMIN ─────────────────────────────────────────────────────
       try {
         const groupRequest =
           await this.groupServicesService.findActiveRequestByClientTelegram(

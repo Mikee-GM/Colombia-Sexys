@@ -134,4 +134,15 @@ export class CreateDriverDto {
     message: 'La placa del vehículo no puede superar los 50 caracteres',
   })
   readonly vehiculoPlaca?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Si true, el chofer recibe ofertas de viaje por Telegram normalmente. ' +
+      'Si false, el viaje se despacha como Uber automatico sin notificarle.',
+    example: true,
+    default: true,
+  })
+  @IsBoolean({ message: 'modoBot debe ser un valor booleano' })
+  @IsOptional()
+  readonly modoBot?: boolean;
 }

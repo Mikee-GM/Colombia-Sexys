@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import LiveMapDynamic from "@/components/dashboard/LiveMapDynamic";
 import PageHeader from "@/components/ui/page-header";
 import { getDriver } from "@/lib/data/drivers";
+import ToggleModoBot from "@/components/admin/ToggleModoBot";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -43,6 +44,22 @@ export default async function DriverDetailPage({ params }: Props) {
               <dd>{driver.usuario?.rol ?? "chofer"}</dd>
             </div>
           </dl>
+
+          {/* Toggle modoBot — modo simulación */}
+          <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+            <p className="mb-2 text-xs font-medium text-zinc-400 uppercase tracking-wider">
+              Modo de operación
+            </p>
+            <ToggleModoBot
+              id={driver.id}
+              tipo="chofer"
+              initialValue={driver.modoBot ?? true}
+            />
+            <p className="mt-2 text-xs text-zinc-500">
+              <span className="text-emerald-400">Usa el app</span> = recibe ofertas de viaje por Telegram.{" "}
+              <span className="text-amber-400">Modo automático</span> = los viajes se despachan como Uber sin notificarle.
+            </p>
+          </div>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 xl:col-span-7">

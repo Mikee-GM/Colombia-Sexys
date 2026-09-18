@@ -262,6 +262,17 @@ export class CreateEmployeeDto {
   readonly contactLabel?: string;
 
   @ApiPropertyOptional({
+    description:
+      'Si true, la empleada usa el app de Telegram normalmente. ' +
+      'Si false, el sistema avanza automaticamente sin esperar su confirmacion.',
+    example: true,
+    default: true,
+  })
+  @IsBoolean({ message: 'modoBot debe ser un valor booleano' })
+  @IsOptional()
+  readonly modoBot?: boolean;
+
+  @ApiPropertyOptional({
     description: 'URLs de fotos adicionales',
     example: ['https://example.com/foto-1.jpg'],
     type: [String],

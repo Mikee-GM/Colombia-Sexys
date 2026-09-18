@@ -64,6 +64,11 @@ export type Employee = {
   precioBaseHora: string;
   disponible: boolean;
   catalogoActivo: boolean;
+  /**
+   * Si true, la empleada usa el app de Telegram normalmente.
+   * Si false, el sistema avanza automaticamente sin esperar su confirmacion.
+   */
+  modoBot?: boolean;
   availabilityStatus?: "disponible" | "ocupada" | "inactiva";
   estimatedAvailableAt?: string | null;
   canScheduleNext?: boolean;
@@ -88,6 +93,11 @@ export type Driver = {
   nombre: string;
   telefono: string;
   disponible: boolean;
+  /**
+   * Si true, el chofer recibe ofertas por Telegram normalmente.
+   * Si false, el viaje se despacha como Uber automatico.
+   */
+  modoBot?: boolean;
   ubicacionLat: string | null;
   ubicacionLng: string | null;
   ultimaUbicacionAt?: string | null;

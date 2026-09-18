@@ -151,6 +151,21 @@ export class Empleadas {
   @ApiProperty({ description: 'Disponible', example: true })
   disponible: boolean;
 
+  /**
+   * Indica si esta empleada usa el app de Telegram normalmente.
+   *
+   * Cuando es false el sistema avanza automaticamente sin esperar su
+   * confirmacion: util durante la fase de simulacion en produccion, donde no
+   * todas las empleadas han sido incorporadas todavia al nuevo flujo. Se puede
+   * cambiar por empleada desde el panel de admin sin tocar codigo.
+   */
+  @Column('boolean', { name: 'modo_bot', default: () => 'true' })
+  @ApiProperty({
+    description: 'Si true, la empleada usa el app Telegram normalmente. Si false, el sistema la procesa automaticamente.',
+    example: true,
+  })
+  modoBot: boolean;
+
   @Column('boolean', { name: 'catalogo_activo', default: () => 'true' })
   @ApiProperty({ description: 'Catalogo Activo', example: true })
   catalogoActivo: boolean;

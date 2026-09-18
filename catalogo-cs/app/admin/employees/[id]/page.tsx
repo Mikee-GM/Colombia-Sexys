@@ -4,6 +4,7 @@ import { getEmployee } from "@/lib/data/employees";
 import { getEmployeeRatingComments } from "@/lib/actions/discipline";
 import { optionalSource } from "@/lib/optional-source";
 import Image from "next/image";
+import ToggleModoBot from "@/components/admin/ToggleModoBot";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -53,6 +54,22 @@ export default async function EmployeeDetailPage({ params }: Props) {
                   ? "Catálogo activo"
                   : "Catálogo inactivo"}
               </Badge>
+            </div>
+
+            {/* Toggle modoBot — modo simulación */}
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+              <p className="mb-2 text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                Modo de operación
+              </p>
+              <ToggleModoBot
+                id={employee.id}
+                tipo="empleada"
+                initialValue={employee.modoBot ?? true}
+              />
+              <p className="mt-2 text-xs text-zinc-500">
+                <span className="text-emerald-400">Usa el app</span> = recibe notificaciones de Telegram y confirma servicios.{" "}
+                <span className="text-amber-400">Modo automático</span> = el sistema avanza solo sin esperar su respuesta.
+              </p>
             </div>
           </div>
         </div>

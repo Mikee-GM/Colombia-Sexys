@@ -50,6 +50,20 @@ export class Choferes {
   disponible: boolean;
 
   /**
+   * Indica si este chofer usa el app de Telegram normalmente.
+   *
+   * Cuando es false el viaje se registra directamente como Uber sin notificar
+   * a nadie: util durante la fase de simulacion en produccion donde los choferes
+   * aun no han sido incorporados. Se puede cambiar desde el panel de admin.
+   */
+  @Column('boolean', { name: 'modo_bot', default: () => 'true' })
+  @ApiProperty({
+    description: 'Si true, el chofer recibe ofertas de viaje normalmente. Si false, el viaje se despacha como Uber automatico.',
+    example: true,
+  })
+  modoBot: boolean;
+
+  /**
    * Ofertas rechazadas seguidas. Aceptar una vuelve a poner el contador en
    * cero: lo que se vigila es la racha actual, no el total historico.
    */
