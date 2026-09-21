@@ -388,7 +388,7 @@ export default function DisciplinaClient({
    * vuelve a pintar.
    */
   const searchParams = useSearchParams();
-  const expedienteEnLaUrl = searchParams.get("expediente");
+  const expedienteEnLaUrl = searchParams?.get("expediente");
   const expedienteAbierto = useRef<string | null>(null);
 
   useEffect(() => {
