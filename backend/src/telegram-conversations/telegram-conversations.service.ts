@@ -158,6 +158,52 @@ export class TelegramConversationsService {
     return this.record(service, asIdentity, message);
   }
 
+  async sendAdminMessageToSession(
+    bookingSessionId: string,
+    actor: Usuarios,
+    raw: string,
+    asIdentity: 'ia' | 'jefe' = 'jefe',
+  ) {
+    if (actor.rol !== 'admin') {
+      throw new ConflictException('Solo un admin puede ver esto');
+    }
+    const message = raw.trim();
+    if (!message) throw new ConflictException('El mensaje está vacío');
+
+    // Buscar al cliente asociado a esta sesión
+    const conversation = await this.conversationsRepository.findOne({
+      where: { bookingSessionId },
+      relations: ['cliente'],
+      order: { enviadoAt: 'ASC' },
+    });
+
+    if (!conversation || !conversation.cliente) {
+      throw new NotFoundException(
+        'Sesión no encontrada o sin cliente asociado',
+      );
+    }
+
+    const clientChatId = conversation.cliente.telegramChatId;
+    if (!clientChatId) {
+      throw new ConflictException('El cliente no tiene Telegram vinculado');
+    }
+
+    await this.bot.telegram.sendMessage(clientChatId, message);
+
+    // Guardar el mensaje en el historial
+    const saved = await this.conversationsRepository.save(
+      this.conversationsRepository.create({
+        clienteId: conversation.clienteId,
+        servicioId: null,
+        bookingSessionId,
+        emisor: asIdentity,
+        mensaje: message,
+        iaActiva: conversation.iaActiva,
+      }),
+    );
+    return saved;
+  }
+
   async pauseAi(serviceId: string, actor: Usuarios) {
     const service = await this.getAuthorizedService(serviceId, actor);
     service.iaActiva = false;

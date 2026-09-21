@@ -103,4 +103,18 @@ export class TelegramConversationsController {
       dto.asIdentity || 'jefe',
     );
   }
+
+  @Post('session/:bookingSessionId/admin-message')
+  sendAdminMessageToSession(
+    @Param('bookingSessionId') bookingSessionId: string,
+    @Body() dto: { message: string; asIdentity?: 'ia' | 'jefe' },
+    @Req() req: any,
+  ) {
+    return this.conversationsService.sendAdminMessageToSession(
+      bookingSessionId,
+      req.user,
+      dto.message,
+      dto.asIdentity || 'jefe',
+    );
+  }
 }
