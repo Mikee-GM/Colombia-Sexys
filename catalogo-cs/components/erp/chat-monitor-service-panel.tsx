@@ -11,6 +11,7 @@ import AccionesDelServicio from "@/components/erp/acciones-del-servicio";
 import CreateServiceDialog from "@/components/services/create-service-dialog";
 import { formatCurrency } from "@/lib/calculations";
 import { StatusBadge } from "@/components/erp/primitives";
+import ChatMonitorServiceForm from "@/components/erp/chat-monitor-service-form";
 
 const ESTADO_TONE: Record<string, "green" | "gold" | "zinc" | "blue" | "red"> = {
   en_curso: "green",
@@ -66,6 +67,18 @@ export default function ChatMonitorServicePanel({
     fetchService();
   }, [activeChat?.clienteId]);
 
+  const refreshService = async () => {
+    try {
+      const pending = await getPendingServices();
+      const clientService = pending.find(
+        (s) => s.clienteId === activeChat?.clienteId
+      );
+      setActiveService(clientService || null);
+    } catch (err) {
+      console.error("Error refreshing pending services:", err);
+    }
+  };
+
   if (!activeChat) {
     return (
       <div className="flex h-full items-center justify-center text-zinc-500">
@@ -103,19 +116,26 @@ export default function ChatMonitorServicePanel({
               </StatusBadge>
             </div>
             
-            <div className="space-y-2">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-zinc-400">Total:</span>
-                <span className="font-semibold text-[#E8D5A3]">
-                  {formatCurrency(Number(activeService.totalFinal))}
-                </span>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-sm bg-black/40 p-3 rounded-xl border border-zinc-800">
+                <div className="flex flex-col">
+                  <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider">Total Final</span>
+                  <span className="font-bold text-[#E8D5A3] text-base">
+                    {formatCurrency(Number(activeService.totalFinal))}
+                  </span>
+                </div>
+                <div className="flex flex-col text-right">
+                  <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider">Modelo</span>
+                  <span className="font-medium text-zinc-200 text-sm">
+                    {activeService.empleada?.nombreArtistico || "Sin asignar"}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-zinc-400">Modelo:</span>
-                <span className="font-medium text-zinc-200">
-                  {activeService.empleada?.nombreArtistico || "Sin asignar"}
-                </span>
-              </div>
+
+              <ChatMonitorServiceForm
+                service={activeService}
+                onRefresh={refreshService}
+              />
             </div>
 
             <Link
