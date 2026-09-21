@@ -173,7 +173,7 @@ export class TelegramConversationsService {
     // Buscar al cliente asociado a esta sesión
     const conversation = await this.conversationsRepository.findOne({
       where: { bookingSessionId },
-      relations: ['cliente'],
+      relations: { cliente: true },
       order: { enviadoAt: 'ASC' },
     });
 
