@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Plus, ArrowRight, User } from "lucide-react";
 import Link from "next/link";
 import { getPendingServices } from "@/lib/data/services";
-import { getEmployees } from "@/lib/data/employees";
-import { optionalSource } from "@/lib/optional-source";
+import { getModelosAction } from "@/lib/actions/modelos";
 import type { Service } from "@/lib/types";
 import type { RecentChat } from "@/lib/actions/telegram-conversations";
 import AccionesDelServicio from "@/components/erp/acciones-del-servicio";
@@ -33,7 +32,7 @@ export default function ChatMonitorServicePanel({
 
   useEffect(() => {
     async function loadModelos() {
-      const m = await optionalSource(getEmployees(), [], "modelos");
+      const m = await getModelosAction();
       setModelos(m);
     }
     loadModelos();
