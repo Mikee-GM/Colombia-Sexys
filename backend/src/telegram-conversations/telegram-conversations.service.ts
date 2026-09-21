@@ -111,8 +111,8 @@ export class TelegramConversationsService {
    * independientemente de si pertenecen a una bookingSessionId o un servicio.
    */
   async listRecentChats(actor: Usuarios, limit = 50) {
-    if (actor.rol !== 'admin') {
-      throw new ConflictException('Solo un admin puede ver esto');
+    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
+      throw new ConflictException('Solo un admin o jefe puede ver esto');
     }
     const take = Math.min(Math.max(limit || 50, 1), 300);
     const rows = await this.conversationsRepository
@@ -147,8 +147,8 @@ export class TelegramConversationsService {
 
   /** CRM Web: Historial completo de un cliente, sin importar sesión o servicio. */
   async findHistoryByClient(clientId: string, actor: Usuarios) {
-    if (actor.rol !== 'admin') {
-      throw new ConflictException('Solo un admin puede ver esto');
+    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
+      throw new ConflictException('Solo un admin o jefe puede ver esto');
     }
     return this.conversationsRepository.find({
       where: { cliente: { id: clientId } },
@@ -351,8 +351,8 @@ export class TelegramConversationsService {
     raw: string,
     asIdentity: 'ia' | 'jefe' = 'jefe',
   ) {
-    if (actor.rol !== 'admin') {
-      throw new ConflictException('Solo un admin puede ver esto');
+    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
+      throw new ConflictException('Solo un admin o jefe puede ver esto');
     }
     const message = raw.trim();
     if (!message) throw new ConflictException('El mensaje está vacío');
@@ -383,8 +383,8 @@ export class TelegramConversationsService {
   }
 
   async toggleAiByClient(clientId: string, actor: Usuarios, iaActiva: boolean) {
-    if (actor.rol !== 'admin') {
-      throw new ConflictException('Solo un admin puede ver esto');
+    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
+      throw new ConflictException('Solo un admin o jefe puede ver esto');
     }
 
     const cliente = await this.clientesRepository.findOne({
