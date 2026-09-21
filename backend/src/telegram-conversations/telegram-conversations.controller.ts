@@ -117,4 +117,54 @@ export class TelegramConversationsController {
       dto.asIdentity || 'jefe',
     );
   }
+
+  // =========================================================================
+  // CRM WEB ENDPOINTS
+  // =========================================================================
+
+  @Get('recent-chats')
+  listRecentChats(
+    @Query('limit') limit: string | undefined,
+    @Req() req: any,
+  ) {
+    return this.conversationsService.listRecentChats(
+      req.user,
+      limit ? Number(limit) : 50,
+    );
+  }
+
+  @Get('chat/:clientId')
+  findHistoryByClient(
+    @Param('clientId') clientId: string,
+    @Req() req: any,
+  ) {
+    return this.conversationsService.findHistoryByClient(clientId, req.user);
+  }
+
+  @Post('chat/:clientId/message')
+  sendAdminMessageByClient(
+    @Param('clientId') clientId: string,
+    @Body() dto: { message: string; asIdentity?: 'ia' | 'jefe' },
+    @Req() req: any,
+  ) {
+    return this.conversationsService.sendAdminMessageByClient(
+      clientId,
+      req.user,
+      dto.message,
+      dto.asIdentity || 'jefe',
+    );
+  }
+
+  @Post('chat/:clientId/toggle-ai')
+  toggleAiByClient(
+    @Param('clientId') clientId: string,
+    @Body() dto: { iaActiva: boolean },
+    @Req() req: any,
+  ) {
+    return this.conversationsService.toggleAiByClient(
+      clientId,
+      req.user,
+      dto.iaActiva,
+    );
+  }
 }

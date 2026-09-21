@@ -11,6 +11,8 @@ import { ConversacionesTelegram } from './entities/telegram-conversation.entity'
 import { Servicios } from '../services/entities/service.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
+import { TelegramSession } from '../telegram/entities/telegram-session.entity';
+import { Clientes } from '../clients/entities/client.entity';
 
 @Injectable()
 export class TelegramConversationsService {
@@ -19,6 +21,10 @@ export class TelegramConversationsService {
     private readonly conversationsRepository: Repository<ConversacionesTelegram>,
     @InjectRepository(Servicios)
     private readonly servicesRepository: Repository<Servicios>,
+    @InjectRepository(TelegramSession)
+    private readonly telegramSessionRepository: Repository<TelegramSession>,
+    @InjectRepository(Clientes)
+    private readonly clientesRepository: Repository<Clientes>,
     @InjectBot() private readonly bot: Telegraf<Context>,
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
@@ -98,6 +104,57 @@ export class TelegramConversationsService {
       lastAt: r.lastAt,
       messageCount: Number(r.messageCount),
     }));
+  }
+
+  /**
+   * CRM Web: Lista todos los clientes con los que el bot ha interactuado recientemente,
+   * independientemente de si pertenecen a una bookingSessionId o un servicio.
+   */
+  async listRecentChats(actor: Usuarios, limit = 50) {
+    if (actor.rol !== 'admin') {
+      throw new ConflictException('Solo un admin puede ver esto');
+    }
+    const take = Math.min(Math.max(limit || 50, 1), 300);
+    const rows = await this.conversationsRepository
+      .createQueryBuilder('c')
+      .innerJoin('c.cliente', 'cliente')
+      .select('c.clienteId', 'clienteId')
+      .addSelect('cliente.nombreTelegram', 'clienteNombre')
+      .addSelect('cliente.telegramChatId', 'clienteTelegramId')
+      .addSelect('MAX(c.enviadoAt)', 'lastAt')
+      .addSelect('COUNT(*)', 'messageCount')
+      .groupBy('c.clienteId')
+      .addGroupBy('cliente.nombreTelegram')
+      .addGroupBy('cliente.telegramChatId')
+      .orderBy('MAX(c.enviadoAt)', 'DESC')
+      .limit(take)
+      .getRawMany<{
+        clienteId: string;
+        clienteNombre: string | null;
+        clienteTelegramId: string;
+        lastAt: Date;
+        messageCount: string;
+      }>();
+
+    return rows.map((r) => ({
+      clienteId: r.clienteId,
+      clienteNombre: r.clienteNombre,
+      clienteTelegramId: r.clienteTelegramId,
+      lastAt: r.lastAt,
+      messageCount: Number(r.messageCount),
+    }));
+  }
+
+  /** CRM Web: Historial completo de un cliente, sin importar sesión o servicio. */
+  async findHistoryByClient(clientId: string, actor: Usuarios) {
+    if (actor.rol !== 'admin') {
+      throw new ConflictException('Solo un admin puede ver esto');
+    }
+    return this.conversationsRepository.find({
+      where: { cliente: { id: clientId } },
+      order: { enviadoAt: 'ASC' },
+      take: 200, // Limitamos para no traer toda la historia si es muy larga
+    });
   }
 
   /** Historial completo de una conversacion que nunca se convirtio en servicio. */
@@ -287,5 +344,88 @@ export class TelegramConversationsService {
       throw new ConflictException('No puedes acceder a esta conversación');
     }
     return service;
+  }
+  async sendAdminMessageByClient(
+    clientId: string,
+    actor: Usuarios,
+    raw: string,
+    asIdentity: 'ia' | 'jefe' = 'jefe',
+  ) {
+    if (actor.rol !== 'admin') {
+      throw new ConflictException('Solo un admin puede ver esto');
+    }
+    const message = raw.trim();
+    if (!message) throw new ConflictException('El mensaje está vacío');
+
+    const cliente = await this.clientesRepository.findOne({ where: { id: clientId } });
+    if (!cliente || !cliente.telegramChatId) {
+      throw new NotFoundException('Cliente no encontrado o sin Telegram vinculado');
+    }
+
+    await this.bot.telegram.sendMessage(cliente.telegramChatId, message);
+
+    // Guardar el mensaje en el historial
+    const saved = await this.conversationsRepository.save(
+      this.conversationsRepository.create({
+        clienteId: clientId,
+        servicioId: null,
+        bookingSessionId: null, // Lo dejamos nulo ya que es un mensaje global al cliente
+        emisor: asIdentity,
+        mensaje: message,
+        iaActiva: true, // asume true a menos que busquemos la sesion
+      }),
+    );
+    return saved;
+  }
+
+  async toggleAiByClient(clientId: string, actor: Usuarios, iaActiva: boolean) {
+    if (actor.rol !== 'admin') {
+      throw new ConflictException('Solo un admin puede ver esto');
+    }
+
+    const cliente = await this.clientesRepository.findOne({ where: { id: clientId } });
+    if (!cliente || !cliente.telegramChatId) {
+      throw new NotFoundException('Cliente no encontrado o sin Telegram vinculado');
+    }
+
+    // Actualizamos los servicios activos de este cliente
+    const activeServices = await this.servicesRepository.find({
+      where: {
+        clienteId: clientId,
+        estado: 'en_curso',
+      },
+    });
+
+    for (const service of activeServices) {
+      service.iaActiva = iaActiva;
+      await this.servicesRepository.save(service);
+      
+      this.realtimeEvents.emitToBosses(
+        [
+          service.jefeId,
+          service.empleada?.jefeId,
+          service.empleada?.jefeSecundarioId,
+        ],
+        {
+          type: iaActiva ? 'service_ai_resumed' : 'service_ai_paused',
+          data: { serviceId: service.id, iaActiva },
+        },
+      );
+    }
+
+    // Buscamos la sesión de telegraf para actualizarla si existe
+    // Hacemos una consulta burda pero efectiva porque hay pocas sesiones
+    const sessions = await this.telegramSessionRepository.find();
+    const clientSession = sessions.find(s => s.key.includes(`:${cliente.telegramChatId}`));
+    
+    if (clientSession) {
+      const data = clientSession.data || {};
+      data.iaActiva = iaActiva;
+      data.humanTakeover = !iaActiva;
+      clientSession.data = data;
+      await this.telegramSessionRepository.save(clientSession);
+    }
+
+    return { ok: true, iaActiva, clientId };
   }
 }

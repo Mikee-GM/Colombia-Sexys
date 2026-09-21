@@ -78,3 +78,49 @@ export async function resumeAiForService(serviceId: string) {
     method: 'POST',
   });
 }
+
+// =========================================================================
+// CRM WEB ENDPOINTS
+// =========================================================================
+
+export interface RecentChat {
+  clienteId: string;
+  clienteNombre: string | null;
+  clienteTelegramId: string;
+  lastAt: string;
+  messageCount: number;
+}
+
+export async function getRecentChats(limit = 50): Promise<RecentChat[]> {
+  try {
+    const data = await apiFetch(`/telegram-conversations/recent-chats?limit=${limit}`);
+    return data as RecentChat[];
+  } catch (error) {
+    console.error('Error fetching recent chats:', error);
+    return [];
+  }
+}
+
+export async function getClientChatHistory(clientId: string): Promise<ChatMessage[]> {
+  try {
+    const data = await apiFetch(`/telegram-conversations/chat/${clientId}`);
+    return data as ChatMessage[];
+  } catch (error) {
+    console.error('Error fetching client chat history:', error);
+    return [];
+  }
+}
+
+export async function sendAdminMessageToClient(clientId: string, message: string) {
+  return await apiFetch(`/telegram-conversations/chat/${clientId}/message`, {
+    method: 'POST',
+    body: JSON.stringify({ message, asIdentity: 'jefe' }),
+  });
+}
+
+export async function toggleAiForClient(clientId: string, iaActiva: boolean) {
+  return await apiFetch(`/telegram-conversations/chat/${clientId}/toggle-ai`, {
+    method: 'POST',
+    body: JSON.stringify({ iaActiva }),
+  });
+}

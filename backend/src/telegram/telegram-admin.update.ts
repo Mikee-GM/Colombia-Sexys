@@ -1494,17 +1494,17 @@ export class TelegramAdminUpdate {
       }
 
       // Siempre mandar un resumen del historial al tema
-      const conversations = await this.telegramConversationRepository.find({
+      const conversations = await this.conversationsRepository.find({
         where: { cliente: { id: cliente.id } },
-        order: { createdAt: 'DESC' },
+        order: { enviadoAt: 'DESC' },
         take: 10,
       });
 
       if (conversations.length > 0) {
         conversations.reverse();
-        const lines = conversations.map((c) => {
-          const emoji = c.esDelCliente ? '👤' : '🤖';
-          return `${emoji} *${c.esDelCliente ? clientName : 'Bot'}*: ${c.mensaje}`;
+        const lines = conversations.map((c: ConversacionesTelegram) => {
+          const emoji = c.emisor === 'cliente' ? '👤' : '🤖';
+          return `${emoji} *${c.emisor === 'cliente' ? clientName : 'Bot'}*: ${c.mensaje}`;
         });
         await this.bot.telegram.sendMessage(
           groupId,
