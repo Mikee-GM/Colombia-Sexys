@@ -48,6 +48,7 @@ import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entit
 import { SaveBankAccountDto } from './dto/bank-account.dto';
 import { CancelServiceDto } from './dto/cancel-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { ChangeServiceLocationDto } from './dto/change-service-location.dto';
 import { UploadService } from '../upload/upload.service';
 import { parseSessionKey } from '../telegram/telegram-session.key';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
@@ -59,6 +60,8 @@ import { ServiceParticipant } from '../group-services/entities/service-participa
 import { TelegramSession } from '../telegram/entities/telegram-session.entity';
 import { formatServiceDuration, roundOpenEndedHours } from './service-duration';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
+import { kilometrosEntre } from '../common/geo';
+import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 import type { InlineKeyboardButton } from 'telegraf/types';
 
 /**
@@ -213,6 +216,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     // Los avisos push, que salen aparte de los de Telegram porque el problema
     // que resuelven es justo que el de Telegram llega y nadie lo ve.
     private readonly notificationsService: NotificationsService,
+    /*
+     * Los moteles de la casa, la tarifa de transporte externo y el area que se
+     * atiende. Entra para poder mover un servicio de sitio desde el panel con
+     * las mismas reglas con las que se eligio el sitio al reservar.
+     */
+    private readonly transportOperations: TransportOperationsService,
   ) {}
 
   private estimatedEnd(service: Servicios): Date | null {
@@ -389,6 +398,67 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /**
+   * Margen que se deja entre dos compromisos de la misma modelo: el traslado,
+   * el arreglo y el respiro de por medio.
+   */
+  private static readonly MARGEN_ENTRE_CITAS_MS = 45 * 60_000;
+
+  /**
+   * Falla si la modelo ya tiene un compromiso que se cruce con ese horario.
+   *
+   * Lo usan la creacion de una cita programada y la reprogramacion. El
+   * `excluirServicioId` es para la segunda: un servicio no choca consigo
+   * mismo, y sin excluirlo mover una cita media hora seria siempre imposible.
+   */
+  private async assertSinChoqueDeHorario(
+    manager: EntityManager,
+    empleadaId: string,
+    inicio: Date,
+    duracionHoras: number,
+    excluirServicioId?: string,
+  ): Promise<void> {
+    const margen = ServicesService.MARGEN_ENTRE_CITAS_MS;
+    const fin = new Date(
+      inicio.getTime() + duracionHoras * 60 * 60_000 + margen,
+    );
+
+    const comprometidos = await manager.find(Servicios, {
+      where: {
+        empleadaId,
+        estado: In(['pendiente', 'agendado', 'en_curso']),
+      },
+    });
+
+    for (const otro of comprometidos) {
+      if (excluirServicioId && otro.id === excluirServicioId) continue;
+
+      const arranque =
+        otro.fechaProgramada ||
+        otro.horaInicioEstimada ||
+        otro.horaInicioServicio ||
+        otro.createdAt;
+      if (!arranque) continue;
+
+      const arranqueFecha = new Date(arranque);
+      const cierre = new Date(
+        arranqueFecha.getTime() +
+          Number(otro.duracionPactadaHoras) * 60 * 60_000 +
+          margen,
+      );
+      const arranqueConMargen = new Date(arranqueFecha.getTime() - margen);
+
+      if (
+        inicio.getTime() < cierre.getTime() &&
+        fin.getTime() > arranqueConMargen.getTime()
+      ) {
+        throw new ConflictException(
+          'La empleada ya tiene un compromiso agendado en ese horario',
+        );
+      }
+    }
+  }
+
   async reserveNext(createData: Partial<Servicios>): Promise<Servicios> {
     if (!createData.empleadaId) {
       throw new BadRequestException('Falta la empleada');
@@ -422,43 +492,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         ) {
           const scheduledDate = new Date(createData.fechaProgramada!);
           const durationHours = Number(createData.duracionPactadaHoras) || 1;
-          const scheduledEnd = new Date(
-            scheduledDate.getTime() + (durationHours * 60 + 45) * 60_000,
+
+          await this.assertSinChoqueDeHorario(
+            manager,
+            createData.empleadaId!,
+            scheduledDate,
+            durationHours,
           );
-          const scheduledStartWithBuffer = new Date(
-            scheduledDate.getTime() - 45 * 60_000,
-          );
-
-          const existingServices = await manager.find(Servicios, {
-            where: {
-              empleadaId: createData.empleadaId,
-              estado: In(['pendiente', 'agendado', 'en_curso']),
-            },
-          });
-
-          for (const existing of existingServices) {
-            const start =
-              existing.fechaProgramada ||
-              existing.horaInicioEstimada ||
-              existing.horaInicioServicio ||
-              existing.createdAt;
-            if (!start) continue;
-            const startDate = new Date(start);
-            const end = new Date(
-              startDate.getTime() +
-                (Number(existing.duracionPactadaHoras) * 60 + 45) * 60_000,
-            );
-            const startWithBuffer = new Date(startDate.getTime() - 45 * 60_000);
-
-            if (
-              scheduledDate.getTime() < end.getTime() &&
-              scheduledEnd.getTime() > startWithBuffer.getTime()
-            ) {
-              throw new ConflictException(
-                'La empleada ya tiene un compromiso agendado en ese horario',
-              );
-            }
-          }
 
           const draft = manager.create(Servicios, {
             ...createData,
@@ -1138,6 +1178,318 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       await this.liquidationSync.syncOfficeRecord(id);
     }
     return service;
+  }
+
+  /**
+   * Estados en los que una cita todavia se puede mover o cambiar de sitio.
+   *
+   * En curso ya no: la modelo va camino del lugar o esta alli, y cambiarle el
+   * destino desde una pantalla no la mueve a ella. Eso se resuelve hablando.
+   */
+  private static readonly ESTADOS_EDITABLES = ['pendiente', 'agendado'];
+
+  private assertServicioEditable(service: Servicios, accion: string): void {
+    if (!ServicesService.ESTADOS_EDITABLES.includes(service.estado)) {
+      throw new ConflictException(
+        `Solo se puede ${accion} un servicio que no ha empezado. Este está en estado "${service.estado}".`,
+      );
+    }
+  }
+
+  /**
+   * Mueve una cita a otra fecha y hora.
+   *
+   * Hasta ahora la unica forma de corregir una hora mal tomada era cancelar el
+   * servicio y rehacerlo, que pierde el hilo con el cliente y el historial.
+   *
+   * Tres cosas que no son obvias y que hay que hacer aqui:
+   *
+   * - `horaInicioEstimada` se mantiene en paralelo a `fechaProgramada`, que es
+   *   de donde cuelgan el calculo de solapes y la estimacion de fin.
+   * - `notificacionPreviaEnviada` vuelve a `false`: el recordatorio de 45
+   *   minutos se manda una sola vez y, si ya habia salido con la hora vieja,
+   *   sin reiniciarlo nadie volveria a avisar de la nueva.
+   * - Un servicio inmediato pasa a programado. Es el caso del alta rapida del
+   *   jefe, que nace con una hora de marcador y se corrige despues.
+   */
+  async reprogramar(
+    id: string,
+    nuevaFecha: Date,
+    actor: Usuarios,
+    avisarCliente: boolean,
+  ): Promise<Servicios> {
+    const service = await this.findOne(id);
+    this.assertActorCanManageService(service, actor);
+    this.assertServicioEditable(service, 'reprogramar');
+
+    if (nuevaFecha.getTime() <= Date.now()) {
+      throw new BadRequestException(
+        'La nueva fecha de la cita tiene que estar en el futuro.',
+      );
+    }
+
+    const duracionHoras = Number(service.duracionPactadaHoras) || 1;
+    await this.assertSinChoqueDeHorario(
+      this.serviciosRepository.manager,
+      service.empleadaId,
+      nuevaFecha,
+      duracionHoras,
+      service.id,
+    );
+
+    const fechaAnterior = service.fechaProgramada
+      ? new Date(service.fechaProgramada)
+      : null;
+
+    await this.serviciosRepository.update(id, {
+      fechaProgramada: nuevaFecha,
+      horaInicioEstimada: nuevaFecha,
+      tipoAgenda: 'programado',
+      notificacionPreviaEnviada: false,
+    });
+
+    const actualizado = await this.findOne(id);
+
+    this.realtimeEventsService.emitToBoss(actualizado.jefeId, {
+      type: 'service_rescheduled',
+      data: {
+        serviceId: actualizado.id,
+        fechaAnterior: fechaAnterior?.toISOString() ?? null,
+        fechaProgramada: nuevaFecha.toISOString(),
+      },
+    });
+
+    await this.avisarDeLaReprogramacion(
+      actualizado,
+      fechaAnterior,
+      avisarCliente,
+    );
+
+    return actualizado;
+  }
+
+  /**
+   * Cuenta el cambio de hora a quien tiene que presentarse a ella.
+   *
+   * Ningun aviso puede tumbar la reprogramacion: el cambio ya esta guardado, y
+   * que Telegram falle no lo deshace. Por eso cada uno va en su propio `try`.
+   */
+  private async avisarDeLaReprogramacion(
+    service: Servicios,
+    fechaAnterior: Date | null,
+    avisarCliente: boolean,
+  ): Promise<void> {
+    const formato: Intl.DateTimeFormatOptions = {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: APP_TIME_ZONE,
+    };
+    const nueva = new Date(service.fechaProgramada!).toLocaleString(
+      APP_LOCALE,
+      formato,
+    );
+    const anterior = fechaAnterior
+      ? fechaAnterior.toLocaleString(APP_LOCALE, formato)
+      : null;
+
+    if (service.empleada?.usuarioId) {
+      try {
+        await this.notificationsService.notificar(service.empleada.usuarioId, {
+          titulo: 'Te cambiaron la hora de una cita',
+          cuerpo: anterior
+            ? `Antes ${anterior}. Ahora ${nueva}.`
+            : `Queda para ${nueva}.`,
+          url: '/empleada/portal',
+          tag: `reprogramada-${service.id}`,
+          requireInteraction: true,
+        });
+      } catch (error) {
+        this.logger.error(
+          'No se pudo avisar a la modelo de la reprogramación:',
+          error,
+        );
+      }
+    }
+
+    if (!avisarCliente) return;
+
+    const chatId = service.cliente?.telegramChatId;
+    if (!chatId) return;
+
+    /*
+     * El texto es fijo a proposito. Es un dato que el cliente tiene que leer
+     * bien para presentarse a la hora correcta, y no puede quedar sujeto a que
+     * el modelo de IA conteste, ni a como decida redactarlo.
+     */
+    const nombre = service.empleada?.nombreArtistico ?? 'tu cita';
+    try {
+      await this.bot.telegram.sendMessage(
+        chatId,
+        `Amor, te confirmo el cambio de horario: nuestra cita con ${nombre} queda para el ${nueva}. Cualquier cosa me dices por aquí.`,
+      );
+    } catch (error) {
+      this.logger.error(
+        'No se pudo avisar al cliente de la reprogramación:',
+        error,
+      );
+    }
+  }
+
+  /**
+   * Cambia el lugar de un servicio, sea a un motel registrado o a una direccion.
+   *
+   * Las coordenadas son lo que de verdad importa: de ellas cuelgan el chofer
+   * mas cercano, el enlace de Uber y el cobro del transporte. Por eso no basta
+   * con editar el texto de las notas, que es lo unico que se podia hacer antes:
+   * el servicio seguia apuntando al punto viejo y el chofer salia hacia alli.
+   *
+   * El cargo por transporte se recalcula con la misma regla que al reservar:
+   * un motel de la casa no le cuesta transporte al cliente; una direccion suya
+   * si, y lleva la tarifa configurada.
+   */
+  async cambiarUbicacion(
+    id: string,
+    destino: ChangeServiceLocationDto,
+    actor: Usuarios,
+  ): Promise<Servicios> {
+    const service = await this.findOne(id);
+    this.assertActorCanManageService(service, actor);
+    this.assertServicioEditable(service, 'cambiar la ubicación de');
+
+    const porDireccion =
+      destino.latitud !== undefined && destino.longitud !== undefined;
+
+    if (destino.presetLocationId && porDireccion) {
+      throw new BadRequestException(
+        'Elige un lugar registrado o una dirección, no las dos cosas.',
+      );
+    }
+    if (!destino.presetLocationId && !porDireccion) {
+      throw new BadRequestException(
+        'Falta el destino: un lugar registrado o unas coordenadas.',
+      );
+    }
+
+    let cambios: Partial<Servicios>;
+
+    if (destino.presetLocationId) {
+      const activas = await this.transportOperations.activeLocations();
+      const lugar = activas.find(
+        (candidata) => candidata.id === destino.presetLocationId,
+      );
+      if (!lugar) {
+        throw new BadRequestException(
+          'Ese lugar no existe o ya no está disponible para nuevas reservas.',
+        );
+      }
+
+      cambios = {
+        ubicacionClienteLat: Number(lugar.latitude),
+        ubicacionClienteLng: Number(lugar.longitude),
+        presetLocationId: lugar.id,
+        locationNameSnapshot: lugar.name,
+        locationAddressSnapshot: lugar.address,
+        customerTransportCharge: 0,
+      };
+    } else {
+      const latitud = destino.latitud!;
+      const longitud = destino.longitud!;
+      await this.assertDentroDeCobertura(latitud, longitud);
+
+      cambios = {
+        ubicacionClienteLat: latitud,
+        ubicacionClienteLng: longitud,
+        presetLocationId: null,
+        locationNameSnapshot: null,
+        locationAddressSnapshot:
+          destino.direccion?.trim() ||
+          `${latitud.toFixed(5)}, ${longitud.toFixed(5)}`,
+        customerTransportCharge: await this.transportOperations
+          .externalLocationFee()
+          .catch(() => Number(service.customerTransportCharge ?? 0)),
+      };
+    }
+
+    await this.serviciosRepository.update(id, cambios);
+    const actualizado = await this.findOne(id);
+
+    this.realtimeEventsService.emitToBoss(actualizado.jefeId, {
+      type: 'service_location_changed',
+      data: {
+        serviceId: actualizado.id,
+        latitud: Number(actualizado.ubicacionClienteLat),
+        longitud: Number(actualizado.ubicacionClienteLng),
+        nombre:
+          actualizado.locationNameSnapshot ??
+          actualizado.locationAddressSnapshot,
+      },
+    });
+
+    if (actualizado.empleada?.usuarioId) {
+      try {
+        await this.notificationsService.notificar(
+          actualizado.empleada.usuarioId,
+          {
+            titulo: 'Cambio de lugar en una cita',
+            cuerpo:
+              actualizado.locationNameSnapshot ??
+              actualizado.locationAddressSnapshot ??
+              'Revisa tu portal para ver el nuevo punto.',
+            url: '/empleada/portal',
+            tag: `ubicacion-${actualizado.id}`,
+            requireInteraction: true,
+          },
+        );
+      } catch (error) {
+        this.logger.error(
+          'No se pudo avisar a la modelo del cambio de ubicación:',
+          error,
+        );
+      }
+    }
+
+    return actualizado;
+  }
+
+  /**
+   * Rechaza una direccion que cae fuera del area que se atiende.
+   *
+   * Es la misma comprobacion que se le hace al pin del cliente en el chat, y
+   * por el mismo motivo: fuera de esa zona no hay a quien mandar. Si el area no
+   * se puede leer se deja pasar, igual que alli: un corte de base no puede
+   * bloquear la operacion.
+   */
+  private async assertDentroDeCobertura(
+    latitud: number,
+    longitud: number,
+  ): Promise<void> {
+    let area: Awaited<ReturnType<TransportOperationsService['coverageArea']>> =
+      null;
+    try {
+      area = await this.transportOperations.coverageArea();
+    } catch (error) {
+      this.logger.error(
+        'No se pudo leer el área de cobertura; se acepta la dirección sin comprobarla:',
+        error,
+      );
+      return;
+    }
+    if (!area) return;
+
+    const distanciaKm = kilometrosEntre(
+      area.centroLat,
+      area.centroLng,
+      latitud,
+      longitud,
+    );
+    if (distanciaKm <= area.radioKm) return;
+
+    throw new BadRequestException(
+      `Esa dirección queda a ${distanciaKm.toFixed(0)} km del centro de ${area.ciudad}, fuera del área que se atiende (${area.radioKm} km). Si de verdad quieres cubrirla, amplía el área de cobertura en Transporte.`,
+    );
   }
 
   /**

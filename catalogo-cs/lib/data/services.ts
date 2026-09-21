@@ -99,6 +99,68 @@ export async function updateServiceAction(
   }
 }
 
+/**
+ * Mueve una cita a otra fecha y hora.
+ *
+ * `fechaProgramada` viaja en ISO con zona. El panel la construye con
+ * `desdeHoraDelNegocio`, porque el `datetime-local` del formulario devuelve
+ * texto sin zona y la agenda corre en hora de Mexico, no en la del equipo
+ * desde el que se captura.
+ */
+export async function rescheduleServiceAction(
+  serviceId: string,
+  fechaProgramada: string,
+  avisarCliente: boolean,
+) {
+  try {
+    const updated = await apiFetch<Service>(
+      `/services/${serviceId}/reprogramar`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ fechaProgramada, avisarCliente }),
+      },
+    );
+    revalidateAdminViews();
+    return { success: true, data: updated };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo reprogramar la cita",
+    };
+  }
+}
+
+/**
+ * Cambia el lugar del servicio: o un lugar registrado, o una direccion con sus
+ * coordenadas. El backend rechaza que vengan los dos o ninguno.
+ */
+export async function changeServiceLocationAction(
+  serviceId: string,
+  destino:
+    | { presetLocationId: string }
+    | { latitud: number; longitud: number; direccion: string },
+) {
+  try {
+    const updated = await apiFetch<Service>(
+      `/services/${serviceId}/ubicacion`,
+      { method: "PATCH", body: JSON.stringify(destino) },
+    );
+    revalidateAdminViews();
+    return { success: true, data: updated };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo cambiar la ubicación",
+    };
+  }
+}
+
 export async function cancelServiceAction(
   serviceId: string,
   reason: CancellationReason,

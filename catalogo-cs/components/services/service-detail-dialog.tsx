@@ -7,12 +7,14 @@ import {
   Camera,
   Car,
   Check,
+  CalendarClock,
   CircleDollarSign,
   Clock3,
   ExternalLink,
   FileCheck2,
   Image as ImageIcon,
   MapPin,
+  MapPinned,
   MessageCircle,
   Pencil,
   Send,
@@ -41,6 +43,8 @@ import {
 } from "@/lib/data/services";
 import { comprimirCaptura } from "@/lib/comprimir-imagen";
 import CancelServiceDialog from "./cancel-service-dialog";
+import ServiceRescheduleDialog from "./service-reschedule-dialog";
+import ServiceLocationDialog from "./service-location-dialog";
 import {
   CANCELLATION_REASON_LABEL,
   SELECTABLE_CANCELLATION_REASONS,
@@ -64,6 +68,8 @@ export default function ServiceDetailDialog({
   const [service, setService] = useState<Service | null>(initialService);
   const [activeTab, setActiveTab] = useState<"detalles" | "chat" | "transporte">("detalles");
   const [editing, setEditing] = useState(false);
+  const [reprogramando, setReprogramando] = useState(false);
+  const [cambiandoUbicacion, setCambiandoUbicacion] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [editingCancellation, setEditingCancellation] = useState(false);
@@ -244,6 +250,42 @@ export default function ServiceDetailDialog({
           onCancel={() => setCancelling(false)}
         />
       )}
+
+      {reprogramando && (
+        <ServiceRescheduleDialog
+          serviceId={service.id}
+          fechaActual={service.fechaProgramada ?? null}
+          nombreEmpleada={service.empleada?.nombreArtistico || "Este servicio"}
+          onClose={() => setReprogramando(false)}
+          onRescheduled={reloadCurrentService}
+        />
+      )}
+
+      {cambiandoUbicacion && (
+        <ServiceLocationDialog
+          serviceId={service.id}
+          ubicacionActual={
+            service.locationNameSnapshot ??
+            service.locationAddressSnapshot ??
+            null
+          }
+          latitudActual={
+            service.ubicacionClienteLat !== undefined &&
+            service.ubicacionClienteLat !== null
+              ? Number(service.ubicacionClienteLat)
+              : null
+          }
+          longitudActual={
+            service.ubicacionClienteLng !== undefined &&
+            service.ubicacionClienteLng !== null
+              ? Number(service.ubicacionClienteLng)
+              : null
+          }
+          presetLocationIdActual={service.presetLocationId ?? null}
+          onClose={() => setCambiandoUbicacion(false)}
+          onChanged={reloadCurrentService}
+        />
+      )}
       <div className="w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800 bg-black/40">
@@ -391,6 +433,36 @@ export default function ServiceDetailDialog({
                 >
                   <Pencil size={15} /> {editing ? "Cerrar Edición" : "Editar Datos"}
                 </button>
+
+                {/*
+                  La hora y el lugar no se editan con el resto de los campos:
+                  cada uno tiene su propia comprobacion --la agenda de la modelo,
+                  el area de cobertura-- y su propio aviso a quien se tiene que
+                  presentar. Solo aparecen mientras el servicio no ha empezado:
+                  despues, la modelo ya va en camino y esto no la mueve a ella.
+                */}
+                {(service.estado === "pendiente" ||
+                  service.estado === "agendado") && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={pendingAction}
+                      onClick={() => setReprogramando(true)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-200 hover:border-[#C5A55A] hover:text-[#E8D5A3] transition-all disabled:opacity-50"
+                    >
+                      <CalendarClock size={15} /> Reprogramar
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={pendingAction}
+                      onClick={() => setCambiandoUbicacion(true)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-200 hover:border-[#C5A55A] hover:text-[#E8D5A3] transition-all disabled:opacity-50"
+                    >
+                      <MapPinned size={15} /> Cambiar ubicación
+                    </button>
+                  </>
+                )}
 
                 {service.estado !== "cancelado" && service.estado !== "finalizado" && (
                   <button

@@ -23,6 +23,8 @@ import { UPLOAD_MAX_BYTES } from '../upload/upload.service';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import { RescheduleServiceDto } from './dto/reschedule-service.dto';
+import { ChangeServiceLocationDto } from './dto/change-service-location.dto';
 import { Servicios } from './entities/service.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -167,6 +169,46 @@ export class ServicesController {
     @Req() req: any,
   ) {
     return this.servicesService.updateForActor(id, updateServiceDto, req.user);
+  }
+
+  /**
+   * Mueve una cita a otra fecha y hora.
+   *
+   * Aparte del PATCH generico porque no es editar un campo: hay que mirar la
+   * agenda de la modelo, reiniciar el recordatorio previo y avisar a quien
+   * tiene que presentarse.
+   */
+  @Patch(':id/reprogramar')
+  @Roles('admin', 'jefe')
+  @ApiActionDocs('Reprogramar una cita', true, 'ID del servicio')
+  reprogramar(
+    @Param('id') id: string,
+    @Body() dto: RescheduleServiceDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.reprogramar(
+      id,
+      new Date(dto.fechaProgramada),
+      req.user,
+      dto.avisarCliente ?? true,
+    );
+  }
+
+  /**
+   * Cambia el lugar del servicio: un motel de la casa o una direccion.
+   *
+   * Lo que se guarda son las coordenadas, que es de lo que cuelgan el chofer
+   * mas cercano, el enlace de Uber y el cobro del transporte.
+   */
+  @Patch(':id/ubicacion')
+  @Roles('admin', 'jefe')
+  @ApiActionDocs('Cambiar la ubicación de un servicio', true, 'ID del servicio')
+  cambiarUbicacion(
+    @Param('id') id: string,
+    @Body() dto: ChangeServiceLocationDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.cambiarUbicacion(id, dto, req.user);
   }
 
   /**
