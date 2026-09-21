@@ -75,6 +75,10 @@ export class Clientes {
   })
   primerContactoAt: Date;
 
+  @Column('integer', { name: 'admin_topic_id', nullable: true })
+  @ApiPropertyOptional({ description: 'Thread ID en el supergrupo admin' })
+  adminTopicId: number | null;
+
   @OneToMany(
     () => AlertasClientes,
     (alertasClientes) => alertasClientes.cliente,

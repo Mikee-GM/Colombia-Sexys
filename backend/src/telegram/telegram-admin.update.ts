@@ -1058,9 +1058,42 @@ export class TelegramAdminUpdate {
     return id && id.trim() ? id.trim() : null;
   }
 
+  private getAdminGroupId(): string | null {
+    const id = this.configService.get<string>('ADMIN_SPY_GROUP_ID');
+    return id && id.trim() ? id.trim() : null;
+  }
+
   private isAdmin(ctx: Context): boolean {
     const adminId = this.getAdminChatId();
-    return Boolean(adminId && ctx.from?.id.toString() === adminId);
+    const isPrivateAdmin = Boolean(adminId && ctx.from?.id.toString() === adminId);
+
+    // También es admin si está en el supergrupo configurado
+    const groupId = this.getAdminGroupId();
+    const isGroupAdmin = Boolean(
+      groupId && ctx.chat && ctx.chat.id.toString() === groupId && ctx.from?.id.toString() === adminId,
+    );
+
+    return isPrivateAdmin || isGroupAdmin;
+  }
+
+  /**
+   * Detecta si un mensaje viene del supergrupo admin y extrae el clientTelegramId
+   * a partir del thread/topic donde se envió.
+   */
+  private async getClientFromTopic(ctx: Context): Promise<string | null> {
+    const groupId = this.getAdminGroupId();
+    if (!groupId || !ctx.chat || ctx.chat.id.toString() !== groupId) return null;
+
+    const msg = ctx.message as any;
+    const threadId = msg?.message_thread_id;
+    if (!threadId) return null;
+
+    // Buscar el cliente cuyo adminTopicId coincide
+    const cliente = await this.clientesRepository.findOne({
+      where: { adminTopicId: threadId },
+    });
+
+    return cliente?.telegramChatId ?? null;
   }
 
   /**
@@ -1256,8 +1289,7 @@ export class TelegramAdminUpdate {
   /**
    * /chats
    *
-   * Lista todos los clientes que han interactuado con el bot recientemente,
-   * organizados con botones inline para entrar a cada chat.
+   * Lista todos los clientes que han interactuado con el bot recientemente.
    */
   @Command('chats')
   async onChats(@Ctx() ctx: Context) {
@@ -1295,10 +1327,12 @@ export class TelegramAdminUpdate {
       }),
     );
 
+    const isGroup = this.getAdminGroupId() && ctx.chat?.id.toString() === this.getAdminGroupId();
+
     const buttons = clientInfos.map((ci) => [
       Markup.button.callback(
         `${ci.estado} ${ci.nombre} (${ci.step})`,
-        `spy_history:${ci.telegramId}`,
+        isGroup ? `open_topic:${ci.telegramId}` : `spy_history:${ci.telegramId}`,
       ),
     ]);
 
@@ -1309,6 +1343,181 @@ export class TelegramAdminUpdate {
         ...Markup.inlineKeyboard(buttons),
       },
     );
+  }
+
+  /**
+   * /clientes
+   *
+   * Lista los últimos 20 clientes registrados.
+   */
+  @Command('clientes')
+  async onClientes(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const clientes = await this.clientesRepository.find({
+      order: { primerContactoAt: 'DESC' },
+      take: 20,
+    });
+
+    if (!clientes.length) {
+      await ctx.reply('📭 No hay clientes registrados.');
+      return;
+    }
+
+    const isGroup = this.getAdminGroupId() && ctx.chat?.id.toString() === this.getAdminGroupId();
+
+    const buttons = clientes.map((c) => [
+      Markup.button.callback(
+        `👤 ${c.nombreTelegram || 'Desconocido'} (${c.telegramChatId})`,
+        isGroup ? `open_topic:${c.telegramChatId}` : `spy_history:${c.telegramChatId}`,
+      ),
+    ]);
+
+    await ctx.reply(
+      `📋 *Últimos 20 clientes:*\n\nToca un cliente para abrir su ficha e historial:`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(buttons),
+      },
+    );
+  }
+
+  /**
+   * /buscar <nombre o id>
+   *
+   * Busca clientes por nombre o telegram ID.
+   */
+  @Command('buscar')
+  async onBuscar(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const text = (ctx.message as any)?.text || '';
+    const query = text.replace('/buscar', '').trim();
+
+    if (!query) {
+      await ctx.reply('❌ Uso: /buscar <nombre o ID del cliente>');
+      return;
+    }
+
+    const isNumeric = /^\d+$/.test(query);
+
+    const qb = this.clientesRepository.createQueryBuilder('c');
+    if (isNumeric) {
+      qb.where('c.telegramChatId LIKE :query', { query: `%${query}%` });
+    } else {
+      qb.where('c.nombreTelegram ILIKE :query', { query: `%${query}%` });
+    }
+
+    const clientes = await qb.orderBy('c.primerContactoAt', 'DESC').take(10).getMany();
+
+    if (!clientes.length) {
+      await ctx.reply(`📭 No se encontraron clientes para la búsqueda: *${query}*`, { parse_mode: 'Markdown' });
+      return;
+    }
+
+    const isGroup = this.getAdminGroupId() && ctx.chat?.id.toString() === this.getAdminGroupId();
+
+    const buttons = clientes.map((c) => [
+      Markup.button.callback(
+        `👤 ${c.nombreTelegram || 'Desconocido'} (${c.telegramChatId})`,
+        isGroup ? `open_topic:${c.telegramChatId}` : `spy_history:${c.telegramChatId}`,
+      ),
+    ]);
+
+    await ctx.reply(
+      `🔍 *Resultados para "${query}" (${clientes.length}):*\n\nToca un cliente para abrir su ficha e historial:`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(buttons),
+      },
+    );
+  }
+
+  /**
+   * Abre o localiza el tema de un cliente en el supergrupo.
+   */
+  @Action(/^open_topic:(\d+)$/)
+  async onOpenTopic(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+    const match = (ctx as any).match;
+    const clientTelegramId = match[1];
+    const groupId = this.getAdminGroupId();
+
+    if (!groupId) {
+      await ctx.answerCbQuery('❌ El supergrupo no está configurado.');
+      return;
+    }
+
+    let cliente = await this.clientesRepository.findOne({
+      where: { telegramChatId: clientTelegramId },
+    });
+
+    if (!cliente) {
+      await ctx.answerCbQuery('❌ Cliente no encontrado.');
+      return;
+    }
+
+    const clientName = cliente.nombreTelegram || 'Cliente';
+    let topicId = cliente.adminTopicId;
+
+    try {
+      if (!topicId) {
+        // Crear el tema si no existe
+        const topic = await this.bot.telegram.createForumTopic(
+          groupId,
+          `${clientName} · ${clientTelegramId}`,
+        );
+        topicId = topic.message_thread_id;
+        cliente.adminTopicId = topicId;
+        await this.clientesRepository.save(cliente);
+
+        // Enviar ficha inicial
+        await this.bot.telegram.sendMessage(
+          groupId,
+          `📋 *Ficha del cliente*\n\n` +
+            `👤 *Nombre:* ${clientName}\n` +
+            `🆔 *Telegram ID:* \`${clientTelegramId}\`\n` +
+            `📅 *Primer contacto:* ${cliente.primerContactoAt ? new Date(cliente.primerContactoAt).toLocaleDateString('es-CO') : 'Desconocido'}\n\n` +
+            `_Todo lo que escribas aquí se le enviará al cliente._`,
+          {
+            message_thread_id: topicId,
+            parse_mode: 'Markdown',
+          },
+        );
+      } else {
+        // Notificar que el tema ya existe
+        await this.bot.telegram.sendMessage(
+          groupId,
+          `ℹ️ *Llamado desde búsqueda*\nEste es el tema de ${clientName}.`,
+          { message_thread_id: topicId, parse_mode: 'Markdown' }
+        );
+      }
+
+      // Siempre mandar un resumen del historial al tema
+      const conversations = await this.telegramConversationRepository.find({
+        where: { cliente: { id: cliente.id } },
+        order: { createdAt: 'DESC' },
+        take: 10,
+      });
+
+      if (conversations.length > 0) {
+        conversations.reverse();
+        const lines = conversations.map((c) => {
+          const emoji = c.esDelCliente ? '👤' : '🤖';
+          return `${emoji} *${c.esDelCliente ? clientName : 'Bot'}*: ${c.mensaje}`;
+        });
+        await this.bot.telegram.sendMessage(
+          groupId,
+          `📜 *Últimos ${conversations.length} mensajes:*\n\n` + lines.join('\n\n'),
+          { message_thread_id: topicId, parse_mode: 'Markdown' }
+        );
+      }
+
+      await ctx.answerCbQuery(`✅ Tema abierto para ${clientName}.`);
+    } catch (error: any) {
+      this.logger.error(`Error abriendo tema para ${clientTelegramId}`, error);
+      await ctx.answerCbQuery(`❌ Error: ${error?.message}`);
+    }
   }
 
   /**
@@ -1571,25 +1780,69 @@ export class TelegramAdminUpdate {
   /**
    * Handler de mensajes del admin.
    *
-   * Si hay un canal activo (activeAdminChat), envía directamente al cliente.
-   * Si no, intenta detectar si está respondiendo a un mensaje espía (reply).
-   * Soporta texto y fotos.
+   * Funciona en 3 modos:
+   * 1. Supergrupo: si escribe en un tema del supergrupo admin, detecta el
+   *    cliente por el topic y reenvía directamente (como WhatsApp).
+   * 2. Canal activo (chat privado): si tiene /chatear activo, envía directo.
+   * 3. Reply a mensaje espía (chat privado): extrae el ID del reply.
+   *
+   * Soporta texto, fotos y documentos.
    */
   @On('message')
   async onAdminReply(@Ctx() ctx: Context) {
     if (!this.isAdmin(ctx)) return;
 
     const msg = ctx.message as any;
+    if (msg?.text?.startsWith('/')) return; // Ignorar comandos
 
-    // ── Canal activo: enviar directamente ──
-    if (this.activeAdminChat) {
+    // ── Modo Supergrupo: detectar cliente por tema ──
+    const clientFromTopic = await this.getClientFromTopic(ctx);
+    if (clientFromTopic) {
       try {
-        // Soporte para fotos
         if (msg?.photo && msg.photo.length > 0) {
           const fileId = msg.photo[msg.photo.length - 1].file_id;
-          const caption = msg.caption || '';
+          await this.bot.telegram.sendPhoto(clientFromTopic, fileId, {
+            caption: msg.caption || undefined,
+          });
+          await ctx.reply(`✅ 📷 Foto enviada`, {
+            message_thread_id: msg.message_thread_id,
+          });
+          return;
+        }
+
+        if (msg?.document) {
+          await this.bot.telegram.sendDocument(clientFromTopic, msg.document.file_id, {
+            caption: msg.caption || undefined,
+          });
+          await ctx.reply(`✅ 📎 Archivo enviado`, {
+            message_thread_id: msg.message_thread_id,
+          });
+          return;
+        }
+
+        if (msg?.text) {
+          await this.bot.telegram.sendMessage(clientFromTopic, msg.text);
+          await ctx.reply(`✅ Enviado`, {
+            message_thread_id: msg.message_thread_id,
+          });
+          return;
+        }
+      } catch (error: any) {
+        this.logger.error(`Error en supergrupo admin → ${clientFromTopic}`, error);
+        await ctx.reply(`❌ ${error?.message || 'Error'}`, {
+          message_thread_id: msg.message_thread_id,
+        });
+        return;
+      }
+    }
+
+    // ── Canal activo (chat privado): enviar directamente ──
+    if (this.activeAdminChat && ctx.chat?.type === 'private') {
+      try {
+        if (msg?.photo && msg.photo.length > 0) {
+          const fileId = msg.photo[msg.photo.length - 1].file_id;
           await this.bot.telegram.sendPhoto(this.activeAdminChat, fileId, {
-            caption: caption || undefined,
+            caption: msg.caption || undefined,
           });
           await ctx.reply(`✅ 📷 Foto enviada a \`${this.activeAdminChat}\``, {
             parse_mode: 'Markdown',
@@ -1597,27 +1850,19 @@ export class TelegramAdminUpdate {
           return;
         }
 
-        // Soporte para documentos
         if (msg?.document) {
           await this.bot.telegram.sendDocument(
             this.activeAdminChat,
             msg.document.file_id,
             { caption: msg.caption || undefined },
           );
-          await ctx.reply(
-            `✅ 📎 Archivo enviado a \`${this.activeAdminChat}\``,
-            {
-              parse_mode: 'Markdown',
-            },
-          );
+          await ctx.reply(`✅ 📎 Archivo enviado a \`${this.activeAdminChat}\``, {
+            parse_mode: 'Markdown',
+          });
           return;
         }
 
-        // Soporte para texto
         if (msg?.text) {
-          // Ignorar comandos
-          if (msg.text.startsWith('/')) return;
-
           await this.bot.telegram.sendMessage(this.activeAdminChat, msg.text);
           await ctx.reply(`✅ Enviado a \`${this.activeAdminChat}\``, {
             parse_mode: 'Markdown',
@@ -1625,31 +1870,24 @@ export class TelegramAdminUpdate {
           return;
         }
       } catch (error: any) {
-        this.logger.error(
-          `Error en canal admin a ${this.activeAdminChat}`,
-          error,
-        );
-        await ctx.reply(
-          `❌ Fallo al enviar: ${error?.message || 'Error desconocido'}`,
-        );
+        this.logger.error(`Error en canal admin a ${this.activeAdminChat}`, error);
+        await ctx.reply(`❌ Fallo al enviar: ${error?.message || 'Error desconocido'}`);
         return;
       }
     }
 
-    // ── Reply a un mensaje espía (sin canal activo) ──
-    if (!msg?.reply_to_message) return;
+    // ── Reply a un mensaje espía (sin canal activo, chat privado) ──
+    if (!msg?.reply_to_message || ctx.chat?.type !== 'private') return;
 
     const repliedMsg = msg.reply_to_message;
     if (repliedMsg.from?.id !== ctx.botInfo.id) return;
 
-    // Extraer el telegramId del formato espía: `123456789`
     const replyText = repliedMsg.text || repliedMsg.caption || '';
     const match = replyText.match(/`(\d{6,15})`/);
     if (!match || !match[1]) return;
 
     const clientTelegramId = match[1];
     try {
-      // Soporte para fotos en reply
       if (msg?.photo && msg.photo.length > 0) {
         const fileId = msg.photo[msg.photo.length - 1].file_id;
         await this.bot.telegram.sendPhoto(clientTelegramId, fileId, {
@@ -1669,9 +1907,8 @@ export class TelegramAdminUpdate {
       }
     } catch (error: any) {
       this.logger.error(`Error en Reply admin a ${clientTelegramId}`, error);
-      await ctx.reply(
-        `❌ Fallo al responder: ${error?.message || 'Error desconocido'}`,
-      );
+      await ctx.reply(`❌ Fallo al responder: ${error?.message || 'Error desconocido'}`);
     }
   }
 }
+

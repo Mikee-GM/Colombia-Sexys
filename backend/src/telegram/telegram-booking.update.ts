@@ -7619,10 +7619,12 @@ export class TelegramBookingUpdate {
     if (ctx.chat?.type === 'private') {
       // ── SPY ADMIN ─────────────────────────────────────────────────────────
       // Reenvía silenciosamente cada mensaje de cliente al administrador.
-      // Solo activo cuando ADMIN_SPY_CHAT_ID está configurado.
-      // Ahora incluye botones inline para responder, pausar y ver historial.
+      // Modo 1: ADMIN_SPY_GROUP_ID → supergrupo con temas por cliente (CRM).
+      // Modo 2: ADMIN_SPY_CHAT_ID → chat privado con botones inline (legacy).
+      const spyGroupId = this.configService.get<string>('ADMIN_SPY_GROUP_ID');
       const spyChatId = this.configService.get<string>('ADMIN_SPY_CHAT_ID');
-      if (spyChatId && spyChatId.trim()) {
+
+      if ((spyGroupId && spyGroupId.trim()) || (spyChatId && spyChatId.trim())) {
         try {
           const clientName =
             ctx.from?.first_name || ctx.from?.username || 'Cliente';
@@ -7633,46 +7635,146 @@ export class TelegramBookingUpdate {
           const rawText =
             (ctx.message as { text?: string })?.text || '(mensaje)';
           const step = ctx.session?.step || '?';
-          const spyMsg =
-            `👁 ${takeoverMark}*${clientName}* · \`${telegramId}\`\n` +
-            `📍 Paso: ${step}\n` +
-            `"${rawText.slice(0, 300)}"`;
-
           const isHuman =
             ctx.session?.humanTakeover || ctx.session?.iaActiva === false;
-          void this.bot.telegram.sendMessage(spyChatId.trim(), spyMsg, {
-            parse_mode: 'Markdown',
-            disable_notification: true,
-            ...Markup.inlineKeyboard([
-              [
-                Markup.button.callback(
-                  '💬 Responder',
-                  `spy_reply:${telegramId}`,
-                ),
-                Markup.button.callback(
-                  isHuman ? '▶️ Reanudar IA' : '⏸ Pausar IA',
-                  isHuman
-                    ? `spy_resume:${telegramId}`
-                    : `spy_pause:${telegramId}`,
-                ),
-              ],
-              [
-                Markup.button.callback(
-                  '📜 Historial',
-                  `spy_history:${telegramId}`,
-                ),
-              ],
-            ]),
-          });
 
-          // Si hay foto, reenviarla también
-          const photo = (ctx.message as any)?.photo;
-          if (photo && photo.length > 0) {
-            const fileId = photo[photo.length - 1].file_id;
-            void this.bot.telegram.sendPhoto(spyChatId.trim(), fileId, {
-              caption: `📷 Foto de *${clientName}* · \`${telegramId}\``,
-              parse_mode: 'Markdown',
+          // ── Modo Supergrupo con Temas ──
+          if (spyGroupId && spyGroupId.trim()) {
+            const groupId = spyGroupId.trim();
+
+            // Buscar o crear el tema del cliente
+            let cliente = await this.clientesRepository.findOne({
+              where: { telegramChatId: telegramId },
             });
+
+            let topicId: number | null = cliente?.adminTopicId ?? null;
+
+            if (!topicId) {
+              // Crear tema nuevo para este cliente
+              try {
+                const topic = await this.bot.telegram.createForumTopic(
+                  groupId,
+                  `${clientName} · ${telegramId}`,
+                );
+                topicId = topic.message_thread_id;
+
+                // Guardar el topic ID en la BD
+                if (cliente) {
+                  cliente.adminTopicId = topicId;
+                  await this.clientesRepository.save(cliente);
+                }
+
+                // Mensaje de bienvenida en el tema
+                await this.bot.telegram.sendMessage(
+                  groupId,
+                  `📋 *Ficha del cliente*\n\n` +
+                    `👤 *Nombre:* ${clientName}\n` +
+                    `🆔 *Telegram ID:* \`${telegramId}\`\n` +
+                    `📅 *Primer contacto:* ${cliente?.primerContactoAt ? new Date(cliente.primerContactoAt).toLocaleDateString('es-CO') : 'Hoy'}\n\n` +
+                    `_Todo lo que escribas aquí se le enviará al cliente._`,
+                  {
+                    message_thread_id: topicId,
+                    parse_mode: 'Markdown',
+                  },
+                );
+              } catch (topicErr: any) {
+                this.logger.warn(`No se pudo crear tema para ${telegramId}: ${topicErr?.message}`);
+                // Fallback al chat privado si falla
+                topicId = null;
+              }
+            }
+
+            if (topicId) {
+              // Buscar si hay un servicio activo para mostrar botones
+              const activeService = await this.serviciosRepository.findOne({
+                where: {
+                  clienteTelegramId: telegramId,
+                  estado: In(['pendiente', 'en_curso', 'agendado']),
+                },
+                order: { createdAt: 'DESC' },
+              });
+
+              // Publicar mensaje del cliente en su tema
+              const emoji = isHuman ? '⚠️' : '👤';
+              const srvMark = activeService ? (activeService.estado === 'pendiente' ? '⏳' : '🔄') : '';
+              const msgText =
+                `${emoji} ${takeoverMark}*${clientName}* ${srvMark}\n` +
+                `📍 Paso: ${step}\n\n` +
+                `${rawText.slice(0, 3000)}`;
+
+              const keyboardRows: any[][] = [
+                [
+                  Markup.button.callback(
+                    isHuman ? '▶️ Reanudar IA' : '⏸ Pausar IA',
+                    isHuman ? `spy_resume:${telegramId}` : `spy_pause:${telegramId}`,
+                  ),
+                ],
+              ];
+
+              if (activeService) {
+                if (activeService.estado === 'pendiente') {
+                  keyboardRows.push([
+                    Markup.button.callback('✅ Aceptar', `jefe_autorizar:${activeService.id}:1`),
+                    Markup.button.callback('❌ Rechazar', `jefe_autorizar:${activeService.id}:0`),
+                  ]);
+                } else {
+                  keyboardRows.push([
+                    Markup.button.callback('📋 Detalles', `jefe_editar_srv:${activeService.id}`),
+                  ]);
+                }
+              }
+
+              await this.bot.telegram.sendMessage(groupId, msgText, {
+                message_thread_id: topicId,
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard(keyboardRows),
+              });
+
+              // Fotos
+              const photo = (ctx.message as any)?.photo;
+              if (photo && photo.length > 0) {
+                const fileId = photo[photo.length - 1].file_id;
+                await this.bot.telegram.sendPhoto(groupId, fileId, {
+                  caption: `📷 Foto de ${clientName}`,
+                  message_thread_id: topicId,
+                });
+              }
+            }
+          }
+
+          // ── Modo Chat Privado (legacy o complementario) ──
+          if (spyChatId && spyChatId.trim()) {
+            const spyMsg =
+              `👁 ${takeoverMark}*${clientName}* · \`${telegramId}\`\n` +
+              `📍 Paso: ${step}\n` +
+              `"${rawText.slice(0, 300)}"`;
+
+            void this.bot.telegram.sendMessage(spyChatId.trim(), spyMsg, {
+              parse_mode: 'Markdown',
+              disable_notification: true,
+              ...Markup.inlineKeyboard([
+                [
+                  Markup.button.callback('💬 Responder', `spy_reply:${telegramId}`),
+                  Markup.button.callback(
+                    isHuman ? '▶️ Reanudar IA' : '⏸ Pausar IA',
+                    isHuman ? `spy_resume:${telegramId}` : `spy_pause:${telegramId}`,
+                  ),
+                ],
+                [
+                  Markup.button.callback('📜 Historial', `spy_history:${telegramId}`),
+                ],
+              ]),
+            });
+
+            // Fotos al chat privado
+            const photo = (ctx.message as any)?.photo;
+            if (photo && photo.length > 0) {
+              const fileId = photo[photo.length - 1].file_id;
+              void this.bot.telegram.sendPhoto(spyChatId.trim(), fileId, {
+                caption: `📷 Foto de *${clientName}* · \`${telegramId}\``,
+                parse_mode: 'Markdown',
+              });
+            }
           }
         } catch {
           // El spy es best-effort: nunca debe romper el flujo normal del cliente
