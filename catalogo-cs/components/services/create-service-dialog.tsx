@@ -21,6 +21,7 @@ import {
 } from "@/lib/data/services";
 import type { Client, Employee, PresetServiceLocation, Service } from "@/lib/types";
 import { formatCurrency } from "@/lib/calculations";
+import { desdeHoraDelNegocio } from "@/lib/locale";
 
 interface CreateServiceDialogProps {
   open: boolean;
@@ -211,7 +212,14 @@ export default function CreateServiceDialog({
         precioBaseHoraPactado: hourlyRate,
         notas: [locationNote, notes.trim()].filter(Boolean).join(" - "),
         tipoAgenda: agendaType,
-        fechaProgramada: agendaType === "programado" ? new Date(scheduledDateTime).toISOString() : undefined,
+        // El input no lleva zona: la agenda corre en hora de Mexico, no en la del equipo.
+        fechaProgramada:
+          agendaType === "programado"
+            ? (
+                desdeHoraDelNegocio(scheduledDateTime) ??
+                new Date(scheduledDateTime)
+              ).toISOString()
+            : undefined,
         presetLocationId: locationType === "preset" ? presetLocationId : undefined,
         clienteTelegramId: clientMode === "registered" ? client?.telegramChatId || undefined : undefined,
       };

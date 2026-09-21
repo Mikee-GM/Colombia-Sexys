@@ -101,7 +101,11 @@ import { PanelAccessService } from '../auth/panel-access.service';
 import { botonesDePortal } from './telegram-portal-buttons';
 import { TelegramSession } from './entities/telegram-session.entity';
 import { buildSessionKey, parseSessionKey } from './telegram-session.key';
-import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
+import {
+  APP_TIME_ZONE,
+  APP_LOCALE,
+  desdeHoraDelNegocio,
+} from '../common/locale';
 import { multiplyMoney, roundMoney, sumMoney } from '../common/money';
 
 interface SessionData {
@@ -9652,11 +9656,18 @@ export class TelegramBookingUpdate {
                 parsedData.fechaProgramada &&
                 typeof parsedData.fechaProgramada === 'string'
               ) {
-                const parsedDate = new Date(parsedData.fechaProgramada);
-                if (
-                  !isNaN(parsedDate.getTime()) &&
-                  parsedDate.getTime() > Date.now()
-                ) {
+                /*
+                 * El modelo escribe la hora pactada sin zona
+                 * ("2026-09-21T14:00:00") porque se le da la hora de Mexico.
+                 * `new Date` leeria ese texto como hora local del servidor
+                 * --UTC en produccion-- y guardaria la cita seis horas antes
+                 * de lo acordado: "a las 2 de la tarde" llegaba al jefe como
+                 * las 8 de la mañana.
+                 */
+                const parsedDate = desdeHoraDelNegocio(
+                  parsedData.fechaProgramada,
+                );
+                if (parsedDate && parsedDate.getTime() > Date.now()) {
                   session.fechaProgramada = parsedDate.toISOString();
                   session.tipoAgenda = 'programado';
                 }

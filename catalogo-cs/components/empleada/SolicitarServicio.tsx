@@ -5,7 +5,7 @@ import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { pedirConSesion } from "@/lib/client-fetch";
-import { APP_TIME_ZONE } from "@/lib/locale";
+import { desdeHoraDelNegocio, paraInputDeFechaHora } from "@/lib/locale";
 
 /**
  * Solicitud de servicio de la empleada, desde un botón fijo en la esquina.
@@ -56,16 +56,7 @@ const HORAS_MAXIMO = 24;
  * el valor por defecto sea la hora de México y no la del teléfono.
  */
 function ahoraParaInput(): string {
-  const partes = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: APP_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date());
-  return partes.replace(" ", "T");
+  return paraInputDeFechaHora(new Date());
 }
 
 export default function SolicitarServicio() {
@@ -155,8 +146,15 @@ export default function SolicitarServicio() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tipo,
-          // El input da hora local; el backend la quiere en ISO.
-          fechaServicio: new Date(cuando).toISOString(),
+          /*
+           * El input da texto sin zona. `new Date` lo leeria en la zona del
+           * telefono, y la agenda del negocio corre en hora de Mexico: la
+           * conversion se hace aqui para que el mismo texto signifique el
+           * mismo instante se capture desde donde se capture.
+           */
+          fechaServicio: (
+            desdeHoraDelNegocio(cuando) ?? new Date(cuando)
+          ).toISOString(),
           // La columna es `numeric(4,2)`: mas decimales los rechaza el backend.
           duracionHoras: Math.round(duracion * 100) / 100,
           metodoPago: metodo,

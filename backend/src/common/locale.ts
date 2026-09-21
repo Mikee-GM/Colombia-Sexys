@@ -68,3 +68,62 @@ export function lunesDeLaSemana(fecha: Date): string {
 export function mismaSemanaOperativa(a: Date, b: Date): boolean {
   return lunesDeLaSemana(a) === lunesDeLaSemana(b);
 }
+
+/**
+ * Una hora de pared de Mexico, convertida al instante real que le corresponde.
+ *
+ * Es el inverso de `enHoraDelNegocio`, y existe porque `new Date('2026-09-21T14:00:00')`
+ * --un texto sin zona-- se interpreta como hora *local del servidor*. En
+ * produccion el contenedor corre en UTC, asi que "las 2 de la tarde" pactadas
+ * por chat se guardaban como las 14:00 UTC, que en Mexico son las 8 de la
+ * mañana: la cita aparecia seis horas antes de lo acordado.
+ *
+ * Un texto que ya trae zona (`Z` o `+05:00`) se respeta tal cual: ahi no hay
+ * ambiguedad que resolver.
+ *
+ * Devuelve `null` si el texto no es una fecha reconocible, para que quien
+ * llama decida que hacer en vez de recibir un `Invalid Date` silencioso.
+ */
+export function desdeHoraDelNegocio(texto: string): Date | null {
+  const limpio = texto.trim();
+
+  // Con zona explicita no hay nada que interpretar.
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/i.test(limpio)) {
+    const conZona = new Date(limpio);
+    return isNaN(conZona.getTime()) ? null : conZona;
+  }
+
+  const partes =
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(
+      limpio,
+    );
+  if (!partes) return null;
+
+  const [, anio, mes, dia, hora, minuto, segundo] = partes;
+  const horaDePared = Date.UTC(
+    Number(anio),
+    Number(mes) - 1,
+    Number(dia),
+    Number(hora ?? 0),
+    Number(minuto ?? 0),
+    Number(segundo ?? 0),
+  );
+  if (isNaN(horaDePared)) return null;
+
+  /*
+   * Se busca el instante `t` cuya lectura en Mexico da esa hora de pared.
+   * La primera pasada corrige el desfase; la segunda cubre el caso en que el
+   * propio salto de horario de verano mueva el desfase entre una y otra.
+   * Mexico no cambia de hora desde 2022, pero la segunda pasada es barata y
+   * deja el helper correcto si vuelve a cambiar o si se reutiliza con otra zona.
+   */
+  let instante = horaDePared;
+  for (let intento = 0; intento < 2; intento += 1) {
+    const leido = enHoraDelNegocio(new Date(instante)).getTime();
+    if (leido === horaDePared) break;
+    instante += horaDePared - leido;
+  }
+
+  const resultado = new Date(instante);
+  return isNaN(resultado.getTime()) ? null : resultado;
+}
