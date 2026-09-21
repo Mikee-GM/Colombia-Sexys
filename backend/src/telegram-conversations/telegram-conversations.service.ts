@@ -436,6 +436,18 @@ export class TelegramConversationsService {
       await this.telegramSessionRepository.save(clientSession);
     }
 
+    // Registrar en el historial para que el UI se entere y quede bitácora
+    await this.conversationsRepository.save(
+      this.conversationsRepository.create({
+        clienteId: clientId,
+        servicioId: null,
+        bookingSessionId: null,
+        emisor: 'sistema',
+        mensaje: iaActiva ? '🤖 Bot reanudado por el administrador.' : '⏸️ Bot pausado por el administrador.',
+        iaActiva,
+      }),
+    );
+
     return { ok: true, iaActiva, clientId };
   }
 }
