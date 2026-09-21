@@ -43,6 +43,12 @@ export class UpdateServiceDto {
   @IsIn(['efectivo', 'tarjeta', 'transferencia', 'mixto'])
   metodoPago?: 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
 
+  @ApiPropertyOptional({ description: 'Precio por hora pactado para este servicio' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  precioBaseHoraPactado?: number;
+
   @ApiPropertyOptional({ description: 'Notas del servicio' })
   @IsOptional()
   @IsString()

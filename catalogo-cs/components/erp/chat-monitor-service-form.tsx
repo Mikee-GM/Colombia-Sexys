@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, MapPin, CalendarClock, Clock, CreditCard, Save } from "lucide-react";
+import { Loader2, MapPin, CalendarClock, Clock, CreditCard, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { updateServiceAction, rescheduleServiceAction } from "@/lib/data/services";
 import { desdeHoraDelNegocio, paraInputDeFechaHora } from "@/lib/locale";
@@ -16,6 +16,7 @@ export default function ChatMonitorServiceForm({
   onRefresh: () => void;
 }) {
   const [duracion, setDuracion] = useState(service.duracionPactadaHoras.toString());
+  const [precio, setPrecio] = useState(service.precioBaseHoraPactado.toString());
   const [metodoPago, setMetodoPago] = useState(service.metodoPago);
   const [fecha, setFecha] = useState(() =>
     paraInputDeFechaHora(
@@ -31,6 +32,7 @@ export default function ChatMonitorServiceForm({
   // Sincronizar estado local si el servicio cambia desde afuera (ej. bot auto-rellena)
   useEffect(() => {
     setDuracion(service.duracionPactadaHoras.toString());
+    setPrecio(service.precioBaseHoraPactado.toString());
     setMetodoPago(service.metodoPago);
     setFecha(
       paraInputDeFechaHora(
@@ -41,55 +43,89 @@ export default function ChatMonitorServiceForm({
     );
   }, [service]);
 
-  // Verificar si hay cambios reales para habilitar el botón de guardar
-  const fechaActualISO = service.fechaProgramada
-    ? new Date(service.fechaProgramada).toISOString()
-    : null;
-  const nuevaFecha = desdeHoraDelNegocio(fecha);
-  const nuevaFechaISO = nuevaFecha ? nuevaFecha.toISOString() : null;
+  const handleBlurText = async () => {
+    const d = parseFloat(duracion);
+    const p = parseFloat(precio);
+    if (isNaN(d) || isNaN(p) || d < 1 || p < 0) return;
 
-  const hasChanges =
-    duracion !== service.duracionPactadaHoras.toString() ||
-    metodoPago !== service.metodoPago ||
-    (nuevaFechaISO !== fechaActualISO && service.tipoAgenda === "programado");
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    let success = true;
-
-    // 1. Actualizar duración y método de pago
     if (
-      duracion !== service.duracionPactadaHoras.toString() ||
-      metodoPago !== service.metodoPago
+      d !== Number(service.duracionPactadaHoras) ||
+      p !== Number(service.precioBaseHoraPactado)
     ) {
+      setIsSaving(true);
       const res = await updateServiceAction(service.id, {
-        duracionPactadaHoras: parseFloat(duracion),
-        metodoPago: metodoPago as any,
+        duracionPactadaHoras: d,
+        precioBaseHoraPactado: p,
       });
-      if (!res.success) {
+      setIsSaving(false);
+      if (res.success) {
+        toast.success("Detalles actualizados");
+        onRefresh();
+      } else {
         toast.error(res.error || "Error al actualizar detalles");
-        success = false;
+        // Revertir a lo que tiene el servicio
+        setDuracion(service.duracionPactadaHoras.toString());
+        setPrecio(service.precioBaseHoraPactado.toString());
       }
     }
+  };
 
-    // 2. Reprogramar si la fecha cambió y es un servicio programado
-    if (service.tipoAgenda === "programado" && nuevaFechaISO !== fechaActualISO) {
+  const handleChangePago = async (val: string) => {
+    setMetodoPago(val as any);
+    if (val !== service.metodoPago) {
+      setIsSaving(true);
+      const res = await updateServiceAction(service.id, {
+        metodoPago: val as any,
+      });
+      setIsSaving(false);
+      if (res.success) {
+        toast.success("Método de pago actualizado");
+        onRefresh();
+      } else {
+        toast.error(res.error || "Error al actualizar método de pago");
+        setMetodoPago(service.metodoPago);
+      }
+    }
+  };
+
+  const handleBlurFecha = async () => {
+    if (service.tipoAgenda !== "programado") return;
+    
+    const nuevaFecha = desdeHoraDelNegocio(fecha);
+    const nuevaFechaISO = nuevaFecha ? nuevaFecha.toISOString() : null;
+    const fechaActualISO = service.fechaProgramada
+      ? new Date(service.fechaProgramada).toISOString()
+      : null;
+
+    if (nuevaFechaISO !== fechaActualISO) {
       if (!nuevaFecha || nuevaFecha.getTime() <= Date.now()) {
         toast.error("La nueva hora tiene que estar en el futuro");
-        success = false;
+        // Revertir
+        setFecha(
+          paraInputDeFechaHora(
+            service.fechaProgramada
+              ? new Date(service.fechaProgramada)
+              : new Date(Date.now() + 60 * 60_000)
+          )
+        );
       } else {
+        setIsSaving(true);
         const res = await rescheduleServiceAction(service.id, nuevaFecha.toISOString(), false);
-        if (!res.success) {
+        setIsSaving(false);
+        if (res.success) {
+          toast.success("Fecha y hora actualizadas");
+          onRefresh();
+        } else {
           toast.error(res.error || "Error al reprogramar la fecha");
-          success = false;
+          setFecha(
+            paraInputDeFechaHora(
+              service.fechaProgramada
+                ? new Date(service.fechaProgramada)
+                : new Date(Date.now() + 60 * 60_000)
+            )
+          );
         }
       }
-    }
-
-    setIsSaving(false);
-    if (success) {
-      toast.success("Servicio actualizado correctamente");
-      onRefresh();
     }
   };
 
@@ -97,7 +133,14 @@ export default function ChatMonitorServiceForm({
     service.locationNameSnapshot || service.locationAddressSnapshot || "Sin ubicación";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {/* Loading overlay for quick auto-saves */}
+      {isSaving && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 rounded-xl backdrop-blur-[1px]">
+          <Loader2 className="animate-spin text-[#C5A55A]" />
+        </div>
+      )}
+
       {/* Lugar */}
       <div className="space-y-1.5">
         <label className="text-[10px] font-semibold uppercase tracking-widest text-[#C5A55A] flex items-center gap-1.5">
@@ -110,7 +153,7 @@ export default function ChatMonitorServiceForm({
           </span>
           <button
             onClick={() => setIsLocationOpen(true)}
-            className="text-xs font-medium text-[#C5A55A] hover:text-[#d8b769] transition-colors whitespace-nowrap bg-[#C5A55A]/10 px-2 py-1 rounded-lg"
+            className="text-xs font-medium text-[#C5A55A] hover:text-[#d8b769] transition-colors whitespace-nowrap bg-[#C5A55A]/10 px-2 py-1 rounded-lg cursor-pointer"
           >
             Editar
           </button>
@@ -130,27 +173,45 @@ export default function ChatMonitorServiceForm({
             min="1"
             value={duracion}
             onChange={(e) => setDuracion(e.target.value)}
+            onBlur={handleBlurText}
             className="w-full bg-black border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#C5A55A] transition-colors"
           />
         </div>
 
-        {/* Método de Pago */}
+        {/* Precio por hora */}
         <div className="space-y-1.5">
           <label className="text-[10px] font-semibold uppercase tracking-widest text-[#C5A55A] flex items-center gap-1.5">
-            <CreditCard size={12} />
-            Método de Pago
+            <DollarSign size={12} />
+            Precio x Hora
           </label>
-          <select
-            value={metodoPago}
-            onChange={(e) => setMetodoPago(e.target.value as any)}
-            className="w-full bg-black border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#C5A55A] transition-colors appearance-none"
-          >
-            <option value="efectivo">Efectivo</option>
-            <option value="tarjeta">Tarjeta</option>
-            <option value="transferencia">Transferencia</option>
-            <option value="mixto">Mixto</option>
-          </select>
+          <input
+            type="number"
+            step="100"
+            min="0"
+            value={precio}
+            onChange={(e) => setPrecio(e.target.value)}
+            onBlur={handleBlurText}
+            className="w-full bg-black border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#C5A55A] transition-colors"
+          />
         </div>
+      </div>
+
+      {/* Método de Pago */}
+      <div className="space-y-1.5">
+        <label className="text-[10px] font-semibold uppercase tracking-widest text-[#C5A55A] flex items-center gap-1.5">
+          <CreditCard size={12} />
+          Método de Pago
+        </label>
+        <select
+          value={metodoPago}
+          onChange={(e) => handleChangePago(e.target.value)}
+          className="w-full bg-black border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#C5A55A] transition-colors appearance-none cursor-pointer"
+        >
+          <option value="efectivo">Efectivo</option>
+          <option value="tarjeta">Tarjeta</option>
+          <option value="transferencia">Transferencia</option>
+          <option value="mixto">Mixto</option>
+        </select>
       </div>
 
       {/* Fecha y Hora (solo si es programado) */}
@@ -164,21 +225,10 @@ export default function ChatMonitorServiceForm({
             type="datetime-local"
             value={fecha}
             onChange={(e) => setFecha(e.target.value)}
-            className="w-full bg-black border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#C5A55A] transition-colors"
+            onBlur={handleBlurFecha}
+            className="w-full bg-black border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#C5A55A] transition-colors cursor-pointer"
           />
         </div>
-      )}
-
-      {/* Botón Guardar */}
-      {hasChanges && (
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-xl bg-[#C5A55A] hover:bg-[#d8b769] px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-black transition-all disabled:opacity-50"
-        >
-          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-          Guardar Cambios
-        </button>
       )}
 
       {/* Modal de Ubicación */}

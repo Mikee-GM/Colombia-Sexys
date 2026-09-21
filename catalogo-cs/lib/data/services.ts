@@ -76,6 +76,7 @@ export async function updateServiceAction(
   serviceId: string,
   data: {
     duracionPactadaHoras?: number;
+    precioBaseHoraPactado?: number;
     metodoPago?: "efectivo" | "tarjeta" | "transferencia" | "mixto";
     notas?: string;
     notasJefe?: string;
