@@ -10,6 +10,7 @@ import {
   type RecentChat,
   type ChatMessage
 } from '@/lib/actions/telegram-conversations';
+import ChatMonitorServicePanel from './chat-monitor-service-panel';
 
 export default function ChatMonitorClient() {
   const [chats, setChats] = useState<RecentChat[]>([]);
@@ -43,7 +44,7 @@ export default function ChatMonitorClient() {
     fetchChats();
     const interval = setInterval(fetchChats, 10000); // Polling cada 10s
     return () => clearInterval(interval);
-  }, [activeChat]);
+  }, [activeChat?.clienteId]);
 
   const loadChatHistory = async (clientId: string) => {
     const msgs = await getClientChatHistory(clientId);
@@ -58,12 +59,12 @@ export default function ChatMonitorClient() {
 
   // Recarga periódica del chat activo
   useEffect(() => {
-    if (!activeChat) return;
+    if (!activeChat?.clienteId) return;
     const interval = setInterval(() => {
       loadChatHistory(activeChat.clienteId);
     }, 5000);
     return () => clearInterval(interval);
-  }, [activeChat]);
+  }, [activeChat?.clienteId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -107,7 +108,7 @@ export default function ChatMonitorClient() {
   return (
     <div className="flex h-[calc(100vh-10rem)] border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/50">
       {/* Sidebar: Lista de Sesiones */}
-      <div className="w-1/3 border-r border-zinc-800 flex flex-col bg-zinc-900/50">
+      <div className="w-1/4 min-w-[280px] border-r border-zinc-800 flex flex-col bg-zinc-900/50">
         <div className="p-4 border-b border-zinc-800 bg-zinc-900">
           <h2 className="font-medium text-zinc-200">Chats Recientes</h2>
           <p className="text-xs text-zinc-400 mt-1">Todos los clientes que interactúan con el bot</p>
@@ -264,6 +265,11 @@ export default function ChatMonitorClient() {
             <p className="text-xs text-zinc-600 mt-1">Para ver el historial y responder</p>
           </div>
         )}
+      </div>
+
+      {/* Right Sidebar: Service Context */}
+      <div className="w-[320px] border-l border-zinc-800 bg-zinc-900/50 hidden lg:block">
+        <ChatMonitorServicePanel activeChat={activeChat} />
       </div>
     </div>
   );
