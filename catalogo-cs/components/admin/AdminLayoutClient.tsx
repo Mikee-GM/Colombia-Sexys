@@ -150,7 +150,7 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
   };
 
   const isActive = (path: string) => {
-    return pathname === path || (path !== "/admin/dashboard" && pathname.startsWith(path + "/"));
+    return pathname === path || (path !== "/admin/dashboard" && pathname?.startsWith(path + "/"));
   };
 
   const isLoginPage = pathname === "/admin";
