@@ -107,6 +107,7 @@ import {
   desdeHoraDelNegocio,
 } from '../common/locale';
 import { multiplyMoney, roundMoney, sumMoney } from '../common/money';
+import { interpretarFechaEscrita } from '../common/fecha-escrita';
 
 interface SessionData {
   step?:
@@ -130,11 +131,25 @@ interface SessionData {
     | 'AWAITING_EXTRA_AMOUNT'
     | 'AWAITING_ROOM'
     | 'BOSS_AWAITING_CLIENT_SEARCH'
-    | 'BOSS_AWAITING_CLIENT_NAME';
+    | 'BOSS_AWAITING_CLIENT_NAME'
+    | 'BOSS_AWAITING_SCHEDULE_DATE';
   bossManualService?: {
     empleadaId?: string;
     clientId?: string;
     clienteNombreLibre?: string;
+    /*
+     * Lo ya elegido en los pasos anteriores, guardado mientras se le pregunta
+     * al jefe la hora de la cita. No puede viajar en el `callback_data` del
+     * boton: Telegram lo limita a 64 bytes y con dos UUID no cabe.
+     */
+    citaPendiente?: {
+      clientId: string;
+      empleadaId: string;
+      duracion: number;
+      metodoPago: 'efectivo' | 'tarjeta' | 'transferencia';
+      locId: string;
+      threadId?: number;
+    };
   };
   empleadaId?: string;
   duracionPactadaHoras?: number;
@@ -6998,6 +7013,42 @@ export class TelegramBookingUpdate {
     }
 
     if (
+      ctx.session?.step === 'BOSS_AWAITING_SCHEDULE_DATE' &&
+      ctx.session.bossManualService?.citaPendiente
+    ) {
+      const texto = ((ctx.message as { text?: string })?.text || '').trim();
+
+      if (/^\/cancelar\b/i.test(texto)) {
+        ctx.session.step = undefined;
+        ctx.session.bossManualService = undefined;
+        await ctx.reply('Alta cancelada. No se creó ningún servicio.');
+        return;
+      }
+
+      const fecha = interpretarFechaEscrita(texto);
+      if (!fecha) {
+        /*
+         * No se adivina ni se pasa a la IA: una hora mal entendida manda a la
+         * modelo al motel el dia que no es. Se vuelve a preguntar con ejemplos,
+         * y la conversacion no se queda sin salida porque el propio texto dice
+         * como salir.
+         */
+        await ctx.reply(this.textoPideHoraDeCita(true), {
+          parse_mode: 'Markdown',
+        });
+        return;
+      }
+
+      const pendiente = ctx.session.bossManualService.citaPendiente;
+      ctx.session.step = undefined;
+      await this.crearServicioManualDelJefe(ctx, {
+        ...pendiente,
+        fechaProgramada: fecha,
+      });
+      return;
+    }
+
+    if (
       ctx.session?.step === 'BOSS_AWAITING_CLIENT_NAME' &&
       ctx.session.bossManualService?.empleadaId
     ) {
@@ -10565,8 +10616,8 @@ export class TelegramBookingUpdate {
       ],
       [
         Markup.button.callback(
-          '📅 Programado (+1 hora)',
-          `boss_ms_conf:${clientId}:${empleadaId}:${duracion}:${metodoPago}:${locId}:programado`,
+          '📅 Programado (elegir hora)',
+          `boss_ms_sched:${clientId}:${empleadaId}:${duracion}:${metodoPago}:${locId}`,
         ),
       ],
       [Markup.button.callback('❌ Cancelar', 'boss_ms_cancel')],
@@ -10582,20 +10633,128 @@ export class TelegramBookingUpdate {
       .catch(() => ctx.reply(msgText, extra));
   }
 
+  /**
+   * Pregunta al jefe para cuando es la cita.
+   *
+   * Antes esta rama no preguntaba nada: el servicio nacia con una hora de
+   * marcador --siempre una hora a partir de ese momento-- y no habia forma de
+   * corregirla desde el bot. El jefe agendaba para las ocho de la noche y el
+   * sistema entendia otra cosa.
+   */
+  @Action(
+    /^boss_ms_sched:(.+):(.+):(\d+):(efectivo|tarjeta|transferencia):(.+)$/,
+  )
+  async onBossMsSchedule(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => {});
+    const match = (ctx as any).match;
+
+    await this.pedirHoraDeCita(ctx, {
+      clientId: match[1],
+      empleadaId: match[2],
+      duracion: parseInt(match[3], 10),
+      metodoPago: match[4] as 'efectivo' | 'tarjeta' | 'transferencia',
+      locId: match[5],
+      threadId: (ctx.callbackQuery?.message as any)?.message_thread_id,
+    });
+  }
+
+  /** Guarda lo ya elegido y deja la sesion esperando la hora escrita. */
+  private async pedirHoraDeCita(
+    ctx: BotContext,
+    citaPendiente: {
+      clientId: string;
+      empleadaId: string;
+      duracion: number;
+      metodoPago: 'efectivo' | 'tarjeta' | 'transferencia';
+      locId: string;
+      threadId?: number;
+    },
+  ): Promise<void> {
+    ctx.session ||= {};
+    ctx.session.step = 'BOSS_AWAITING_SCHEDULE_DATE';
+    ctx.session.bossManualService = {
+      ...ctx.session.bossManualService,
+      citaPendiente,
+    };
+
+    const msg = this.textoPideHoraDeCita();
+    await ctx
+      .editMessageText(msg, { parse_mode: 'Markdown' })
+      .catch(() => ctx.reply(msg, { parse_mode: 'Markdown' }));
+  }
+
+  /** El mismo texto al preguntar y al no entender: siempre con ejemplos. */
+  private textoPideHoraDeCita(noSeEntendio = false): string {
+    return (
+      (noSeEntendio
+        ? '❓ *No entendí esa hora.*\n\n'
+        : '📅 *Paso 7: ¿Para cuándo es la cita?*\n\n') +
+      'Escríbela en hora de Ciudad de México. Por ejemplo:\n' +
+      '• `20:00` (hoy, o mañana si ya pasó)\n' +
+      '• `8pm`\n' +
+      '• `mañana 14:30`\n' +
+      '• `25/09 20:00`\n\n' +
+      'Escribe /cancelar para dejarlo.'
+    );
+  }
+
   @Action(
     /^boss_ms_conf:(.+):(.+):(\d+):(efectivo|tarjeta|transferencia):(.+):(inmediato|programado)$/,
   )
   async onBossMsConfirm(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery().catch(() => {});
     const match = (ctx as any).match;
-    const clientId = match[1];
-    const empleadaId = match[2];
-    const duracion = parseInt(match[3], 10);
-    const metodoPago = match[4] as 'efectivo' | 'tarjeta' | 'transferencia';
-    const locId = match[5];
-    const tipoAgenda = match[6] as 'inmediato' | 'programado';
 
-    const threadId = (ctx.callbackQuery?.message as any)?.message_thread_id;
+    /*
+     * El boton "programado" ya no se pinta --ahora se pregunta la hora-- pero
+     * los que quedaron en conversaciones viejas se siguen pudiendo pulsar. Se
+     * les da la entrada nueva en vez de dejarlos mudos o, peor, crear un
+     * servicio inmediato sin que nadie lo haya pedido.
+     */
+    if (match[6] === 'programado') {
+      await this.pedirHoraDeCita(ctx, {
+        clientId: match[1],
+        empleadaId: match[2],
+        duracion: parseInt(match[3], 10),
+        metodoPago: match[4] as 'efectivo' | 'tarjeta' | 'transferencia',
+        locId: match[5],
+        threadId: (ctx.callbackQuery?.message as any)?.message_thread_id,
+      });
+      return;
+    }
+
+    await this.crearServicioManualDelJefe(ctx, {
+      clientId: match[1],
+      empleadaId: match[2],
+      duracion: parseInt(match[3], 10),
+      metodoPago: match[4] as 'efectivo' | 'tarjeta' | 'transferencia',
+      locId: match[5],
+      threadId: (ctx.callbackQuery?.message as any)?.message_thread_id,
+    });
+  }
+
+  /**
+   * Crea el servicio con lo reunido por el asistente del jefe.
+   *
+   * Lo comparten la rama inmediata --que entra por el boton-- y la programada,
+   * que entra despues de que el jefe escriba la hora. Sin `fechaProgramada` el
+   * servicio es para ya mismo.
+   */
+  private async crearServicioManualDelJefe(
+    ctx: BotContext,
+    datos: {
+      clientId: string;
+      empleadaId: string;
+      duracion: number;
+      metodoPago: 'efectivo' | 'tarjeta' | 'transferencia';
+      locId: string;
+      threadId?: number;
+      fechaProgramada?: Date;
+    },
+  ): Promise<void> {
+    const { clientId, empleadaId, duracion, metodoPago, locId, threadId } =
+      datos;
+    const tipoAgenda = datos.fechaProgramada ? 'programado' : 'inmediato';
 
     try {
       const empleada = await this.empleadasRepository.findOne({
@@ -10651,11 +10810,6 @@ export class TelegramBookingUpdate {
         }
       }
 
-      const scheduledDate =
-        tipoAgenda === 'programado'
-          ? new Date(Date.now() + 60 * 60 * 1000)
-          : undefined;
-
       const newService = await this.servicesService.create({
         empleadaId: empleada.id,
         clienteId: client?.id,
@@ -10668,7 +10822,7 @@ export class TelegramBookingUpdate {
         precioBaseHoraPactado: Number(empleada.precioBaseHora) || 1200,
         notas: `Servicio creado manualmente por el jefe (${locName})`,
         tipoAgenda,
-        fechaProgramada: scheduledDate,
+        fechaProgramada: datos.fechaProgramada,
         presetLocationId,
         clienteTelegramId: client?.telegramChatId,
       });
@@ -10686,6 +10840,16 @@ export class TelegramBookingUpdate {
         'Sin cliente (anónimo)';
 
       const totalBase = (Number(empleada.precioBaseHora) || 1200) * duracion;
+      const cuando = datos.fechaProgramada
+        ? datos.fechaProgramada.toLocaleString(APP_LOCALE, {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: APP_TIME_ZONE,
+          })
+        : null;
       const successMsg =
         `✅ *Servicio Creado Exitosamente*\n\n` +
         `• *ID:* #${newService.id.slice(0, 8)}\n` +
@@ -10695,7 +10859,7 @@ export class TelegramBookingUpdate {
         `• *Método de Pago:* ${metodoPago.toUpperCase()}\n` +
         `• *Ubicación:* ${locName}\n` +
         `• *Total Base:* $${totalBase}\n` +
-        `• *Agenda:* ${tipoAgenda.toUpperCase()}`;
+        `• *Agenda:* ${cuando ? `PROGRAMADA · ${cuando}` : 'INMEDIATO'}`;
 
       await ctx
         .editMessageText(successMsg, { parse_mode: 'Markdown' })
@@ -10703,7 +10867,9 @@ export class TelegramBookingUpdate {
 
       // Notificar al cliente en privado solo si tiene Telegram Chat ID
       if (client?.telegramChatId) {
-        const clientMsg = `¡Listo amor! Tu servicio con *${empleada.nombreArtistico}* por ${duracion} hora(s) ha sido confirmado. Ya nos estamos preparando para salir a verte.`;
+        const clientMsg = cuando
+          ? `¡Listo amor! Tu cita con *${empleada.nombreArtistico}* por ${duracion} hora(s) queda para el ${cuando}. Ahí nos vemos.`
+          : `¡Listo amor! Tu servicio con *${empleada.nombreArtistico}* por ${duracion} hora(s) ha sido confirmado. Ya nos estamos preparando para salir a verte.`;
         await this.bot.telegram.sendMessage(client.telegramChatId, clientMsg, {
           parse_mode: 'Markdown',
         });
