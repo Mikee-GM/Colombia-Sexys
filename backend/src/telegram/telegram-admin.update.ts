@@ -15,6 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { Clientes } from '../clients/entities/client.entity';
+import { ConversacionesTelegram } from '../telegram-conversations/entities/telegram-conversation.entity';
 import { DisciplineService } from '../discipline/discipline.service';
 import { ServicesService } from '../services/services.service';
 import type { TelegramSessionData } from './telegram-booking.update';
@@ -39,6 +40,9 @@ type BossContext = Context & { session?: TelegramSessionData };
 export class TelegramAdminUpdate {
   private readonly logger = new Logger(TelegramAdminUpdate.name);
 
+  /** Canal admin activo: el telegramId del cliente al que se le envían mensajes directos. */
+  private activeAdminChat: string | null = null;
+
   constructor(
     @InjectBot() private readonly bot: Telegraf<Context>,
     @InjectRepository(Usuarios)
@@ -53,6 +57,8 @@ export class TelegramAdminUpdate {
     private readonly discipline: DisciplineService,
     @InjectRepository(TelegramSession)
     private readonly telegramSessionRepository: Repository<TelegramSession>,
+    @InjectRepository(ConversacionesTelegram)
+    private readonly conversationsRepository: Repository<ConversacionesTelegram>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -1248,41 +1254,424 @@ export class TelegramAdminUpdate {
   }
 
   /**
-   * Responder a un mensaje espiado.
+   * /chats
    *
-   * Si el administrador hace "Responder" (Reply) a un mensaje reenviado en su
-   * chat, extraemos el ID del cliente del mensaje original (ej: `555123456`)
-   * y se lo enviamos a él directamente.
+   * Lista todos los clientes que han interactuado con el bot recientemente,
+   * organizados con botones inline para entrar a cada chat.
+   */
+  @Command('chats')
+  async onChats(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const sessions = await this.telegramSessionRepository.find();
+    const clientSessions = sessions
+      .map((s) => {
+        const parsed = parseSessionKey(s.key);
+        if (!parsed?.fromId) return null;
+        const d: TelegramSessionData = s.data || {};
+        return {
+          telegramId: parsed.fromId,
+          step: d.step || '?',
+          humanTakeover: !!d.humanTakeover,
+          iaActiva: d.iaActiva !== false,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x);
+
+    if (!clientSessions.length) {
+      await ctx.reply('📭 No hay conversaciones activas en este momento.');
+      return;
+    }
+
+    // Buscar nombres de clientes
+    const clientInfos = await Promise.all(
+      clientSessions.map(async (cs) => {
+        const cliente = await this.clientesRepository.findOne({
+          where: { telegramChatId: cs.telegramId },
+        });
+        const nombre = cliente?.nombreTelegram || cs.telegramId;
+        const estado = cs.humanTakeover ? '⚠️' : cs.iaActiva ? '🤖' : '🔕';
+        return { ...cs, nombre, estado };
+      }),
+    );
+
+    const buttons = clientInfos.map((ci) => [
+      Markup.button.callback(
+        `${ci.estado} ${ci.nombre} (${ci.step})`,
+        `spy_history:${ci.telegramId}`,
+      ),
+    ]);
+
+    await ctx.reply(
+      `📋 *Conversaciones activas (${clientInfos.length}):*\n\nToca un cliente para ver su historial:`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(buttons),
+      },
+    );
+  }
+
+  /**
+   * /chat <telegramId>
+   *
+   * Muestra los últimos 10 mensajes del historial con un cliente específico.
+   */
+  @Command('chat')
+  async onChat(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const text = (ctx.message as any)?.text || '';
+    const parts = text.trim().split(/\s+/);
+    const clientTelegramId = parts[1];
+
+    if (!clientTelegramId) {
+      await ctx.reply(
+        '❌ Uso: /chat <telegramId>\n\nEjemplo: /chat 5536271234',
+      );
+      return;
+    }
+
+    await this.showClientHistory(ctx, clientTelegramId);
+  }
+
+  /**
+   * /chatear <telegramId>
+   *
+   * Abre un "canal directo" con un cliente. A partir de ese momento, todo lo
+   * que escribas (texto o fotos) se envía directamente a ese cliente, hasta
+   * que escribas /salir.
+   */
+  @Command('chatear')
+  async onChatear(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    const text = (ctx.message as any)?.text || '';
+    const parts = text.trim().split(/\s+/);
+    const clientTelegramId = parts[1];
+
+    if (!clientTelegramId) {
+      await ctx.reply(
+        '❌ Uso: /chatear <telegramId>\n\n' +
+          'Abre un canal directo. Todo lo que escribas se le enviará al cliente.\n' +
+          'Escribe /salir para cerrar el canal.',
+      );
+      return;
+    }
+
+    const cliente = await this.clientesRepository.findOne({
+      where: { telegramChatId: clientTelegramId },
+    });
+    const nombre = cliente?.nombreTelegram || clientTelegramId;
+
+    // Guardar en memoria el canal activo
+    this.activeAdminChat = clientTelegramId;
+
+    await ctx.reply(
+      `🔗 *Canal abierto con ${nombre}* (\`${clientTelegramId}\`)\n\n` +
+        `Todo lo que escribas aquí se le enviará directamente.\n` +
+        `📷 También puedes enviar fotos.\n` +
+        `Escribe /salir para cerrar el canal.`,
+      { parse_mode: 'Markdown' },
+    );
+  }
+
+  @Command('salir')
+  async onSalir(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+
+    if (!this.activeAdminChat) {
+      await ctx.reply('ℹ️ No hay ningún canal abierto.');
+      return;
+    }
+
+    const closed = this.activeAdminChat;
+    this.activeAdminChat = null;
+    await ctx.reply(`✅ Canal con \`${closed}\` cerrado.`, {
+      parse_mode: 'Markdown',
+    });
+  }
+
+  // ── Inline button handlers ──────────────────────────────────────────────
+
+  /**
+   * Botón "Responder" en un mensaje espía.
+   * Activa el canal directo con ese cliente.
+   */
+  @Action(/^spy_reply:(\d+)$/)
+  async onSpyReply(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+    const clientTelegramId = (ctx as any).match[1] as string;
+
+    const cliente = await this.clientesRepository.findOne({
+      where: { telegramChatId: clientTelegramId },
+    });
+    const nombre = cliente?.nombreTelegram || clientTelegramId;
+
+    this.activeAdminChat = clientTelegramId;
+
+    await ctx.answerCbQuery(`Canal abierto con ${nombre}`);
+    await ctx.reply(
+      `🔗 *Canal abierto con ${nombre}* (\`${clientTelegramId}\`)\n\n` +
+        `Escribe tu mensaje y se le enviará directamente.\n` +
+        `📷 Puedes enviar fotos también.\n` +
+        `Escribe /salir para cerrar el canal.`,
+      { parse_mode: 'Markdown' },
+    );
+  }
+
+  /**
+   * Botón "Pausar IA" en un mensaje espía.
+   */
+  @Action(/^spy_pause:(\d+)$/)
+  async onSpyPause(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+    const clientTelegramId = (ctx as any).match[1] as string;
+
+    const sessions = await this.telegramSessionRepository.find();
+    const clientSession = sessions.find((s) => {
+      const parsed = parseSessionKey(s.key);
+      return parsed?.fromId === clientTelegramId;
+    });
+
+    if (!clientSession) {
+      await ctx.answerCbQuery('Sesión no encontrada', { show_alert: true });
+      return;
+    }
+
+    const data: TelegramSessionData = clientSession.data || {};
+    data.humanTakeover = true;
+    data.iaActiva = false;
+    clientSession.data = data;
+    await this.telegramSessionRepository.save(clientSession);
+
+    await ctx.answerCbQuery('IA pausada ✅');
+    await ctx.reply(
+      `⏸ *IA pausada* para \`${clientTelegramId}\`\n` +
+        `Puedes contestar tú con /chatear ${clientTelegramId}`,
+      { parse_mode: 'Markdown' },
+    );
+  }
+
+  /**
+   * Botón "Reanudar IA" en un mensaje espía.
+   */
+  @Action(/^spy_resume:(\d+)$/)
+  async onSpyResume(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+    const clientTelegramId = (ctx as any).match[1] as string;
+
+    const sessions = await this.telegramSessionRepository.find();
+    const clientSession = sessions.find((s) => {
+      const parsed = parseSessionKey(s.key);
+      return parsed?.fromId === clientTelegramId;
+    });
+
+    if (!clientSession) {
+      await ctx.answerCbQuery('Sesión no encontrada', { show_alert: true });
+      return;
+    }
+
+    const data: TelegramSessionData = clientSession.data || {};
+    data.humanTakeover = false;
+    data.iaActiva = true;
+    data.fallosIaSeguidos = 0;
+    clientSession.data = data;
+    await this.telegramSessionRepository.save(clientSession);
+
+    await ctx.answerCbQuery('IA reanudada ✅');
+    await ctx.reply(`▶️ *IA reactivada* para \`${clientTelegramId}\``, {
+      parse_mode: 'Markdown',
+    });
+  }
+
+  /**
+   * Botón "Historial" en un mensaje espía.
+   */
+  @Action(/^spy_history:(\d+)$/)
+  async onSpyHistory(@Ctx() ctx: Context) {
+    if (!this.isAdmin(ctx)) return;
+    const clientTelegramId = (ctx as any).match[1] as string;
+    await ctx.answerCbQuery('Cargando historial...');
+    await this.showClientHistory(ctx, clientTelegramId);
+  }
+
+  /**
+   * Muestra los últimos mensajes de un cliente en el chat del admin.
+   */
+  private async showClientHistory(ctx: Context, clientTelegramId: string) {
+    const cliente = await this.clientesRepository.findOne({
+      where: { telegramChatId: clientTelegramId },
+    });
+    const nombre = cliente?.nombreTelegram || clientTelegramId;
+
+    if (!cliente) {
+      await ctx.reply(
+        `⚠️ Cliente con Telegram ID \`${clientTelegramId}\` no encontrado en BD.`,
+        {
+          parse_mode: 'Markdown',
+        },
+      );
+      return;
+    }
+
+    // Obtener últimos 15 mensajes de la BD
+    const conversations = await this.conversationsRepository.find({
+      where: { clienteId: cliente.id },
+      order: { enviadoAt: 'DESC' },
+      take: 15,
+    });
+
+    if (!conversations.length) {
+      await ctx.reply(
+        `📭 No hay historial para *${nombre}* (\`${clientTelegramId}\`)`,
+        { parse_mode: 'Markdown' },
+      );
+      return;
+    }
+
+    const lines = conversations.reverse().map((c) => {
+      const time = new Date(c.enviadoAt).toLocaleTimeString('es-MX', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Bogota',
+      });
+      const icon =
+        c.emisor === 'cliente'
+          ? '👤'
+          : c.emisor === 'ia'
+            ? '🤖'
+            : c.emisor === 'jefe'
+              ? '👨‍💼'
+              : '⚙️';
+      return `${icon} [${time}] ${c.mensaje.slice(0, 200)}`;
+    });
+
+    await ctx.reply(
+      `📜 *Historial de ${nombre}* (\`${clientTelegramId}\`)\n` +
+        `Últimos ${conversations.length} mensajes:\n\n` +
+        lines.join('\n\n'),
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              '💬 Responder',
+              `spy_reply:${clientTelegramId}`,
+            ),
+            Markup.button.callback(
+              '⏸ Pausar IA',
+              `spy_pause:${clientTelegramId}`,
+            ),
+          ],
+        ]),
+      },
+    );
+  }
+
+  /**
+   * Handler de mensajes del admin.
+   *
+   * Si hay un canal activo (activeAdminChat), envía directamente al cliente.
+   * Si no, intenta detectar si está respondiendo a un mensaje espía (reply).
+   * Soporta texto y fotos.
    */
   @On('message')
   async onAdminReply(@Ctx() ctx: Context) {
     if (!this.isAdmin(ctx)) return;
 
     const msg = ctx.message as any;
-    if (!msg?.reply_to_message || !msg?.text) return; // Si no es un texto respondiendo a algo, lo ignoramos
 
-    // Verificar si está respondiendo a un mensaje espía del bot (que contiene el ID)
-    const repliedMsg = msg.reply_to_message;
-    if (repliedMsg.from?.id === ctx.botInfo.id && repliedMsg.text) {
-      // El formato espía es: 👁 Nombre · `123456789`
-      const match = repliedMsg.text.match(/·\s?`?(\d{6,15})`?/);
-      if (match && match[1]) {
-        const clientTelegramId = match[1];
-        try {
-          await this.bot.telegram.sendMessage(clientTelegramId, msg.text);
-          await ctx.reply(`✅ Respondido a \`${clientTelegramId}\``, {
+    // ── Canal activo: enviar directamente ──
+    if (this.activeAdminChat) {
+      try {
+        // Soporte para fotos
+        if (msg?.photo && msg.photo.length > 0) {
+          const fileId = msg.photo[msg.photo.length - 1].file_id;
+          const caption = msg.caption || '';
+          await this.bot.telegram.sendPhoto(this.activeAdminChat, fileId, {
+            caption: caption || undefined,
+          });
+          await ctx.reply(`✅ 📷 Foto enviada a \`${this.activeAdminChat}\``, {
             parse_mode: 'Markdown',
           });
-        } catch (error: any) {
-          this.logger.error(
-            `Error en Reply admin a ${clientTelegramId}`,
-            error,
+          return;
+        }
+
+        // Soporte para documentos
+        if (msg?.document) {
+          await this.bot.telegram.sendDocument(
+            this.activeAdminChat,
+            msg.document.file_id,
+            { caption: msg.caption || undefined },
           );
           await ctx.reply(
-            `❌ Fallo al responder: ${error?.message || 'Error desconocido'}`,
+            `✅ 📎 Archivo enviado a \`${this.activeAdminChat}\``,
+            {
+              parse_mode: 'Markdown',
+            },
           );
+          return;
         }
+
+        // Soporte para texto
+        if (msg?.text) {
+          // Ignorar comandos
+          if (msg.text.startsWith('/')) return;
+
+          await this.bot.telegram.sendMessage(this.activeAdminChat, msg.text);
+          await ctx.reply(`✅ Enviado a \`${this.activeAdminChat}\``, {
+            parse_mode: 'Markdown',
+          });
+          return;
+        }
+      } catch (error: any) {
+        this.logger.error(
+          `Error en canal admin a ${this.activeAdminChat}`,
+          error,
+        );
+        await ctx.reply(
+          `❌ Fallo al enviar: ${error?.message || 'Error desconocido'}`,
+        );
+        return;
       }
+    }
+
+    // ── Reply a un mensaje espía (sin canal activo) ──
+    if (!msg?.reply_to_message) return;
+
+    const repliedMsg = msg.reply_to_message;
+    if (repliedMsg.from?.id !== ctx.botInfo.id) return;
+
+    // Extraer el telegramId del formato espía: `123456789`
+    const replyText = repliedMsg.text || repliedMsg.caption || '';
+    const match = replyText.match(/`(\d{6,15})`/);
+    if (!match || !match[1]) return;
+
+    const clientTelegramId = match[1];
+    try {
+      // Soporte para fotos en reply
+      if (msg?.photo && msg.photo.length > 0) {
+        const fileId = msg.photo[msg.photo.length - 1].file_id;
+        await this.bot.telegram.sendPhoto(clientTelegramId, fileId, {
+          caption: msg.caption || undefined,
+        });
+        await ctx.reply(`✅ 📷 Foto enviada a \`${clientTelegramId}\``, {
+          parse_mode: 'Markdown',
+        });
+        return;
+      }
+
+      if (msg?.text) {
+        await this.bot.telegram.sendMessage(clientTelegramId, msg.text);
+        await ctx.reply(`✅ Respondido a \`${clientTelegramId}\``, {
+          parse_mode: 'Markdown',
+        });
+      }
+    } catch (error: any) {
+      this.logger.error(`Error en Reply admin a ${clientTelegramId}`, error);
+      await ctx.reply(
+        `❌ Fallo al responder: ${error?.message || 'Error desconocido'}`,
+      );
     }
   }
 }

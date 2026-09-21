@@ -7620,6 +7620,7 @@ export class TelegramBookingUpdate {
       // ── SPY ADMIN ─────────────────────────────────────────────────────────
       // Reenvía silenciosamente cada mensaje de cliente al administrador.
       // Solo activo cuando ADMIN_SPY_CHAT_ID está configurado.
+      // Ahora incluye botones inline para responder, pausar y ver historial.
       const spyChatId = this.configService.get<string>('ADMIN_SPY_CHAT_ID');
       if (spyChatId && spyChatId.trim()) {
         try {
@@ -7631,13 +7632,48 @@ export class TelegramBookingUpdate {
               : '';
           const rawText =
             (ctx.message as { text?: string })?.text || '(mensaje)';
+          const step = ctx.session?.step || '?';
           const spyMsg =
-            `👁 ${takeoverMark}${clientName} · \`${telegramId}\`\n` +
+            `👁 ${takeoverMark}*${clientName}* · \`${telegramId}\`\n` +
+            `📍 Paso: ${step}\n` +
             `"${rawText.slice(0, 300)}"`;
+
+          const isHuman =
+            ctx.session?.humanTakeover || ctx.session?.iaActiva === false;
           void this.bot.telegram.sendMessage(spyChatId.trim(), spyMsg, {
             parse_mode: 'Markdown',
             disable_notification: true,
+            ...Markup.inlineKeyboard([
+              [
+                Markup.button.callback(
+                  '💬 Responder',
+                  `spy_reply:${telegramId}`,
+                ),
+                Markup.button.callback(
+                  isHuman ? '▶️ Reanudar IA' : '⏸ Pausar IA',
+                  isHuman
+                    ? `spy_resume:${telegramId}`
+                    : `spy_pause:${telegramId}`,
+                ),
+              ],
+              [
+                Markup.button.callback(
+                  '📜 Historial',
+                  `spy_history:${telegramId}`,
+                ),
+              ],
+            ]),
           });
+
+          // Si hay foto, reenviarla también
+          const photo = (ctx.message as any)?.photo;
+          if (photo && photo.length > 0) {
+            const fileId = photo[photo.length - 1].file_id;
+            void this.bot.telegram.sendPhoto(spyChatId.trim(), fileId, {
+              caption: `📷 Foto de *${clientName}* · \`${telegramId}\``,
+              parse_mode: 'Markdown',
+            });
+          }
         } catch {
           // El spy es best-effort: nunca debe romper el flujo normal del cliente
         }
