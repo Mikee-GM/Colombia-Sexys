@@ -10,6 +10,8 @@ import {
 } from '@nestjs/common';
 import { TelegramConversationsService } from './telegram-conversations.service';
 import { CreateTelegramConversationDto } from './dto/create-telegram-conversation.dto';
+import { ToggleAiDto } from './dto/toggle-ai.dto';
+import { AdminMessageDto, SessionAdminMessageDto } from './dto/admin-message.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -93,7 +95,7 @@ export class TelegramConversationsController {
   @Post('service/:serviceId/admin-message')
   sendAdminMessage(
     @Param('serviceId') serviceId: string,
-    @Body() dto: { message: string; asIdentity?: 'empleada' | 'jefe' | 'ia' },
+    @Body() dto: AdminMessageDto,
     @Req() req: any,
   ) {
     return this.conversationsService.sendAdminMessage(
@@ -107,7 +109,7 @@ export class TelegramConversationsController {
   @Post('session/:bookingSessionId/admin-message')
   sendAdminMessageToSession(
     @Param('bookingSessionId') bookingSessionId: string,
-    @Body() dto: { message: string; asIdentity?: 'ia' | 'jefe' },
+    @Body() dto: SessionAdminMessageDto,
     @Req() req: any,
   ) {
     return this.conversationsService.sendAdminMessageToSession(
@@ -138,7 +140,7 @@ export class TelegramConversationsController {
   @Post('chat/:clientId/message')
   sendAdminMessageByClient(
     @Param('clientId') clientId: string,
-    @Body() dto: { message: string; asIdentity?: 'ia' | 'jefe' },
+    @Body() dto: SessionAdminMessageDto,
     @Req() req: any,
   ) {
     return this.conversationsService.sendAdminMessageByClient(
@@ -152,7 +154,7 @@ export class TelegramConversationsController {
   @Post('chat/:clientId/toggle-ai')
   toggleAiByClient(
     @Param('clientId') clientId: string,
-    @Body() dto: { iaActiva: boolean },
+    @Body() dto: ToggleAiDto,
     @Req() req: any,
   ) {
     return this.conversationsService.toggleAiByClient(
