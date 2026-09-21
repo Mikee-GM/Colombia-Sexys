@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { ButtonHTMLAttributes, Dispatch, ReactNode, SetStateAction } from "react";
-import { Award, Banknote, ArrowLeft, ArrowRight, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, Copy, ExternalLink, FileCheck2, Hourglass, LogOut, MapPin, MessageCircle, Navigation, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { Award, Banknote, ArrowLeft, ArrowRight, Ban, CalendarClock, Camera, Car, Check, CircleDollarSign, Copy, ExternalLink, FileCheck2, Hourglass, LogOut, MapPin, MapPinned, MessageCircle, Navigation, Pencil, Plus, Repeat2, Search, Send, Smartphone, Star, Trash2, UserRoundCheck, UserRoundX, X } from "lucide-react";
 import { toast } from "sonner";
 import Image from "next/image";
 import imageCompression from "browser-image-compression";
@@ -12,6 +12,8 @@ import EvaluationHistorySheet from "@/components/admin/evaluations/evaluation-hi
 import CreateServiceDialog from "@/components/services/create-service-dialog";
 import ServiceStatusBadge from "@/components/services/service-status-badge";
 import CancelServiceDialog from "@/components/services/cancel-service-dialog";
+import ServiceRescheduleDialog from "@/components/services/service-reschedule-dialog";
+import ServiceLocationDialog from "@/components/services/service-location-dialog";
 import GaleriaFotos from "@/components/erp/galeria-fotos";
 import CerrarPorOficina from "@/components/services/cerrar-por-oficina";
 import ReasignarModelo from "@/components/services/reasignar-modelo";
@@ -84,6 +86,13 @@ export default function TeamOperations({ initialEmployees, initialServices, init
   // disponibilidad desde la propia hoja esta seguiria mostrando el estado
   // anterior, porque la lista se actualiza pero la copia de la hoja no.
   const [detalleEmpleadaId, setDetalleEmpleadaId] = useState<string | null>(null);
+  /*
+   * La hora y el lugar se cambian desde su propio dialogo, no desde el de
+   * "editar servicio pendiente": cada uno tiene su comprobacion --la agenda de
+   * la modelo, el area de cobertura-- y avisa a quien se tiene que presentar.
+   */
+  const [reprogramandoService, setReprogramandoService] = useState<Service | null>(null);
+  const [ubicacionService, setUbicacionService] = useState<Service | null>(null);
   const [pending, startTransition] = useTransition();
 
   const chatServiceRef = useRef<Service | null>(null);
@@ -417,7 +426,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     {tab === "equipo" ? <section>
       <label className="mb-4 flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-4 focus-within:border-[#C5A55A]/70"><Search size={18} className="text-[#C5A55A]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar empleada" className="w-full bg-transparent py-3.5 text-sm text-white outline-none placeholder:text-zinc-600" /></label>
       <EmployeeList employees={visibleEmployees} sinLeer={canalSinLeer} disabled={pending} onToggle={toggleAvailability} onOpen={(employee) => setDetalleEmpleadaId(employee.id)} />
-    </section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : tab === "historial" ? <ServiceList employees={employees} services={filteredHistory} allServices={services} active={false} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} /> : <div className="flex flex-col gap-7">
+    </section> : tab === "grupos" ? <GroupServiceOrganizer initialRequests={groupRequests} /> : tab === "efectivo" ? <CashDeliveryPanel summary={cashSummary} pending={pending} run={(action) => startTransition(async () => { const result = await action(); if (!result.success) { toast.error(result.error); return; } setCashSummary(await getJefeCashObligations()); toast.success("Entrega de efectivo registrada"); })} /> : tab === "historial" ? <ServiceList employees={employees} services={filteredHistory} allServices={services} active={false} disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onRequestReschedule={setReprogramandoService} onRequestLocation={setUbicacionService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} /> : <div className="flex flex-col gap-7">
       {/* Los grupales se anuncian aqui, que es donde se mira lo urgente, en vez
           de esperar en una pestaña que ya no esta a la vista. */}
       {groupRequests.length > 0 && (
@@ -440,7 +449,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
             <span className="h-1.5 w-1.5 rounded-full bg-[#C5A55A]" />
             {pendientes.length === 1 ? "Espera tu autorización" : "Esperan tu autorización"}
           </p>
-          <ServiceList employees={employees} services={pendientes} allServices={services} active disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />
+          <ServiceList employees={employees} services={pendientes} allServices={services} active disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onRequestReschedule={setReprogramandoService} onRequestLocation={setUbicacionService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />
         </section>
       )}
 
@@ -450,7 +459,7 @@ export default function TeamOperations({ initialEmployees, initialServices, init
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             En curso
           </p>
-          <ServiceList employees={employees} services={enCurso} allServices={services} active disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />
+          <ServiceList employees={employees} services={enCurso} allServices={services} active disabled={pending} onDecide={decide} onRequestAccept={setAcceptingService} onRequestEdit={setEditingService} onRequestReschedule={setReprogramandoService} onRequestLocation={setUbicacionService} onCancel={setCancellingService} onChat={openChat} onRefresh={reloadServices} />
         </section>
       )}
 
@@ -476,6 +485,8 @@ export default function TeamOperations({ initialEmployees, initialServices, init
     {chatService && <ChatPanel service={chatService} messages={messages} setMessages={setMessages} onClose={() => setChatService(null)} />}
     {acceptingService && <AcceptServiceDialog service={acceptingService} previousService={services.find((item) => item.id === acceptingService.servicioPrevioId)} disabled={pending} onClose={() => setAcceptingService(null)} onAccept={(transport, notes) => decide(acceptingService, "aceptar", transport, notes)} />}
     {editingService && <EditPendingServiceDialog service={editingService} onClose={() => setEditingService(null)} onSaved={handleSaveServiceEdit} />}
+    {reprogramandoService && <ServiceRescheduleDialog serviceId={reprogramandoService.id} fechaActual={reprogramandoService.fechaProgramada ?? null} nombreEmpleada={reprogramandoService.empleada?.nombreArtistico || "Este servicio"} onClose={() => setReprogramandoService(null)} onRescheduled={reloadServices} />}
+    {ubicacionService && <ServiceLocationDialog serviceId={ubicacionService.id} ubicacionActual={ubicacionService.locationNameSnapshot ?? ubicacionService.locationAddressSnapshot ?? null} latitudActual={ubicacionService.ubicacionClienteLat != null ? Number(ubicacionService.ubicacionClienteLat) : null} longitudActual={ubicacionService.ubicacionClienteLng != null ? Number(ubicacionService.ubicacionClienteLng) : null} presetLocationIdActual={ubicacionService.presetLocationId ?? null} onClose={() => setUbicacionService(null)} onChanged={reloadServices} />}
     <CreateServiceDialog open={creatingService} onClose={() => setCreatingService(false)} initialEmployees={employees} onCreated={() => { reloadServices(); }} />
     {cancellingService && <CancelServiceDialog serviceLabel={cancellingService.empleada?.nombreArtistico || "este servicio"} disabled={pending} onConfirm={(reason, note) => cancelService(cancellingService, reason, note)} onCancel={() => setCancellingService(null)} />}
     <EvaluationHistorySheet userId={selectedEvaluationUser?.id ?? null} workerName={selectedEvaluationUser?.name} open={Boolean(selectedEvaluationUser)} onOpenChange={(open) => !open && setSelectedEvaluationUser(null)} />
@@ -593,12 +604,12 @@ function CashDeliveryPanel({ summary, pending, run }: { summary: CashObligationS
   );
 }
 
-function ServiceList({ services, allServices, employees, active, disabled, onDecide, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { services: Service[]; allServices: Service[]; employees: Employee[]; active: boolean; disabled: boolean; onDecide: (service: Service, decision: "aceptar" | "rechazar", transport?: "chofer" | "uber", bossNotes?: string) => void; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
+function ServiceList({ services, allServices, employees, active, disabled, onDecide, onRequestAccept, onRequestEdit, onRequestReschedule, onRequestLocation, onCancel, onChat, onRefresh }: { services: Service[]; allServices: Service[]; employees: Employee[]; active: boolean; disabled: boolean; onDecide: (service: Service, decision: "aceptar" | "rechazar", transport?: "chofer" | "uber", bossNotes?: string) => void; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onRequestReschedule: (service: Service) => void; onRequestLocation: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   if (!services.length) return <div className="rounded-2xl border border-dashed border-zinc-800 py-20 text-center text-sm text-zinc-500">No hay servicios en esta sección.</div>;
   // Un servicio cerrado se consulta, no se opera: el historial es una lista
   // para repasar y solo despliega el detalle el que se toca.
   if (!active) return <HistoryList services={services} onChat={onChat} />;
-  return <div className="space-y-3">{services.map((service) => <ServiceCard key={service.id} service={service} previous={allServices.find((item) => item.id === service.servicioPrevioId)} employees={employees} disabled={disabled} onRequestAccept={onRequestAccept} onRequestEdit={onRequestEdit} onCancel={onCancel} onChat={onChat} onRefresh={onRefresh} />)}</div>;
+  return <div className="space-y-3">{services.map((service) => <ServiceCard key={service.id} service={service} previous={allServices.find((item) => item.id === service.servicioPrevioId)} employees={employees} disabled={disabled} onRequestAccept={onRequestAccept} onRequestEdit={onRequestEdit} onRequestReschedule={onRequestReschedule} onRequestLocation={onRequestLocation} onCancel={onCancel} onChat={onChat} onRefresh={onRefresh} />)}</div>;
 }
 
 /**
@@ -728,9 +739,15 @@ function esperandoAlistado(service: Service) {
   );
 }
 
-function ServiceCard({ service, previous, employees, disabled, onRequestAccept, onRequestEdit, onCancel, onChat, onRefresh }: { service: Service; previous?: Service; employees: Employee[]; disabled: boolean; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
+function ServiceCard({ service, previous, employees, disabled, onRequestAccept, onRequestEdit, onRequestReschedule, onRequestLocation, onCancel, onChat, onRefresh }: { service: Service; previous?: Service; employees: Employee[]; disabled: boolean; onRequestAccept: (service: Service) => void; onRequestEdit?: (service: Service) => void; onRequestReschedule: (service: Service) => void; onRequestLocation: (service: Service) => void; onCancel: (service: Service) => void; onChat: (service: Service) => void; onRefresh: () => Promise<void> }) {
   const programado = service.tipoAgenda === "programado";
   const pendiente = service.estado === "pendiente";
+  /*
+   * Mientras no ha empezado todavia se puede mover de hora y de sitio. En curso
+   * ya no: la modelo va camino del lugar o esta alli, y cambiarle el destino
+   * desde una pantalla no la mueve a ella.
+   */
+  const sinEmpezar = pendiente || service.estado === "agendado";
 
   const datos: Array<[string, string]> = [
     ["Cliente", service.cliente?.nombreTelegram || "Cliente"],
@@ -787,8 +804,15 @@ function ServiceCard({ service, previous, employees, disabled, onRequestAccept, 
         </button>
       )}
 
-      <div className={`mt-2.5 grid gap-2 ${pendiente ? "grid-cols-3" : "grid-cols-2"}`}>
+      {/*
+        Dos columnas en el telefono y tres a partir de `sm`, en vez de contar
+        los botones: la rejilla se reparte sola sea cual sea el estado, y antes
+        cada boton nuevo obligaba a rehacer la cuenta a mano.
+      */}
+      <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {pendiente && <SecondaryAction onClick={() => onRequestEdit?.(service)} disabled={disabled} icon={<Pencil size={16} />} label="Editar" />}
+        {sinEmpezar && <SecondaryAction onClick={() => onRequestReschedule(service)} disabled={disabled} icon={<CalendarClock size={16} />} label="Reprogramar" />}
+        {sinEmpezar && <SecondaryAction onClick={() => onRequestLocation(service)} disabled={disabled} icon={<MapPinned size={16} />} label="Ubicación" />}
         <SecondaryAction onClick={() => onChat(service)} icon={<MessageCircle size={16} />} label="Chat" />
         <SecondaryAction onClick={() => onCancel(service)} disabled={disabled} danger icon={<Ban size={16} />} label="Cancelar" />
       </div>
