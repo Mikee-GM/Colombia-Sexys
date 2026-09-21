@@ -443,7 +443,9 @@ export class TelegramConversationsService {
         servicioId: null,
         bookingSessionId: null,
         emisor: 'sistema',
-        mensaje: iaActiva ? '🤖 Bot reanudado por el administrador.' : '⏸️ Bot pausado por el administrador.',
+        mensaje: iaActiva
+          ? '🤖 Bot reanudado por el administrador.'
+          : '⏸️ Bot pausado por el administrador.',
         iaActiva,
       }),
     );
