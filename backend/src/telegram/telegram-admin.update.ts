@@ -1472,7 +1472,7 @@ export class TelegramAdminUpdate {
       return;
     }
 
-    let cliente = await this.clientesRepository.findOne({
+    const cliente = await this.clientesRepository.findOne({
       where: { telegramChatId: clientTelegramId },
     });
 

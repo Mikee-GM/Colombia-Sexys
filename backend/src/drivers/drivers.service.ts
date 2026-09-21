@@ -242,7 +242,7 @@ export class DriversService {
 
     for (const fila of filas) {
       const { id, ...puntos } = fila;
-      mapa.set(id, puntos as DriverPortalTripPoints);
+      mapa.set(id, puntos);
     }
     return mapa;
   }

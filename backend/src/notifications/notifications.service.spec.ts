@@ -199,7 +199,7 @@ describe('NotificationsService', () => {
 
     await service.notificarJefeServicioPendiente('servicio-1');
 
-    const carga = enviar.mock.calls[0][1] as unknown as Record<string, unknown>;
+    const carga = enviar.mock.calls[0][1];
     expect(carga.titulo).toBe('Servicio pendiente de autorizar');
     // El aviso se lee en la pantalla de bloqueo: solo dice que hay algo que
     // autorizar, nunca de quien ni por cuanto.

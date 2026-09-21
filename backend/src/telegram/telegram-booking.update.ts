@@ -7646,7 +7646,7 @@ export class TelegramBookingUpdate {
             const groupId = spyGroupId.trim();
 
             // Buscar o crear el tema del cliente
-            let cliente = await this.clientesRepository.findOne({
+            const cliente = await this.clientesRepository.findOne({
               where: { telegramChatId: telegramId },
             });
 
@@ -8418,7 +8418,7 @@ export class TelegramBookingUpdate {
      */
     if (!yaExplicado) {
       this.terminarContratacionEnSesion(ctx);
-      ctx.session!.rechazoAvisadoServicioId = ultimo.id;
+      ctx.session.rechazoAvisadoServicioId = ultimo.id;
       await this.persistSession(ctx);
     }
 
