@@ -357,9 +357,13 @@ export class TelegramConversationsService {
     const message = raw.trim();
     if (!message) throw new ConflictException('El mensaje está vacío');
 
-    const cliente = await this.clientesRepository.findOne({ where: { id: clientId } });
+    const cliente = await this.clientesRepository.findOne({
+      where: { id: clientId },
+    });
     if (!cliente || !cliente.telegramChatId) {
-      throw new NotFoundException('Cliente no encontrado o sin Telegram vinculado');
+      throw new NotFoundException(
+        'Cliente no encontrado o sin Telegram vinculado',
+      );
     }
 
     await this.bot.telegram.sendMessage(cliente.telegramChatId, message);
@@ -383,9 +387,13 @@ export class TelegramConversationsService {
       throw new ConflictException('Solo un admin puede ver esto');
     }
 
-    const cliente = await this.clientesRepository.findOne({ where: { id: clientId } });
+    const cliente = await this.clientesRepository.findOne({
+      where: { id: clientId },
+    });
     if (!cliente || !cliente.telegramChatId) {
-      throw new NotFoundException('Cliente no encontrado o sin Telegram vinculado');
+      throw new NotFoundException(
+        'Cliente no encontrado o sin Telegram vinculado',
+      );
     }
 
     // Actualizamos los servicios activos de este cliente
@@ -399,7 +407,7 @@ export class TelegramConversationsService {
     for (const service of activeServices) {
       service.iaActiva = iaActiva;
       await this.servicesRepository.save(service);
-      
+
       this.realtimeEvents.emitToBosses(
         [
           service.jefeId,
@@ -416,8 +424,10 @@ export class TelegramConversationsService {
     // Buscamos la sesión de telegraf para actualizarla si existe
     // Hacemos una consulta burda pero efectiva porque hay pocas sesiones
     const sessions = await this.telegramSessionRepository.find();
-    const clientSession = sessions.find(s => s.key.includes(`:${cliente.telegramChatId}`));
-    
+    const clientSession = sessions.find((s) =>
+      s.key.includes(`:${cliente.telegramChatId}`),
+    );
+
     if (clientSession) {
       const data = clientSession.data || {};
       data.iaActiva = iaActiva;

@@ -123,10 +123,7 @@ export class TelegramConversationsController {
   // =========================================================================
 
   @Get('recent-chats')
-  listRecentChats(
-    @Query('limit') limit: string | undefined,
-    @Req() req: any,
-  ) {
+  listRecentChats(@Query('limit') limit: string | undefined, @Req() req: any) {
     return this.conversationsService.listRecentChats(
       req.user,
       limit ? Number(limit) : 50,
@@ -134,10 +131,7 @@ export class TelegramConversationsController {
   }
 
   @Get('chat/:clientId')
-  findHistoryByClient(
-    @Param('clientId') clientId: string,
-    @Req() req: any,
-  ) {
+  findHistoryByClient(@Param('clientId') clientId: string, @Req() req: any) {
     return this.conversationsService.findHistoryByClient(clientId, req.user);
   }
 

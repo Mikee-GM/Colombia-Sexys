@@ -1065,12 +1065,17 @@ export class TelegramAdminUpdate {
 
   private isAdmin(ctx: Context): boolean {
     const adminId = this.getAdminChatId();
-    const isPrivateAdmin = Boolean(adminId && ctx.from?.id.toString() === adminId);
+    const isPrivateAdmin = Boolean(
+      adminId && ctx.from?.id.toString() === adminId,
+    );
 
     // También es admin si está en el supergrupo configurado
     const groupId = this.getAdminGroupId();
     const isGroupAdmin = Boolean(
-      groupId && ctx.chat && ctx.chat.id.toString() === groupId && ctx.from?.id.toString() === adminId,
+      groupId &&
+      ctx.chat &&
+      ctx.chat.id.toString() === groupId &&
+      ctx.from?.id.toString() === adminId,
     );
 
     return isPrivateAdmin || isGroupAdmin;
@@ -1082,7 +1087,8 @@ export class TelegramAdminUpdate {
    */
   private async getClientFromTopic(ctx: Context): Promise<string | null> {
     const groupId = this.getAdminGroupId();
-    if (!groupId || !ctx.chat || ctx.chat.id.toString() !== groupId) return null;
+    if (!groupId || !ctx.chat || ctx.chat.id.toString() !== groupId)
+      return null;
 
     const msg = ctx.message as any;
     const threadId = msg?.message_thread_id;
@@ -1327,12 +1333,16 @@ export class TelegramAdminUpdate {
       }),
     );
 
-    const isGroup = this.getAdminGroupId() && ctx.chat?.id.toString() === this.getAdminGroupId();
+    const isGroup =
+      this.getAdminGroupId() &&
+      ctx.chat?.id.toString() === this.getAdminGroupId();
 
     const buttons = clientInfos.map((ci) => [
       Markup.button.callback(
         `${ci.estado} ${ci.nombre} (${ci.step})`,
-        isGroup ? `open_topic:${ci.telegramId}` : `spy_history:${ci.telegramId}`,
+        isGroup
+          ? `open_topic:${ci.telegramId}`
+          : `spy_history:${ci.telegramId}`,
       ),
     ]);
 
@@ -1364,12 +1374,16 @@ export class TelegramAdminUpdate {
       return;
     }
 
-    const isGroup = this.getAdminGroupId() && ctx.chat?.id.toString() === this.getAdminGroupId();
+    const isGroup =
+      this.getAdminGroupId() &&
+      ctx.chat?.id.toString() === this.getAdminGroupId();
 
     const buttons = clientes.map((c) => [
       Markup.button.callback(
         `👤 ${c.nombreTelegram || 'Desconocido'} (${c.telegramChatId})`,
-        isGroup ? `open_topic:${c.telegramChatId}` : `spy_history:${c.telegramChatId}`,
+        isGroup
+          ? `open_topic:${c.telegramChatId}`
+          : `spy_history:${c.telegramChatId}`,
       ),
     ]);
 
@@ -1408,19 +1422,29 @@ export class TelegramAdminUpdate {
       qb.where('c.nombreTelegram ILIKE :query', { query: `%${query}%` });
     }
 
-    const clientes = await qb.orderBy('c.primerContactoAt', 'DESC').take(10).getMany();
+    const clientes = await qb
+      .orderBy('c.primerContactoAt', 'DESC')
+      .take(10)
+      .getMany();
 
     if (!clientes.length) {
-      await ctx.reply(`📭 No se encontraron clientes para la búsqueda: *${query}*`, { parse_mode: 'Markdown' });
+      await ctx.reply(
+        `📭 No se encontraron clientes para la búsqueda: *${query}*`,
+        { parse_mode: 'Markdown' },
+      );
       return;
     }
 
-    const isGroup = this.getAdminGroupId() && ctx.chat?.id.toString() === this.getAdminGroupId();
+    const isGroup =
+      this.getAdminGroupId() &&
+      ctx.chat?.id.toString() === this.getAdminGroupId();
 
     const buttons = clientes.map((c) => [
       Markup.button.callback(
         `👤 ${c.nombreTelegram || 'Desconocido'} (${c.telegramChatId})`,
-        isGroup ? `open_topic:${c.telegramChatId}` : `spy_history:${c.telegramChatId}`,
+        isGroup
+          ? `open_topic:${c.telegramChatId}`
+          : `spy_history:${c.telegramChatId}`,
       ),
     ]);
 
@@ -1489,7 +1513,7 @@ export class TelegramAdminUpdate {
         await this.bot.telegram.sendMessage(
           groupId,
           `ℹ️ *Llamado desde búsqueda*\nEste es el tema de ${clientName}.`,
-          { message_thread_id: topicId, parse_mode: 'Markdown' }
+          { message_thread_id: topicId, parse_mode: 'Markdown' },
         );
       }
 
@@ -1508,8 +1532,9 @@ export class TelegramAdminUpdate {
         });
         await this.bot.telegram.sendMessage(
           groupId,
-          `📜 *Últimos ${conversations.length} mensajes:*\n\n` + lines.join('\n\n'),
-          { message_thread_id: topicId, parse_mode: 'Markdown' }
+          `📜 *Últimos ${conversations.length} mensajes:*\n\n` +
+            lines.join('\n\n'),
+          { message_thread_id: topicId, parse_mode: 'Markdown' },
         );
       }
 
@@ -1811,9 +1836,13 @@ export class TelegramAdminUpdate {
         }
 
         if (msg?.document) {
-          await this.bot.telegram.sendDocument(clientFromTopic, msg.document.file_id, {
-            caption: msg.caption || undefined,
-          });
+          await this.bot.telegram.sendDocument(
+            clientFromTopic,
+            msg.document.file_id,
+            {
+              caption: msg.caption || undefined,
+            },
+          );
           await ctx.reply(`✅ 📎 Archivo enviado`, {
             message_thread_id: msg.message_thread_id,
           });
@@ -1828,7 +1857,10 @@ export class TelegramAdminUpdate {
           return;
         }
       } catch (error: any) {
-        this.logger.error(`Error en supergrupo admin → ${clientFromTopic}`, error);
+        this.logger.error(
+          `Error en supergrupo admin → ${clientFromTopic}`,
+          error,
+        );
         await ctx.reply(`❌ ${error?.message || 'Error'}`, {
           message_thread_id: msg.message_thread_id,
         });
@@ -1856,9 +1888,12 @@ export class TelegramAdminUpdate {
             msg.document.file_id,
             { caption: msg.caption || undefined },
           );
-          await ctx.reply(`✅ 📎 Archivo enviado a \`${this.activeAdminChat}\``, {
-            parse_mode: 'Markdown',
-          });
+          await ctx.reply(
+            `✅ 📎 Archivo enviado a \`${this.activeAdminChat}\``,
+            {
+              parse_mode: 'Markdown',
+            },
+          );
           return;
         }
 
@@ -1870,8 +1905,13 @@ export class TelegramAdminUpdate {
           return;
         }
       } catch (error: any) {
-        this.logger.error(`Error en canal admin a ${this.activeAdminChat}`, error);
-        await ctx.reply(`❌ Fallo al enviar: ${error?.message || 'Error desconocido'}`);
+        this.logger.error(
+          `Error en canal admin a ${this.activeAdminChat}`,
+          error,
+        );
+        await ctx.reply(
+          `❌ Fallo al enviar: ${error?.message || 'Error desconocido'}`,
+        );
         return;
       }
     }
@@ -1907,8 +1947,9 @@ export class TelegramAdminUpdate {
       }
     } catch (error: any) {
       this.logger.error(`Error en Reply admin a ${clientTelegramId}`, error);
-      await ctx.reply(`❌ Fallo al responder: ${error?.message || 'Error desconocido'}`);
+      await ctx.reply(
+        `❌ Fallo al responder: ${error?.message || 'Error desconocido'}`,
+      );
     }
   }
 }
-

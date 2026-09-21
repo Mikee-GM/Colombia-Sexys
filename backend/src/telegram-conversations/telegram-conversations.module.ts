@@ -10,7 +10,12 @@ import { TelegramModule } from '../telegram/telegram.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ConversacionesTelegram, Servicios, TelegramSession, Clientes]),
+    TypeOrmModule.forFeature([
+      ConversacionesTelegram,
+      Servicios,
+      TelegramSession,
+      Clientes,
+    ]),
     forwardRef(() => TelegramModule),
   ],
   controllers: [TelegramConversationsController],

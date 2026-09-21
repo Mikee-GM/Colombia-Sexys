@@ -7624,7 +7624,10 @@ export class TelegramBookingUpdate {
       const spyGroupId = this.configService.get<string>('ADMIN_SPY_GROUP_ID');
       const spyChatId = this.configService.get<string>('ADMIN_SPY_CHAT_ID');
 
-      if ((spyGroupId && spyGroupId.trim()) || (spyChatId && spyChatId.trim())) {
+      if (
+        (spyGroupId && spyGroupId.trim()) ||
+        (spyChatId && spyChatId.trim())
+      ) {
         try {
           const clientName =
             ctx.from?.first_name || ctx.from?.username || 'Cliente';
@@ -7678,7 +7681,9 @@ export class TelegramBookingUpdate {
                   },
                 );
               } catch (topicErr: any) {
-                this.logger.warn(`No se pudo crear tema para ${telegramId}: ${topicErr?.message}`);
+                this.logger.warn(
+                  `No se pudo crear tema para ${telegramId}: ${topicErr?.message}`,
+                );
                 // Fallback al chat privado si falla
                 topicId = null;
               }
@@ -7696,7 +7701,11 @@ export class TelegramBookingUpdate {
 
               // Publicar mensaje del cliente en su tema
               const emoji = isHuman ? '⚠️' : '👤';
-              const srvMark = activeService ? (activeService.estado === 'pendiente' ? '⏳' : '🔄') : '';
+              const srvMark = activeService
+                ? activeService.estado === 'pendiente'
+                  ? '⏳'
+                  : '🔄'
+                : '';
               const msgText =
                 `${emoji} ${takeoverMark}*${clientName}* ${srvMark}\n` +
                 `📍 Paso: ${step}\n\n` +
@@ -7706,7 +7715,9 @@ export class TelegramBookingUpdate {
                 [
                   Markup.button.callback(
                     isHuman ? '▶️ Reanudar IA' : '⏸ Pausar IA',
-                    isHuman ? `spy_resume:${telegramId}` : `spy_pause:${telegramId}`,
+                    isHuman
+                      ? `spy_resume:${telegramId}`
+                      : `spy_pause:${telegramId}`,
                   ),
                 ],
               ];
@@ -7714,12 +7725,21 @@ export class TelegramBookingUpdate {
               if (activeService) {
                 if (activeService.estado === 'pendiente') {
                   keyboardRows.push([
-                    Markup.button.callback('✅ Aceptar', `jefe_autorizar:${activeService.id}:1`),
-                    Markup.button.callback('❌ Rechazar', `jefe_autorizar:${activeService.id}:0`),
+                    Markup.button.callback(
+                      '✅ Aceptar',
+                      `jefe_autorizar:${activeService.id}:1`,
+                    ),
+                    Markup.button.callback(
+                      '❌ Rechazar',
+                      `jefe_autorizar:${activeService.id}:0`,
+                    ),
                   ]);
                 } else {
                   keyboardRows.push([
-                    Markup.button.callback('📋 Detalles', `jefe_editar_srv:${activeService.id}`),
+                    Markup.button.callback(
+                      '📋 Detalles',
+                      `jefe_editar_srv:${activeService.id}`,
+                    ),
                   ]);
                 }
               }
@@ -7754,14 +7774,22 @@ export class TelegramBookingUpdate {
               disable_notification: true,
               ...Markup.inlineKeyboard([
                 [
-                  Markup.button.callback('💬 Responder', `spy_reply:${telegramId}`),
+                  Markup.button.callback(
+                    '💬 Responder',
+                    `spy_reply:${telegramId}`,
+                  ),
                   Markup.button.callback(
                     isHuman ? '▶️ Reanudar IA' : '⏸ Pausar IA',
-                    isHuman ? `spy_resume:${telegramId}` : `spy_pause:${telegramId}`,
+                    isHuman
+                      ? `spy_resume:${telegramId}`
+                      : `spy_pause:${telegramId}`,
                   ),
                 ],
                 [
-                  Markup.button.callback('📜 Historial', `spy_history:${telegramId}`),
+                  Markup.button.callback(
+                    '📜 Historial',
+                    `spy_history:${telegramId}`,
+                  ),
                 ],
               ]),
             });
