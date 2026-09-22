@@ -214,7 +214,7 @@ describe('AI Prompts Generation (prompts.ts)', () => {
     const prompt = getHireSystemPrompt(baseParams);
 
     expect(prompt).toContain(
-      'EN TU PRIMER MENSAJE (saludo inicial) ESTÁ PROHIBIDO PREGUNTAR POR HORAS, MÉTODO DE PAGO O UBICACIÓN',
+      'EN TU PRIMER MENSAJE (saludo inicial): Salúdalo dulce y coqueta',
     );
     expect(prompt).toContain('REGLA DEL CIERRE LIMPIO');
   });
