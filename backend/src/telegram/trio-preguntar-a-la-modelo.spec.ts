@@ -60,7 +60,12 @@ describe('TelegramBookingUpdate: preguntarle a la compañera por el trio', () =>
       save: jest.fn().mockResolvedValue(undefined),
     };
     update.empleadasRepository = { findOne: jest.fn() };
-    update.usuariosRepository = { findOne: jest.fn() };
+    update.usuariosRepository = {
+      find: jest
+        .fn()
+        .mockResolvedValue([{ ...principal.jefe, enJornada: true }]),
+      findOne: jest.fn(),
+    };
     update.callbackGuard = { esRepetido: jest.fn().mockResolvedValue(false) };
   });
 

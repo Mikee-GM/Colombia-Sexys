@@ -32,6 +32,17 @@ describe('TelegramBookingUpdate - Asistente de Creación Manual del Jefe', () =>
 
     update.empleadasRepository = mockEmpleadasRepo;
     update.clientesRepository = mockClientesRepo;
+    update.usuariosRepository = {
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 'jefe-1',
+          activo: true,
+          disponible: true,
+          enJornada: true,
+        },
+      ]),
+      findOne: jest.fn().mockResolvedValue(null),
+    };
     update.servicesService = mockServicesService;
     update.serviciosRepository = mockServiciosRepo;
     update.bot = mockBot;
