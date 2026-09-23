@@ -2,7 +2,13 @@
 
 import { apiFetch } from "@/lib/api-server";
 import { getCurrentUser, isRedirectError } from "@/lib/auth";
-import type { CashObligationSummary, ConversationMessage, Employee, GroupServiceRequest, Service } from "@/lib/types";
+import type {
+  CashObligationSummary,
+  ConversationMessage,
+  Employee,
+  GroupServiceRequest,
+  Service,
+} from "@/lib/types";
 import { redirect } from "next/navigation";
 import type { CancellationReason } from "@/lib/cancellation-reasons";
 
@@ -18,7 +24,8 @@ export async function getJefeEmployees(): Promise<Employee[]> {
   const jefe = await requireJefe();
   const employees = await apiFetch<Employee[]>("/employees");
   return employees.filter(
-    (employee) => employee.jefeId === jefe.id || employee.jefeSecundarioId === jefe.id,
+    (employee) =>
+      employee.jefeId === jefe.id || employee.jefeSecundarioId === jefe.id,
   );
 }
 
@@ -29,30 +36,54 @@ export async function getJefeServices(): Promise<Service[]> {
 
 export async function getJefeCashObligations(): Promise<CashObligationSummary> {
   await requireJefe();
-  return apiFetch<CashObligationSummary>("/transport-operations/cash-obligations");
+  return apiFetch<CashObligationSummary>(
+    "/transport-operations/cash-obligations",
+  );
 }
 
-export async function registerJefeCashPayment(employeeId: string, amount: number) {
+export async function registerJefeCashPayment(
+  employeeId: string,
+  amount: number,
+) {
   try {
     await assertAssignedEmployee(employeeId);
     await apiFetch("/transport-operations/cash-payments", {
       method: "POST",
-      body: JSON.stringify({ employeeId, amount, note: "Entrega registrada por el jefe" }),
+      body: JSON.stringify({
+        employeeId,
+        amount,
+        note: "Entrega registrada por el jefe",
+      }),
     });
     return { success: true };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, error: error instanceof Error ? error.message : "No se pudo registrar la entrega" };
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo registrar la entrega",
+    };
   }
 }
 
 export async function closeJefeCashObligation(obligationId: string) {
   try {
-    await apiFetch(`/transport-operations/cash-obligations/${obligationId}/close`, { method: "POST" });
+    await apiFetch(
+      `/transport-operations/cash-obligations/${obligationId}/close`,
+      { method: "POST" },
+    );
     return { success: true };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, error: error instanceof Error ? error.message : "No se pudo saldar el servicio" };
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo saldar el servicio",
+    };
   }
 }
 
@@ -70,7 +101,10 @@ async function assertOwnedService(serviceId: string) {
   }
 }
 
-export async function setEmployeeAvailability(employeeId: string, disponible: boolean) {
+export async function setEmployeeAvailability(
+  employeeId: string,
+  disponible: boolean,
+) {
   try {
     await assertAssignedEmployee(employeeId);
     await apiFetch(`/employees/${employeeId}`, {
@@ -80,7 +114,10 @@ export async function setEmployeeAvailability(employeeId: string, disponible: bo
     return { success: true };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, error: error instanceof Error ? error.message : "No se pudo actualizar" };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo actualizar",
+    };
   }
 }
 
@@ -105,7 +142,10 @@ export async function decidePendingService(
     return { success: true };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, error: error instanceof Error ? error.message : "No se pudo procesar" };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "No se pudo procesar",
+    };
   }
 }
 
@@ -197,8 +237,7 @@ export async function reasignarEmpleadaDeServicio(
     if (isRedirectError(error)) throw error;
     return {
       success: false,
-      error:
-        error instanceof Error ? error.message : "No se pudo reasignar",
+      error: error instanceof Error ? error.message : "No se pudo reasignar",
     };
   }
 }
@@ -219,12 +258,18 @@ export async function cancelJefeService(
     if (isRedirectError(error)) throw error;
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo cancelar el servicio",
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo cancelar el servicio",
     };
   }
 }
 
-export async function chooseReturnTransport(serviceId: string, transportType: "chofer" | "uber") {
+export async function chooseReturnTransport(
+  serviceId: string,
+  transportType: "chofer" | "uber",
+) {
   try {
     await assertOwnedService(serviceId);
     const data = await apiFetch(`/services/${serviceId}/return-transport`, {
@@ -234,11 +279,18 @@ export async function chooseReturnTransport(serviceId: string, transportType: "c
     return { success: true, data };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, error: error instanceof Error ? error.message : "No se pudo elegir el regreso" };
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "No se pudo elegir el regreso",
+    };
   }
 }
 
-export async function updateUberStatus(tripId: string, status: "en_camino" | "llegado") {
+export async function updateUberStatus(
+  tripId: string,
+  status: "en_camino" | "llegado",
+) {
   try {
     await apiFetch(`/services/trips/${tripId}/uber-status`, {
       method: "PATCH",
@@ -247,7 +299,13 @@ export async function updateUberStatus(tripId: string, status: "en_camino" | "ll
     return { success: true };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, error: error instanceof Error ? error.message : "No se pudo actualizar el Uber" };
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar el Uber",
+    };
   }
 }
 
@@ -260,17 +318,23 @@ export async function confirmUberFare(tripId: string, amount: number) {
     return { success: true };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, error: error instanceof Error ? error.message : "No se pudo registrar la tarifa" };
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo registrar la tarifa",
+    };
   }
 }
 
 export async function changeTripTransport(
   tripId: string,
-  transportType: 'chofer' | 'uber',
+  transportType: "chofer" | "uber",
 ) {
   try {
     const data = await apiFetch(`/services/trips/${tripId}/transport`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify({ transportType }),
     });
     return { success: true, data };
@@ -281,7 +345,7 @@ export async function changeTripTransport(
       error:
         error instanceof Error
           ? error.message
-          : 'No se pudo cambiar el transporte',
+          : "No se pudo cambiar el transporte",
     };
   }
 }
@@ -293,31 +357,49 @@ export async function uploadUberScreenshot(formData: FormData) {
     const payload = new FormData();
     if (!(file instanceof File)) throw new Error("Selecciona una imagen");
     payload.append("file", file);
-    await apiFetch(`/services/trips/${tripId}/uber-screenshot`, { method: "POST", body: payload });
+    await apiFetch(`/services/trips/${tripId}/uber-screenshot`, {
+      method: "POST",
+      body: payload,
+    });
     return { success: true };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, error: error instanceof Error ? error.message : "No se pudo enviar la captura" };
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "No se pudo enviar la captura",
+    };
   }
 }
 
-export async function getServiceMessages(serviceId: string): Promise<ConversationMessage[]> {
+export async function getServiceMessages(
+  serviceId: string,
+): Promise<ConversationMessage[]> {
   await assertOwnedService(serviceId);
-  const result = await apiFetch<{ messages: ConversationMessage[] }>(`/telegram-conversations/service/${serviceId}`);
+  const result = await apiFetch<{ messages: ConversationMessage[] }>(
+    `/telegram-conversations/service/${serviceId}`,
+  );
   return result.messages;
 }
 
 export async function sendServiceMessage(serviceId: string, message: string) {
   try {
     await assertOwnedService(serviceId);
-    const data = await apiFetch<ConversationMessage>(`/telegram-conversations/service/${serviceId}/messages`, {
-      method: "POST",
-      body: JSON.stringify({ message }),
-    });
+    const data = await apiFetch<ConversationMessage>(
+      `/telegram-conversations/service/${serviceId}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      },
+    );
     return { success: true, data };
   } catch (error) {
     if (isRedirectError(error)) throw error;
-    return { success: false, error: error instanceof Error ? error.message : "No se pudo enviar el mensaje" };
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "No se pudo enviar el mensaje",
+    };
   }
 }
 
@@ -401,10 +483,7 @@ export async function requestGroupLocation(requestId: string) {
 }
 
 export async function sendGroupCatalog(requestId: string) {
-  return groupMutation(
-    `/group-services/requests/${requestId}/catalog`,
-    "POST",
-  );
+  return groupMutation(`/group-services/requests/${requestId}/catalog`, "POST");
 }
 
 export async function reserveGroupEmployees(
@@ -527,4 +606,124 @@ export async function addGroupManualTransportCharge(
     "POST",
     { amount, reason },
   );
+}
+
+// === CONTROLES MANUALES DEL JEFE ===
+
+export async function marcarEmpleadaListaManual(serviceId: string) {
+  try {
+    await assertOwnedService(serviceId);
+    await apiFetch(`/services/${serviceId}/manual-controls/lista`, {
+      method: "POST",
+    });
+    return { success: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Error al marcar como lista",
+    };
+  }
+}
+
+export async function updateUberStatusManual(
+  tripId: string,
+  status: "en_camino" | "llegado",
+) {
+  try {
+    // Note: assertOwnedService works with serviceId, not tripId, but backend verifies the trip belongs to a valid service.
+    await apiFetch(`/services/trips/${tripId}/manual-controls/status`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    });
+    return { success: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Error al actualizar estado del viaje",
+    };
+  }
+}
+
+export async function finishServiceManual(serviceId: string) {
+  try {
+    await assertOwnedService(serviceId);
+    await apiFetch(`/services/${serviceId}/manual-controls/finish`, {
+      method: "POST",
+    });
+    return { success: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Error al finalizar el servicio",
+    };
+  }
+}
+
+export async function pedirProrrogaManual(serviceId: string) {
+  try {
+    await assertOwnedService(serviceId);
+    await apiFetch(`/services/${serviceId}/manual-controls/prorroga`, {
+      method: "POST",
+    });
+    return { success: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Error al solicitar prórroga",
+    };
+  }
+}
+
+export async function extendServiceManual(serviceId: string, horas: number) {
+  try {
+    await assertOwnedService(serviceId);
+    await apiFetch(`/services/${serviceId}/manual-controls/extend`, {
+      method: "POST",
+      body: JSON.stringify({ horas }),
+    });
+    return { success: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Error al extender el servicio",
+    };
+  }
+}
+
+export async function addExtraManual(
+  serviceId: string,
+  metodoPago: "tarjeta" | "transferencia" | "efectivo",
+  extraCatalogoId?: string,
+  precioCobrado?: number,
+) {
+  try {
+    await assertOwnedService(serviceId);
+    await apiFetch(`/services/${serviceId}/manual-controls/extras`, {
+      method: "POST",
+      body: JSON.stringify({ extraCatalogoId, metodoPago, precioCobrado }),
+    });
+    return { success: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Error al agregar extra",
+    };
+  }
 }

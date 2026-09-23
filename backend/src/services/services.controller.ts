@@ -482,4 +482,71 @@ export class ServicesController {
       dto.status === 'llegado' ? 'uber_arrived' : 'uber_en_route',
     );
   }
+
+  // === CONTROLES MANUALES DEL JEFE (POR LA EMPLEADA) ===
+
+  @Post(':id/manual-controls/lista')
+  @Roles('admin', 'jefe')
+  marcarListaManual(@Param('id') id: string, @Req() req: any) {
+    return this.servicesService.marcarEmpleadaLista(id, req.user.id, true);
+  }
+
+  @Post('trips/:tripId/manual-controls/status')
+  @Roles('admin', 'jefe')
+  updateStatusManual(
+    @Param('tripId') tripId: string,
+    @Body() dto: UberStatusDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.updateUberStatus(
+      tripId,
+      req.user.id,
+      dto.status === 'llegado' ? 'employee_arrived' : 'employee_en_route',
+      true,
+    );
+  }
+
+  @Post(':id/manual-controls/finish')
+  @Roles('admin', 'jefe')
+  finishManual(@Param('id') id: string, @Req() req: any) {
+    return this.servicesService.finishByEmployee(id, req.user.id, true);
+  }
+
+  @Post(':id/manual-controls/prorroga')
+  @Roles('admin', 'jefe')
+  prorrogaManual(@Param('id') id: string, @Req() req: any) {
+    return this.servicesService.solicitarProrroga(id, req.user.id, true);
+  }
+
+  @Post(':id/manual-controls/extend')
+  @Roles('admin', 'jefe')
+  extendManual(
+    @Param('id') id: string,
+    @Body('horas') horas: number,
+    @Req() req: any,
+  ) {
+    return this.servicesService.extendByEmployee(id, req.user.id, horas, true);
+  }
+
+  @Post(':id/manual-controls/extras')
+  @Roles('admin', 'jefe')
+  addExtraManual(
+    @Param('id') id: string,
+    @Body()
+    dto: {
+      extraCatalogoId?: string;
+      metodoPago: 'tarjeta' | 'transferencia' | 'efectivo';
+      precioCobrado?: number;
+    },
+    @Req() req: any,
+  ) {
+    return this.servicesService.addServiceExtra({
+      servicioId: id,
+      extraCatalogoId: dto.extraCatalogoId,
+      metodoPago: dto.metodoPago,
+      actorUserId: req.user.id,
+      precioCobrado: dto.precioCobrado,
+      forceByBoss: true,
+    });
+  }
 }

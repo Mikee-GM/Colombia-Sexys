@@ -2558,6 +2558,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   async solicitarProrroga(
     servicioId: string,
     actorUserId: string,
+    forceByBoss: boolean = false,
   ): Promise<{ prorrogasUsadas: number; restantes: number; minutos: number }> {
     const MINUTOS = 10;
 
@@ -2569,7 +2570,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
-    if (!(await this.puedePedirProrroga(servicio, actorUserId))) {
+    if (
+      !forceByBoss &&
+      !(await this.puedePedirProrroga(servicio, actorUserId))
+    ) {
       throw new ForbiddenException(
         'No puedes solicitar prórrogas para este servicio',
       );
@@ -2946,6 +2950,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     servicioId: string,
     actorUserId: string,
     horas: number,
+    forceByBoss: boolean = false,
   ): Promise<Servicios> {
     if (!Number.isInteger(horas) || horas < 1 || horas > 12) {
       throw new BadRequestException('La extensión debe ser de 1 a 12 horas');
@@ -2956,7 +2961,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relations: { empleada: { usuario: true } },
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
-    if (servicio.empleada?.usuarioId !== actorUserId) {
+    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('No puedes extender este servicio');
     }
     if (servicio.estado !== 'en_curso') {
@@ -4443,6 +4448,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   private async resolveExtrasActor(
     servicio: Servicios,
     actorUserId: string,
+    forceByBoss: boolean = false,
   ): Promise<{ employeeId: string; participantId: string | null }> {
     if (servicio.serviceType === 'grupal') {
       const participant = await this.serviceParticipantsRepository.findOne({
@@ -4462,7 +4468,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    if (servicio.empleada?.usuarioId !== actorUserId) {
+    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('No puedes modificar este servicio');
     }
     return { employeeId: servicio.empleadaId, participantId: null };
@@ -4478,6 +4484,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   async listAvailableExtras(
     servicioId: string,
     actorUserId: string,
+    forceByBoss: boolean = false,
   ): Promise<ExtrasCatalogo[]> {
     const servicio = await this.serviciosRepository.findOne({
       where: { id: servicioId },
@@ -4488,7 +4495,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException('Este servicio ya no está activo');
     }
 
-    const { employeeId } = await this.resolveExtrasActor(servicio, actorUserId);
+    const { employeeId } = await this.resolveExtrasActor(
+      servicio,
+      actorUserId,
+      forceByBoss,
+    );
 
     // El comodin de los montos libres queda fuera: no es algo que se ofrezca,
     // y su precio es el del primer monto libre que se cobro con el.
@@ -4520,6 +4531,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     metodoPago: 'tarjeta' | 'transferencia' | 'efectivo';
     actorUserId: string;
     precioCobrado?: number;
+    forceByBoss?: boolean;
   }): Promise<AddServiceExtraResult> {
     if (!input.extraCatalogoId && input.precioCobrado === undefined) {
       throw new BadRequestException(
@@ -4542,6 +4554,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const { employeeId, participantId } = await this.resolveExtrasActor(
       servicio,
       input.actorUserId,
+      input.forceByBoss,
     );
 
     const extra = input.extraCatalogoId
@@ -4684,6 +4697,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   async finishByEmployee(
     servicioId: string,
     actorUserId: string,
+    forceByBoss: boolean = false,
   ): Promise<FinishByEmployeeResult> {
     const servicio = await this.serviciosRepository.findOne({
       where: { id: servicioId },
@@ -4702,7 +4716,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'Un servicio grupal lo cierra la responsable desde su flujo de grupo',
       );
     }
-    if (servicio.empleada?.usuarioId !== actorUserId) {
+    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('No puedes finalizar este servicio');
     }
 
@@ -6020,6 +6034,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       | 'uber_arrived'
       | 'employee_en_route'
       | 'employee_arrived',
+    forceByBoss: boolean = false,
   ): Promise<void> {
     const trip = await this.viajesRepository.findOne({
       where: { id: tripId },
@@ -6048,6 +6063,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     if (
       !bossAction &&
+      !forceByBoss &&
       (actor.rol !== 'empleada' ||
         trip.servicio.empleada?.usuarioId !== actor.id)
     ) {
