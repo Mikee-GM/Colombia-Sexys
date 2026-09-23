@@ -94,7 +94,7 @@ describe('TelegramBookingUpdate.startHireSession al reentrar', () => {
     expect(ctx.session.metodoPago).toBeUndefined();
   });
 
-  it('arranca de cero si el cliente cambio de modelo', async () => {
+  it('bloquea el inicio si el cliente intenta cambiar de modelo con reserva pendiente', async () => {
     ctx.session = sesionNegociada(20 * 60 * 1000);
     update.empleadasRepository.findOne.mockResolvedValue({
       id: 'emp-2',
@@ -106,9 +106,15 @@ describe('TelegramBookingUpdate.startHireSession al reentrar', () => {
 
     await update.startHireSession(ctx, 'emp-2');
 
-    expect(ctx.session.empleadaId).toBe('emp-2');
-    expect(ctx.session.bookingSessionId).not.toBe('draft-1');
-    expect(ctx.session.duracionPactadaHoras).toBeUndefined();
+    // La sesion NO debe resetearse: debe conservar los datos de emp-1
+    expect(ctx.session.empleadaId).toBe('emp-1');
+    expect(ctx.session.bookingSessionId).toBe('draft-1');
+    expect(ctx.session.duracionPactadaHoras).toBe(2);
+    // Debe haber enviado el teclado de bloqueo
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.stringContaining('No puedes iniciar una nueva conversación'),
+      expect.anything(),
+    );
   });
 
   /*
