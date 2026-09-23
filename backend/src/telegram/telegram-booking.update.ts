@@ -2679,14 +2679,25 @@ export class TelegramBookingUpdate {
         const previaEmpleada = await this.empleadasRepository.findOne({
           where: { id: sesionPrevia.empleadaId },
         });
-        const nombrePrevia = previaEmpleada?.nombreArtistico || 'la chica anterior';
+        const nombrePrevia =
+          previaEmpleada?.nombreArtistico || 'la chica anterior';
 
         await ctx.reply(
           `Veo que estabas a punto de reservar con ${nombrePrevia}. No puedes iniciar una nueva conversación hasta que decidas qué hacer con la reserva actual.`,
           Markup.inlineKeyboard([
-            [Markup.button.callback(`❌ Cancelar reserva con ${nombrePrevia}`, `cancel_session`)],
-            [Markup.button.callback(`🔙 Regresar con ${nombrePrevia}`, `resume_session:${sesionPrevia.empleadaId}`)],
-          ])
+            [
+              Markup.button.callback(
+                `❌ Cancelar reserva con ${nombrePrevia}`,
+                `cancel_session`,
+              ),
+            ],
+            [
+              Markup.button.callback(
+                `🔙 Regresar con ${nombrePrevia}`,
+                `resume_session:${sesionPrevia.empleadaId}`,
+              ),
+            ],
+          ]),
         );
         return;
       }
