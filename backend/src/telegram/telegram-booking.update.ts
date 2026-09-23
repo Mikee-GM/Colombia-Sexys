@@ -2663,10 +2663,15 @@ export class TelegramBookingUpdate {
       sesionPrevia?.empleadaId === empleadaId &&
       Boolean(sesionPrevia?.bookingSessionId) &&
       abiertaHace < TelegramBookingUpdate.VENTANA_REINGRESO_MS;
-      
+
     const esRancia = abiertaHace >= TelegramBookingUpdate.VENTANA_REINGRESO_MS;
 
-    if (!mismaContratacion && !esRancia && sesionPrevia?.empleadaId && sesionPrevia?.step) {
+    if (
+      !mismaContratacion &&
+      !esRancia &&
+      sesionPrevia?.empleadaId &&
+      sesionPrevia?.step
+    ) {
       const teniaDatos =
         sesionPrevia.duracionPactadaHoras ||
         sesionPrevia.duracionIndefinida ||
