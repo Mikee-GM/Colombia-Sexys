@@ -609,7 +609,9 @@ export function extractHireDuration(text: string): number | undefined {
 
   // Se recorren todas las cifras con unidad, no solo la primera: en "llego a
   // las 9, quiero 3 horas" la que vale es la segunda.
-  for (const match of text.matchAll(/\b(\d+)\s*(?:h|hr|hrs|hora|horas)\b/gi)) {
+  for (const match of text.matchAll(
+    /\b(\d+)\s*(?:h|hr|hrs|hora|horas|horitas|hras)[a-z]*\b/gi,
+  )) {
     const hours = parseInt(match[1], 10);
     if (hours >= 1 && hours <= 24) return hours;
   }
@@ -9902,7 +9904,7 @@ export class TelegramBookingUpdate {
         }
 
         // Check if response contains the structured DATA block
-        const dataMatch = responseText.match(/\[DATA:\s*(\{.*?\})\]/);
+        const dataMatch = responseText.match(/\[DATA:\s*(\{[\s\S]*?\})\]/);
 
         if (dataMatch) {
           try {
