@@ -48,7 +48,6 @@ export default function WorkShiftToggle({
    * dejándola vacía.
    */
   const [pidiendoMotivo, setPidiendoMotivo] = useState(false);
-  const [motivo, setMotivo] = useState("");
   const [pending, startTransition] = useTransition();
 
   const cambiar = (siguiente: boolean, razon?: string) => {
@@ -62,7 +61,6 @@ export default function WorkShiftToggle({
       }
       setStatus(result.status);
       setPidiendoMotivo(false);
-      setMotivo("");
       toast.success(
         siguiente
           ? "Estas de vuelta en jornada"
