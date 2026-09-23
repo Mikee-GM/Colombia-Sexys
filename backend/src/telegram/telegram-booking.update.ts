@@ -4489,6 +4489,50 @@ export class TelegramBookingUpdate {
    * es donde tiene los datos y las notas del jefe delante. Quien puede pulsarlo
    * lo comprueba `marcarEmpleadaLista`: es suyo o no es de nadie.
    */
+  @Action(/^jefe_empleada_lista:(.+)$/)
+  async onJefeEmpleadaLista(@Ctx() ctx: Context) {
+    if (await this.callbackGuard.esRepetido(ctx)) return;
+    const servicioId = (ctx as any).match?.[1] as string | undefined;
+    if (!servicioId) return;
+
+    const telegramId = ctx.from?.id?.toString();
+    if (!telegramId) return;
+    
+    const usuario = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+    
+    if (!usuario || (usuario.rol !== 'jefe' && usuario.rol !== 'admin')) {
+      await ctx.answerCbQuery('❌ No tienes permisos para realizar esta acción.', { show_alert: true });
+      return;
+    }
+
+    try {
+      const resultado = await this.servicesService.marcarEmpleadaLista(
+        servicioId,
+        usuario.id,
+        true
+      );
+      
+      try {
+        await ctx.editMessageReplyMarkup(undefined);
+      } catch (e) {
+        // Ignorar si falla la edición del mensaje
+      }
+      
+      await ctx.answerCbQuery(
+        resultado.yaEstaba
+          ? 'Ya habíamos avisado. El Uber está en camino.'
+          : '✅ La empleada fue marcada como lista. El Uber se ha despachado.',
+        { show_alert: true }
+      );
+    } catch (error: any) {
+      await ctx.answerCbQuery(error?.message || 'No se pudo avisar', {
+        show_alert: true,
+      });
+    }
+  }
+
   @Action(/^lista_servicio:(.+)$/)
   async onEmpleadaLista(@Ctx() ctx: Context) {
     if (await this.callbackGuard.esRepetido(ctx)) return;
@@ -7252,14 +7296,24 @@ export class TelegramBookingUpdate {
           await this.servicesService.aceptar(
             ctx.session.roomServiceId,
             user.id,
-            'chofer',
+            'uber',
             undefined,
             habitacion,
           );
 
           await ctx.reply(
             `🟢 *Servicio Aceptado* por ${user.email} ${habitacion ? `(Habitación: ${habitacion})` : ''}`,
-            Markup.removeKeyboard(),
+            {
+              parse_mode: 'Markdown',
+              ...Markup.inlineKeyboard([
+                [
+                  Markup.button.callback(
+                    '👩🏻‍💼 Aceptar por la empleada (Lista)',
+                    `jefe_empleada_lista:${ctx.session.roomServiceId}`,
+                  ),
+                ],
+              ]),
+            },
           );
         } catch (err: any) {
           this.logger.error(

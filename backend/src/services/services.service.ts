@@ -2297,6 +2297,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   async marcarEmpleadaLista(
     servicioId: string,
     actorUserId: string,
+    forceByBoss: boolean = false,
   ): Promise<{ uberLink?: string; viajeId?: string; yaEstaba: boolean }> {
     const servicio = await this.serviciosRepository.findOne({
       where: { id: servicioId },
@@ -2304,7 +2305,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
 
-    if (servicio.empleada?.usuarioId !== actorUserId) {
+    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('Este servicio no es tuyo');
     }
     if (servicio.estado !== 'en_curso') {

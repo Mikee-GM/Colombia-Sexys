@@ -61,7 +61,7 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
     expect(servicesService.aceptar).toHaveBeenCalledWith(
       'srv-1',
       'jefe-1',
-      'chofer',
+      'uber',
       undefined,
       '204',
     );
@@ -75,7 +75,7 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
     expect(servicesService.aceptar).toHaveBeenCalledWith(
       'srv-1',
       'jefe-1',
-      'chofer',
+      'uber',
       undefined,
       undefined,
     );
