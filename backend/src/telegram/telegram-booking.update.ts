@@ -2670,7 +2670,7 @@ export class TelegramBookingUpdate {
         sesionPrevia.duracionIndefinida ||
         sesionPrevia.locationLat ||
         sesionPrevia.metodoPago ||
-        sesionPrevia.step === 'AWAITING_RECEIPT' ||
+        sesionPrevia.step === 'AWAITING_PAYMENT_RECEIPT' ||
         sesionPrevia.step === 'AWAITING_PAYMENT_METHOD' ||
         sesionPrevia.step === 'AWAITING_LOCATION' ||
         sesionPrevia.step === 'AWAITING_DURATION';
