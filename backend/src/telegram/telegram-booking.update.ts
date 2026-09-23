@@ -2007,6 +2007,23 @@ export class TelegramBookingUpdate {
     await this.servicesService.rechazar(service.id, user.id);
   }
 
+  @Action(/^resume_session:(.+)$/)
+  async onResumeSession(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => undefined);
+    const empleadaId = (ctx as any).match[1];
+    await this.startHireSession(ctx, empleadaId);
+  }
+
+  @Action(/^cancel_session$/)
+  async onCancelSession(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => undefined);
+    // Vaciamos la sesión anterior para permitir nuevas conversaciones
+    ctx.session = undefined as any;
+    await ctx.reply(
+      'Reserva cancelada exitosamente. Ya puedes elegir otra chica del catálogo o intentar de nuevo.',
+    );
+  }
+
   @Action(/^contratar_empleada:(.+)$/)
   async onContratarEmpleada(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery();
@@ -2646,6 +2663,34 @@ export class TelegramBookingUpdate {
       sesionPrevia?.empleadaId === empleadaId &&
       Boolean(sesionPrevia?.bookingSessionId) &&
       abiertaHace < TelegramBookingUpdate.VENTANA_REINGRESO_MS;
+
+    if (!mismaContratacion && sesionPrevia?.empleadaId && sesionPrevia?.step) {
+      const teniaDatos =
+        sesionPrevia.duracionPactadaHoras ||
+        sesionPrevia.duracionIndefinida ||
+        sesionPrevia.locationLat ||
+        sesionPrevia.metodoPago ||
+        sesionPrevia.step === 'AWAITING_RECEIPT' ||
+        sesionPrevia.step === 'AWAITING_PAYMENT_METHOD' ||
+        sesionPrevia.step === 'AWAITING_LOCATION' ||
+        sesionPrevia.step === 'AWAITING_DURATION';
+
+      if (teniaDatos) {
+        const previaEmpleada = await this.empleadasRepository.findOne({
+          where: { id: sesionPrevia.empleadaId },
+        });
+        const nombrePrevia = previaEmpleada?.nombreArtistico || 'la chica anterior';
+
+        await ctx.reply(
+          `Veo que estabas a punto de reservar con ${nombrePrevia}. No puedes iniciar una nueva conversación hasta que decidas qué hacer con la reserva actual.`,
+          Markup.inlineKeyboard([
+            [Markup.button.callback(`❌ Cancelar reserva con ${nombrePrevia}`, `cancel_session`)],
+            [Markup.button.callback(`🔙 Regresar con ${nombrePrevia}`, `resume_session:${sesionPrevia.empleadaId}`)],
+          ])
+        );
+        return;
+      }
+    }
 
     /*
      * Con la reserva ya cerrada esperando comprobante el servicio existe y el
