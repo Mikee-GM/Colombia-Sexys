@@ -1924,7 +1924,10 @@ export class TelegramBookingUpdate {
     });
 
     if (!user || (user.rol !== 'jefe' && user.rol !== 'admin')) {
-      await ctx.answerCbQuery('❌ No tienes permisos para autorizar este servicio.', { show_alert: true });
+      await ctx.answerCbQuery(
+        '❌ No tienes permisos para autorizar este servicio.',
+        { show_alert: true },
+      );
       return;
     }
 
@@ -1937,7 +1940,10 @@ export class TelegramBookingUpdate {
     });
 
     if (!service) {
-      await ctx.answerCbQuery('❌ No se encontró ningún servicio asociado a este hilo.', { show_alert: true });
+      await ctx.answerCbQuery(
+        '❌ No se encontró ningún servicio asociado a este hilo.',
+        { show_alert: true },
+      );
       return;
     }
 
@@ -1946,7 +1952,7 @@ export class TelegramBookingUpdate {
       ctx.session.roomServiceId = service.id;
       ctx.session.roomAskedAt = Date.now();
     }
-    
+
     await ctx.answerCbQuery();
     await ctx.reply(
       '🏨 ¿En qué habitación es el servicio? (Responde a este mensaje con el número/detalle, o escribe "No" si es casa).',
@@ -1974,7 +1980,10 @@ export class TelegramBookingUpdate {
     });
 
     if (!user || (user.rol !== 'jefe' && user.rol !== 'admin')) {
-      await ctx.answerCbQuery('❌ No tienes permisos para autorizar este servicio.', { show_alert: true });
+      await ctx.answerCbQuery(
+        '❌ No tienes permisos para autorizar este servicio.',
+        { show_alert: true },
+      );
       return;
     }
 
@@ -1987,7 +1996,10 @@ export class TelegramBookingUpdate {
     });
 
     if (!service) {
-      await ctx.answerCbQuery('❌ No se encontró ningún servicio asociado a este hilo.', { show_alert: true });
+      await ctx.answerCbQuery(
+        '❌ No se encontró ningún servicio asociado a este hilo.',
+        { show_alert: true },
+      );
       return;
     }
 
@@ -4497,13 +4509,16 @@ export class TelegramBookingUpdate {
 
     const telegramId = ctx.from?.id?.toString();
     if (!telegramId) return;
-    
+
     const usuario = await this.usuariosRepository.findOne({
       where: { telegramChatId: telegramId },
     });
-    
+
     if (!usuario || (usuario.rol !== 'jefe' && usuario.rol !== 'admin')) {
-      await ctx.answerCbQuery('❌ No tienes permisos para realizar esta acción.', { show_alert: true });
+      await ctx.answerCbQuery(
+        '❌ No tienes permisos para realizar esta acción.',
+        { show_alert: true },
+      );
       return;
     }
 
@@ -4511,20 +4526,20 @@ export class TelegramBookingUpdate {
       const resultado = await this.servicesService.marcarEmpleadaLista(
         servicioId,
         usuario.id,
-        true
+        true,
       );
-      
+
       try {
         await ctx.editMessageReplyMarkup(undefined);
       } catch (e) {
         // Ignorar si falla la edición del mensaje
       }
-      
+
       await ctx.answerCbQuery(
         resultado.yaEstaba
           ? 'Ya habíamos avisado. El Uber está en camino.'
           : '✅ La empleada fue marcada como lista. El Uber se ha despachado.',
-        { show_alert: true }
+        { show_alert: true },
       );
     } catch (error: any) {
       await ctx.answerCbQuery(error?.message || 'No se pudo avisar', {
@@ -8115,8 +8130,14 @@ export class TelegramBookingUpdate {
                 extraOptions,
                 Markup.inlineKeyboard([
                   [
-                    Markup.button.callback('🟢 Aceptar', 'jefe_aceptar_servicio'),
-                    Markup.button.callback('🔴 Rechazar', 'jefe_rechazar_servicio'),
+                    Markup.button.callback(
+                      '🟢 Aceptar',
+                      'jefe_aceptar_servicio',
+                    ),
+                    Markup.button.callback(
+                      '🔴 Rechazar',
+                      'jefe_rechazar_servicio',
+                    ),
                   ],
                 ]),
               );
@@ -8176,8 +8197,14 @@ export class TelegramBookingUpdate {
                   extraOptions,
                   Markup.inlineKeyboard([
                     [
-                      Markup.button.callback('🟢 Aceptar', 'jefe_aceptar_servicio'),
-                      Markup.button.callback('🔴 Rechazar', 'jefe_rechazar_servicio'),
+                      Markup.button.callback(
+                        '🟢 Aceptar',
+                        'jefe_aceptar_servicio',
+                      ),
+                      Markup.button.callback(
+                        '🔴 Rechazar',
+                        'jefe_rechazar_servicio',
+                      ),
                     ],
                   ]),
                 );
