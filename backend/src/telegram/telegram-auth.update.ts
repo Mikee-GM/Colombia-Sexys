@@ -834,7 +834,10 @@ export class TelegramAuthUpdate {
    * comando /panel y teclearlo. Un boton fijo lo deja a la vista.
    */
   private bossMenu() {
-    return Markup.keyboard([['Mi Panel']]).resize();
+    return Markup.keyboard([
+      ['Mi Panel'],
+      ['🟢 Iniciar Turno', '🔴 Terminar Turno'],
+    ]).resize();
   }
 
   /**
@@ -984,6 +987,52 @@ export class TelegramAuthUpdate {
   @Hears('Mi Panel')
   async onPanelButton(@Ctx() ctx: Context) {
     await this.enviarEnlaceDePanel(ctx, null);
+  }
+
+  @Hears('🟢 Iniciar Turno')
+  async onBossStartShift(@Ctx() ctx: Context) {
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
+
+    const user = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId, rol: In(['jefe', 'admin']) },
+    });
+    if (!user) {
+      await ctx.reply('No tienes permisos de jefe para esta acción.');
+      return;
+    }
+
+    await this.usuariosRepository.update(user.id, {
+      enJornada: true,
+      disponible: true,
+    });
+
+    await ctx.reply(
+      '🟢 Turno INICIADO. A partir de ahora comenzarás a recibir todas las notificaciones y solicitudes de las empleadas a tu cargo.',
+    );
+  }
+
+  @Hears('🔴 Terminar Turno')
+  async onBossEndShift(@Ctx() ctx: Context) {
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return;
+
+    const user = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId, rol: In(['jefe', 'admin']) },
+    });
+    if (!user) {
+      await ctx.reply('No tienes permisos de jefe para esta acción.');
+      return;
+    }
+
+    await this.usuariosRepository.update(user.id, {
+      enJornada: false,
+      disponible: false,
+    });
+
+    await ctx.reply(
+      '🔴 Turno TERMINADO. Las alertas pasarán a ser atendidas por el jefe en turno o secundario.',
+    );
   }
 
   /**

@@ -8305,7 +8305,7 @@ export class TelegramBookingUpdate {
       if (!userMessage.trim()) return;
 
       // Debounce / Buffer de mensajes seguidos del cliente para evitar que la IA responda por partes
-      const DEBOUNCE_WAIT_MS = 20000;
+      const DEBOUNCE_WAIT_MS = 4000;
       // La clave lleva la empleada ademas del cliente, igual que hace
       // `getSessionKey` en telegram.module.ts. Con solo el id de Telegram, un
       // cliente que escribia a dos modelos dentro de la ventana de agrupacion
