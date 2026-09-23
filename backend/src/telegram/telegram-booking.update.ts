@@ -1907,6 +1907,94 @@ export class TelegramBookingUpdate {
     );
   }
 
+  @Action('jefe_aceptar_servicio')
+  async onJefeAceptarServicio(@Ctx() ctx: BotContext) {
+    const message = ctx.callbackQuery?.message as any;
+    const threadId = message?.message_thread_id;
+    const chatId = message?.chat?.id?.toString();
+    const senderTelegramId = ctx.from?.id.toString();
+
+    if (!threadId || !chatId || !senderTelegramId) {
+      await ctx.answerCbQuery('Error: no se encontró el hilo.');
+      return;
+    }
+
+    const user = await this.usuariosRepository.findOne({
+      where: { telegramChatId: senderTelegramId },
+    });
+
+    if (!user || (user.rol !== 'jefe' && user.rol !== 'admin')) {
+      await ctx.answerCbQuery('❌ No tienes permisos para autorizar este servicio.', { show_alert: true });
+      return;
+    }
+
+    const service = await this.serviciosRepository.findOne({
+      where: {
+        telegramThreadId: threadId.toString(),
+        jefe: { grupoTelegramId: chatId },
+      },
+      relations: { empleada: true, cliente: true },
+    });
+
+    if (!service) {
+      await ctx.answerCbQuery('❌ No se encontró ningún servicio asociado a este hilo.', { show_alert: true });
+      return;
+    }
+
+    if (ctx.session) {
+      ctx.session.step = 'AWAITING_ROOM';
+      ctx.session.roomServiceId = service.id;
+      ctx.session.roomAskedAt = Date.now();
+    }
+    
+    await ctx.answerCbQuery();
+    await ctx.reply(
+      '🏨 ¿En qué habitación es el servicio? (Responde a este mensaje con el número/detalle, o escribe "No" si es casa).',
+      {
+        reply_parameters: { message_id: message.message_id },
+        ...Markup.forceReply(),
+      },
+    );
+  }
+
+  @Action('jefe_rechazar_servicio')
+  async onJefeRechazarServicio(@Ctx() ctx: BotContext) {
+    const message = ctx.callbackQuery?.message as any;
+    const threadId = message?.message_thread_id;
+    const chatId = message?.chat?.id?.toString();
+    const senderTelegramId = ctx.from?.id.toString();
+
+    if (!threadId || !chatId || !senderTelegramId) {
+      await ctx.answerCbQuery('Error: no se encontró el hilo.');
+      return;
+    }
+
+    const user = await this.usuariosRepository.findOne({
+      where: { telegramChatId: senderTelegramId },
+    });
+
+    if (!user || (user.rol !== 'jefe' && user.rol !== 'admin')) {
+      await ctx.answerCbQuery('❌ No tienes permisos para autorizar este servicio.', { show_alert: true });
+      return;
+    }
+
+    const service = await this.serviciosRepository.findOne({
+      where: {
+        telegramThreadId: threadId.toString(),
+        jefe: { grupoTelegramId: chatId },
+      },
+      relations: { empleada: true, cliente: true },
+    });
+
+    if (!service) {
+      await ctx.answerCbQuery('❌ No se encontró ningún servicio asociado a este hilo.', { show_alert: true });
+      return;
+    }
+
+    await ctx.answerCbQuery('Rechazando servicio...');
+    await this.servicesService.rechazar(service.id, user.id);
+  }
+
   @Action(/^contratar_empleada:(.+)$/)
   async onContratarEmpleada(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery();
@@ -7971,11 +8059,12 @@ export class TelegramBookingUpdate {
             if (isPendiente) {
               Object.assign(
                 extraOptions,
-                Markup.keyboard([
-                  [BOTON_ACEPTAR_SERVICIO, BOTON_RECHAZAR_SERVICIO],
-                ])
-                  .resize()
-                  .oneTime(),
+                Markup.inlineKeyboard([
+                  [
+                    Markup.button.callback('🟢 Aceptar', 'jefe_aceptar_servicio'),
+                    Markup.button.callback('🔴 Rechazar', 'jefe_rechazar_servicio'),
+                  ],
+                ]),
               );
             }
             await this.bot.telegram.sendMessage(
@@ -8031,11 +8120,12 @@ export class TelegramBookingUpdate {
               if (isPendiente) {
                 Object.assign(
                   extraOptions,
-                  Markup.keyboard([
-                    [BOTON_ACEPTAR_SERVICIO, BOTON_RECHAZAR_SERVICIO],
-                  ])
-                    .resize()
-                    .oneTime(),
+                  Markup.inlineKeyboard([
+                    [
+                      Markup.button.callback('🟢 Aceptar', 'jefe_aceptar_servicio'),
+                      Markup.button.callback('🔴 Rechazar', 'jefe_rechazar_servicio'),
+                    ],
+                  ]),
                 );
               }
               await this.bot.telegram.sendMessage(
