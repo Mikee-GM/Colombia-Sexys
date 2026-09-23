@@ -1149,37 +1149,7 @@ export class TelegramBookingUpdate {
   private async findAssignedJefe(
     empleada: Empleadas,
   ): Promise<Usuarios | null> {
-    if (empleada.jefeId) {
-      const mainJefe = await this.usuariosRepository.findOne({
-        where: { id: empleada.jefeId, activo: true },
-      });
-      if (mainJefe && mainJefe.disponible) {
-        return mainJefe;
-      }
-      if (empleada.jefeSecundarioId) {
-        const secJefe = await this.usuariosRepository.findOne({
-          where: { id: empleada.jefeSecundarioId, activo: true },
-        });
-        if (secJefe && secJefe.disponible) {
-          return secJefe;
-        }
-      }
-    }
-    let jefe = await this.usuariosRepository.findOne({
-      where: [
-        { rol: 'jefe', activo: true, disponible: true },
-        { rol: 'admin', activo: true, disponible: true },
-      ],
-    });
-    if (!jefe) {
-      jefe = await this.usuariosRepository.findOne({
-        where: [
-          { rol: 'jefe', activo: true },
-          { rol: 'admin', activo: true },
-        ],
-      });
-    }
-    return jefe;
+    return this.resolveBossForEmployee(empleada);
   }
 
   /**
@@ -1784,10 +1754,27 @@ export class TelegramBookingUpdate {
   private async resolveBossForEmployee(
     empleada: Empleadas,
   ): Promise<Usuarios | null> {
-    let boss = empleada.jefe ?? null;
-    if (!boss && empleada.jefeId) {
+    const jIds = [];
+    if (empleada.jefeId) jIds.push(empleada.jefeId);
+    if (empleada.jefeSecundarioId) jIds.push(empleada.jefeSecundarioId);
+
+    let boss: Usuarios | null = null;
+    if (jIds.length > 0) {
+      const bosses = await this.usuariosRepository.find({
+        where: jIds.map((id) => ({ id, activo: true })),
+      });
+
+      boss = bosses.find((b) => b.enJornada) || null;
+
+      if (!boss) {
+        boss =
+          bosses.find((b) => b.id === empleada.jefeId) || bosses[0] || null;
+      }
+    }
+
+    if (!boss) {
       boss = await this.usuariosRepository.findOne({
-        where: { id: empleada.jefeId, activo: true },
+        where: { rol: 'jefe', disponible: true, activo: true, enJornada: true },
       });
     }
     if (!boss) {
@@ -3529,22 +3516,7 @@ export class TelegramBookingUpdate {
     const telegramId = ctx.from?.id?.toString();
     if (!telegramId) return;
 
-    let boss = mainEmployee.jefe;
-    if (!boss && mainEmployee.jefeId) {
-      boss = await this.usuariosRepository.findOne({
-        where: { id: mainEmployee.jefeId, activo: true },
-      });
-    }
-    if (!boss) {
-      boss = await this.usuariosRepository.findOne({
-        where: { rol: 'jefe', disponible: true, activo: true },
-      });
-    }
-    if (!boss) {
-      boss = await this.usuariosRepository.findOne({
-        where: { rol: 'admin', activo: true },
-      });
-    }
+    const boss = await this.resolveBossForEmployee(mainEmployee);
 
     const bossGroupId = boss?.grupoTelegramId;
     const bossPrivateId = boss?.telegramChatId;
@@ -3898,12 +3870,7 @@ export class TelegramBookingUpdate {
     trioEmployee: Empleadas,
     acepta: boolean,
   ): Promise<void> {
-    let boss = mainEmployee.jefe;
-    if (!boss && mainEmployee.jefeId) {
-      boss = await this.usuariosRepository.findOne({
-        where: { id: mainEmployee.jefeId, activo: true },
-      });
-    }
+    const boss = await this.resolveBossForEmployee(mainEmployee);
     const destino = boss?.grupoTelegramId || boss?.telegramChatId;
     if (!destino) return;
 
@@ -10219,22 +10186,7 @@ export class TelegramBookingUpdate {
       client?.nombreTelegram || ctx.from?.first_name || 'Cliente';
 
     // Buscar jefe asignado o jefe/admin activo
-    let boss = empleada?.jefe;
-    if (!boss && empleada?.jefeId) {
-      boss = await this.usuariosRepository.findOne({
-        where: { id: empleada.jefeId, activo: true },
-      });
-    }
-    if (!boss) {
-      boss = await this.usuariosRepository.findOne({
-        where: { rol: 'jefe', disponible: true, activo: true },
-      });
-    }
-    if (!boss) {
-      boss = await this.usuariosRepository.findOne({
-        where: { rol: 'admin', activo: true },
-      });
-    }
+    const boss = await this.resolveBossForEmployee(empleada!);
 
     const grupoTelegramId = boss?.grupoTelegramId;
     if (!grupoTelegramId) {
@@ -11046,11 +10998,13 @@ export class TelegramBookingUpdate {
         }
       }
 
+      const activeBoss = await this.resolveBossForEmployee(empleada);
+
       const newService = await this.servicesService.create({
         empleadaId: empleada.id,
         clienteId: client?.id,
         clienteNombreLibre: client ? undefined : clienteNombreLibre,
-        jefeId: empleada.jefeId || undefined,
+        jefeId: activeBoss?.id || undefined,
         duracionPactadaHoras: duracion,
         metodoPago,
         ubicacionClienteLat: lat,

@@ -106,25 +106,15 @@ export default function WorkShiftToggle({
         {status.enJornada && pidiendoMotivo && (
           <div className="mt-2 rounded-xl border border-zinc-800 bg-black p-3">
             <label
-              className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]"
-              htmlFor="motivo-jornada-compacto"
+              className="block text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]"
             >
-              ¿Cierras tu jornada? Di por qué si quieres
+              ¿Seguro que deseas cerrar tu turno?
             </label>
-            <textarea
-              id="motivo-jornada-compacto"
-              value={motivo}
-              onChange={(event) => setMotivo(event.target.value)}
-              maxLength={500}
-              rows={2}
-              placeholder="Opcional"
-              className="mt-2 w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-[#C5A55A]"
-            />
-            <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => cambiar(false, motivo.trim() || undefined)}
+                onClick={() => cambiar(false)}
                 className="rounded-lg bg-[#C5A55A] px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-black disabled:opacity-50"
               >
                 Cerrar jornada
@@ -132,10 +122,7 @@ export default function WorkShiftToggle({
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => {
-                  setPidiendoMotivo(false);
-                  setMotivo("");
-                }}
+                onClick={() => setPidiendoMotivo(false)}
                 className="rounded-lg border border-zinc-800 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 disabled:opacity-50"
               >
                 Cancelar
@@ -170,23 +157,14 @@ export default function WorkShiftToggle({
 
       {status.enJornada && pidiendoMotivo && (
         <div className="mt-2 rounded-xl border border-zinc-800 bg-black p-3">
-          <label className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-[#C5A55A]" htmlFor="motivo-jornada">
-            ¿Por qué cierras? Opcional
+          <label className="block text-center text-xs font-semibold uppercase tracking-[0.16em] text-[#C5A55A]">
+            ¿Seguro que deseas cerrar tu turno?
           </label>
-          <textarea
-            id="motivo-jornada"
-            value={motivo}
-            onChange={(event) => setMotivo(event.target.value)}
-            maxLength={500}
-            rows={2}
-            placeholder="Si no quieres decirlo, cierra sin escribir nada"
-            className="mt-2 w-full resize-none rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-[#C5A55A]"
-          />
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
               disabled={pending}
-              onClick={() => cambiar(false, motivo.trim() || undefined)}
+              onClick={() => cambiar(false)}
               className="rounded-lg bg-[#C5A55A] px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-black disabled:opacity-50"
             >
               Cerrar jornada
@@ -194,10 +172,7 @@ export default function WorkShiftToggle({
             <button
               type="button"
               disabled={pending}
-              onClick={() => {
-                setPidiendoMotivo(false);
-                setMotivo("");
-              }}
+              onClick={() => setPidiendoMotivo(false)}
               className="rounded-lg border border-zinc-800 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 disabled:opacity-50"
             >
               Cancelar
