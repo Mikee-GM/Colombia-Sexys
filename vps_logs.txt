@@ -1,0 +1,100 @@
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users/off-duty, GET} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users/:id, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users/:id, PATCH} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users/:id, DELETE} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users/:id/telegram-otp, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/users/:id/unlink-telegram, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mClientsController {/api/clients} (version: 1):[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/clients/:id/ficha, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/clients, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/clients, GET} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/clients/:id, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/clients/:id, PATCH} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/clients/:id/bloqueo, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/clients/:id/bloqueo, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/clients/:id/bloqueo, DELETE} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/clients/:id, DELETE} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEmployeesController {/api/employees} (version: 1):[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employees, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employees, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employees/kpis, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employees/:id, GET} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employees/:id, PATCH} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employees/:id, DELETE} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEmployeePortalController {/api/employee-portal} (version: 1):[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/me, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/trips/:tripId/status, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/services/:servicioId/available-extras, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/services/:servicioId/extras, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/services/:servicioId/finish, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/weekly-photos, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/weekly-photos, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/services/:servicioId/extend, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/location, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/services/:servicioId/prorroga, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/services/:servicioId/lista, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/channel, GET} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/channel, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/ratings/appealable, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/ratings/:ratingId/appeal, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/reports/mine, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/reports/:reportId/statement, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/reports, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/ratings/pending-clients, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-portal/ratings, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mCatalogExtrasController {/api/catalog-extras} (version: 1):[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/catalog-extras, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/catalog-extras, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/catalog-extras/:id, GET} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/catalog-extras/:id, PATCH} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/catalog-extras/:id, DELETE} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mTelegramConversationsController {/api/telegram-conversations} (version: 1):[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/service/:serviceId, GET} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/unlinked-sessions, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/session/:bookingSessionId, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/service/:serviceId/messages, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/service/:serviceId/pause-ai, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/service/:serviceId/resume-ai, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/service/:serviceId/admin-message, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/session/:bookingSessionId/admin-message, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/recent-chats, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/chat/:clientId, GET} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/chat/:clientId/message, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/telegram-conversations/chat/:clientId/toggle-ai, POST} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mEmployeePhotosController {/api/employee-photos} (version: 1):[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos/:id, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos/:id, PATCH} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos/:id, DELETE} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos/private/:empleadaId, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos/private, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos/private/:id, DELETE} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos/gallery/reorder, PATCH} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/employee-photos/:id/move, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mApartmentsController {/api/apartments} (version: 1):[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/apartments, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/apartments, GET} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/apartments/:id, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/apartments/:id, PATCH} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/apartments/:id, DELETE} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mChallengesController {/api/challenges} (version: 1):[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/challenges, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/challenges/:id, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/challenges, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/challenges/:id/cancel, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mDriverShiftsController {/api/driver-shifts} (version: 1):[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/driver-shifts, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/driver-shifts/driver/:driverId, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/driver-shifts/:id, GET} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/driver-shifts/:id/candidates, GET} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/driver-shifts, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/driver-shifts/:id, PATCH} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/driver-shifts/:id/deactivate, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/driver-shifts/:id/assign, POST} (version: 1) route[39m[38;5;3m +0ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/driver-shifts/:id/assign/:driverId, DELETE} (version: 1) route[39m[38;5;3m +1ms[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[RealtimeBus] [39m[32mEscuchando eventos en vivo de otras réplicas (instancia e8c73dab).[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[UserSeederService] [39m[32mEl usuario administrador ya existe en la base de datos.[39m
+[32m[Nest] 1  - [39m09/24/2026, 5:20:10 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +1ms[39m
+[33m[Nest] 1  - [39m09/24/2026, 5:21:38 AM [33m   WARN[39m [38;5;3m[TelegramSessionStore] [39m[33mSesion 7813542583:7813542583: dos conflictos seguidos al guardar, se forzo la escritura.[39m
+[33m[Nest] 1  - [39m09/24/2026, 5:22:15 AM [33m   WARN[39m [38;5;3m[HttpExceptionFilter] [39m[33mPOST /api/v1/auth/panel-access - Status: 401 - Error: El enlace de acceso no es válido o ya se usó[39m
