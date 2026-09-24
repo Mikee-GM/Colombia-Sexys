@@ -5265,11 +5265,18 @@ export class TelegramBookingUpdate {
       try {
         const fileUrl = await ctx.telegram.getFileLink(fileId);
         const processingMsg = await ctx.reply('Mirando la foto... 👀');
-        const visionResult = await this.aiMessageService.describeGeneralImage(fileUrl.href);
-        await ctx.telegram.deleteMessage(ctx.chat!.id, processingMsg.message_id).catch(() => undefined);
+        const visionResult = await this.aiMessageService.describeGeneralImage(
+          fileUrl.href,
+        );
+        await ctx.telegram
+          .deleteMessage(ctx.chat!.id, processingMsg.message_id)
+          .catch(() => undefined);
 
         const paymentMethod = ctx.session.metodoPago;
-        const expectsReceipt = paymentMethod === 'transferencia' || paymentMethod === 'tarjeta' || paymentMethod === 'mixto';
+        const expectsReceipt =
+          paymentMethod === 'transferencia' ||
+          paymentMethod === 'tarjeta' ||
+          paymentMethod === 'mixto';
 
         if (visionResult.esComprobante && expectsReceipt) {
           await this.createReceiptEvidence(ctx, fileId, client?.nombreTelegram);
@@ -5279,7 +5286,8 @@ export class TelegramBookingUpdate {
             'cliente',
             '[Comprobante de transferencia enviado por el cliente]',
           );
-          const ack = '¡Listo mi amor, ya me llegó tu comprobante! Lo reviso y seguimos 😘';
+          const ack =
+            '¡Listo mi amor, ya me llegó tu comprobante! Lo reviso y seguimos 😘';
           await ctx.reply(ack);
           await this.recordDraftConversation(ctx, 'ia', ack);
           await this.persistSession(ctx);
@@ -5294,7 +5302,7 @@ export class TelegramBookingUpdate {
             const DEBOUNCE_WAIT_MS = 4000;
             const bufferKey = this.messageBufferKey(telegramId, empleadaId);
             const existingBuffer = this.clientMessageBuffers.get(bufferKey);
-            
+
             if (existingBuffer) {
               clearTimeout(existingBuffer.timer);
               existingBuffer.messages.push(fakeMessage);
@@ -5316,7 +5324,10 @@ export class TelegramBookingUpdate {
           }
         }
       } catch (err) {
-        this.logger.error('No se pudo procesar la foto general del cliente:', err);
+        this.logger.error(
+          'No se pudo procesar la foto general del cliente:',
+          err,
+        );
       }
     }
   }
@@ -5324,24 +5335,34 @@ export class TelegramBookingUpdate {
   @On(['voice', 'audio'])
   async onAudioUpload(@Ctx() ctx: BotContext) {
     if (ctx.chat?.type !== 'private' || !ctx.session?.empleadaId) return;
-    
+
     // Rechazar amablemente los audios (opción A de requerimientos)
-    const ack = 'Ay mor, discúlpame pero ahorita no puedo escuchar audios 😩. ¿Me lo escribes porfa? 😘';
+    const ack =
+      'Ay mor, discúlpame pero ahorita no puedo escuchar audios 😩. ¿Me lo escribes porfa? 😘';
     await ctx.reply(ack);
     await this.recordDraftConversation(ctx, 'ia', ack);
-    await this.recordDraftConversation(ctx, 'cliente', '[El cliente envió una nota de voz]');
+    await this.recordDraftConversation(
+      ctx,
+      'cliente',
+      '[El cliente envió una nota de voz]',
+    );
     await this.persistSession(ctx);
   }
 
   @On('video')
   async onVideoUpload(@Ctx() ctx: BotContext) {
     if (ctx.chat?.type !== 'private' || !ctx.session?.empleadaId) return;
-    
+
     // Rechazar amablemente los videos
-    const ack = 'Ay mi amor, el internet lo tengo malísimo y no me cargan los videos 😩. Mándame fotito mejor o cuéntame.';
+    const ack =
+      'Ay mi amor, el internet lo tengo malísimo y no me cargan los videos 😩. Mándame fotito mejor o cuéntame.';
     await ctx.reply(ack);
     await this.recordDraftConversation(ctx, 'ia', ack);
-    await this.recordDraftConversation(ctx, 'cliente', '[El cliente envió un video]');
+    await this.recordDraftConversation(
+      ctx,
+      'cliente',
+      '[El cliente envió un video]',
+    );
     await this.persistSession(ctx);
   }
 
@@ -9990,9 +10011,12 @@ export class TelegramBookingUpdate {
               session.metodoPago = userProvidedPayment;
             } else if (
               parsedData.pago &&
-              ['efectivo', 'tarjeta', 'transferencia', 'mixto'].includes(parsedData.pago)
+              ['efectivo', 'tarjeta', 'transferencia', 'mixto'].includes(
+                parsedData.pago,
+              )
             ) {
-              session.metodoPago = parsedData.pago as 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
+              session.metodoPago = parsedData.pago as
+                'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
             }
 
             /* Se cierra en cuanto estan los dos datos, los diera el turno que los diera. */

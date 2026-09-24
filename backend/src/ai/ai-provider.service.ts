@@ -458,7 +458,10 @@ Devuelve estrictamente un JSON con esta estructura:
       }
     } catch (err: any) {
       clearTimeout(timeoutId);
-      this.logger.error('Failed to call xAI Vision API for description:', err.message);
+      this.logger.error(
+        'Failed to call xAI Vision API for description:',
+        err.message,
+      );
       return { esComprobante: false, descripcion: 'una foto' };
     }
   }

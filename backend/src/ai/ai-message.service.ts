@@ -106,7 +106,9 @@ Evento: ${event}. No inventes información, no uses Markdown y devuelve solo el 
     return this.aiProviderService.analyzeReceipt(imageUrl, expectedAmount);
   }
 
-  async describeGeneralImage(imageUrl: string): Promise<{ esComprobante: boolean, descripcion: string }> {
+  async describeGeneralImage(
+    imageUrl: string,
+  ): Promise<{ esComprobante: boolean; descripcion: string }> {
     return this.aiProviderService.describeGeneralImage(imageUrl);
   }
 }
