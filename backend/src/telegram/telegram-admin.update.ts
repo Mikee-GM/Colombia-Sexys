@@ -516,7 +516,7 @@ export class TelegramAdminUpdate {
       );
       (ctx as any).session = {};
       await ctx.answerCbQuery('Costo registrado');
-      
+
       let buttons: any[] = [];
       if (trip.tipo === 'regreso') {
         buttons = [

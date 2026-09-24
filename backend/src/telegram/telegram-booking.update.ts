@@ -4146,17 +4146,27 @@ export class TelegramBookingUpdate {
       ctx.session ||= {};
       ctx.session.extraSelection = { servicioId };
       await ctx.answerCbQuery();
-      const extraMsg = `➕ *Selecciona el monto del extra a agregar:*\n\n` +
-          `Se te solicitará seleccionar el método de pago del extra en el siguiente paso.`;
-      
+      const extraMsg =
+        `➕ *Selecciona el monto del extra a agregar:*\n\n` +
+        `Se te solicitará seleccionar el método de pago del extra en el siguiente paso.`;
+
       const keyboardOptions = [
         [
           Markup.button.callback('$500', `agregar_extra_amt:${servicioId}:500`),
-          Markup.button.callback('$1000', `agregar_extra_amt:${servicioId}:1000`),
+          Markup.button.callback(
+            '$1000',
+            `agregar_extra_amt:${servicioId}:1000`,
+          ),
         ],
         [
-          Markup.button.callback('$1500', `agregar_extra_amt:${servicioId}:1500`),
-          Markup.button.callback('Otro monto', `agregar_extra_amt:${servicioId}:custom`),
+          Markup.button.callback(
+            '$1500',
+            `agregar_extra_amt:${servicioId}:1500`,
+          ),
+          Markup.button.callback(
+            'Otro monto',
+            `agregar_extra_amt:${servicioId}:custom`,
+          ),
         ],
         [Markup.button.callback('🔙 Volver', `canc_fin_serv:${servicioId}`)],
       ];
@@ -4767,7 +4777,10 @@ export class TelegramBookingUpdate {
                 })
                 .catch(() => undefined);
             } else {
-              await ctx.editMessageText('✅ Llegada a base confirmada. El servicio ha concluido.')
+              await ctx
+                .editMessageText(
+                  '✅ Llegada a base confirmada. El servicio ha concluido.',
+                )
                 .catch(() => undefined);
             }
           }
@@ -7098,11 +7111,12 @@ export class TelegramBookingUpdate {
     await ctx.answerCbQuery('Servicio extendido con éxito.');
 
     try {
-      const extensionMsg = `✅ *Servicio Extendido* ➕${horasAExtender}h\n\n` +
+      const extensionMsg =
+        `✅ *Servicio Extendido* ➕${horasAExtender}h\n\n` +
         `• Nueva Duración Pactada: *${servicio.duracionPactadaHoras} horas*\n` +
         `• Nuevo Total Estimado: *$${servicio.totalFinal}*\n\n` +
         `El cambio ha sido registrado automáticamente en el sistema.`;
-      
+
       if (!isBoss) {
         await ctx.editMessageText(extensionMsg, { parse_mode: 'Markdown' });
       } else {
