@@ -93,7 +93,7 @@ export default function ManualServiceControls({
                 </button>
               )}
 
-            {currentTrip?.estado === "pendiente" &&
+            {currentTrip?.estado === "aceptado" &&
               currentTrip.proveedorTransporte === "uber" && (
                 <button
                   disabled={isLoading}
