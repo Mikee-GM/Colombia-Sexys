@@ -519,14 +519,50 @@ export class TelegramAdminUpdate {
 
       let buttons: any[] = [];
       if (trip.tipo === 'regreso') {
-        buttons = [
-          [
-            Markup.button.callback(
-              '📍 Uber llegó (por ella)',
-              `jefe_uber_estado:${trip.id}:llegado`,
-            ),
-          ],
-        ];
+        /*
+         * La tarifa y el estado del viaje son cosas distintas. Mostrar
+         * directamente «llegó» aqui saltaba la transición que el servicio exige
+         * y producia el aviso «Primero confirma que el Uber va en camino».
+         * La botonera solo encadena el siguiente paso que corresponde al estado
+         * actual; las transiciones y sus validaciones siguen en ServicesService.
+         */
+        if (trip.estado === 'aceptado') {
+          buttons = [
+            [
+              Markup.button.callback(
+                '🚗 Uber va en camino (por ella)',
+                `jefe_uber_estado:${trip.id}:en_camino`,
+              ),
+            ],
+          ];
+        } else if (trip.estado === 'en_camino') {
+          buttons = [
+            [
+              Markup.button.callback(
+                '📍 Uber llegó (por ella)',
+                `jefe_uber_estado:${trip.id}:llegado`,
+              ),
+            ],
+          ];
+        } else if (trip.estado === 'llegado') {
+          buttons = [
+            [
+              Markup.button.callback(
+                '🚶‍♀️ Ya subió (por ella)',
+                `eu:${trip.id}:i`,
+              ),
+            ],
+          ];
+        } else if (trip.estado === 'en_curso') {
+          buttons = [
+            [
+              Markup.button.callback(
+                '📍 Ya llegó a su destino',
+                `eu:${trip.id}:f`,
+              ),
+            ],
+          ];
+        }
       }
 
       await ctx.editMessageText(
