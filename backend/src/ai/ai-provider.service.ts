@@ -391,6 +391,77 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
       };
     }
   }
+
+  async describeGeneralImage(imageUrl: string): Promise<{
+    esComprobante: boolean;
+    descripcion: string;
+  }> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('XAI_API_KEY is not defined in environment variables');
+    }
+
+    const systemPrompt = `Eres un asistente que describe imágenes de forma concisa.
+Tu tarea es decirme si la imagen parece ser un comprobante de pago/transferencia bancaria, y además describirla brevemente.
+Devuelve estrictamente un JSON con esta estructura:
+{
+  "esComprobante": boolean,
+  "descripcion": "Una breve descripción de lo que se ve en la foto (ej. 'Un comprobante de BBVA', 'Un hombre sonriendo', 'Un carro rojo', 'Una selfie de una persona', 'Un paisaje')"
+}`;
+
+    const messages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: systemPrompt },
+          { type: 'image_url', image_url: { url: imageUrl } },
+        ],
+      },
+    ];
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout for simple description
+
+    try {
+      const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.visionModel,
+          messages,
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`xAI API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || '{}';
+
+      try {
+        const parsed = JSON.parse(content);
+        return {
+          esComprobante: Boolean(parsed.esComprobante),
+          descripcion: parsed.descripcion || 'una foto',
+        };
+      } catch (e) {
+        return { esComprobante: false, descripcion: 'una imagen' };
+      }
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      this.logger.error('Failed to call xAI Vision API for description:', err.message);
+      return { esComprobante: false, descripcion: 'una foto' };
+    }
+  }
 }
 
 /**

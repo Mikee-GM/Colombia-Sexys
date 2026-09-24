@@ -5249,10 +5249,7 @@ export class TelegramBookingUpdate {
       return;
     }
 
-    // El cliente mandó una foto durante la negociación (típicamente adelanta el
-    // comprobante antes de que el flujo llegue al paso de pago). Se guarda y se
-    // reconoce para que nunca se le vuelva a pedir "como si nunca la hubiera
-    // recibido".
+    // El cliente mandó una foto durante la negociación.
     if (ctx.session?.empleadaId && ctx.chat?.type === 'private') {
       const photos = (ctx.message as any)?.photo as
         Array<{ file_id: string }> | undefined;
@@ -5262,38 +5259,90 @@ export class TelegramBookingUpdate {
       const client = await this.clientesRepository.findOne({
         where: { telegramChatId: ctx.from!.id.toString() },
       });
+      const telegramId = ctx.from!.id.toString();
+      const empleadaId = ctx.session.empleadaId;
+
       try {
-        // Se sube igualmente como evidencia: si luego hay que revisarla a mano,
-        // la imagen ya esta guardada y no depende de que Telegram conserve el
-        // archivo.
-        await this.createReceiptEvidence(ctx, fileId, client?.nombreTelegram);
-        /*
-         * Se guarda la foto y se recuerda cual era, pero no se da por buena:
-         * el monto que tiene que decir depende de horas, tarifa y transporte,
-         * y a estas alturas de la conversacion puede que no esten cerrados. Se
-         * analiza en cuanto se sepan, en `validarComprobanteDeReserva`.
-         *
-         * Tampoco se toca el metodo de pago: una foto cualquiera --y aqui
-         * llega cualquiera-- no significa que el cliente vaya a transferir.
-         */
-        ctx.session.comprobanteAdelantadoFileId = fileId;
-        await this.recordDraftConversation(
-          ctx,
-          'cliente',
-          '[Comprobante de transferencia enviado por el cliente]',
-        );
-        const ack =
-          '¡Listo mi amor, ya me llegó tu comprobante! Lo reviso y seguimos 😘';
-        await ctx.reply(ack);
-        await this.recordDraftConversation(ctx, 'ia', ack);
-        await this.persistSession(ctx);
+        const fileUrl = await ctx.telegram.getFileLink(fileId);
+        const processingMsg = await ctx.reply('Mirando la foto... 👀');
+        const visionResult = await this.aiMessageService.describeGeneralImage(fileUrl.href);
+        await ctx.telegram.deleteMessage(ctx.chat!.id, processingMsg.message_id).catch(() => undefined);
+
+        const paymentMethod = ctx.session.metodoPago;
+        const expectsReceipt = paymentMethod === 'transferencia' || paymentMethod === 'tarjeta' || paymentMethod === 'mixto';
+
+        if (visionResult.esComprobante && expectsReceipt) {
+          await this.createReceiptEvidence(ctx, fileId, client?.nombreTelegram);
+          ctx.session.comprobanteAdelantadoFileId = fileId;
+          await this.recordDraftConversation(
+            ctx,
+            'cliente',
+            '[Comprobante de transferencia enviado por el cliente]',
+          );
+          const ack = '¡Listo mi amor, ya me llegó tu comprobante! Lo reviso y seguimos 😘';
+          await ctx.reply(ack);
+          await this.recordDraftConversation(ctx, 'ia', ack);
+          await this.persistSession(ctx);
+        } else {
+          const empleada = await this.empleadasRepository.findOne({
+            where: { id: empleadaId },
+            relations: { usuario: true, jefe: true },
+          });
+
+          if (empleada) {
+            const fakeMessage = `[El cliente envió una foto: ${visionResult.descripcion}]`;
+            const DEBOUNCE_WAIT_MS = 4000;
+            const bufferKey = this.messageBufferKey(telegramId, empleadaId);
+            const existingBuffer = this.clientMessageBuffers.get(bufferKey);
+            
+            if (existingBuffer) {
+              clearTimeout(existingBuffer.timer);
+              existingBuffer.messages.push(fakeMessage);
+              existingBuffer.ctx = ctx;
+              existingBuffer.timer = setTimeout(() => {
+                void this.flushClientMessageBuffer(bufferKey, empleada);
+              }, DEBOUNCE_WAIT_MS);
+            } else {
+              const timer = setTimeout(() => {
+                void this.flushClientMessageBuffer(bufferKey, empleada);
+              }, DEBOUNCE_WAIT_MS);
+              this.clientMessageBuffers.set(bufferKey, {
+                messages: [fakeMessage],
+                timer,
+                ctx,
+                empleada,
+              });
+            }
+          }
+        }
       } catch (err) {
-        this.logger.error(
-          'No se pudo guardar el comprobante adelantado por el cliente:',
-          err,
-        );
+        this.logger.error('No se pudo procesar la foto general del cliente:', err);
       }
     }
+  }
+
+  @On(['voice', 'audio'])
+  async onAudioUpload(@Ctx() ctx: BotContext) {
+    if (ctx.chat?.type !== 'private' || !ctx.session?.empleadaId) return;
+    
+    // Rechazar amablemente los audios (opción A de requerimientos)
+    const ack = 'Ay mor, discúlpame pero ahorita no puedo escuchar audios 😩. ¿Me lo escribes porfa? 😘';
+    await ctx.reply(ack);
+    await this.recordDraftConversation(ctx, 'ia', ack);
+    await this.recordDraftConversation(ctx, 'cliente', '[El cliente envió una nota de voz]');
+    await this.persistSession(ctx);
+  }
+
+  @On('video')
+  async onVideoUpload(@Ctx() ctx: BotContext) {
+    if (ctx.chat?.type !== 'private' || !ctx.session?.empleadaId) return;
+    
+    // Rechazar amablemente los videos
+    const ack = 'Ay mi amor, el internet lo tengo malísimo y no me cargan los videos 😩. Mándame fotito mejor o cuéntame.';
+    await ctx.reply(ack);
+    await this.recordDraftConversation(ctx, 'ia', ack);
+    await this.recordDraftConversation(ctx, 'cliente', '[El cliente envió un video]');
+    await this.persistSession(ctx);
   }
 
   /**
@@ -9941,9 +9990,9 @@ export class TelegramBookingUpdate {
               session.metodoPago = userProvidedPayment;
             } else if (
               parsedData.pago &&
-              extractHirePaymentMethod(userMessage)
+              ['efectivo', 'tarjeta', 'transferencia', 'mixto'].includes(parsedData.pago)
             ) {
-              session.metodoPago = parsedData.pago;
+              session.metodoPago = parsedData.pago as 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
             }
 
             /* Se cierra en cuanto estan los dos datos, los diera el turno que los diera. */
