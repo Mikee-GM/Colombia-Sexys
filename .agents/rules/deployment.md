@@ -30,3 +30,18 @@ Before committing and pushing ANY code, always run the following steps inside th
 
 > [!WARNING]
 > If you are an AI agent "vibecoding" for the user, **DO NOT** push code without first running `npm run format` locally. Failing to format the code will waste time and require a second formatting commit.
+
+## GitHub Secrets Configuration (Required for CI/CD)
+
+The GitHub Action (`deploy.yml`) uses SSH to connect to the VPS. If the SSH connection fails with an exit code 1 during the `Desplegar commit validado` step, it is highly likely that the GitHub Secrets are missing or the SSH Key is not correctly authorized on the server.
+
+The following secrets **MUST** be correctly configured under the repository settings: `Settings > Secrets and variables > Actions`:
+
+- `VPS_HOST`: `31.220.17.121`
+- `VPS_USER`: `root`
+- `VPS_PORT`: `22`
+- `VPS_PROJECT_PATH`: `/opt/colombia-sexys`
+- `VPS_SSH_KEY`: The private Ed25519 SSH key (`-----BEGIN OPENSSH PRIVATE KEY-----...`).
+
+> [!IMPORTANT]  
+> If the `VPS_SSH_KEY` is not authorized on the server's `/root/.ssh/authorized_keys`, GitHub Actions will **silently fail** with an exit code 1 because it cannot use a password to authenticate. If deployments are failing because of this, either update the secrets or perform a manual SSH deployment as a fallback.
