@@ -301,31 +301,35 @@ export class TelegramAdminUpdate {
             `cambiar_transporte:${res.viajeId}:${transportType === 'uber' ? 'interno' : 'uber'}`,
           ),
         ]);
-        inlineButtons.push([
-          Markup.button.callback(
-            '👩 Empleada lista',
-            `jefe_empleada_lista:${serviceId}`,
-          ),
-        ]);
-        inlineButtons.push([
-          Markup.button.callback('🚗 Va en camino', `eu:${res.viajeId}:i`),
-          Markup.button.callback('📍 Ya llegó', `eu:${res.viajeId}:f`),
-        ]);
+        if (!res.empleada?.usuario?.telegramChatId) {
+          inlineButtons.push([
+            Markup.button.callback(
+              '👩 Empleada lista',
+              `jefe_empleada_lista:${serviceId}`,
+            ),
+          ]);
+          inlineButtons.push([
+            Markup.button.callback('🚗 Va en camino', `eu:${res.viajeId}:i`),
+            Markup.button.callback('📍 Ya llegó', `eu:${res.viajeId}:f`),
+          ]);
+        }
       }
 
-      inlineButtons.push([
-        Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
-      ]);
-      inlineButtons.push([
-        Markup.button.callback(
-          '⏳ Extender +1h',
-          `extender_servicio:${serviceId}:1`,
-        ),
-        Markup.button.callback(
-          '➕ Agregar Extra',
-          `agregar_extra_list:${serviceId}`,
-        ),
-      ]);
+      if (!res.empleada?.usuario?.telegramChatId) {
+        inlineButtons.push([
+          Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
+        ]);
+        inlineButtons.push([
+          Markup.button.callback(
+            '⏳ Extender +1h',
+            `extender_servicio:${serviceId}:1`,
+          ),
+          Markup.button.callback(
+            '➕ Agregar Extra',
+            `agregar_extra_list:${serviceId}`,
+          ),
+        ]);
+      }
 
       await ctx.editMessageText(
         `Servicio aceptado.\nNotas internas: ${pending.notes}` +
@@ -698,6 +702,8 @@ export class TelegramAdminUpdate {
       let uberLink: string | undefined;
       let viajeId: string | undefined;
       let esperandoAlistado = false;
+      let empleadaTelegramChatId: string | null | undefined;
+      
       if (accept) {
         const res = await this.servicesService.aceptar(
           serviceId,
@@ -707,6 +713,7 @@ export class TelegramAdminUpdate {
         uberLink = res.uberLink;
         viajeId = res.viajeId;
         esperandoAlistado = Boolean(res.esperandoAlistado);
+        empleadaTelegramChatId = res.empleada?.usuario?.telegramChatId;
         await ctx.answerCbQuery('🟢 Servicio Aceptado exitosamente.');
       } else {
         await this.servicesService.rechazar(serviceId, user.id);
@@ -745,7 +752,7 @@ export class TelegramAdminUpdate {
         }
       }
 
-      if (accept && viajeId) {
+      if (accept && viajeId && !empleadaTelegramChatId) {
         if (esperandoAlistado) {
           inlineButtons.push([
             Markup.button.callback(

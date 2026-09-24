@@ -4749,33 +4749,38 @@ export class TelegramBookingUpdate {
           const viaje = await this.viajesRepository.findOne({
             where: { id: match[1] },
             select: { servicioId: true, tipo: true },
+            relations: { servicio: { empleada: { usuario: true } } },
           });
           if (viaje) {
             if (viaje.tipo === 'ida') {
-              await ctx
-                .editMessageReplyMarkup({
-                  inline_keyboard: [
-                    [
-                      Markup.button.callback(
-                        '🏁 Finalizar',
-                        `conf_fin_serv:${viaje.servicioId}`,
-                      ),
+              if (!viaje.servicio?.empleada?.usuario?.telegramChatId) {
+                await ctx
+                  .editMessageReplyMarkup({
+                    inline_keyboard: [
+                      [
+                        Markup.button.callback(
+                          '🏁 Finalizar',
+                          `conf_fin_serv:${viaje.servicioId}`,
+                        ),
+                      ],
+                      [
+                        Markup.button.callback(
+                          '⏳ Extender +1h',
+                          `extender_servicio:${viaje.servicioId}:1`,
+                        ),
+                      ],
+                      [
+                        Markup.button.callback(
+                          '➕ Agregar Extra',
+                          `agregar_extra_list:${viaje.servicioId}`,
+                        ),
+                      ],
                     ],
-                    [
-                      Markup.button.callback(
-                        '⏳ Extender +1h',
-                        `extender_servicio:${viaje.servicioId}:1`,
-                      ),
-                    ],
-                    [
-                      Markup.button.callback(
-                        '➕ Agregar Extra',
-                        `agregar_extra_list:${viaje.servicioId}`,
-                      ),
-                    ],
-                  ],
-                })
-                .catch(() => undefined);
+                  })
+                  .catch(() => undefined);
+              } else {
+                await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
+              }
             } else {
               await ctx
                 .editMessageText(
