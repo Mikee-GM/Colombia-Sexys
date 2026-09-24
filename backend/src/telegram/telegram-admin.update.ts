@@ -162,19 +162,16 @@ export class TelegramAdminUpdate {
             ...(samePresetLocation
               ? [
                   Markup.button.callback(
-                    'Sin notas, misma ubicación',
+                    'Misma ubicación',
                     `conf_ja:${serviceId}:1:same`,
                   ),
                 ]
               : [
                   Markup.button.callback(
-                    'Sin notas, Chofer',
+                    'Chofer',
                     `conf_ja:${serviceId}:1:chofer`,
                   ),
-                  Markup.button.callback(
-                    'Sin notas, Uber',
-                    `conf_ja:${serviceId}:1:uber`,
-                  ),
+                  Markup.button.callback('Uber', `conf_ja:${serviceId}:1:uber`),
                 ]),
           ],
           [
@@ -695,6 +692,16 @@ export class TelegramAdminUpdate {
             `cambiar_transporte:${viajeId}:${transportType === 'uber' ? 'interno' : 'uber'}`,
           ),
         ]);
+        inlineButtons.push([
+          Markup.button.callback(
+            '👩 Empleada lista',
+            `jefe_empleada_lista:${serviceId}`,
+          ),
+        ]);
+        inlineButtons.push([
+          Markup.button.callback('🚗 Va en camino', `eu:${viajeId}:i`),
+          Markup.button.callback('📍 Ya llegó', `eu:${viajeId}:f`),
+        ]);
       }
 
       if (accept && servicio.cliente?.telegramChatId) {
@@ -702,6 +709,16 @@ export class TelegramAdminUpdate {
           Markup.button.url(
             'Contactar Cliente',
             `tg://user?id=${servicio.cliente.telegramChatId}`,
+          ),
+        ]);
+      }
+
+      if (accept) {
+        inlineButtons.push([
+          Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
+          Markup.button.callback(
+            '⏳ Extender +1h',
+            `extender_servicio:${serviceId}:1`,
           ),
         ]);
       }
