@@ -20,6 +20,7 @@ import type { LiquidationReport } from "@/components/liquidations/types";
 import ComisionExtrasTarjeta from "@/components/liquidations/comision-extras-tarjeta";
 import ComprobantesTransferencia from "@/components/erp/comprobantes-transferencia";
 import ConciliacionOficinaEmpleada from "@/components/erp/conciliacion-oficina-empleada";
+import CutComparison from "@/components/liquidations/cut-comparison";
 import type { EvidenceItem } from "@/lib/types";
 
 /**
@@ -196,83 +197,11 @@ export default function LiquidacionEmpleada({
         </Panel>
       </div>
 
-      <Panel
-        title="Servicios del periodo"
-        subtitle="registros que componen el corte"
-        flush
-      >
-        <ErpTable>
-          <thead>
-            <tr>
-              <Th>Servicio</Th>
-              <Th>Ocurrido</Th>
-              <Th>Metodo</Th>
-              <Th numeric>Total</Th>
-              <Th numeric>Efectivo</Th>
-              <Th numeric>Extras</Th>
-              <Th numeric>Debe entregar</Th>
-              <Th>Multa</Th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {registros.length === 0 ? (
-              <tr>
-                <Td colSpan={8} className="py-10 text-center text-zinc-500">
-                  No hay registros en este periodo.
-                </Td>
-              </tr>
-            ) : (
-              registros.map((registro) => (
-                <tr key={registro.id}>
-                  <Td>
-                    {registro.serviceId ? (
-                      <RecordLink href={`/admin/services/${registro.serviceId}`}>
-                        SR-{registro.serviceId.slice(-6).toUpperCase()}
-                      </RecordLink>
-                    ) : (
-                      <span className="text-zinc-500">Manual</span>
-                    )}
-                  </Td>
-                  <Td className="text-zinc-500">{fecha(registro.occurredAt)}</Td>
-                  <Td className="capitalize">{registro.paymentMethod}</Td>
-                  <Td numeric>{formatCurrency(registro.serviceTotal)}</Td>
-                  <Td numeric>{formatCurrency(registro.cashAmount)}</Td>
-                  <Td numeric>{formatCurrency(registro.extraAmount)}</Td>
-                  <Td numeric>{formatCurrency(registro.employeeCashDue)}</Td>
-                  <Td>
-                    {registro.isFine ? (
-                      <StatusBadge tone="red">
-                        {formatCurrency(registro.fineAmount)}
-                      </StatusBadge>
-                    ) : (
-                      <Empty />
-                    )}
-                  </Td>
-                </tr>
-              ))
-            )}
-          </tbody>
-
-          {registros.length > 0 ? (
-            <tfoot>
-              <TFootRow>
-                <Td>
-                  Total &middot; {registros.length}{" "}
-                  {registros.length === 1 ? "registro" : "registros"}
-                </Td>
-                <Td />
-                <Td />
-                <Td numeric>{formatCurrency(cut.salesTotal)}</Td>
-                <Td numeric>{formatCurrency(cut.cashTotal)}</Td>
-                <Td numeric>{formatCurrency(cut.calculatedExtras)}</Td>
-                <Td numeric>{formatCurrency(cut.employeeCashDue)}</Td>
-                <Td numeric>{formatCurrency(cut.finesTotal)}</Td>
-              </TFootRow>
-            </tfoot>
-          ) : null}
-        </ErpTable>
-      </Panel>
+      <CutComparison 
+        report={report} 
+        isAdmin={puedeEditarComision} 
+        locked={corte.status === "confirmed"} 
+      />
 
       {/*
         Las capturas de los cobros del periodo, debajo de la tabla que las
