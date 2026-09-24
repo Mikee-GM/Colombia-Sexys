@@ -4562,7 +4562,15 @@ export class TelegramBookingUpdate {
       );
 
       try {
-        await ctx.editMessageReplyMarkup(undefined);
+        if (resultado.viajeId) {
+          await ctx.editMessageReplyMarkup({
+            inline_keyboard: [
+              [Markup.button.callback('🚗 Va en camino', `eu:${resultado.viajeId}:i`)],
+            ],
+          });
+        } else {
+          await ctx.editMessageReplyMarkup(undefined);
+        }
       } catch (e) {
         // Ignorar si falla la edición del mensaje
       }
@@ -4718,6 +4726,28 @@ export class TelegramBookingUpdate {
           await ctx
             .editMessageText('Tu llegada quedó registrada.')
             .catch(() => undefined);
+        }
+      } else {
+        if (match[2] === 'i') {
+          await ctx.editMessageReplyMarkup({
+            inline_keyboard: [
+              [Markup.button.callback('📍 Ya llegó', `eu:${match[1]}:f`)],
+            ],
+          }).catch(() => undefined);
+        } else if (match[2] === 'f') {
+          const viaje = await this.viajesRepository.findOne({
+            where: { id: match[1] },
+            select: ['servicioId'],
+          });
+          if (viaje) {
+            await ctx.editMessageReplyMarkup({
+              inline_keyboard: [
+                [Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${viaje.servicioId}`)],
+                [Markup.button.callback('⏳ Extender +1h', `extender_servicio:${viaje.servicioId}:1`)],
+                [Markup.button.callback('➕ Agregar Extra', `agregar_extra_list:${viaje.servicioId}`)],
+              ],
+            }).catch(() => undefined);
+          }
         }
       }
       if (match[2] === 'i') {

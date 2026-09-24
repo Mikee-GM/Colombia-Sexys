@@ -686,32 +686,18 @@ export class TelegramAdminUpdate {
       }
 
       if (accept && viajeId) {
-        inlineButtons.push([
-          Markup.button.callback(
-            transportType === 'uber' ? 'Cambiar a chofer' : 'Cambiar a Uber',
-            `cambiar_transporte:${viajeId}:${transportType === 'uber' ? 'interno' : 'uber'}`,
-          ),
-        ]);
-        inlineButtons.push([
-          Markup.button.callback(
-            '👩 Empleada lista',
-            `jefe_empleada_lista:${serviceId}`,
-          ),
-        ]);
-        inlineButtons.push([
-          Markup.button.callback('🚗 Va en camino', `eu:${viajeId}:i`),
-          Markup.button.callback('📍 Ya llegó', `eu:${viajeId}:f`),
-        ]);
-      }
-
-      if (accept) {
-        inlineButtons.push([
-          Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
-          Markup.button.callback(
-            '⏳ Extender +1h',
-            `extender_servicio:${serviceId}:1`,
-          ),
-        ]);
+        if (esperandoAlistado) {
+          inlineButtons.push([
+            Markup.button.callback(
+              '👩 Empleada lista',
+              `jefe_empleada_lista:${serviceId}`,
+            ),
+          ]);
+        } else {
+          inlineButtons.push([
+            Markup.button.callback('🚗 Va en camino', `eu:${viajeId}:i`),
+          ]);
+        }
       }
 
       if (inlineButtons.length > 0) {
