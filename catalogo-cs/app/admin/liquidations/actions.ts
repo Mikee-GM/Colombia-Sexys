@@ -98,12 +98,22 @@ export async function updateRecord(
   recordId: string,
   data: Partial<LiquidationRecordInput>,
 ) {
-  const record = await apiFetch<LiquidationRecord>(
-    `/liquidations/records/${recordId}`,
-    { method: "PATCH", body: JSON.stringify(data) },
-  );
+  const record = await apiFetch<LiquidationRecord>(`/liquidations/records/${recordId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
   revalidatePath("/admin/liquidations");
+  revalidatePath("/admin/liquidations/[id]", "page");
   return record;
+}
+
+export async function setCompanyPercentageForRecords(recordIds: string[], companyPercentage: number) {
+  await Promise.all(recordIds.map(id => apiFetch(`/liquidations/records/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ companyPercentage })
+  })));
+  revalidatePath("/admin/liquidations");
+  revalidatePath("/admin/liquidations/[id]", "page");
 }
 
 export async function getDebts(employeeId: string) {

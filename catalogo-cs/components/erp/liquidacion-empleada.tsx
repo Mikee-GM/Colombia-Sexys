@@ -17,7 +17,7 @@ import {
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { LiquidationReport } from "@/components/liquidations/types";
-import ComisionExtrasTarjeta from "@/components/liquidations/comision-extras-tarjeta";
+import CorteSimulacion from "@/components/liquidations/corte-simulacion";
 import ComprobantesTransferencia from "@/components/erp/comprobantes-transferencia";
 import ConciliacionOficinaEmpleada from "@/components/erp/conciliacion-oficina-empleada";
 import CutComparison from "@/components/liquidations/cut-comparison";
@@ -133,69 +133,7 @@ export default function LiquidacionEmpleada({
         />
       </KpiGrid>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Panel title="Reparto del periodo" subtitle="liquidaciones_registro">
-          <div className="flex flex-col">
-            <Fila label="Ventas totales" value={formatCurrency(cut.salesTotal)} />
-            <Fila
-              label="Comision de la empresa"
-              value={formatCurrency(cut.companyCommission)}
-            />
-            {/*
-              Los extras son integros de la empleada: no entran en el reparto
-              con la casa. Se dice explicitamente porque la etiqueta anterior
-              ("Extras calculados") no aclaraba de quien era ese dinero, y
-              ademas el calculo le retenia un 15 % que no aparecia por ningun
-              lado.
-            */}
-            <Fila
-              label="Extras (integros para ella)"
-              value={formatCurrency(cut.calculatedExtras)}
-            />
-            <ComisionExtrasTarjeta
-              settings={report.commissionSettings}
-              editable={puedeEditarComision}
-            />
-            <Fila
-              label="Membresias"
-              value={formatCurrency(cut.membershipTotal)}
-            />
-            <Fila label="Multas" value={formatCurrency(cut.finesTotal)} negativo />
-            <Fila
-              label="Bruto de la empleada"
-              value={formatCurrency(cut.employeeGrossPay)}
-              destacado
-            />
-          </div>
-        </Panel>
-
-        <Panel title="Transporte y efectivo" subtitle="del periodo">
-          <div className="flex flex-col">
-            <Fila
-              label="Transporte cobrado al cliente"
-              value={formatCurrency(cut.customerTransportCharges)}
-            />
-            <Fila
-              label="Costo de transporte"
-              value={formatCurrency(cut.transportTotal)}
-              negativo
-            />
-            <Fila
-              label="Reembolsos de Uber a la empleada"
-              value={formatCurrency(cut.employeeUberReimbursements)}
-            />
-            <Fila
-              label="Efectivo recibido por la empleada"
-              value={formatCurrency(cut.cashTotal)}
-            />
-            <Fila
-              label="Efectivo que debe entregar"
-              value={formatCurrency(cut.employeeCashDue)}
-              destacado
-            />
-          </div>
-        </Panel>
-      </div>
+      <CorteSimulacion report={report} isAdmin={puedeEditarComision} />
 
       <CutComparison 
         report={report} 
