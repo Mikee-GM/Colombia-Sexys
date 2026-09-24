@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import {
@@ -90,6 +90,23 @@ export default function ManualServiceControls({
                 >
                   <CheckSquare className="h-3.5 w-3.5 text-emerald-400" />
                   <span>Marcar Lista</span>
+                </button>
+              )}
+
+            {currentTrip?.estado === "pendiente" &&
+              currentTrip.proveedorTransporte === "uber" && (
+                <button
+                  disabled={isLoading}
+                  onClick={() =>
+                    wrapAction(
+                      () => updateUberStatusManual(currentTrip.id, "en_camino"),
+                      "Marcada en camino",
+                    )
+                  }
+                  className="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 p-2 text-left hover:bg-zinc-700 hover:text-white transition-colors"
+                >
+                  <MapPin className="h-3.5 w-3.5 text-sky-400" />
+                  <span>Marcar en Camino</span>
                 </button>
               )}
 

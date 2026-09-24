@@ -4694,27 +4694,33 @@ export class TelegramBookingUpdate {
       return ctx.answerCbQuery('Usuario no autorizado', { show_alert: true });
     const match = (ctx as any).match;
     try {
+      const isBoss = user.rol === 'jefe' || user.rol === 'admin';
       await this.servicesService.updateUberStatus(
         match[1],
         user.id,
         match[2] === 'f' ? 'employee_arrived' : 'employee_en_route',
+        isBoss,
       );
       await ctx.answerCbQuery(
-        match[2] === 'f' ? 'Llegada registrada' : 'Cliente notificado',
+        match[2] === 'f' ? 'Llegada registrada' : 'Estado de camino registrado',
       );
+      if (!isBoss) {
+        if (match[2] === 'i') {
+          await ctx.editMessageText(
+            'Cuando llegues al destino, confirma tu llegada.',
+            {
+              ...Markup.inlineKeyboard([
+                [Markup.button.callback('📍 Ya llegué', `eu:${match[1]}:f`)],
+              ]),
+            },
+          );
+        } else {
+          await ctx
+            .editMessageText('Tu llegada quedó registrada.')
+            .catch(() => undefined);
+        }
+      }
       if (match[2] === 'i') {
-        await ctx.editMessageText(
-          'Cuando llegues al destino, confirma tu llegada.',
-          {
-            ...Markup.inlineKeyboard([
-              [Markup.button.callback('📍 Ya llegué', `eu:${match[1]}:f`)],
-            ]),
-          },
-        );
-      } else {
-        await ctx
-          .editMessageText('Tu llegada quedó registrada.')
-          .catch(() => undefined);
         const trip = await this.viajesRepository.findOne({
           where: { id: match[1] },
           relations: { servicio: { cliente: true } },
@@ -7003,17 +7009,15 @@ export class TelegramBookingUpdate {
     const telegramId = ctx.from?.id.toString();
     const user = telegramId
       ? await this.usuariosRepository.findOne({
-          where: { telegramChatId: telegramId, rol: 'empleada' },
+          where: { telegramChatId: telegramId },
         })
       : null;
-    if (!user) {
+    const isBoss = user && (user.rol === 'jefe' || user.rol === 'admin');
+    if (!user || (user.rol !== 'empleada' && !isBoss)) {
       this.callbackGuard.liberar(ctx);
-      await ctx.answerCbQuery(
-        'Solo la empleada del servicio puede extenderlo.',
-        {
-          show_alert: true,
-        },
-      );
+      await ctx.answerCbQuery('Solo la empleada o el jefe pueden extenderlo.', {
+        show_alert: true,
+      });
       return;
     }
 
@@ -7023,6 +7027,7 @@ export class TelegramBookingUpdate {
         servicioId,
         user.id,
         horasAExtender,
+        isBoss || false,
       );
     } catch (error: any) {
       this.callbackGuard.liberar(ctx);
@@ -7036,18 +7041,20 @@ export class TelegramBookingUpdate {
     await ctx.answerCbQuery('Servicio extendido con éxito.');
 
     try {
-      await ctx.editMessageText(
-        `✅ *Servicio Extendido* ➕${horasAExtender}h
-
-` +
-          `• Nueva Duración Pactada: *${servicio.duracionPactadaHoras} horas*
-` +
-          `• Nuevo Total Estimado: *$${servicio.totalFinal}*
-
-` +
-          `El cambio ha sido registrado automáticamente en el sistema.`,
-        { parse_mode: 'Markdown' },
-      );
+      if (!isBoss) {
+        await ctx.editMessageText(
+          `✅ *Servicio Extendido* ➕${horasAExtender}h
+  
+  ` +
+            `• Nueva Duración Pactada: *${servicio.duracionPactadaHoras} horas*
+  ` +
+            `• Nuevo Total Estimado: *$${servicio.totalFinal}*
+  
+  ` +
+            `El cambio ha sido registrado automáticamente en el sistema.`,
+          { parse_mode: 'Markdown' },
+        );
+      }
     } catch (err) {
       this.logger.error('Error al editar mensaje de extensión:', err);
     }
@@ -8947,6 +8954,13 @@ export class TelegramBookingUpdate {
   ): Promise<boolean> {
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return false;
+
+    const userCheck = await this.usuariosRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+    if (userCheck && (userCheck.rol === 'jefe' || userCheck.rol === 'admin')) {
+      return true;
+    }
 
     if (service.serviceType === 'grupal') {
       return Boolean(

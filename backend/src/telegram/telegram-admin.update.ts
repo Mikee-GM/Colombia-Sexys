@@ -304,7 +304,25 @@ export class TelegramAdminUpdate {
             `cambiar_transporte:${res.viajeId}:${transportType === 'uber' ? 'interno' : 'uber'}`,
           ),
         ]);
+        inlineButtons.push([
+          Markup.button.callback(
+            '👩 Empleada lista',
+            `jefe_empleada_lista:${serviceId}`,
+          ),
+        ]);
+        inlineButtons.push([
+          Markup.button.callback('🚗 Va en camino', `eu:${res.viajeId}:i`),
+          Markup.button.callback('📍 Ya llegó', `eu:${res.viajeId}:f`),
+        ]);
       }
+
+      inlineButtons.push([
+        Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
+        Markup.button.callback(
+          '⏳ Extender +1h',
+          `extender_servicio:${serviceId}:1`,
+        ),
+      ]);
 
       await ctx.editMessageText(
         `Servicio aceptado.\nNotas internas: ${pending.notes}` +
