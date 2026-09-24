@@ -25,7 +25,7 @@ export default function CorteSimulacion({
   }, [report.officeRecords]);
 
   // Client-side recalculation function for the simulated cut
-  const recalculateCut = (cut: any, records: any[]) => {
+  const recalculateCut = (cut: LiquidationReport["officeCut"], records: LiquidationReport["officeRecords"]) => {
     let newCompanyCommission = 0;
     records.forEach(r => {
       if (r.cancelled || r.isFine) return;
