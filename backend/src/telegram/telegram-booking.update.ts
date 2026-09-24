@@ -9565,19 +9565,20 @@ export class TelegramBookingUpdate {
       const tieneFotosExclusivas = await this.tieneFotosExclusivas(empleada.id);
 
       /*
-       * Con la ubicacion ya confirmada, callarse el dato que falta es perder al
-       * cliente: el que ya mando el pin --o el que escribe desde el motel-- ya
-       * decidio, y las reglas antipresion, pensadas para cuando todavia esta
-       * dudando, lo dejaban esperando indefinidamente.
+       * Para llevar un orden natural y no acosar al cliente:
+       * 1. Primero las horas
+       * 2. Luego la ubicación
+       * 3. Finalmente el método de pago
        */
       const ubicacionYaConfirmada = this.hasConfirmedLocation(session);
-      const datoQueFalta: 'horas' | 'pago' | null = !ubicacionYaConfirmada
-        ? null
-        : !session.duracionPactadaHoras && !session.duracionIndefinida
+      const datoQueFalta: 'horas' | 'ubicacion' | 'pago' | null =
+        !session.duracionPactadaHoras && !session.duracionIndefinida
           ? 'horas'
-          : !session.metodoPago
-            ? 'pago'
-            : null;
+          : !ubicacionYaConfirmada
+            ? 'ubicacion'
+            : !session.metodoPago
+              ? 'pago'
+              : null;
 
       /*
        * Dos instrucciones contradictorias en el mismo prompt no las resuelve el
