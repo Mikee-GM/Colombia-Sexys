@@ -39,5 +39,6 @@ jobs:
           VPS_PROJECT_PATH: ${{ secrets.VPS_PROJECT_PATH }}
           COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          ssh -o StrictHostKeyChecking=no -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
+          ssh-keyscan -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
             "cd '$VPS_PROJECT_PATH' && PROJECT_DIR='$VPS_PROJECT_PATH' ./scripts/deploy.sh '$COMMIT_SHA'"
