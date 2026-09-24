@@ -4737,7 +4737,7 @@ export class TelegramBookingUpdate {
         } else if (match[2] === 'f') {
           const viaje = await this.viajesRepository.findOne({
             where: { id: match[1] },
-            select: ['servicioId'],
+            select: { servicioId: true },
           });
           if (viaje) {
             await ctx.editMessageReplyMarkup({
