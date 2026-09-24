@@ -704,15 +704,6 @@ export class TelegramAdminUpdate {
         ]);
       }
 
-      if (accept && servicio.cliente?.telegramChatId) {
-        inlineButtons.push([
-          Markup.button.url(
-            'Contactar Cliente',
-            `tg://user?id=${servicio.cliente.telegramChatId}`,
-          ),
-        ]);
-      }
-
       if (accept) {
         inlineButtons.push([
           Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
