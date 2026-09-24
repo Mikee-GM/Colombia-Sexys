@@ -4779,7 +4779,9 @@ export class TelegramBookingUpdate {
                   })
                   .catch(() => undefined);
               } else {
-                await ctx.editMessageReplyMarkup(undefined).catch(() => undefined);
+                await ctx
+                  .editMessageReplyMarkup(undefined)
+                  .catch(() => undefined);
               }
             } else {
               await ctx
