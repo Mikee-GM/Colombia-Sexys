@@ -4141,45 +4141,37 @@ export class TelegramBookingUpdate {
       return;
     }
 
-    if (user.rol === 'empleada') {
+    const isBoss = user.rol === 'jefe' || user.rol === 'admin';
+    if (user.rol === 'empleada' || isBoss) {
       ctx.session ||= {};
       ctx.session.extraSelection = { servicioId };
       await ctx.answerCbQuery();
-      await ctx.editMessageText(
-        `➕ *Selecciona el monto del extra a agregar:*\n\n` +
-          `Se te solicitará seleccionar el método de pago del extra en el siguiente paso.`,
-        {
+      const extraMsg = `➕ *Selecciona el monto del extra a agregar:*\n\n` +
+          `Se te solicitará seleccionar el método de pago del extra en el siguiente paso.`;
+      
+      const keyboardOptions = [
+        [
+          Markup.button.callback('$500', `agregar_extra_amt:${servicioId}:500`),
+          Markup.button.callback('$1000', `agregar_extra_amt:${servicioId}:1000`),
+        ],
+        [
+          Markup.button.callback('$1500', `agregar_extra_amt:${servicioId}:1500`),
+          Markup.button.callback('Otro monto', `agregar_extra_amt:${servicioId}:custom`),
+        ],
+        [Markup.button.callback('🔙 Volver', `canc_fin_serv:${servicioId}`)],
+      ];
+
+      if (isBoss) {
+        await ctx.reply(extraMsg, {
           parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                '$500',
-                `agregar_extra_amt:${servicioId}:500`,
-              ),
-              Markup.button.callback(
-                '$1000',
-                `agregar_extra_amt:${servicioId}:1000`,
-              ),
-            ],
-            [
-              Markup.button.callback(
-                '$1500',
-                `agregar_extra_amt:${servicioId}:1500`,
-              ),
-              Markup.button.callback(
-                'Otro monto',
-                `agregar_extra_amt:${servicioId}:custom`,
-              ),
-            ],
-            [
-              Markup.button.callback(
-                '🔙 Volver',
-                `canc_fin_serv:${servicioId}`,
-              ),
-            ],
-          ]),
-        },
-      );
+          ...Markup.inlineKeyboard(keyboardOptions),
+        });
+      } else {
+        await ctx.editMessageText(extraMsg, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard(keyboardOptions),
+        });
+      }
       return;
     }
 
@@ -4398,7 +4390,8 @@ export class TelegramBookingUpdate {
       return;
     }
 
-    if (amount !== undefined && !user.empleadas) {
+    const isBoss = user.rol === 'jefe' || user.rol === 'admin';
+    if (amount !== undefined && !user.empleadas && !isBoss) {
       await ctx.answerCbQuery(
         'Solo las empleadas pueden usar montos personalizados.',
         { show_alert: true },
@@ -4421,6 +4414,7 @@ export class TelegramBookingUpdate {
         metodoPago,
         actorUserId: user.id,
         precioCobrado: amount,
+        forceByBoss: isBoss,
       });
     } catch (error: any) {
       await ctx.answerCbQuery(
@@ -4744,33 +4738,38 @@ export class TelegramBookingUpdate {
         } else if (match[2] === 'f') {
           const viaje = await this.viajesRepository.findOne({
             where: { id: match[1] },
-            select: { servicioId: true },
+            select: { servicioId: true, tipo: true },
           });
           if (viaje) {
-            await ctx
-              .editMessageReplyMarkup({
-                inline_keyboard: [
-                  [
-                    Markup.button.callback(
-                      '🏁 Finalizar',
-                      `conf_fin_serv:${viaje.servicioId}`,
-                    ),
+            if (viaje.tipo === 'ida') {
+              await ctx
+                .editMessageReplyMarkup({
+                  inline_keyboard: [
+                    [
+                      Markup.button.callback(
+                        '🏁 Finalizar',
+                        `conf_fin_serv:${viaje.servicioId}`,
+                      ),
+                    ],
+                    [
+                      Markup.button.callback(
+                        '⏳ Extender +1h',
+                        `extender_servicio:${viaje.servicioId}:1`,
+                      ),
+                    ],
+                    [
+                      Markup.button.callback(
+                        '➕ Agregar Extra',
+                        `agregar_extra_list:${viaje.servicioId}`,
+                      ),
+                    ],
                   ],
-                  [
-                    Markup.button.callback(
-                      '⏳ Extender +1h',
-                      `extender_servicio:${viaje.servicioId}:1`,
-                    ),
-                  ],
-                  [
-                    Markup.button.callback(
-                      '➕ Agregar Extra',
-                      `agregar_extra_list:${viaje.servicioId}`,
-                    ),
-                  ],
-                ],
-              })
-              .catch(() => undefined);
+                })
+                .catch(() => undefined);
+            } else {
+              await ctx.editMessageText('✅ Llegada a base confirmada. El servicio ha concluido.')
+                .catch(() => undefined);
+            }
           }
         }
       }
@@ -5668,15 +5667,19 @@ export class TelegramBookingUpdate {
      * La peticion de calificacion ya no sale de aqui: la manda `finishByEmployee`
      * al cerrar, de modo que tambien la recibe quien cierra desde el portal, que
      * antes se quedaba sin ella. Aqui solo queda el atajo al portal.
+     * Solo se le muestra a la empleada, ya que en grupos de jefes el botón
+     * webApp de Telegram es inválido y no corresponde a su portal.
      */
-    const atajos = await this.botonesDelPortal(
-      servicio.empleada.usuarioId,
-      telegramId,
-    );
-    if (atajos.length > 0) {
-      await ctx.reply('Puedes revisar el detalle en tu portal.', {
-        ...Markup.inlineKeyboard(atajos),
-      });
+    if (telegramId === servicio.empleada.usuario?.telegramChatId) {
+      const atajos = await this.botonesDelPortal(
+        servicio.empleada.usuarioId,
+        telegramId,
+      );
+      if (atajos.length > 0) {
+        await ctx.reply('Puedes revisar el detalle en tu portal.', {
+          ...Markup.inlineKeyboard(atajos),
+        });
+      }
     }
 
     // Limpieza del chat del cliente: se quita el mensaje del servicio ya cerrado.
@@ -7095,19 +7098,15 @@ export class TelegramBookingUpdate {
     await ctx.answerCbQuery('Servicio extendido con éxito.');
 
     try {
+      const extensionMsg = `✅ *Servicio Extendido* ➕${horasAExtender}h\n\n` +
+        `• Nueva Duración Pactada: *${servicio.duracionPactadaHoras} horas*\n` +
+        `• Nuevo Total Estimado: *$${servicio.totalFinal}*\n\n` +
+        `El cambio ha sido registrado automáticamente en el sistema.`;
+      
       if (!isBoss) {
-        await ctx.editMessageText(
-          `✅ *Servicio Extendido* ➕${horasAExtender}h
-  
-  ` +
-            `• Nueva Duración Pactada: *${servicio.duracionPactadaHoras} horas*
-  ` +
-            `• Nuevo Total Estimado: *$${servicio.totalFinal}*
-  
-  ` +
-            `El cambio ha sido registrado automáticamente en el sistema.`,
-          { parse_mode: 'Markdown' },
-        );
+        await ctx.editMessageText(extensionMsg, { parse_mode: 'Markdown' });
+      } else {
+        await ctx.reply(extensionMsg, { parse_mode: 'Markdown' });
       }
     } catch (err) {
       this.logger.error('Error al editar mensaje de extensión:', err);

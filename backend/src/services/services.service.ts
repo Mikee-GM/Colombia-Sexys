@@ -5150,15 +5150,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const topic = this.getServiceTopic(servicio);
     const text =
       customText ??
-      `${reminder ? 'Recordatorio\n\n' : ''}La empleada ${servicio.empleada?.nombreArtistico || ''} finalizó el servicio. ¿Cómo será su viaje de regreso?`;
+      `${reminder ? 'Recordatorio\n\n' : ''}🚗 *Seleccione el transporte de regreso*`;
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
-          'Regreso con chofer',
+          '🚕 Chofer',
           `regreso_transporte:${servicio.id}:interno`,
         ),
         Markup.button.callback(
-          'Regreso con Uber',
+          '🚗 Uber',
           `regreso_transporte:${servicio.id}:uber`,
         ),
       ],
@@ -5684,7 +5684,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     tripId: string,
     actorId: string,
     amount: number,
-  ): Promise<void> {
+  ): Promise<Viajes> {
     if (
       !Number.isFinite(amount) ||
       amount <= 0 ||
@@ -5750,6 +5750,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         totalFinal: updated?.totalFinal,
       },
     });
+    return trip;
   }
 
   /**

@@ -315,9 +315,15 @@ export class TelegramAdminUpdate {
 
       inlineButtons.push([
         Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
+      ]);
+      inlineButtons.push([
         Markup.button.callback(
           '⏳ Extender +1h',
           `extender_servicio:${serviceId}:1`,
+        ),
+        Markup.button.callback(
+          '➕ Agregar Extra',
+          `agregar_extra_list:${serviceId}`,
         ),
       ]);
 
@@ -503,15 +509,29 @@ export class TelegramAdminUpdate {
       );
     }
     try {
-      await this.servicesService.confirmUberFare(
+      const trip = await this.servicesService.confirmUberFare(
         (ctx as any).match[1],
         actor.id,
         session.pendingUberFare,
       );
       (ctx as any).session = {};
       await ctx.answerCbQuery('Costo registrado');
+      
+      let buttons: any[] = [];
+      if (trip.tipo === 'regreso') {
+        buttons = [
+          [
+            Markup.button.callback(
+              '📍 Uber llegó (por ella)',
+              `jefe_uber_estado:${trip.id}:llegado`,
+            ),
+          ],
+        ];
+      }
+
       await ctx.editMessageText(
         'Costo del Uber registrado y liquidación actualizada.',
+        buttons.length > 0 ? { ...Markup.inlineKeyboard(buttons) } : undefined,
       );
     } catch (error: any) {
       await ctx.answerCbQuery(error.message, { show_alert: true });
@@ -583,7 +603,11 @@ export class TelegramAdminUpdate {
           ]),
         });
       } else {
-        await ctx.editMessageText('✅ La llegada del Uber fue confirmada.');
+        await ctx.editMessageText('✅ La llegada del Uber fue confirmada.', {
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🚶‍♀️ Ya subió', `eu:${match[1]}:i`)],
+          ]),
+        });
       }
     } catch (error: any) {
       await ctx.answerCbQuery(error.message, { show_alert: true });
@@ -693,7 +717,7 @@ export class TelegramAdminUpdate {
               `jefe_empleada_lista:${serviceId}`,
             ),
           ]);
-        } else {
+        } else if (transportType === 'uber') {
           inlineButtons.push([
             Markup.button.callback('🚗 Va en camino', `eu:${viajeId}:i`),
           ]);
