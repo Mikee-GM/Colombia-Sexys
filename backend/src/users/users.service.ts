@@ -27,7 +27,7 @@ export class UsersService {
     }
 
     const code = generateLinkCode();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos de validez
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días de validez
 
     // En la base solo queda la huella. El codigo en claro se devuelve una vez,
     // para que el panel se lo enseñe a quien lo pidio, y no se guarda en ningun
