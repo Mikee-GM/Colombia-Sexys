@@ -3041,48 +3041,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const empUser = servicio.empleada?.usuario;
     if (empUser?.telegramChatId && empUser.telegramChatId !== '111111111') {
       try {
-        if (tipoTransporte === 'propio') {
-          const inlineButtons: any[] = [
-            [
-              Markup.button.callback(
-                '🏁 Finalizar Servicio',
-                `finalizar_servicio:${servicio.id}`,
-              ),
-            ],
-            [
-              Markup.button.callback(
-                '⏳ Extender +1h',
-                `extender_servicio:${servicio.id}:1`,
-              ),
-              Markup.button.callback(
-                '➕ Agregar Extra',
-                `agregar_extra_list:${servicio.id}`,
-              ),
-            ],
-          ];
-          await this.bot.telegram.sendMessage(
-            empUser.telegramChatId,
-            `💼 *¡Servicio en Curso!* 🟢\n\n` +
-              `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
-              `• *Duración:* ${servicio.duracionPactadaHoras} horas\n` +
-              `• *Método de Pago:* ${servicio.metodoPago.toUpperCase()}\n\n` +
-              (servicio.notasJefe
-                ? `• *Notas del jefe:* ${servicio.notasJefe}\n\n`
-                : '') +
-              `Cuando hayas terminado el servicio, presiona el botón de abajo para finalizarlo:`,
-            {
-              parse_mode: 'Markdown',
-              ...Markup.inlineKeyboard(inlineButtons),
-            },
-          );
-        } else {
           await this.bot.telegram.sendMessage(
             empUser.telegramChatId,
             `💼 *¡Tienes un nuevo servicio!*\n\nTu transporte de ida será en ${
               tipoTransporte === 'uber' ? 'Uber' : 'Chofer interno'
             }. Espera instrucciones para tu traslado.`,
           );
-        }
       } catch (err) {
         this.logger.error('Error notificando empleada por Telegram:', err);
       }
@@ -3310,18 +3274,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           if (trip.proveedorTransporte === 'uber') {
             await this.bot.telegram.sendMessage(
               employeeChatId,
-              'Tu siguiente servicio está listo. Tu transporte será en Uber. Usa los botones para confirmar cada etapa de tu trayecto.',
-              {
-                ...Markup.inlineKeyboard([
-                  [
-                    Markup.button.callback(
-                      'Ya estoy en el Uber',
-                      `eu:${trip.id}:i`,
-                    ),
-                    Markup.button.callback('Ya llegué', `eu:${trip.id}:f`),
-                  ],
-                ]),
-              },
+              'Tu siguiente servicio está listo. Tu transporte será en Uber. El jefe te enviará los detalles en breve.',
             );
           } else {
             await this.bot.telegram.sendMessage(
