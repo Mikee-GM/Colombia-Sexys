@@ -4476,16 +4476,20 @@ export class TelegramBookingUpdate {
             ],
           ]
         : []),
-      [
-        Markup.button.callback(
-          '⏳ Extender +1h',
-          `extender_servicio:${actualizado.id}:1`,
-        ),
-        Markup.button.callback(
-          '➕ Agregar Extra',
-          `agregar_extra_list:${actualizado.id}`,
-        ),
-      ],
+      ...(pendingInboundTrips === 0 && actualizado.estado === 'en_curso'
+        ? [
+            [
+              Markup.button.callback(
+                '⏳ Extender +1h',
+                `extender_servicio:${actualizado.id}:1`,
+              ),
+              Markup.button.callback(
+                '➕ Agregar Extra',
+                `agregar_extra_list:${actualizado.id}`,
+              ),
+            ],
+          ]
+        : []),
       ...(await this.botonesDelPortal(
         user.id,
         ctx.from?.id.toString() ?? null,

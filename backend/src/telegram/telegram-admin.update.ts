@@ -334,17 +334,17 @@ export class TelegramAdminUpdate {
               `conf_fin_serv:${serviceId}`,
             ),
           ]);
+          inlineButtons.push([
+            Markup.button.callback(
+              '⏳ Extender +1h',
+              `extender_servicio:${serviceId}:1`,
+            ),
+            Markup.button.callback(
+              '➕ Agregar Extra',
+              `agregar_extra_list:${serviceId}`,
+            ),
+          ]);
         }
-        inlineButtons.push([
-          Markup.button.callback(
-            '⏳ Extender +1h',
-            `extender_servicio:${serviceId}:1`,
-          ),
-          Markup.button.callback(
-            '➕ Agregar Extra',
-            `agregar_extra_list:${serviceId}`,
-          ),
-        ]);
       }
 
       await ctx.editMessageText(

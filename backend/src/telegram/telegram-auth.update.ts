@@ -689,24 +689,26 @@ export class TelegramAuthUpdate {
         })
       : 0;
 
-    if (responsible && pendingInboundTrips === 0) {
+    if (pendingInboundTrips === 0) {
+      if (responsible) {
+        inlineButtons.push([
+          Markup.button.callback(
+            '🏁 Finalizar Servicio',
+            `finalizar_servicio:${service.id}`,
+          ),
+        ]);
+      }
       inlineButtons.push([
         Markup.button.callback(
-          '🏁 Finalizar Servicio',
-          `finalizar_servicio:${service.id}`,
+          '⏳ Extender +1h',
+          `extender_servicio:${service.id}:1`,
+        ),
+        Markup.button.callback(
+          '➕ Agregar Extra',
+          `agregar_extra_list:${service.id}`,
         ),
       ]);
     }
-    inlineButtons.push([
-      Markup.button.callback(
-        '⏳ Extender +1h',
-        `extender_servicio:${service.id}:1`,
-      ),
-      Markup.button.callback(
-        '➕ Agregar Extra',
-        `agregar_extra_list:${service.id}`,
-      ),
-    ]);
 
     await ctx.reply(
       `🟢 Servicio activo\n\n` +
