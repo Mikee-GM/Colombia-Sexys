@@ -329,7 +329,10 @@ export class TelegramAdminUpdate {
         });
         if (pendingInboundTrips === 0 && res.estado === 'en_curso') {
           inlineButtons.push([
-            Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
+            Markup.button.callback(
+              '🏁 Finalizar',
+              `conf_fin_serv:${serviceId}`,
+            ),
           ]);
         }
         inlineButtons.push([

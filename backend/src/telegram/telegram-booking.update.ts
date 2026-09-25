@@ -4464,7 +4464,9 @@ export class TelegramBookingUpdate {
       : 0;
 
     const inlineButtons: any[] = [
-      ...(esResponsable && pendingInboundTrips === 0 && actualizado.estado === 'en_curso'
+      ...(esResponsable &&
+      pendingInboundTrips === 0 &&
+      actualizado.estado === 'en_curso'
         ? [
             [
               Markup.button.callback(
