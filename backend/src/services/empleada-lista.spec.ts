@@ -118,7 +118,7 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
     );
   });
 
-  it('le cambia a ella el boton por los del traslado', async () => {
+  it('le quita a ella el boton de lista para esperar indicaciones', async () => {
     serviciosRepository.findOne.mockResolvedValue(servicioEnUber());
     marcaQueGana(1);
 
@@ -127,7 +127,7 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
     const [, mensajeId, , markup] =
       bot.telegram.editMessageReplyMarkup.mock.calls[0];
     expect(mensajeId).toBe(77);
-    expect(markup.inline_keyboard[0][0].callback_data).toBe('eu:viaje-1:i');
+    expect(markup.inline_keyboard).toHaveLength(0);
   });
 
   /*
