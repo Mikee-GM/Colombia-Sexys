@@ -6036,15 +6036,18 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           'aceptado',
           'en_camino',
           'llegado',
+          'en_curso',
         ].includes(trip.estado)
       ) {
         throw new ConflictException('El viaje ya no puede iniciarse');
       }
       resultingState = 'en_curso';
-      await this.viajesRepository.update(trip.id, {
-        estado: resultingState,
-        horaInicioViaje: new Date(),
-      });
+      if (trip.estado !== 'en_curso') {
+        await this.viajesRepository.update(trip.id, {
+          estado: resultingState,
+          horaInicioViaje: new Date(),
+        });
+      }
     } else if (action === 'employee_arrived') {
       if (!['en_curso', 'finalizado'].includes(trip.estado))
         throw new ConflictException('Primero confirma que vas en camino');
