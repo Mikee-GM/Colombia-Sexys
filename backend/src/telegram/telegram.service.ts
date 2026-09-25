@@ -56,11 +56,25 @@ export class TelegramService implements OnModuleInit {
     }
   }
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     this.assertPollingIsSafe();
     // Todo lo que sale del sistema pasa por este bot: avisos a jefes, ofertas a
     // choferes, mensajes a clientes y los barridos periodicos.
     installSendThrottle(this.bot, 'central');
+
+    try {
+      await this.bot.telegram.setMyCommands([
+        { command: 'contactar', description: 'Iniciar el bot y ver el menú' },
+        { command: 'portal', description: 'Abrir tu portal de empleada' },
+        { command: 'vincular', description: 'Conectar tu perfil al bot' },
+        { command: 'apelar', description: 'Apelar una mala calificación' },
+        { command: 'historial', description: 'Ver tus últimos servicios' },
+        { command: 'help', description: 'Ver la ayuda' },
+      ]);
+      this.logger.log('Comandos del bot actualizados en Telegram exitosamente.');
+    } catch (error) {
+      this.logger.error('No se pudieron actualizar los comandos del bot', error);
+    }
   }
 
   /**
