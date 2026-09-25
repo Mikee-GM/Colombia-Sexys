@@ -4732,9 +4732,34 @@ export class TelegramBookingUpdate {
             },
           );
         } else {
-          await ctx
-            .editMessageText('Tu llegada quedó registrada.')
-            .catch(() => undefined);
+          const viaje = await this.viajesRepository.findOne({
+            where: { id: match[1] },
+            select: { servicioId: true, tipo: true },
+          });
+          if (viaje?.tipo === 'ida') {
+            await ctx
+              .editMessageText('Tu llegada quedó registrada. Cuando termines el servicio, usa el botón de abajo para finalizarlo:', {
+                ...Markup.inlineKeyboard([
+                  [
+                    Markup.button.callback(
+                      '🏁 Finalizar Servicio',
+                      `finalizar_servicio:${viaje.servicioId}`,
+                    ),
+                  ],
+                  [
+                    Markup.button.callback(
+                      '➕ Agregar Extra',
+                      `agregar_extra_list:${viaje.servicioId}`,
+                    ),
+                  ],
+                ]),
+              })
+              .catch(() => undefined);
+          } else {
+            await ctx
+              .editMessageText('Tu llegada quedó registrada.')
+              .catch(() => undefined);
+          }
         }
       } else {
         if (match[2] === 'i') {

@@ -437,6 +437,34 @@ export class DriverTripsService {
           cambios.servicioPrevioId = null;
           cambios.horaInicioEstimada = horaInicio;
         }
+
+        const employeeChatId = trip.servicio.empleada?.usuario?.telegramChatId;
+        if (employeeChatId) {
+          try {
+            await this.bot.telegram.sendMessage(
+              employeeChatId,
+              'Tu chofer ha finalizado el viaje de ida. Cuando termines el servicio, usa el botón de abajo para finalizarlo:',
+              {
+                ...Markup.inlineKeyboard([
+                  [
+                    Markup.button.callback(
+                      '🏁 Finalizar Servicio',
+                      `finalizar_servicio:${trip.servicio.id}`,
+                    ),
+                  ],
+                  [
+                    Markup.button.callback(
+                      '➕ Agregar Extra',
+                      `agregar_extra_list:${trip.servicio.id}`,
+                    ),
+                  ],
+                ]),
+              },
+            );
+          } catch (err) {
+            this.logger.error('No se pudo enviar boton de finalizar a la empleada:', err);
+          }
+        }
       } else {
         const horaLlegada = new Date();
         trip.servicio.horaLlegadaCasa = horaLlegada;

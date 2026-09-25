@@ -2146,26 +2146,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
            * Aparecen cuando pulsa "Ya estoy lista", que es el momento en que el
            * jefe recibe el enlace.
            */
-          if (tipoTransporte === 'uber') {
-            inlineButtons.unshift(
-              esperandoAlistado
-                ? [
-                    Markup.button.callback(
-                      'Ya estoy lista',
-                      `lista_servicio:${servicio.id}`,
-                    ),
-                  ]
-                : [
-                    Markup.button.callback(
-                      'Ya estoy en el Uber',
-                      `eu:${viajeGuardado.id}:i`,
-                    ),
-                    Markup.button.callback(
-                      'Ya llegué',
-                      `eu:${viajeGuardado.id}:f`,
-                    ),
-                  ],
-            );
+          if (tipoTransporte === 'uber' && esperandoAlistado) {
+            inlineButtons.unshift([
+              Markup.button.callback(
+                'Ya estoy lista',
+                `lista_servicio:${servicio.id}`,
+              ),
+            ]);
           }
 
           const empMsg = await this.bot.telegram.sendMessage(
@@ -5726,7 +5713,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'El jefe debe adjuntar la captura del Uber antes de confirmar la tarifa',
       );
     }
-    const newEstado = ['aceptado', 'en_camino', 'llegado', 'en_curso'].includes(trip.estado) ? 'finalizado' : trip.estado;
+    const newEstado = ['aceptado', 'en_camino', 'llegado', 'en_curso'].includes(
+      trip.estado,
+    )
+      ? 'finalizado'
+      : trip.estado;
     await this.viajesRepository.update(trip.id, {
       tarifa: amount,
       fareConfirmedAt: new Date(),
@@ -6195,6 +6186,32 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     if (!bossAction && trip.tipo === 'ida') {
       const event = action;
+      if (action === 'employee_arrived' && trip.servicio.empleada?.usuario?.telegramChatId) {
+        try {
+          await this.bot.telegram.sendMessage(
+            trip.servicio.empleada.usuario.telegramChatId,
+            'Cuando termines el servicio, usa el botón de abajo para finalizarlo:',
+            {
+              ...Markup.inlineKeyboard([
+                [
+                  Markup.button.callback(
+                    '🏁 Finalizar Servicio',
+                    `finalizar_servicio:${trip.servicio.id}`,
+                  ),
+                ],
+                [
+                  Markup.button.callback(
+                    '➕ Agregar Extra',
+                    `agregar_extra_list:${trip.servicio.id}`,
+                  ),
+                ],
+              ]),
+            },
+          );
+        } catch (err) {
+          this.logger.error('No se pudo enviar boton de finalizar:', err);
+        }
+      }
       if (trip.servicio.cliente?.telegramChatId) {
         const clientMessage = await this.aiMessageService.generate(
           action === 'employee_arrived'
