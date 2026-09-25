@@ -5539,7 +5539,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       // en el mismo bot: un `file_id` solo sirve dentro del bot que recibio el
       // archivo.
       await this.bot.telegram.sendPhoto(chatId, fileId, {
-        caption: `Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.`,
+        caption: `Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.\nUsa los botones para confirmar cada etapa de tu trayecto.`,
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('🚗 Ya estoy en el Uber', `eu:${trip.id}:i`),
+            Markup.button.callback('📍 Ya llegué', `eu:${trip.id}:f`),
+          ],
+        ]),
       });
     }
 
@@ -5574,7 +5580,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       chatId,
       { source: file.buffer, filename: file.originalname },
       {
-        caption: `Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.`,
+        caption: `Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.\nUsa los botones para confirmar cada etapa de tu trayecto.`,
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('🚗 Ya estoy en el Uber', `eu:${trip.id}:i`),
+            Markup.button.callback('📍 Ya llegué', `eu:${trip.id}:f`),
+          ],
+        ]),
       },
     );
     const photos = message.photo;
