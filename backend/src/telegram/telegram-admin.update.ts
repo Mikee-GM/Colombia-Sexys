@@ -15,6 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { Clientes } from '../clients/entities/client.entity';
+import { Viajes } from '../trips/entities/trip.entity';
 import { ConversacionesTelegram } from '../telegram-conversations/entities/telegram-conversation.entity';
 import { DisciplineService } from '../discipline/discipline.service';
 import { ServicesService } from '../services/services.service';
@@ -54,6 +55,8 @@ export class TelegramAdminUpdate {
     private readonly callbackGuard: TelegramCallbackGuard,
     @InjectRepository(Clientes)
     private readonly clientesRepository: Repository<Clientes>,
+    @InjectRepository(Viajes)
+    private readonly viajesRepository: Repository<Viajes>,
     private readonly discipline: DisciplineService,
     @InjectRepository(TelegramSession)
     private readonly telegramSessionRepository: Repository<TelegramSession>,
@@ -316,9 +319,19 @@ export class TelegramAdminUpdate {
       }
 
       if (!res.empleada?.usuario?.telegramChatId) {
-        inlineButtons.push([
-          Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
-        ]);
+        const pendingInboundTrips = await this.viajesRepository.count({
+          where: [
+            { servicioId: serviceId, tipo: 'ida', estado: 'aceptado' },
+            { servicioId: serviceId, tipo: 'ida', estado: 'en_camino' },
+            { servicioId: serviceId, tipo: 'ida', estado: 'llegado' },
+            { servicioId: serviceId, tipo: 'ida', estado: 'en_curso' },
+          ],
+        });
+        if (pendingInboundTrips === 0 && res.estado === 'en_curso') {
+          inlineButtons.push([
+            Markup.button.callback('🏁 Finalizar', `conf_fin_serv:${serviceId}`),
+          ]);
+        }
         inlineButtons.push([
           Markup.button.callback(
             '⏳ Extender +1h',

@@ -678,7 +678,18 @@ export class TelegramAuthUpdate {
       ]);
     }
 
-    if (responsible) {
+    const pendingInboundTrips = responsible
+      ? await this.viajesRepository.count({
+          where: [
+            { servicioId: service.id, tipo: 'ida', estado: 'aceptado' },
+            { servicioId: service.id, tipo: 'ida', estado: 'en_camino' },
+            { servicioId: service.id, tipo: 'ida', estado: 'llegado' },
+            { servicioId: service.id, tipo: 'ida', estado: 'en_curso' },
+          ],
+        })
+      : 0;
+
+    if (responsible && pendingInboundTrips === 0) {
       inlineButtons.push([
         Markup.button.callback(
           '🏁 Finalizar Servicio',
@@ -687,6 +698,10 @@ export class TelegramAuthUpdate {
       ]);
     }
     inlineButtons.push([
+      Markup.button.callback(
+        '⏳ Extender +1h',
+        `extender_servicio:${service.id}:1`,
+      ),
       Markup.button.callback(
         '➕ Agregar Extra',
         `agregar_extra_list:${service.id}`,

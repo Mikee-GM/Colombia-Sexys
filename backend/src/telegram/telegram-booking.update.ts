@@ -4452,8 +4452,19 @@ export class TelegramBookingUpdate {
         ),
       );
 
+    const pendingInboundTrips = esResponsable
+      ? await this.viajesRepository.count({
+          where: [
+            { servicioId: actualizado.id, tipo: 'ida', estado: 'aceptado' },
+            { servicioId: actualizado.id, tipo: 'ida', estado: 'en_camino' },
+            { servicioId: actualizado.id, tipo: 'ida', estado: 'llegado' },
+            { servicioId: actualizado.id, tipo: 'ida', estado: 'en_curso' },
+          ],
+        })
+      : 0;
+
     const inlineButtons: any[] = [
-      ...(esResponsable
+      ...(esResponsable && pendingInboundTrips === 0 && actualizado.estado === 'en_curso'
         ? [
             [
               Markup.button.callback(
@@ -4464,6 +4475,10 @@ export class TelegramBookingUpdate {
           ]
         : []),
       [
+        Markup.button.callback(
+          '⏳ Extender +1h',
+          `extender_servicio:${actualizado.id}:1`,
+        ),
         Markup.button.callback(
           '➕ Agregar Extra',
           `agregar_extra_list:${actualizado.id}`,
@@ -4847,6 +4862,10 @@ export class TelegramBookingUpdate {
                   ),
                 ],
                 [
+                  Markup.button.callback(
+                    '⏳ Extender +1h',
+                    `extender_servicio:${trip.servicio.id}:1`,
+                  ),
                   Markup.button.callback(
                     'Agregar extra',
                     `agregar_extra_list:${trip.servicio.id}`,

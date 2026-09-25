@@ -4838,6 +4838,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       hasScheduledSuccessor: successor.hasSuccessor,
     });
 
+    this.realtimeEventsService.emitToJefes({
+      type: 'active_services_updated',
+      empleadaId: servicio.empleadaId,
+    });
+
     // Se relee porque los totales los recalcula un trigger, no este proceso.
     const servicioConTotal =
       (await this.serviciosRepository.findOne({
