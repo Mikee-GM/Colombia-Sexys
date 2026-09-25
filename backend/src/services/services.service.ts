@@ -3041,12 +3041,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const empUser = servicio.empleada?.usuario;
     if (empUser?.telegramChatId && empUser.telegramChatId !== '111111111') {
       try {
-          await this.bot.telegram.sendMessage(
-            empUser.telegramChatId,
-            `💼 *¡Tienes un nuevo servicio!*\n\nTu transporte de ida será en ${
-              tipoTransporte === 'uber' ? 'Uber' : 'Chofer interno'
-            }. Espera instrucciones para tu traslado.`,
-          );
+        await this.bot.telegram.sendMessage(
+          empUser.telegramChatId,
+          `💼 *¡Tienes un nuevo servicio!*\n\nTu transporte de ida será en ${
+            tipoTransporte === 'uber' ? 'Uber' : 'Chofer interno'
+          }. Espera instrucciones para tu traslado.`,
+        );
       } catch (err) {
         this.logger.error('Error notificando empleada por Telegram:', err);
       }
