@@ -5541,9 +5541,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       await this.bot.telegram.sendPhoto(chatId, fileId, {
         caption: `Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.\nUsa los botones para confirmar cada etapa de tu trayecto.`,
         ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback('🚗 Ya estoy en el Uber', `eu:${trip.id}:i`),
-          ],
+          [Markup.button.callback('🚗 Ya estoy en el Uber', `eu:${trip.id}:i`)],
         ]),
       });
     }
@@ -5581,9 +5579,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       {
         caption: `Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.\nUsa los botones para confirmar cada etapa de tu trayecto.`,
         ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback('🚗 Ya estoy en el Uber', `eu:${trip.id}:i`),
-          ],
+          [Markup.button.callback('🚗 Ya estoy en el Uber', `eu:${trip.id}:i`)],
         ]),
       },
     );
@@ -6033,9 +6029,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
        * ya no puede iniciarse".
        */
       if (
-        !['notificado', 'creado', 'pendiente', 'aceptado', 'en_camino', 'llegado'].includes(
-          trip.estado,
-        )
+        ![
+          'notificado',
+          'creado',
+          'pendiente',
+          'aceptado',
+          'en_camino',
+          'llegado',
+        ].includes(trip.estado)
       ) {
         throw new ConflictException('El viaje ya no puede iniciarse');
       }
@@ -6177,27 +6178,27 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (trip.tipo === 'ida') {
-      if (trip.servicio.cliente?.telegramChatId) {
-        const clientMessage = await this.aiMessageService.generate(
-          action === 'employee_arrived'
-            ? 'employee_arrived'
-            : 'employee_on_the_way',
-          { employeeName: trip.servicio.empleada?.nombreArtistico },
-          action === 'employee_arrived'
-            ? 'Ya llegué al punto que cuadramos, aquí te espero'
-            : 'Ya voy en camino, nos vemos pronto',
-        );
-        await this.bot.telegram.sendMessage(
-          trip.servicio.cliente.telegramChatId,
-          clientMessage,
-        );
-      }
-      if (trip.servicio.clienteId) {
-        this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
-          type: event,
-          data: { tripId: trip.id, serviceId: trip.servicioId },
-        });
-      }
+        if (trip.servicio.cliente?.telegramChatId) {
+          const clientMessage = await this.aiMessageService.generate(
+            action === 'employee_arrived'
+              ? 'employee_arrived'
+              : 'employee_on_the_way',
+            { employeeName: trip.servicio.empleada?.nombreArtistico },
+            action === 'employee_arrived'
+              ? 'Ya llegué al punto que cuadramos, aquí te espero'
+              : 'Ya voy en camino, nos vemos pronto',
+          );
+          await this.bot.telegram.sendMessage(
+            trip.servicio.cliente.telegramChatId,
+            clientMessage,
+          );
+        }
+        if (trip.servicio.clienteId) {
+          this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
+            type: event,
+            data: { tripId: trip.id, serviceId: trip.servicioId },
+          });
+        }
       }
     }
     if (
