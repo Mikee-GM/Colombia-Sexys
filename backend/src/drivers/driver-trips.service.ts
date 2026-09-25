@@ -462,7 +462,10 @@ export class DriverTripsService {
               },
             );
           } catch (err) {
-            this.logger.error('No se pudo enviar boton de finalizar a la empleada:', err);
+            this.logger.error(
+              'No se pudo enviar boton de finalizar a la empleada:',
+              err,
+            );
           }
         }
       } else {

@@ -6186,7 +6186,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     if (!bossAction && trip.tipo === 'ida') {
       const event = action;
-      if (action === 'employee_arrived' && trip.servicio.empleada?.usuario?.telegramChatId) {
+      if (
+        action === 'employee_arrived' &&
+        trip.servicio.empleada?.usuario?.telegramChatId
+      ) {
         try {
           await this.bot.telegram.sendMessage(
             trip.servicio.empleada.usuario.telegramChatId,

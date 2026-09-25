@@ -4738,22 +4738,25 @@ export class TelegramBookingUpdate {
           });
           if (viaje?.tipo === 'ida') {
             await ctx
-              .editMessageText('Tu llegada quedó registrada. Cuando termines el servicio, usa el botón de abajo para finalizarlo:', {
-                ...Markup.inlineKeyboard([
-                  [
-                    Markup.button.callback(
-                      '🏁 Finalizar Servicio',
-                      `finalizar_servicio:${viaje.servicioId}`,
-                    ),
-                  ],
-                  [
-                    Markup.button.callback(
-                      '➕ Agregar Extra',
-                      `agregar_extra_list:${viaje.servicioId}`,
-                    ),
-                  ],
-                ]),
-              })
+              .editMessageText(
+                'Tu llegada quedó registrada. Cuando termines el servicio, usa el botón de abajo para finalizarlo:',
+                {
+                  ...Markup.inlineKeyboard([
+                    [
+                      Markup.button.callback(
+                        '🏁 Finalizar Servicio',
+                        `finalizar_servicio:${viaje.servicioId}`,
+                      ),
+                    ],
+                    [
+                      Markup.button.callback(
+                        '➕ Agregar Extra',
+                        `agregar_extra_list:${viaje.servicioId}`,
+                      ),
+                    ],
+                  ]),
+                },
+              )
               .catch(() => undefined);
           } else {
             await ctx
