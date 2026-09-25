@@ -5726,11 +5726,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'El jefe debe adjuntar la captura del Uber antes de confirmar la tarifa',
       );
     }
+    const newEstado = ['aceptado', 'en_camino', 'llegado', 'en_curso'].includes(trip.estado) ? 'finalizado' : trip.estado;
     await this.viajesRepository.update(trip.id, {
       tarifa: amount,
       fareConfirmedAt: new Date(),
       fareConfirmedByUserId: actorId,
       fareConfirmationOverride: override,
+      estado: newEstado as any,
     });
     await this.liquidationSync.syncOfficeRecord(trip.servicioId);
     if (trip.tipo === 'regreso') {
