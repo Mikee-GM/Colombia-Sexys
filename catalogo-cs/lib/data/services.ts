@@ -45,6 +45,24 @@ export async function getServiceByIdAction(serviceId: string) {
   }
 }
 
+export async function deleteServiceAction(serviceId: string) {
+  try {
+    await apiFetch(`/services/${serviceId}`, {
+      method: "DELETE",
+    });
+    revalidateAdminViews();
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo eliminar el servicio",
+    };
+  }
+}
+
 export async function decideServiceAction(
   serviceId: string,
   decision: "aceptar" | "rechazar",

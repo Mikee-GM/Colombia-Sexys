@@ -34,6 +34,7 @@ import {
   chooseReturnTransportAction,
   confirmUberFareAction,
   decideServiceAction,
+  deleteServiceAction,
   getServiceByIdAction,
   getServiceMessagesAction,
   sendServiceMessageAction,
@@ -190,6 +191,24 @@ export default function ServiceDetailDialog({
       await reloadCurrentService();
     } catch (err: any) {
       toast.error(err.message || "No se pudo cancelar el servicio");
+    } finally {
+      setPendingAction(false);
+    }
+  };
+
+  const handleDeleteService = async () => {
+    if (!confirm("¿Estás seguro de que deseas ELIMINAR este servicio de la base de datos? Esto destruirá el historial y no se puede deshacer.")) return;
+    setPendingAction(true);
+    try {
+      const res = await deleteServiceAction(service.id);
+      if (!res.success) {
+        throw new Error(res.error || "Error al eliminar");
+      }
+      toast.success("Servicio eliminado correctamente");
+      onUpdated();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "No se pudo eliminar el servicio");
     } finally {
       setPendingAction(false);
     }
@@ -465,14 +484,25 @@ export default function ServiceDetailDialog({
                 )}
 
                 {service.estado !== "cancelado" && service.estado !== "finalizado" && (
-                  <button
-                    type="button"
-                    disabled={pendingAction}
-                    onClick={() => setCancelling(true)}
-                    className="inline-flex items-center gap-2 rounded-xl border border-red-950 bg-red-950/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-400 hover:bg-red-900/40 transition-all disabled:opacity-50 ml-auto"
-                  >
-                    <Ban size={15} /> Cancelar
-                  </button>
+                  <div className="flex gap-2 ml-auto">
+                    <button
+                      type="button"
+                      disabled={pendingAction}
+                      onClick={() => setCancelling(true)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-red-950 bg-red-950/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-400 hover:bg-red-900/40 transition-all disabled:opacity-50"
+                    >
+                      <Ban size={15} /> Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={pendingAction}
+                      onClick={handleDeleteService}
+                      className="inline-flex items-center gap-2 rounded-xl border border-red-950 bg-red-950/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-500 hover:bg-red-900/60 transition-all disabled:opacity-50"
+                      title="Eliminar servicio de la base de datos (Destructivo)"
+                    >
+                      <X size={15} /> Borrar
+                    </button>
+                  </div>
                 )}
               </div>
 

@@ -2429,24 +2429,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const mensajeId = servicio.telegramEmpleadaMensajeId;
     if (!chatId || !mensajeId || !viajeId) return;
 
-    const botones: InlineKeyboardButton[][] = [
-      [
-        Markup.button.callback('Ya estoy en el Uber', `eu:${viajeId}:i`),
-        Markup.button.callback('Ya llegué', `eu:${viajeId}:f`),
-      ],
-      [
-        Markup.button.callback(
-          'Finalizar Servicio',
-          `finalizar_servicio:${servicio.id}`,
-        ),
-      ],
-      [
-        Markup.button.callback(
-          'Agregar Extra',
-          `agregar_extra_list:${servicio.id}`,
-        ),
-      ],
-    ];
+    // Solo le quitamos el botón de 'Estoy lista' para que no lo vuelva a pulsar.
+    // Los demás botones llegarán de forma secuencial en los siguientes mensajes.
+    const botones: InlineKeyboardButton[][] = [];
 
     try {
       await this.bot.telegram.editMessageReplyMarkup(
@@ -3056,44 +3041,48 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const empUser = servicio.empleada?.usuario;
     if (empUser?.telegramChatId && empUser.telegramChatId !== '111111111') {
       try {
-        const inlineButtons: any[] = [
-          [
-            Markup.button.callback(
-              '🏁 Finalizar Servicio',
-              `finalizar_servicio:${servicio.id}`,
-            ),
-          ],
-          [
-            Markup.button.callback(
-              '➕ Agregar Extra',
-              `agregar_extra_list:${servicio.id}`,
-            ),
-          ],
-        ];
-        if (tipoTransporte === 'uber') {
-          inlineButtons.unshift([
-            Markup.button.callback(
-              'Ya estoy en el Uber',
-              `eu:${viajeGuardado.id}:i`,
-            ),
-            Markup.button.callback('Ya llegué', `eu:${viajeGuardado.id}:f`),
-          ]);
+        if (tipoTransporte === 'propio') {
+          const inlineButtons: any[] = [
+            [
+              Markup.button.callback(
+                '🏁 Finalizar Servicio',
+                `finalizar_servicio:${servicio.id}`,
+              ),
+            ],
+            [
+              Markup.button.callback(
+                '⏳ Extender +1h',
+                `extender_servicio:${servicio.id}:1`,
+              ),
+              Markup.button.callback(
+                '➕ Agregar Extra',
+                `agregar_extra_list:${servicio.id}`,
+              ),
+            ],
+          ];
+          await this.bot.telegram.sendMessage(
+            empUser.telegramChatId,
+            `💼 *¡Servicio en Curso!* 🟢\n\n` +
+              `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
+              `• *Duración:* ${servicio.duracionPactadaHoras} horas\n` +
+              `• *Método de Pago:* ${servicio.metodoPago.toUpperCase()}\n\n` +
+              (servicio.notasJefe
+                ? `• *Notas del jefe:* ${servicio.notasJefe}\n\n`
+                : '') +
+              `Cuando hayas terminado el servicio, presiona el botón de abajo para finalizarlo:`,
+            {
+              parse_mode: 'Markdown',
+              ...Markup.inlineKeyboard(inlineButtons),
+            },
+          );
+        } else {
+          await this.bot.telegram.sendMessage(
+            empUser.telegramChatId,
+            `💼 *¡Tienes un nuevo servicio!*\n\nTu transporte de ida será en ${
+              tipoTransporte === 'uber' ? 'Uber' : 'Chofer interno'
+            }. Espera instrucciones para tu traslado.`,
+          );
         }
-        await this.bot.telegram.sendMessage(
-          empUser.telegramChatId,
-          `💼 *¡Servicio en Curso!* 🟢\n\n` +
-            `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
-            `• *Duración:* ${servicio.duracionPactadaHoras} horas\n` +
-            `• *Método de Pago:* ${servicio.metodoPago.toUpperCase()}\n\n` +
-            (servicio.notasJefe
-              ? `• *Notas del jefe:* ${servicio.notasJefe}\n\n`
-              : '') +
-            `Cuando hayas terminado el servicio, presiona el botón de abajo para finalizarlo:`,
-          {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard(inlineButtons),
-          },
-        );
       } catch (err) {
         this.logger.error('Error notificando empleada por Telegram:', err);
       }
@@ -5380,18 +5369,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       await this.bot.telegram
         .sendMessage(
           employeeChatId,
-          'Tu transporte de regreso será en Uber. Confirma cada etapa cuando abordes y llegues.',
-          {
-            ...Markup.inlineKeyboard([
-              [
-                Markup.button.callback(
-                  'Ya estoy en el Uber',
-                  `eu:${result.trip.id}:i`,
-                ),
-                Markup.button.callback('Ya llegué', `eu:${result.trip.id}:f`),
-              ],
-            ]),
-          },
+          'Tu transporte de regreso será en Uber. El jefe te enviará los detalles en breve.',
         )
         .catch((error) =>
           this.logger.error(
@@ -5500,18 +5478,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         await this.bot.telegram
           .sendMessage(
             employeeChatId,
-            `El viaje de ${result.trip.tipo} cambió a Uber. Usa los botones para actualizar tu trayecto.`,
-            {
-              ...Markup.inlineKeyboard([
-                [
-                  Markup.button.callback(
-                    'Ya estoy en el Uber',
-                    `eu:${result.trip.id}:i`,
-                  ),
-                  Markup.button.callback('Ya llegué', `eu:${result.trip.id}:f`),
-                ],
-              ]),
-            },
+            `El viaje de ${result.trip.tipo} cambió a Uber. El jefe te enviará los detalles en breve.`,
           )
           .catch(() => undefined);
       }
