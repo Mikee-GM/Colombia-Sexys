@@ -28,7 +28,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
       - run: pnpm run test
-      - run: pnpm run build
+      - run: pnpm run build 2>&1 | tee build_log.txt
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build_log.txt
 
       - name: Validar Docker Compose
         run: |
