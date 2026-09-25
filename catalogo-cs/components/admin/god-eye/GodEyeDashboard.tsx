@@ -1442,7 +1442,7 @@ export default function GodEyeDashboard({
                                           }`}
                                       />
                                       <span className="font-mono text-zinc-300 font-bold text-sm">
-                                        #{s.id.slice(0, 8)}
+                                        #{s.id?.slice(0, 8)}
                                       </span>
                                       <span
                                         className={`rounded-lg px-2 py-0.5 text-xs font-extrabold uppercase ${s.estado === "en_curso"
@@ -2398,7 +2398,7 @@ export default function GodEyeDashboard({
                             {srv.empleadaNombre} · {srv.clienteNombre}
                           </span>
                           <span className="text-xs text-zinc-500 font-mono">
-                            #{srv.id.slice(0, 6).toUpperCase()}
+                            #{srv.id?.slice(0, 6).toUpperCase()}
                           </span>
                         </div>
 

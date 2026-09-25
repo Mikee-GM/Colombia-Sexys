@@ -43,7 +43,7 @@ const ZONA_LABEL: Record<TripZone, string> = {
 
 const num = (value: unknown) => Number(value ?? 0) || 0;
 
-const codigoViaje = (id: string) => `VJ-${id.slice(-6).toUpperCase()}`;
+const codigoViaje = (id?: string | null) => id ? `VJ-${id.slice(-6).toUpperCase()}` : "VJ-??????";
 
 function diaLocal(value: string | number | Date) {
   const date = new Date(value);

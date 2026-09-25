@@ -191,7 +191,7 @@ export function StatusBadge({
  * El listado y la ficha muestran el mismo identificador, asi que vive aqui en
  * lugar de repetirse en cada pantalla.
  */
-export const codigoServicio = (id: string) => `SR-${id.slice(-6).toUpperCase()}`;
+export const codigoServicio = (id?: string | null) => id ? `SR-${id.slice(-6).toUpperCase()}` : "SR-??????";
 
 /* -------------------------------------------------------------------------- */
 /* RecordLink                                                                 */

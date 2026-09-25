@@ -17,8 +17,8 @@ function fechaHora(iso: string) {
   });
 }
 
-function codigoServicio(id: string) {
-  return `SR-${id.slice(-6).toUpperCase()}`;
+function codigoServicio(id?: string | null) {
+  return id ? `SR-${id.slice(-6).toUpperCase()}` : "SR-??????";
 }
 
 const EMISOR_STYLE: Record<string, string> = {

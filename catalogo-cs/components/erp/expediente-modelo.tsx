@@ -384,7 +384,7 @@ export default function ExpedienteModelo({
             >
               <div className="flex flex-col">
                 {/* El endpoint no devuelve id, asi que la clave combina fecha y texto. */}
-                {ratings.slice(0, 6).map((rating, indice) => (
+                {(ratings || []).slice(0, 6).map((rating, indice) => (
                   <div
                     key={`${rating.createdAt}-${indice}`}
                     className="flex flex-col gap-1 border-b border-zinc-800/55 px-5 py-[13px] last:border-b-0"

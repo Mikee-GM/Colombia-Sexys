@@ -127,7 +127,7 @@ function fechaHora(iso: string | null | undefined) {
   }).format(date);
 }
 
-const codigoViaje = (id: string) => `VJ-${id.slice(-6).toUpperCase()}`;
+const codigoViaje = (id?: string | null) => id ? `VJ-${id.slice(-6).toUpperCase()}` : "VJ-??????";
 
 type Props = {
   role: "admin" | "jefe";

@@ -150,7 +150,7 @@ export default function ReportDetailSheet({
               <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
                 <div className="mb-4 flex items-center gap-2 text-[#C5A55A]"><Clock3 size={17} /><h3 className="text-xs font-bold uppercase tracking-[0.16em]">Servicio y prórrogas</h3></div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Detail label="Servicio" value={`#${report.serviceId.slice(-8).toUpperCase()}`} />
+                  <Detail label="Servicio" value={report.serviceId ? `#${report.serviceId.slice(-8).toUpperCase()}` : "—"} />
                   <Detail label="Estado" value={report.service?.estado || "—"} />
                   <Detail label="Calificación" value={report.service?.calificacion ? `${report.service.calificacion} estrellas` : "Sin calificar"} />
                   <Detail label="Prórrogas usadas" value={String(report.service?.prorrogasUsadas ?? 0)} />
