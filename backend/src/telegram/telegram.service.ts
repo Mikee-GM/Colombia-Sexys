@@ -71,9 +71,14 @@ export class TelegramService implements OnModuleInit {
         { command: 'historial', description: 'Ver tus últimos servicios' },
         { command: 'help', description: 'Ver la ayuda' },
       ]);
-      this.logger.log('Comandos del bot actualizados en Telegram exitosamente.');
+      this.logger.log(
+        'Comandos del bot actualizados en Telegram exitosamente.',
+      );
     } catch (error) {
-      this.logger.error('No se pudieron actualizar los comandos del bot', error);
+      this.logger.error(
+        'No se pudieron actualizar los comandos del bot',
+        error,
+      );
     }
   }
 
