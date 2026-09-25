@@ -6195,7 +6195,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         }
         if (trip.servicio.clienteId) {
           this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
-            type: event,
+            type: action,
             data: { tripId: trip.id, serviceId: trip.servicioId },
           });
         }
