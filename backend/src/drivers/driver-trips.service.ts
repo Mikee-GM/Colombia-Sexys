@@ -441,11 +441,11 @@ export class DriverTripsService {
         const employeeChatId = trip.servicio.empleada?.usuario?.telegramChatId;
         if (employeeChatId) {
           try {
-            await this.bot.telegram.sendMessage(
+            await this.telegram.sendMessage(
               employeeChatId,
               'Tu chofer ha finalizado el viaje de ida. Cuando termines el servicio, usa el botón de abajo para finalizarlo:',
               {
-                ...Markup.inlineKeyboard([
+                buttons: [
                   [
                     Markup.button.callback(
                       '🏁 Finalizar Servicio',
@@ -458,7 +458,7 @@ export class DriverTripsService {
                       `agregar_extra_list:${trip.servicio.id}`,
                     ),
                   ],
-                ]),
+                ],
               },
             );
           } catch (err) {
