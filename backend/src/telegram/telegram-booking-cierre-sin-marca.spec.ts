@@ -135,15 +135,12 @@ describe('Cierre de la contratación sin la marca [DATA]', () => {
     expect(session.presetLocationId).toBe('loc-1');
     expect(session.locationNameSnapshot).toBe('Motel Montecarlo');
     expect(session.customerTransportCharge).toBe(0);
-    expect(p.onLocation).toHaveBeenCalledWith(
-      {},
-      {
-        latitude: 20.58,
-        longitude: -100.39,
-        title: 'Motel Montecarlo',
-        address: 'Av. Siempre Viva 1',
-      },
-    );
+    expect(p.onLocation).toHaveBeenCalledWith({}, undefined, {
+      latitude: 20.58,
+      longitude: -100.39,
+      title: 'Motel Montecarlo',
+      address: 'Av. Siempre Viva 1',
+    });
   });
 
   it('con el pin ya confirmado sigue por el método de pago, sin volver a pedir ubicación', async () => {
