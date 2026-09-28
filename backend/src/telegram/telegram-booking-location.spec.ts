@@ -176,7 +176,7 @@ describe('Refrescos de una ubicación en vivo del cliente', () => {
       { editado: true },
     );
 
-    await instancia.onLocation(ctx);
+    await instancia.onLocation(ctx, undefined);
 
     expect(ctx.reply).not.toHaveBeenCalled();
     // El pin si se mueve: el servicio debe salir con la ultima posicion.
@@ -191,7 +191,7 @@ describe('Refrescos de una ubicación en vivo del cliente', () => {
     const instancia = nuevaInstanciaDeCliente();
     const ctx = contexto({}, { editado: true });
 
-    await instancia.onLocation(ctx);
+    await instancia.onLocation(ctx, undefined);
 
     expect(ctx.reply).not.toHaveBeenCalled();
   });
@@ -203,7 +203,7 @@ describe('Refrescos de una ubicación en vivo del cliente', () => {
     );
     const ctx = contexto({ step: 'GROUP_WITH_BOSS' }, { editado: true });
 
-    await instancia.onLocation(ctx);
+    await instancia.onLocation(ctx, undefined);
 
     expect(
       instancia.groupServicesService.setLocationFromClient,
@@ -224,7 +224,7 @@ describe('Refrescos de una ubicación en vivo del cliente', () => {
     );
     const ctx = contexto({ step: 'GROUP_WITH_BOSS' }, { editado: true });
 
-    await instancia.onLocation(ctx);
+    await instancia.onLocation(ctx, undefined);
 
     expect(
       instancia.groupServicesService.setLocationFromClient,
@@ -235,7 +235,7 @@ describe('Refrescos de una ubicación en vivo del cliente', () => {
     const instancia = nuevaInstanciaDeCliente();
     const ctx = contexto({}, { editado: false });
 
-    await instancia.onLocation(ctx);
+    await instancia.onLocation(ctx, undefined);
 
     expect(ctx.reply).toHaveBeenCalledWith(
       expect.stringContaining('inicia la contratación'),

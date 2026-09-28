@@ -3182,7 +3182,7 @@ export class TelegramBookingUpdate {
     ctx.session.locationNameSnapshot = location.name;
     ctx.session.locationAddressSnapshot = location.address;
     ctx.session.customerTransportCharge = 0;
-    await this.onLocation(ctx, {
+    await this.onLocation(ctx, undefined, {
       latitude: Number(location.latitude),
       longitude: Number(location.longitude),
       title: location.name,
@@ -3385,7 +3385,7 @@ export class TelegramBookingUpdate {
       session.customerTransportCharge = 0;
 
       try {
-        await this.onLocation(ctx, {
+        await this.onLocation(ctx, undefined, {
           latitude: Number(ubicacionCandidata.latitude),
           longitude: Number(ubicacionCandidata.longitude),
           title: ubicacionCandidata.name,
@@ -6161,13 +6161,13 @@ export class TelegramBookingUpdate {
   @On(['location', 'venue', 'edited_message'])
   async onLocation(
     @Ctx() ctx: BotContext,
+    @Next() next?: () => Promise<void>,
     selectedLocation?: {
       latitude: number;
       longitude: number;
       title: string;
       address: string;
     },
-    @Next() next?: () => Promise<void>,
   ) {
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
