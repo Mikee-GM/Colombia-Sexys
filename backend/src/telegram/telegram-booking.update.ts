@@ -2007,7 +2007,7 @@ export class TelegramBookingUpdate {
   async onCancelSession(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery().catch(() => undefined);
     // Vaciamos la sesión anterior para permitir nuevas conversaciones
-    ctx.session = undefined as any;
+    ctx.session = undefined;
     await ctx.reply(
       'Reserva cancelada exitosamente. Ya puedes elegir otra chica del catálogo o intentar de nuevo.',
     );
@@ -5401,7 +5401,7 @@ export class TelegramBookingUpdate {
           fileUrl.href,
         );
         await ctx.telegram
-          .deleteMessage(ctx.chat!.id, processingMsg.message_id)
+          .deleteMessage(ctx.chat.id, processingMsg.message_id)
           .catch(() => undefined);
 
         const paymentMethod = ctx.session.metodoPago;

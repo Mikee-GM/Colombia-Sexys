@@ -10,7 +10,7 @@ describe('TelegramAdminUpdate: cierre de Uber de regreso', () => {
   };
 
   function montar(estado: string) {
-    const update = Object.create(TelegramAdminUpdate.prototype) as any;
+    const update = Object.create(TelegramAdminUpdate.prototype);
     update.callbackGuard = { esRepetido: jest.fn().mockResolvedValue(false) };
     update.usuariosRepository = {
       findOne: jest.fn().mockResolvedValue({ id: 'boss' }),

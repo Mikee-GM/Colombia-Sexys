@@ -5654,7 +5654,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       fareConfirmedAt: new Date(),
       fareConfirmedByUserId: actorId,
       fareConfirmationOverride: override,
-      estado: newEstado as any,
+      estado: newEstado,
     });
     await this.liquidationSync.syncOfficeRecord(trip.servicioId);
     if (trip.tipo === 'regreso') {

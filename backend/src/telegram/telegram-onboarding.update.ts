@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Action, Ctx, Update } from 'nestjs-telegraf';
+import { Action, Ctx, Update, On, Next } from 'nestjs-telegraf';
 import { Repository } from 'typeorm';
 import { Context, Markup } from 'telegraf';
 import { EmployeeOnboardingService } from '../employee-onboarding/employee-onboarding.service';
@@ -162,5 +162,40 @@ export class TelegramOnboardingUpdate {
     } catch {
       await ctx.reply(message);
     }
+  }
+
+  @On(['location', 'edited_message'])
+  async onLocationShared(
+    @Ctx() ctx: Context,
+    @Next() next: () => Promise<void>,
+  ) {
+    const telegramId = ctx.from?.id.toString();
+    if (!telegramId) return next();
+
+    // Fast check to avoid throwing error in getStaffUser
+    const user = await this.usersRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+    if (!user || !['empleada', 'chofer', 'jefe'].includes(user.rol)) {
+      return next();
+    }
+
+    try {
+      const assignment = await this.onboardingService
+        .getActiveAssignmentForUser(user.id)
+        .catch(() => null);
+      if (
+        assignment &&
+        assignment.welcomeSentAt &&
+        !assignment.regulationSentAt &&
+        assignment.status === 'pending'
+      ) {
+        // They sent the location. Proceed to deliver regulation!
+        await this.telegramOnboardingService.deliverAssignment(assignment);
+      }
+    } catch {
+      // ignore
+    }
+    return next();
   }
 }
