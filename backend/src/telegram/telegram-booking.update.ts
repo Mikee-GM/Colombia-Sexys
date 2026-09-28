@@ -108,6 +108,8 @@ import {
 } from '../common/locale';
 import { multiplyMoney, roundMoney, sumMoney } from '../common/money';
 import { interpretarFechaEscrita } from '../common/fecha-escrita';
+import { TelegramOnboardingService } from './telegram-onboarding.service';
+import { EmployeeOnboardingService } from '../employee-onboarding/employee-onboarding.service';
 
 interface SessionData {
   step?:
@@ -928,6 +930,10 @@ export class TelegramBookingUpdate {
     private readonly manualServiceWizard: TelegramManualServiceWizard,
     @Inject(forwardRef(() => TelegramTeamChannelUpdate))
     private readonly teamChannelUpdate: TelegramTeamChannelUpdate,
+    @Inject(forwardRef(() => TelegramOnboardingService))
+    private readonly telegramOnboardingService: TelegramOnboardingService,
+    @Inject(forwardRef(() => EmployeeOnboardingService))
+    private readonly employeeOnboardingService: EmployeeOnboardingService,
   ) {}
 
   private async createReceiptEvidence(
@@ -6254,6 +6260,29 @@ export class TelegramBookingUpdate {
         await ctx.reply(
           `Ubicación registrada para ${quien}: ${registro.nombre}.`,
         );
+
+        try {
+          const user = await this.usuariosRepository.findOne({
+            where: { telegramChatId: telegramId },
+          });
+          if (user) {
+            const assignment = await this.employeeOnboardingService
+              .getActiveAssignmentForUser(user.id)
+              .catch(() => null);
+            if (
+              assignment &&
+              assignment.welcomeSentAt &&
+              !assignment.regulationSentAt &&
+              assignment.status === 'pending'
+            ) {
+              await this.telegramOnboardingService.deliverAssignment(
+                assignment,
+              );
+            }
+          }
+        } catch (err) {
+          this.logger.error('Error enviando reglamento tras ubicación', err);
+        }
       }
       return next ? next() : undefined;
     }
