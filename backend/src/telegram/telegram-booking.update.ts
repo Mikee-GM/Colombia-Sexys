@@ -6265,16 +6265,11 @@ export class TelegramBookingUpdate {
           const user = await this.usuariosRepository.findOne({
             where: { telegramChatId: telegramId },
           });
-          if (user) {
+          if (user && ['empleada', 'chofer', 'jefe'].includes(user.rol)) {
             const assignment = await this.employeeOnboardingService
               .getActiveAssignmentForUser(user.id)
               .catch(() => null);
-            if (
-              assignment &&
-              assignment.welcomeSentAt &&
-              !assignment.regulationSentAt &&
-              assignment.status === 'pending'
-            ) {
+            if (assignment && assignment.status === 'pending') {
               await this.telegramOnboardingService.deliverAssignment(
                 assignment,
               );

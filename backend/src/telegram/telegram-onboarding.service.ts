@@ -19,20 +19,21 @@ export class TelegramOnboardingService {
       await this.onboardingService.ensureCurrentAssignmentForUser(userId);
       const assignment =
         await this.onboardingService.getActiveAssignmentForUser(userId);
+      await this.deliverAssignment(assignment);
 
-      const chatId = assignment.user?.telegramChatId;
-      const rol = assignment.user?.rol;
+      // If onboarding is already completed, send the location request and menu directly
+      if (assignment.status === 'completed' && assignment.user) {
+        const rol = assignment.user.rol;
+        const chatId = assignment.user.telegramChatId;
+        if (chatId && (rol === 'chofer' || rol === 'empleada')) {
+          const menu =
+            rol === 'empleada'
+              ? Markup.keyboard([['👑 Mi Portal']]).resize()
+              : Markup.keyboard([
+                  ['🚚 Mi Portal'],
+                  ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
+                ]).resize();
 
-      if (chatId && (rol === 'chofer' || rol === 'empleada')) {
-        const menu =
-          rol === 'empleada'
-            ? Markup.keyboard([['👑 Mi Portal']]).resize()
-            : Markup.keyboard([
-                ['🚚 Mi Portal'],
-                ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
-              ]).resize();
-
-        if (assignment.status === 'completed') {
           await this.bot.telegram.sendMessage(
             chatId,
             `*IMPORTANTE: Compartir Ubicación en Tiempo Real*\n\n` +
@@ -41,26 +42,11 @@ export class TelegramOnboardingService {
               `2. Selecciona *Ubicación*.\n` +
               `3. Elige *Compartir mi ubicación en tiempo real...* (selecciona la duración deseada, ej. 8 horas).\n\n` +
               `*Atención:* NO envíes la ubicación actual estática (un solo pin), ya que el sistema requiere rastreo continuo en tiempo real.`,
-            { parse_mode: 'Markdown', ...menu },
+            {
+              parse_mode: 'Markdown',
+              ...menu,
+            },
           );
-        } else {
-          await this.bot.telegram.sendMessage(
-            chatId,
-            '¡Te damos la bienvenida al equipo!\n\nTu cuenta ha sido vinculada correctamente. Antes de enviarte tu reglamento, necesitamos que compartas tu ubicación.',
-          );
-          await this.bot.telegram.sendMessage(
-            chatId,
-            `*IMPORTANTE: Compartir Ubicación en Tiempo Real*\n\n` +
-              `Para continuar, debes compartir tu *Ubicación en tiempo real* (Live Location):\n\n` +
-              `1. Toca el botón de adjuntar (📎).\n` +
-              `2. Selecciona *Ubicación*.\n` +
-              `3. Elige *Compartir mi ubicación en tiempo real...* (selecciona la duración deseada, ej. 8 horas).\n\n` +
-              `En cuanto la envíes, te mandaremos tu reglamento para iniciar el cuestionario.`,
-            { parse_mode: 'Markdown', ...menu },
-          );
-          if (!assignment.welcomeSentAt) {
-            await this.onboardingService.markWelcomeSent(assignment.id);
-          }
         }
       }
     } catch (error) {
@@ -79,28 +65,9 @@ export class TelegramOnboardingService {
       if (!assignment.welcomeSentAt) {
         await this.bot.telegram.sendMessage(
           chatId,
-          '¡Te damos la bienvenida al equipo!\n\nTu cuenta ha sido vinculada correctamente. Antes de enviarte tu reglamento, necesitamos que compartas tu ubicación.',
-        );
-        const menu =
-          assignment.user?.rol === 'empleada'
-            ? Markup.keyboard([['👑 Mi Portal']]).resize()
-            : Markup.keyboard([
-                ['🚚 Mi Portal'],
-                ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
-              ]).resize();
-
-        await this.bot.telegram.sendMessage(
-          chatId,
-          `*IMPORTANTE: Compartir Ubicación en Tiempo Real*\n\n` +
-            `Para continuar, debes compartir tu *Ubicación en tiempo real* (Live Location):\n\n` +
-            `1. Toca el botón de adjuntar (📎).\n` +
-            `2. Selecciona *Ubicación*.\n` +
-            `3. Elige *Compartir mi ubicación en tiempo real...* (selecciona la duración deseada, ej. 8 horas).\n\n` +
-            `En cuanto la envíes, te mandaremos tu reglamento para iniciar el cuestionario.`,
-          { parse_mode: 'Markdown', ...menu },
+          '¡Te damos la bienvenida al equipo!\n\nTu cuenta ha sido vinculada correctamente. A continuación recibirás el reglamento básico de trabajo. Léelo con atención porque después deberás responder un breve cuestionario.',
         );
         await this.onboardingService.markWelcomeSent(assignment.id);
-        return;
       }
 
       if (!assignment.regulationSentAt) {
