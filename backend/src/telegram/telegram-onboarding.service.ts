@@ -19,9 +19,50 @@ export class TelegramOnboardingService {
       await this.onboardingService.ensureCurrentAssignmentForUser(userId);
       const assignment =
         await this.onboardingService.getActiveAssignmentForUser(userId);
-      await this.deliverAssignment(assignment);
 
-      // Menu is sent after completing the exam by telegram-onboarding.update.ts
+      const chatId = assignment.user?.telegramChatId;
+      const rol = assignment.user?.rol;
+
+      if (chatId && (rol === 'chofer' || rol === 'empleada')) {
+        const menu =
+          rol === 'empleada'
+            ? Markup.keyboard([['👑 Mi Portal']]).resize()
+            : Markup.keyboard([
+                ['🚚 Mi Portal'],
+                ['🟢 Quedar Disponible', '🔴 Quedar Inactivo'],
+              ]).resize();
+
+        if (assignment.status === 'completed') {
+          await this.bot.telegram.sendMessage(
+            chatId,
+            `*IMPORTANTE: Compartir Ubicación en Tiempo Real*\n\n` +
+              `Para recibir y gestionar servicios correctamente, debes compartir tu *Ubicación en tiempo real* (Live Location):\n\n` +
+              `1. Toca el botón de adjuntar (📎).\n` +
+              `2. Selecciona *Ubicación*.\n` +
+              `3. Elige *Compartir mi ubicación en tiempo real...* (selecciona la duración deseada, ej. 8 horas).\n\n` +
+              `*Atención:* NO envíes la ubicación actual estática (un solo pin), ya que el sistema requiere rastreo continuo en tiempo real.`,
+            { parse_mode: 'Markdown', ...menu },
+          );
+        } else {
+          await this.bot.telegram.sendMessage(
+            chatId,
+            '¡Te damos la bienvenida al equipo!\n\nTu cuenta ha sido vinculada correctamente. Antes de enviarte tu reglamento, necesitamos que compartas tu ubicación.',
+          );
+          await this.bot.telegram.sendMessage(
+            chatId,
+            `*IMPORTANTE: Compartir Ubicación en Tiempo Real*\n\n` +
+              `Para continuar, debes compartir tu *Ubicación en tiempo real* (Live Location):\n\n` +
+              `1. Toca el botón de adjuntar (📎).\n` +
+              `2. Selecciona *Ubicación*.\n` +
+              `3. Elige *Compartir mi ubicación en tiempo real...* (selecciona la duración deseada, ej. 8 horas).\n\n` +
+              `En cuanto la envíes, te mandaremos tu reglamento para iniciar el cuestionario.`,
+            { parse_mode: 'Markdown', ...menu },
+          );
+          if (!assignment.welcomeSentAt) {
+            await this.onboardingService.markWelcomeSent(assignment.id);
+          }
+        }
+      }
     } catch (error) {
       this.logger.error(
         `No fue posible iniciar la incorporación para el usuario ${userId}`,
