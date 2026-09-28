@@ -6167,6 +6167,7 @@ export class TelegramBookingUpdate {
       title: string;
       address: string;
     },
+    @Next() next?: () => Promise<void>,
   ) {
     const telegramId = ctx.from?.id.toString();
     if (!telegramId) return;
@@ -6254,7 +6255,7 @@ export class TelegramBookingUpdate {
           `Ubicación registrada para ${quien}: ${registro.nombre}.`,
         );
       }
-      return;
+      return next ? next() : undefined;
     }
 
     /*
