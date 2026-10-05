@@ -53,6 +53,8 @@ import {
   ApiUpdateDocs,
 } from '../common/swagger/api-docs.decorators';
 import { SaveBankAccountDto } from './dto/bank-account.dto';
+import { ExtendServiceDto } from '../employees/dto/extend-service.dto';
+import { AddPortalServiceExtraDto } from '../employees/dto/portal-service-extra.dto';
 
 @Controller('services')
 @ApiControllerDocs('services', true)
@@ -536,10 +538,16 @@ export class ServicesController {
   @Roles('admin', 'jefe')
   extendManual(
     @Param('id') id: string,
-    @Body('horas') horas: number,
+    @Body() dto: ExtendServiceDto,
     @Req() req: any,
   ) {
-    return this.servicesService.extendByEmployee(id, req.user.id, horas, true);
+    return this.servicesService.extendByEmployee(
+      id,
+      req.user.id,
+      dto.horas,
+      true,
+      dto.montoAcordado,
+    );
   }
 
   @Post(':id/manual-controls/extras')
@@ -547,11 +555,7 @@ export class ServicesController {
   addExtraManual(
     @Param('id') id: string,
     @Body()
-    dto: {
-      extraCatalogoId?: string;
-      metodoPago: 'tarjeta' | 'transferencia' | 'efectivo';
-      precioCobrado?: number;
-    },
+    dto: AddPortalServiceExtraDto,
     @Req() req: any,
   ) {
     return this.servicesService.addServiceExtra({

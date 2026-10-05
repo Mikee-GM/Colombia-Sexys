@@ -1155,6 +1155,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async assertUserCanManageService(
+    service: Servicios,
+    actorUserId: string,
+  ): Promise<void> {
+    const actor = await this.usuariosRepository.findOneBy({ id: actorUserId });
+    if (!actor) throw new ConflictException('Usuario no autorizado');
+    this.assertActorCanManageService(service, actor);
+  }
+
   async updateForActor(
     id: string,
     updateData: UpdateServiceDto,
@@ -2635,7 +2644,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
 
-    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    } else if (servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('Este servicio no es tuyo');
     }
     if (servicio.estado !== 'en_curso') {
@@ -2885,10 +2896,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
-    if (
-      !forceByBoss &&
-      !(await this.puedePedirProrroga(servicio, actorUserId))
-    ) {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    } else if (!(await this.puedePedirProrroga(servicio, actorUserId))) {
       throw new ForbiddenException(
         'No puedes solicitar prórrogas para este servicio',
       );
@@ -3277,7 +3287,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relations: { cliente: true, empleada: { usuario: true } },
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
-    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    } else if (servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('No puedes extender este servicio');
     }
     if (servicio.estado !== 'en_curso') {
@@ -5027,6 +5039,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     actorUserId: string,
     forceByBoss: boolean = false,
   ): Promise<{ employeeId: string; participantId: string | null }> {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    }
     if (servicio.serviceType === 'grupal') {
       const participant = await this.serviceParticipantsRepository.findOne({
         where: {
@@ -5315,7 +5330,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'Un servicio grupal lo cierra la responsable desde su flujo de grupo',
       );
     }
-    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    } else if (servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('No puedes finalizar este servicio');
     }
 
@@ -6772,6 +6789,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException(
         'Solo la empleada asignada puede actualizar el viaje',
       );
+    }
+    if (!bossAction && forceByBoss) {
+      this.assertActorCanManageService(trip.servicio, actor);
     }
 
     let resultingState = trip.estado;

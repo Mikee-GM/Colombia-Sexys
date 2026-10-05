@@ -1,11 +1,22 @@
-import { ConflictException } from '@nestjs/common';
+import {
+  ConflictException,
+  INestApplication,
+  RequestMethod,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import cookieParser from 'cookie-parser';
+import { createHmac } from 'crypto';
 import { getBotToken } from 'nestjs-telegraf';
+import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
 import { AiMessageService } from '../src/ai/ai-message.service';
+import { AuthService } from '../src/auth/auth.service';
 import { DriverTripsService } from '../src/drivers/driver-trips.service';
 import { NotificationsService } from '../src/notifications/notifications.service';
+import { RealtimeBus } from '../src/realtime/realtime.bus';
 import { RealtimeEventsService } from '../src/realtime/realtime.service';
 import { Servicios } from '../src/services/entities/service.entity';
 import { ServiceOperationEvent } from '../src/services/operations/entities/service-operation-event.entity';
@@ -17,11 +28,14 @@ import {
 import { ServicesService } from '../src/services/services.service';
 import { TelegramConversationsService } from '../src/telegram-conversations/telegram-conversations.service';
 import { TelegramService } from '../src/telegram/telegram.service';
+import { Usuarios } from '../src/users/entities/user.entity';
 import { CreateServiceOperationsCore1810000000000 } from '../src/migrations/1810000000000-CreateServiceOperationsCore';
 
 const IDS = {
   boss: '11111111-1111-4111-8111-111111111111',
+  otherBoss: '11111111-1111-4111-8111-222222222222',
   employeeUser: '22222222-2222-4222-8222-222222222222',
+  otherEmployeeUser: '22222222-2222-4222-8222-333333333333',
   employee: '33333333-3333-4333-8333-333333333333',
   client: '44444444-4444-4444-8444-444444444444',
   driverUser: '55555555-5555-4555-8555-555555555555',
@@ -45,7 +59,23 @@ const telegram = new Proxy<Record<PropertyKey, jest.Mock>>(
     },
   },
 );
-const bot = { telegram, catch: jest.fn(), stop: jest.fn() };
+const botMethods = new Map<PropertyKey, jest.Mock>();
+const bot = new Proxy<Record<PropertyKey, unknown>>(
+  { telegram },
+  {
+    get: (target, property) => {
+      // Evita que `await` interprete el doble como una Promise pendiente.
+      if (property === 'then') return undefined;
+      if (property in target) return target[property];
+      let method = botMethods.get(property);
+      if (!method) {
+        method = jest.fn();
+        botMethods.set(property, method);
+      }
+      return method;
+    },
+  },
+);
 
 const notifications = {
   notificar: jest.fn((_userId: string, message: { titulo: string }) => {
@@ -83,7 +113,9 @@ const realtime = {
 
 describe('flujo operativo integrado (PostgreSQL)', () => {
   let moduleFixture: TestingModule | undefined;
+  let app: INestApplication | undefined;
   let dataSource: DataSource;
+  let auth: AuthService;
   let services: ServicesService;
   let driverTrips: DriverTripsService;
   let conversations: TelegramConversationsService;
@@ -98,18 +130,46 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       .useValue(aiMessages)
       .overrideProvider(TelegramService)
       .useValue(telegramAdapter)
+      .overrideProvider(RealtimeBus)
+      .useValue({
+        onRemoteMessage: jest.fn(),
+        publish: jest.fn().mockResolvedValue(undefined),
+      })
       .overrideProvider(RealtimeEventsService)
       .useValue(realtime)
       .compile();
 
+    app = moduleFixture.createNestApplication();
+    app.use(cookieParser(process.env.COOKIE_SECRET));
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
+    app.setGlobalPrefix('api', {
+      exclude: [
+        { path: 'health/live', method: RequestMethod.GET },
+        { path: 'health/ready', method: RequestMethod.GET },
+      ],
+    });
+    app.enableVersioning({
+      type: VersioningType.URI,
+      defaultVersion: '1',
+    });
+    await app.init();
+
     dataSource = moduleFixture.get(DataSource);
+    auth = moduleFixture.get(AuthService);
     services = moduleFixture.get(ServicesService);
     driverTrips = moduleFixture.get(DriverTripsService);
     conversations = moduleFixture.get(TelegramConversationsService);
   });
 
   afterAll(async () => {
-    if (moduleFixture) await moduleFixture.close();
+    if (app) await app.close();
+    else if (moduleFixture) await moduleFixture.close();
   });
 
   beforeEach(async () => {
@@ -127,9 +187,17 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
         (id, email, password_hash, rol, nombre, telegram_chat_id, activo, disponible, en_jornada)
        VALUES
         ($1, 'jefe-e2e@example.com', 'hash', 'jefe', 'Jefe E2E', NULL, true, true, true),
-        ($2, 'empleada-e2e@example.com', 'hash', 'empleada', 'Empleada E2E', NULL, true, true, true),
-        ($3, 'chofer-e2e@example.com', 'hash', 'chofer', 'Chofer E2E', 9003, true, true, true)`,
-      [IDS.boss, IDS.employeeUser, IDS.driverUser],
+        ($2, 'otro-jefe-e2e@example.com', 'hash', 'jefe', 'Otro Jefe E2E', NULL, true, true, true),
+        ($3, 'empleada-e2e@example.com', 'hash', 'empleada', 'Empleada E2E', NULL, true, true, true),
+        ($4, 'otra-empleada-e2e@example.com', 'hash', 'empleada', 'Otra Empleada E2E', NULL, true, true, true),
+        ($5, 'chofer-e2e@example.com', 'hash', 'chofer', 'Chofer E2E', 9003, true, true, true)`,
+      [
+        IDS.boss,
+        IDS.otherBoss,
+        IDS.employeeUser,
+        IDS.otherEmployeeUser,
+        IDS.driverUser,
+      ],
     );
     await dataSource.query(
       `INSERT INTO "empleadas"
@@ -184,6 +252,22 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       order: { occurredAt: 'ASC' },
     });
     return rows.map((row) => row.type);
+  }
+
+  async function accessToken(userId: string): Promise<string> {
+    const user = await dataSource
+      .getRepository(Usuarios)
+      .findOneByOrFail({ id: userId });
+    return (await auth.issueSessionFor(user, 'e2e-http')).accessToken;
+  }
+
+  function signedCookie(name: string, value: string): string {
+    const secret = process.env.COOKIE_SECRET as string;
+    const signature = createHmac('sha256', secret)
+      .update(value)
+      .digest('base64')
+      .replace(/=+$/, '');
+    return `${name}=${encodeURIComponent(`s:${value}.${signature}`)}`;
   }
 
   it('aplica, revierte y reaplica la migración sin perder el servicio legado', async () => {
@@ -568,5 +652,187 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       '9001',
       'Respuesta humana E2E',
     );
+  });
+
+  describe('superficie HTTP del flujo operativo', () => {
+    const api = '/api/v1';
+
+    it('exige autenticación y rol correcto sin modificar el servicio', async () => {
+      await request(app!.getHttpServer())
+        .post(`${api}/employee-portal/services/${IDS.service}/accept`)
+        .expect(401);
+
+      const employeeToken = await accessToken(IDS.employeeUser);
+      await request(app!.getHttpServer())
+        .post(`${api}/services/${IDS.service}/aceptar`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ transportType: 'chofer' })
+        .expect(403);
+
+      expect((await service()).operationalState).toBe('preparacion');
+      expect(await eventTypes()).toEqual([]);
+    });
+
+    it('rechaza payload inválido antes del dominio', async () => {
+      const employeeToken = await accessToken(IDS.employeeUser);
+      await request(app!.getHttpServer())
+        .post(`${api}/employee-portal/services/${IDS.service}/extend`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({ horas: 0, campoInesperado: true })
+        .expect(400);
+
+      expect(Number((await service()).duracionPactadaHoras)).toBe(1);
+      expect(await eventTypes()).toEqual([]);
+    });
+
+    it('aísla servicios por jefe y permite al jefe asignado operar', async () => {
+      const otherBossToken = await accessToken(IDS.otherBoss);
+      await request(app!.getHttpServer())
+        .post(`${api}/services/${IDS.service}/aceptar`)
+        .set('Authorization', `Bearer ${otherBossToken}`)
+        .send({ transportType: 'chofer' })
+        .expect(409);
+      expect((await service()).operationalState).toBe('preparacion');
+
+      const bossToken = await accessToken(IDS.boss);
+      await request(app!.getHttpServer())
+        .post(`${api}/services/${IDS.service}/aceptar`)
+        .set('Authorization', `Bearer ${bossToken}`)
+        .send({ transportType: 'chofer' })
+        .expect(201);
+      expect((await service()).operationalState).toBe(
+        'esperando_aceptacion_empleada',
+      );
+    });
+
+    it('aplica CSRF a cookie, acepta el actor correcto y no duplica la aceptación', async () => {
+      await services.ofrecerAEmpleada(IDS.service, IDS.boss, 'chofer');
+      const token = await accessToken(IDS.employeeUser);
+      const cookies = [
+        signedCookie('access_token', token),
+        'csrf_token=csrf-e2e',
+      ];
+
+      await request(app!.getHttpServer())
+        .post(`${api}/employee-portal/services/${IDS.service}/accept`)
+        .set('Cookie', cookies)
+        .expect(403);
+      expect((await service()).operationalState).toBe(
+        'esperando_aceptacion_empleada',
+      );
+
+      await request(app!.getHttpServer())
+        .post(`${api}/employee-portal/services/${IDS.service}/accept`)
+        .set('Cookie', cookies)
+        .set('x-csrf-token', 'csrf-e2e')
+        .expect(200);
+
+      await request(app!.getHttpServer())
+        .post(`${api}/employee-portal/services/${IDS.service}/accept`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(409);
+
+      expect((await service()).operationalState).toBe(
+        'esperando_transporte_ida',
+      );
+      expect(
+        (await eventTypes()).filter(
+          (type) => type === 'EMPLOYEE_ACCEPTED_SERVICE',
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('rechaza una transición fuera de orden sin tocar estado ni eventos', async () => {
+      await services.ofrecerAEmpleada(IDS.service, IDS.boss, 'chofer');
+      await services.acceptByEmployee(IDS.service, IDS.employeeUser);
+      const before = await eventTypes();
+      const employeeToken = await accessToken(IDS.employeeUser);
+
+      await request(app!.getHttpServer())
+        .post(`${api}/employee-portal/services/${IDS.service}/start`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(409);
+
+      const persisted = await service();
+      expect(persisted.operationalState).toBe('esperando_transporte_ida');
+      expect(persisted.horaInicioServicio).toBeNull();
+      expect(await eventTypes()).toEqual(before);
+    });
+
+    it('serializa el doble inicio y genera un solo evento', async () => {
+      await dataSource.query(
+        `UPDATE servicios
+            SET estado = 'pendiente', estado_operativo = 'empleada_llego',
+                hora_inicio_servicio = NULL
+          WHERE id = $1`,
+        [IDS.service],
+      );
+      const employeeToken = await accessToken(IDS.employeeUser);
+      const responses = await Promise.all([
+        request(app!.getHttpServer())
+          .post(`${api}/employee-portal/services/${IDS.service}/start`)
+          .set('Authorization', `Bearer ${employeeToken}`),
+        request(app!.getHttpServer())
+          .post(`${api}/employee-portal/services/${IDS.service}/start`)
+          .set('Authorization', `Bearer ${employeeToken}`),
+      ]);
+
+      expect(responses.map((response) => response.status).sort()).toEqual([
+        200, 409,
+      ]);
+      expect((await service()).operationalState).toBe('en_curso');
+      expect(
+        (await eventTypes()).filter((type) => type === 'SERVICE_STARTED'),
+      ).toHaveLength(1);
+    });
+
+    it('serializa la doble finalización y prepara un solo regreso', async () => {
+      await dataSource.query(
+        `UPDATE servicios
+            SET estado = 'en_curso', estado_operativo = 'en_curso',
+                hora_inicio_servicio = now() - interval '30 minutes'
+          WHERE id = $1`,
+        [IDS.service],
+      );
+      const employeeToken = await accessToken(IDS.employeeUser);
+      const responses = await Promise.all([
+        request(app!.getHttpServer())
+          .post(`${api}/employee-portal/services/${IDS.service}/finish`)
+          .set('Authorization', `Bearer ${employeeToken}`),
+        request(app!.getHttpServer())
+          .post(`${api}/employee-portal/services/${IDS.service}/finish`)
+          .set('Authorization', `Bearer ${employeeToken}`),
+      ]);
+
+      expect(responses.map((response) => response.status).sort()).toEqual([
+        200, 409,
+      ]);
+      expect((await service()).operationalState).toBe('preparando_regreso');
+      expect(
+        (await eventTypes()).filter(
+          (type) => type === 'RETURN_PREPARATION_STARTED',
+        ),
+      ).toHaveLength(1);
+    });
+
+    it('impide que otro jefe use controles manuales sobre el servicio', async () => {
+      await dataSource.query(
+        `UPDATE servicios
+            SET estado = 'en_curso', estado_operativo = 'en_curso',
+                hora_inicio_servicio = now(), duracion_pactada_horas = 1
+          WHERE id = $1`,
+        [IDS.service],
+      );
+      const otherBossToken = await accessToken(IDS.otherBoss);
+
+      await request(app!.getHttpServer())
+        .post(`${api}/services/${IDS.service}/manual-controls/extend`)
+        .set('Authorization', `Bearer ${otherBossToken}`)
+        .send({ horas: 1 })
+        .expect(409);
+
+      expect(Number((await service()).duracionPactadaHoras)).toBe(1);
+      expect(await eventTypes()).toEqual([]);
+    });
   });
 });
