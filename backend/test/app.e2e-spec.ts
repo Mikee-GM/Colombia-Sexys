@@ -252,8 +252,13 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     expect(acceptedService.operationalState).toBe('esperando_transporte_ida');
     persisted = await service();
     expect(persisted.operationalState).toBe('esperando_transporte_ida');
+    expect(persisted.estado).toBe('pendiente');
+    expect(persisted.horaInicioServicio).toBeNull();
     expect(persisted.employeeAcceptedAt).toBeInstanceOf(Date);
     expect(employeeOperationActions(persisted.operationalState)).toEqual([]);
+    await expect(
+      services.finishByEmployee(IDS.service, IDS.employeeUser),
+    ).rejects.toBeInstanceOf(ConflictException);
 
     const [outbound] = await dataSource.query(
       `SELECT id, chofer_id, proveedor_transporte, estado
@@ -301,6 +306,8 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     await services.startByEmployee(IDS.service, IDS.employeeUser);
     persisted = await service();
     expect(persisted.operationalState).toBe('en_curso');
+    expect(persisted.estado).toBe('en_curso');
+    expect(persisted.horaInicioServicio).toBeInstanceOf(Date);
     expect(employeeOperationActions(persisted.operationalState)).toEqual([
       'finalizar_servicio',
       'extender_servicio',

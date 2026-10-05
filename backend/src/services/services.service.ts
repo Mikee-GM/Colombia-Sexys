@@ -2045,6 +2045,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       'aceptar_empleada',
       'esperar_transporte_ida',
     ];
+    const deferStartUntilEmployeeAction = activated.estado === 'en_curso';
     const accepted = await this.serviceOperations.transitionMany(
       servicio.id,
       actions,
@@ -2058,6 +2059,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         patch: {
           employeeAcceptedAt: now,
           employeeAcceptanceExpiresAt: null,
+          // `aceptar` conserva efectos heredados necesarios (reserva de la
+          // empleada y creación del viaje), pero el servicio no empieza hasta
+          // que ella pulse INICIAR después de llegar. Mantener aquí
+          // `en_curso` permitía finalizar o agregar extras antes de ese paso.
+          ...(deferStartUntilEmployeeAction
+            ? {
+                estado: 'pendiente' as const,
+                horaInicioServicio: null,
+                horaInicioEstimada: null,
+              }
+            : {}),
         },
       },
     );

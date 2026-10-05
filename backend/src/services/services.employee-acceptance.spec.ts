@@ -153,7 +153,11 @@ describe('flujo de aceptación de la empleada', () => {
       ['aceptar_empleada', 'esperar_transporte_ida'],
       { userId: 'employee-user-1', type: 'empleada' },
       expect.objectContaining({
-        patch: expect.objectContaining({ employeeAcceptanceExpiresAt: null }),
+        patch: expect.objectContaining({
+          employeeAcceptanceExpiresAt: null,
+          estado: 'pendiente',
+          horaInicioServicio: null,
+        }),
       }),
     );
   });
