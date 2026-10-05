@@ -2045,7 +2045,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       'aceptar_empleada',
       'esperar_transporte_ida',
     ];
-    await this.serviceOperations.transitionMany(
+    const accepted = await this.serviceOperations.transitionMany(
       servicio.id,
       actions,
       { userId: actorUserId, type: 'empleada' },
@@ -2066,7 +2066,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       type: 'employee_accepted_service',
       data: { serviceId: servicio.id, acceptedAt: now },
     });
-    return activated;
+    // `activated` fue leído antes de las transiciones operativas. Devolverlo
+    // hacía que el portal recibiera todavía "esperando_aceptacion_empleada"
+    // aunque la base ya estuviera esperando transporte.
+    return Object.assign(accepted, {
+      uberLink: activated.uberLink,
+      viajeId: activated.viajeId,
+    });
   }
 
   async rejectByEmployee(id: string, actorUserId: string): Promise<void> {
@@ -3834,6 +3840,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     if (this.maintenanceInterval) clearInterval(this.maintenanceInterval);
+    for (const timeout of this.waitTimeouts.values()) clearTimeout(timeout);
+    for (const timeout of this.dispatchTimeouts.values()) clearTimeout(timeout);
+    this.waitTimeouts.clear();
+    this.dispatchTimeouts.clear();
   }
 
   async checkActiveServicesForExtension() {
@@ -6818,9 +6828,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         });
       }
       if (trip.tipo === 'regreso') {
-        await this.serviciosRepository.update(trip.servicioId, {
-          ...(trip.servicio.horaLlegadaCasa ? {} : { horaLlegadaCasa: now }),
-        });
+        // Un segundo toque sobre "llegué" es idempotente. TypeORM no admite
+        // `update(id, {})`: si la llegada ya estaba registrada, no hay ninguna
+        // escritura que hacer y se continúa con las comprobaciones de cierre.
+        if (!trip.servicio.horaLlegadaCasa) {
+          await this.serviciosRepository.update(trip.servicioId, {
+            horaLlegadaCasa: now,
+          });
+        }
         // Quien decide si ya se puede cerrar es `cerrarLiquidacionSiProcede`,
         // que mira TODOS los viajes: aqui solo se sabe de este.
         await this.cerrarLiquidacionSiProcede(trip.servicioId);

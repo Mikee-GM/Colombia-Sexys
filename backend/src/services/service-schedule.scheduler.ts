@@ -23,6 +23,7 @@ import { ServicesService } from './services.service';
 export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ServiceScheduleScheduler.name);
   private timer: ReturnType<typeof setInterval> | null = null;
+  private initialTimer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
   private telegramEnabled = true;
 
@@ -53,12 +54,16 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
     // Check every 60 seconds
     this.timer = setInterval(() => void this.runCycle(), 60 * 1000);
     if (typeof this.timer?.unref === 'function') this.timer.unref();
-    const initialTimer = setTimeout(() => void this.runCycle(), 10_000);
-    if (typeof initialTimer.unref === 'function') initialTimer.unref();
+    this.initialTimer = setTimeout(() => void this.runCycle(), 10_000);
+    if (typeof this.initialTimer.unref === 'function')
+      this.initialTimer.unref();
   }
 
   onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
+    if (this.initialTimer) clearTimeout(this.initialTimer);
+    this.timer = null;
+    this.initialTimer = null;
   }
 
   /**
