@@ -32,6 +32,28 @@ export class CreateServiceOperationsCore1810000000000 implements MigrationInterf
         ALTER COLUMN "estado_operativo" SET NOT NULL;
     `);
     await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+           WHERE conname = 'chk_servicios_estado_operativo'
+             AND conrelid = 'servicios'::regclass
+        ) THEN
+          ALTER TABLE "servicios"
+            ADD CONSTRAINT "chk_servicios_estado_operativo"
+            CHECK ("estado_operativo" IN (
+              'preparacion', 'preparado', 'asignado',
+              'esperando_aceptacion_empleada', 'aceptado',
+              'esperando_transporte_ida', 'transporte_ida_asignado',
+              'empleada_en_camino', 'empleada_llego', 'en_curso',
+              'preparando_regreso', 'transporte_regreso_asignado',
+              'empleada_de_regreso', 'finalizado', 'rechazado',
+              'cancelado', 'expirado'
+            ));
+        END IF;
+      END $$;
+    `);
+    await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS "idx_servicios_estado_operativo"
         ON "servicios" ("estado_operativo");
       CREATE INDEX IF NOT EXISTS "idx_servicios_aceptacion_expira"
@@ -46,7 +68,8 @@ export class CreateServiceOperationsCore1810000000000 implements MigrationInterf
         "from_state" varchar(50),
         "to_state" varchar(50),
         "actor_user_id" uuid,
-        "actor_type" varchar(30) NOT NULL DEFAULT 'system',
+        "actor_type" varchar(30) NOT NULL DEFAULT 'system'
+          CHECK ("actor_type" IN ('system', 'jefe', 'empleada', 'chofer', 'admin')),
         "payload" jsonb NOT NULL DEFAULT '{}'::jsonb,
         "occurred_at" timestamptz NOT NULL DEFAULT now()
       );
