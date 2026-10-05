@@ -8,7 +8,10 @@ import { Usuarios } from '../users/entities/user.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { JwtService } from '@nestjs/jwt';
 import type { InlineKeyboardButton, Message } from 'telegraf/types';
-import { installSendThrottle } from './telegram-send-throttle';
+import {
+  installTelegramTransport,
+  type TelegramTransportMode,
+} from './telegram-transport';
 
 /**
  * Extras de un envio programatico.
@@ -32,6 +35,7 @@ export type SendMessageOptions = {
 @Injectable()
 export class TelegramService implements OnModuleInit {
   private readonly logger = new Logger(TelegramService.name);
+  private readonly transportMode: TelegramTransportMode;
 
   constructor(
     @InjectBot() private readonly bot: Telegraf<Context>,
@@ -42,6 +46,8 @@ export class TelegramService implements OnModuleInit {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {
+    const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+    this.transportMode = installTelegramTransport(this.bot, token, 'central');
     if (this.bot && typeof this.bot.catch === 'function') {
       this.bot.catch((err: any, ctx: Context) => {
         this.logger.error('Global Telegram Bot Error:', err);
@@ -58,9 +64,13 @@ export class TelegramService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     this.assertPollingIsSafe();
-    // Todo lo que sale del sistema pasa por este bot: avisos a jefes, ofertas a
-    // choferes, mensajes a clientes y los barridos periodicos.
-    installSendThrottle(this.bot, 'central');
+
+    if (this.transportMode === 'dummy') {
+      this.logger.log(
+        'Telegram opera en modo simulado; se omite la configuracion remota del bot.',
+      );
+      return;
+    }
 
     try {
       await this.bot.telegram.setMyCommands([
