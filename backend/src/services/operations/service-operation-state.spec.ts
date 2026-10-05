@@ -44,7 +44,7 @@ describe('máquina de estados operativa del servicio', () => {
       nextServiceOperationState('transporte_ida_asignado', 'empleada_llega'),
     ).toBeNull();
     expect(
-      nextServiceOperationState('empleada_llega', 'preparar_regreso'),
+      nextServiceOperationState('empleada_llego', 'preparar_regreso'),
     ).toBeNull();
   });
 
