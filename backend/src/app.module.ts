@@ -138,7 +138,10 @@ import { TeamChannelModule } from './team-channel/team-channel.module';
         autoLoadEntities: true,
         synchronize: false, // Regla Heavy DB: no sincronización automática en producción/desarrollo estructurado, usar migraciones.
         migrationsRun: false,
-        migrations: [__dirname + '/migrations/*{.ts,.js}'],
+        // Solo los ficheros numerados son migraciones. El glob anterior
+        // tambien importaba `*.spec.ts` al arrancar con ts-jest, registrando
+        // suites de Jest dentro del test E2E que estaba en ejecución.
+        migrations: [__dirname + '/migrations/[0-9]*{.ts,.js}'],
         /*
          * El pool es el primer techo del sistema bajo carga.
          *
