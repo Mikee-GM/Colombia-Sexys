@@ -15,7 +15,7 @@ import {
  */
 describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
   let update: any;
-  let servicesService: { aceptar: jest.Mock };
+  let servicesService: { ofrecerAEmpleada: jest.Mock };
   let usuarios: { findOne: jest.Mock };
   let ctx: any;
 
@@ -34,7 +34,9 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    servicesService = { aceptar: jest.fn().mockResolvedValue(undefined) };
+    servicesService = {
+      ofrecerAEmpleada: jest.fn().mockResolvedValue(undefined),
+    };
     usuarios = {
       findOne: jest
         .fn()
@@ -58,7 +60,7 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
     ctx = conTexto('204');
     await update.onMessage(ctx);
 
-    expect(servicesService.aceptar).toHaveBeenCalledWith(
+    expect(servicesService.ofrecerAEmpleada).toHaveBeenCalledWith(
       'srv-1',
       'jefe-1',
       'uber',
@@ -72,7 +74,7 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
     ctx = conTexto('No');
     await update.onMessage(ctx);
 
-    expect(servicesService.aceptar).toHaveBeenCalledWith(
+    expect(servicesService.ofrecerAEmpleada).toHaveBeenCalledWith(
       'srv-1',
       'jefe-1',
       'uber',
@@ -86,7 +88,7 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
     ctx = conTexto(BOTON_RECHAZAR_SERVICIO);
     await update.onMessage(ctx);
 
-    expect(servicesService.aceptar).not.toHaveBeenCalled();
+    expect(servicesService.ofrecerAEmpleada).not.toHaveBeenCalled();
     // El paso se suelta para que el mensaje llegue a quien sabe rechazar.
     expect(ctx.session.step).toBeUndefined();
     expect(ctx.session.roomServiceId).toBeUndefined();
@@ -97,7 +99,7 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
     ctx = conTexto(BOTON_ACEPTAR_SERVICIO);
     await update.onMessage(ctx);
 
-    expect(servicesService.aceptar).not.toHaveBeenCalled();
+    expect(servicesService.ofrecerAEmpleada).not.toHaveBeenCalled();
     expect(ctx.session.step).toBe('AWAITING_ROOM');
     expect(ctx.reply).toHaveBeenCalled();
   });
@@ -106,7 +108,7 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
     ctx = conTexto('cancelar');
     await update.onMessage(ctx);
 
-    expect(servicesService.aceptar).not.toHaveBeenCalled();
+    expect(servicesService.ofrecerAEmpleada).not.toHaveBeenCalled();
     expect(ctx.session.step).toBeUndefined();
   });
 
@@ -120,7 +122,7 @@ describe('TelegramBookingUpdate: la habitación tras autorizar', () => {
     });
     await update.onMessage(ctx);
 
-    expect(servicesService.aceptar).not.toHaveBeenCalled();
+    expect(servicesService.ofrecerAEmpleada).not.toHaveBeenCalled();
     expect(ctx.session.step).toBeUndefined();
     expect(ctx.session.roomServiceId).toBeUndefined();
   });
