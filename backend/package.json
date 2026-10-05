@@ -36,7 +36,8 @@
     "db:demo:limpiar": "corepack pnpm build && node dist/scripts/sembrar-datos-demo.js --limpiar --confirmar",
     "db:demo:prod": "node dist/scripts/sembrar-datos-demo.js",
     "db:demo:prod:run": "node dist/scripts/sembrar-datos-demo.js --confirmar --en-produccion",
-    "db:demo:prod:limpiar": "node dist/scripts/sembrar-datos-demo.js --limpiar --confirmar --en-produccion"
+    "db:demo:prod:limpiar": "node dist/scripts/sembrar-datos-demo.js --limpiar --confirmar --en-produccion",
+    "db:qa:seed": "corepack pnpm build && node dist/scripts/sembrar-operacion-qa.js --confirmar"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1081.0",
@@ -56,7 +57,7 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "helmet": "^8.3.0",
-    "joi": "^18.2.3",
+    "joi": "^18.2.9",
     "nestjs-telegraf": "^2.9.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -65,7 +66,7 @@
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
     "telegraf": "^4.16.3",
-    "typeorm": "1.0.0",
+    "typeorm": "1.1.1",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
