@@ -29,6 +29,11 @@ import { Servicios } from '../services/entities/service.entity';
 import { WeeklyContentService } from '../weekly-content/weekly-content.service';
 import { TeamChannelService } from '../team-channel/team-channel.service';
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
+import {
+  employeeOperationActions,
+  operationStateFromLegacy,
+  TERMINAL_SERVICE_OPERATION_STATES,
+} from '../services/operations/service-operation-state';
 
 @Injectable()
 export class EmployeesService {
@@ -1136,13 +1141,17 @@ export class EmployeesService {
      * que es justo cuando esos dos avisos importan. El servicio no esta cerrado
      * de verdad hasta que ese viaje termina.
      */
-    const activeOrUpcoming = services.find(
-      (s) =>
-        s.estado === 'en_curso' ||
-        s.estado === 'agendado' ||
-        s.estado === 'pendiente' ||
-        (s.estado === 'finalizado' && this.regresoSinCerrar(s)),
-    );
+    const activeOrUpcoming = services.find((s) => {
+      const operationalState =
+        s.operationalState ?? operationStateFromLegacy(s);
+      if (s.estado === 'finalizado') return this.regresoSinCerrar(s);
+      if (TERMINAL_SERVICE_OPERATION_STATES.has(operationalState)) return false;
+      // Una solicitud apenas creada todavía no fue asignada por el jefe y no
+      // debe aparecer como trabajo accionable en el portal.
+      return !['preparacion', 'preparado', 'asignado'].includes(
+        operationalState,
+      );
+    });
 
     let activeServiceDto: EmployeePortalActiveService | null = null;
     if (activeOrUpcoming) {
@@ -1184,9 +1193,17 @@ export class EmployeesService {
         ? new Date(startTime.getTime() + duration * 3600000)
         : null;
 
+      const operationalState =
+        activeOrUpcoming.operationalState ??
+        operationStateFromLegacy(activeOrUpcoming);
       activeServiceDto = {
         id: activeOrUpcoming.id,
         estado: activeOrUpcoming.estado,
+        estadoOperativo: operationalState,
+        accionesDisponibles: employeeOperationActions(operationalState),
+        aceptacionExpiraAt: activeOrUpcoming.employeeAcceptanceExpiresAt
+          ? new Date(activeOrUpcoming.employeeAcceptanceExpiresAt).toISOString()
+          : null,
         duracionHoras: duration,
         metodoPago: activeOrUpcoming.metodoPago,
         horaInicio: startTime?.toISOString() || null,

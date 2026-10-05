@@ -689,6 +689,38 @@ export type EmployeePortalServiceItem = {
 export type EmployeePortalActiveService = {
   id: string;
   estado: string;
+  estadoOperativo:
+    | "preparacion"
+    | "preparado"
+    | "asignado"
+    | "esperando_aceptacion_empleada"
+    | "aceptado"
+    | "esperando_transporte_ida"
+    | "transporte_ida_asignado"
+    | "empleada_en_camino"
+    | "empleada_llego"
+    | "en_curso"
+    | "preparando_regreso"
+    | "transporte_regreso_asignado"
+    | "empleada_de_regreso"
+    | "finalizado"
+    | "rechazado"
+    | "cancelado"
+    | "expirado";
+  accionesDisponibles: Array<
+    | "aceptar_servicio"
+    | "rechazar_servicio"
+    | "marcar_en_camino"
+    | "marcar_llegada"
+    | "iniciar_servicio"
+    | "finalizar_servicio"
+    | "extender_servicio"
+    | "registrar_extra"
+    | "activar_panico"
+    | "marcar_regreso"
+    | "marcar_llegada_regreso"
+  >;
+  aceptacionExpiraAt?: string | null;
   duracionHoras: number;
   metodoPago: string;
   horaInicio?: string | null;

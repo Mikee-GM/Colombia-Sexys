@@ -41,6 +41,19 @@ export const SERVICE_OPERATION_ACTIONS = [
 
 export type ServiceOperationAction = (typeof SERVICE_OPERATION_ACTIONS)[number];
 
+export type EmployeeOperationAction =
+  | 'aceptar_servicio'
+  | 'rechazar_servicio'
+  | 'marcar_en_camino'
+  | 'marcar_llegada'
+  | 'iniciar_servicio'
+  | 'finalizar_servicio'
+  | 'extender_servicio'
+  | 'registrar_extra'
+  | 'activar_panico'
+  | 'marcar_regreso'
+  | 'marcar_llegada_regreso';
+
 export const TERMINAL_SERVICE_OPERATION_STATES = new Set<ServiceOperationState>(
   ['finalizado', 'rechazado', 'cancelado', 'expirado'],
 );
@@ -123,6 +136,35 @@ export function isServiceOperationState(
     typeof value === 'string' &&
     (SERVICE_OPERATION_STATES as readonly string[]).includes(value)
   );
+}
+
+/** Acciones de UI decididas por el núcleo, no por componentes del portal. */
+export function employeeOperationActions(
+  state: ServiceOperationState,
+): EmployeeOperationAction[] {
+  switch (state) {
+    case 'esperando_aceptacion_empleada':
+      return ['aceptar_servicio', 'rechazar_servicio'];
+    case 'transporte_ida_asignado':
+      return ['marcar_en_camino'];
+    case 'empleada_en_camino':
+      return ['marcar_llegada'];
+    case 'empleada_llego':
+      return ['iniciar_servicio'];
+    case 'en_curso':
+      return [
+        'finalizar_servicio',
+        'extender_servicio',
+        'registrar_extra',
+        'activar_panico',
+      ];
+    case 'transporte_regreso_asignado':
+      return ['marcar_regreso'];
+    case 'empleada_de_regreso':
+      return ['marcar_llegada_regreso'];
+    default:
+      return [];
+  }
 }
 
 /** Compatibilidad para filas anteriores a la máquina de estados operativa. */

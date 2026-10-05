@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ServicesService } from './services.service';
+import { operationStateFromLegacy } from './operations/service-operation-state';
 
 describe('ServicesService transport settlement', () => {
   const serviciosRepository = {
@@ -43,6 +44,12 @@ describe('ServicesService transport settlement', () => {
     uploadEvidence: jest.fn(),
     uploadEvidenceFromUrl: jest.fn(),
   };
+  const serviceOperations = {
+    currentState: jest.fn(
+      (item) => item.operationalState ?? operationStateFromLegacy(item),
+    ),
+    transition: jest.fn().mockResolvedValue(undefined),
+  };
 
   /*
    * Se construye por nombre y no con `new`.
@@ -82,6 +89,7 @@ describe('ServicesService transport settlement', () => {
     extrasCatalogoRepository: {},
     extrasServicioRepository: {},
     serviceParticipantsRepository: {},
+    serviceOperations,
   });
 
   beforeEach(() => jest.clearAllMocks());
@@ -237,10 +245,10 @@ describe('ServicesService transport settlement', () => {
     expect(viajesRepository.update).toHaveBeenCalledWith('trip', {
       estado: 'llegado',
     });
-    const keyboard = bot.telegram.sendMessage.mock.calls[0][2];
-    const callbackData =
-      keyboard.reply_markup.inline_keyboard[0][0].callback_data;
-    expect(Buffer.byteLength(callbackData, 'utf8')).toBeLessThanOrEqual(64);
+    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
+      '123',
+      expect.stringContaining('portal web'),
+    );
   });
 
   it('exige tarifa antes de marcar el Uber en camino', async () => {
@@ -565,73 +573,75 @@ describe('ServicesService transport settlement', () => {
     ).rejects.toThrow('el viaje ya tiene un chofer asignado');
   });
 
-  it('corrige la hora de inicio al llegar en Uber aunque el servicio no fuera una cita agendada', async () => {
+  it('deja el inicio en manos de la empleada después de llegar en Uber', async () => {
+    const assignedService = {
+      id: 'service',
+      jefeId: 'boss',
+      estado: 'en_curso',
+      operationalState: 'empleada_en_camino',
+      empleadaId: 'employee',
+      empleada: { usuarioId: 'employee-user', usuario: {} },
+    };
     viajesRepository.findOne.mockResolvedValue({
       id: 'trip',
       servicioId: 'service',
       tipo: 'ida',
       estado: 'en_curso',
       proveedorTransporte: 'uber',
-      servicio: {
-        id: 'service',
-        jefeId: 'boss',
-        estado: 'en_curso',
-        empleadaId: 'employee',
-        empleada: { usuarioId: 'employee-user', usuario: {} },
-      },
+      servicio: assignedService,
     });
     usuariosRepository.findOneBy.mockResolvedValue({
       id: 'employee-user',
       rol: 'empleada',
     });
+    serviciosRepository.findOne.mockResolvedValue(assignedService);
 
     await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
 
-    // Solo se corrige la hora real de inicio: como no era una cita agendada,
-    // no se toca el estado ni se avisa de "siguiente servicio iniciado".
-    expect(serviciosRepository.update).toHaveBeenCalledWith('service', {
-      horaInicioServicio: expect.any(Date),
-    });
+    expect(serviciosRepository.update).not.toHaveBeenCalledWith(
+      'service',
+      expect.objectContaining({ horaInicioServicio: expect.any(Date) }),
+    );
+    expect(serviceOperations.transition).toHaveBeenCalledWith(
+      'service',
+      'empleada_llega',
+      expect.objectContaining({ type: 'empleada' }),
+      expect.objectContaining({ eventType: 'EMPLOYEE_ARRIVED' }),
+    );
     expect(realtime.emitToBoss).not.toHaveBeenCalledWith(
       'boss',
       expect.objectContaining({ type: 'scheduled_service_started' }),
     );
   });
 
-  it('sigue arrancando la cita agendada al llegar en Uber, con la hora de inicio corregida', async () => {
+  it('tampoco inicia automáticamente una cita agendada al llegar en Uber', async () => {
+    const scheduledService = {
+      id: 'service',
+      jefeId: 'boss',
+      estado: 'agendado',
+      operationalState: 'empleada_en_camino',
+      empleadaId: 'employee',
+      empleada: { usuarioId: 'employee-user', usuario: {} },
+    };
     viajesRepository.findOne.mockResolvedValue({
       id: 'trip',
       servicioId: 'service',
       tipo: 'ida',
       estado: 'en_curso',
       proveedorTransporte: 'uber',
-      servicio: {
-        id: 'service',
-        jefeId: 'boss',
-        estado: 'agendado',
-        empleadaId: 'employee',
-        empleada: { usuarioId: 'employee-user', usuario: {} },
-      },
+      servicio: scheduledService,
     });
     usuariosRepository.findOneBy.mockResolvedValue({
       id: 'employee-user',
       rol: 'empleada',
     });
-    // notifyScheduledServiceStarted vuelve a leer el servicio: sin destino de
-    // chat no manda nada, y no debe interferir con esta prueba.
-    serviciosRepository.findOne.mockResolvedValue(undefined);
+    serviciosRepository.findOne.mockResolvedValue(scheduledService);
 
     await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
 
-    expect(serviciosRepository.update).toHaveBeenCalledWith('service', {
-      horaInicioServicio: expect.any(Date),
-      estado: 'en_curso',
-      servicioPrevioId: null,
-      horaInicioEstimada: expect.any(Date),
-    });
-    expect(realtime.emitToBoss).toHaveBeenCalledWith(
-      'boss',
-      expect.objectContaining({ type: 'scheduled_service_started' }),
+    expect(serviciosRepository.update).not.toHaveBeenCalledWith(
+      'service',
+      expect.objectContaining({ estado: 'en_curso' }),
     );
   });
 

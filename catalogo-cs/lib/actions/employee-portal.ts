@@ -154,7 +154,10 @@ export async function uploadMyWeeklyPhotos(
       const mensaje = Array.isArray(err.message)
         ? err.message.join(". ")
         : err.message;
-      return { success: false, error: mensaje || "No se pudieron subir las fotos" };
+      return {
+        success: false,
+        error: mensaje || "No se pudieron subir las fotos",
+      };
     }
 
     revalidatePath("/empleada/portal");
@@ -204,6 +207,64 @@ export async function updateMyTripStatus(
   } catch (error) {
     console.error("Error al actualizar el viaje:", error);
     return { success: false, error: "Error de conexion con el servidor" };
+  }
+}
+
+/** Responde la oferta desde el portal; Telegram queda solo como aviso. */
+export async function responderServicioAsignado(
+  servicioId: string,
+  decision: "accept" | "reject",
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/services/${servicioId}/${decision}`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: await portalHeaders(token),
+      },
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: error.message || "No se pudo registrar tu respuesta",
+      };
+    }
+    revalidatePath("/empleada/portal");
+    revalidatePath("/empleada/servicio");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error de conexión con el servidor" };
+  }
+}
+
+export async function iniciarMiServicio(
+  servicioId: string,
+  token?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/services/${servicioId}/start`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: await portalHeaders(token),
+      },
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: error.message || "No se pudo iniciar el servicio",
+      };
+    }
+    revalidatePath("/empleada/portal");
+    revalidatePath("/empleada/servicio");
+    return { success: true };
+  } catch {
+    return { success: false, error: "Error de conexión con el servidor" };
   }
 }
 
@@ -330,7 +391,10 @@ export async function addServiceExtra(
       const mensaje = Array.isArray(err.message)
         ? err.message.join(". ")
         : err.message;
-      return { success: false, error: mensaje || "No se pudo agregar el extra" };
+      return {
+        success: false,
+        error: mensaje || "No se pudo agregar el extra",
+      };
     }
 
     revalidatePath("/empleada/portal");
@@ -424,7 +488,10 @@ export async function responderReporte(
       const mensaje = Array.isArray(err.message)
         ? err.message.join(". ")
         : err.message;
-      return { success: false, error: mensaje || "No se pudo enviar tu versión" };
+      return {
+        success: false,
+        error: mensaje || "No se pudo enviar tu versión",
+      };
     }
     return { success: true };
   } catch (error: any) {
@@ -606,7 +673,11 @@ export async function leerCanal(
       headers: await portalHeaders(token),
     });
     if (!response.ok) {
-      return { success: false, mensajes: [], error: "No se pudo abrir el canal" };
+      return {
+        success: false,
+        mensajes: [],
+        error: "No se pudo abrir el canal",
+      };
     }
     return { success: true, mensajes: await response.json() };
   } catch (error: any) {

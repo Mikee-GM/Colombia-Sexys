@@ -18,9 +18,11 @@ import type { EmployeePortalActiveService } from "@/lib/types";
  */
 export default function AccionesDelViaje({
   transporte,
+  accionesDisponibles,
   token,
 }: {
   transporte: NonNullable<EmployeePortalActiveService["transporte"]>;
+  accionesDisponibles: EmployeePortalActiveService["accionesDisponibles"];
   token?: string;
 }) {
   const router = useRouter();
@@ -40,11 +42,13 @@ export default function AccionesDelViaje({
    * En cualquier otro estado no hay nada que marcar: o todavia se esta
    * buscando transporte, o el viaje ya termino.
    */
-  const siguiente = ["aceptado", "en_camino", "llegado"].includes(
-    transporte.estado,
+  const siguiente = accionesDisponibles.some((action) =>
+    ["marcar_en_camino", "marcar_regreso"].includes(action),
   )
     ? ("en_camino" as const)
-    : transporte.estado === "en_curso"
+    : accionesDisponibles.some((action) =>
+          ["marcar_llegada", "marcar_llegada_regreso"].includes(action),
+        )
       ? ("llegue" as const)
       : null;
 

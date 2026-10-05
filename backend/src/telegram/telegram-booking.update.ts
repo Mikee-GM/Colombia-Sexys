@@ -7569,7 +7569,7 @@ export class TelegramBookingUpdate {
         }
 
         try {
-          await this.servicesService.aceptar(
+          await this.servicesService.ofrecerAEmpleada(
             ctx.session.roomServiceId,
             user.id,
             'uber',

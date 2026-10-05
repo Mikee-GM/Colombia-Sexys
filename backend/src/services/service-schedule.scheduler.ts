@@ -24,6 +24,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ServiceScheduleScheduler.name);
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private telegramEnabled = true;
 
   constructor(
     @InjectRepository(Servicios)
@@ -47,7 +48,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
       this.logger.log(
         'Bot de Telegram deshabilitado en local; omitiendo programador de citas.',
       );
-      return;
+      this.telegramEnabled = false;
     }
     // Check every 60 seconds
     this.timer = setInterval(() => void this.runCycle(), 60 * 1000);
@@ -71,11 +72,28 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
       await withAdvisoryLock(
         this.dataSource,
         ADVISORY_LOCKS.serviceSchedule,
-        () => this.checkUpcomingScheduledServices(),
+        () =>
+          this.telegramEnabled
+            ? this.checkUpcomingScheduledServices()
+            : Promise.resolve(),
       );
     } catch (error) {
       this.logger.warn(
         `Error en el ciclo de citas programadas: ${describeError(error)}`,
+      );
+    }
+    try {
+      await withAdvisoryLock(
+        this.dataSource,
+        ADVISORY_LOCKS.serviceOperations,
+        async () => {
+          await this.servicesService.sweepEmployeeAcceptanceDeadlines();
+          await this.servicesService.sweepServicesEndingSoon();
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Error en el ciclo operativo de servicios: ${describeError(error)}`,
       );
     }
     try {

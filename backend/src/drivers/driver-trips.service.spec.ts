@@ -17,6 +17,7 @@ const AJENO = 'chofer-2';
 function viaje(overrides: Partial<Viajes> = {}): Viajes {
   return {
     id: 'viaje-1',
+    servicioId: 'servicio-1',
     choferId: CHOFER,
     estado: 'aceptado',
     tipo: 'ida',
@@ -72,6 +73,8 @@ function montar(trip: Viajes | null, afectadas = 1) {
     return Promise.resolve({ message_id: 4321 });
   });
   const startWaitTimeout = jest.fn();
+  const markTransportAssigned = jest.fn(() => Promise.resolve());
+  const markEmployeeTripProgress = jest.fn(() => Promise.resolve());
 
   /*
    * Se construye por nombre y no por posicion.
@@ -116,6 +119,8 @@ function montar(trip: Viajes | null, afectadas = 1) {
       rechazarOfertaManual: jest.fn(() => Promise.resolve()),
       notifyScheduledServiceStarted: jest.fn(() => Promise.resolve()),
       sendFinalReceiptAndAward: jest.fn(() => Promise.resolve()),
+      markTransportAssigned,
+      markEmployeeTripProgress,
     },
   };
 
@@ -137,6 +142,8 @@ function montar(trip: Viajes | null, afectadas = 1) {
     syncDriverSettlement,
     choferesUpdate,
     managerUpdate,
+    markTransportAssigned,
+    markEmployeeTripProgress,
   };
 }
 
@@ -319,16 +326,19 @@ describe('DriverTripsService.finalizarViaje', () => {
     expect(syncDriverSettlement).toHaveBeenCalledWith('viaje-1');
   });
 
-  it('en la ida arranca el servicio agendado', async () => {
+  it('en la ida espera el inicio explícito de la empleada', async () => {
     const trip = viaje({ estado: 'en_curso', tipo: 'ida' });
     (trip.servicio as unknown as { estado: string }).estado = 'agendado';
-    const { service, serviciosUpdate } = montar(trip);
+    const { service, serviciosUpdate, markEmployeeTripProgress } = montar(trip);
 
     await service.finalizarViaje('viaje-1', CHOFER);
 
-    expect(serviciosUpdate).toHaveBeenCalledWith(
+    expect(serviciosUpdate).toHaveBeenCalledWith('servicio-1', {});
+    expect(markEmployeeTripProgress).toHaveBeenCalledWith(
       'servicio-1',
-      expect.objectContaining({ estado: 'en_curso', servicioPrevioId: null }),
+      'ida',
+      'arrived',
+      expect.objectContaining({ type: 'chofer' }),
     );
   });
 
@@ -382,7 +392,7 @@ describe('DriverTripsService.finalizarViaje', () => {
 
 describe('DriverTripsService.aceptarOferta', () => {
   it('toma la oferta y deja al chofer ocupado', async () => {
-    const { service, managerUpdate } = montar(
+    const { service, managerUpdate, markTransportAssigned } = montar(
       viaje({ estado: 'notificado' }),
       1,
     );
@@ -395,6 +405,11 @@ describe('DriverTripsService.aceptarOferta', () => {
       expect.anything(),
       CHOFER,
       expect.objectContaining({ disponible: false, rechazosConsecutivos: 0 }),
+    );
+    expect(markTransportAssigned).toHaveBeenCalledWith(
+      'servicio-1',
+      undefined,
+      'chofer',
     );
   });
 

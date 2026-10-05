@@ -11,11 +11,12 @@ import {
 } from "lucide-react";
 
 import AccionesDelViaje from "@/components/empleada/AccionesDelViaje";
+import AceptarServicio from "@/components/empleada/AceptarServicio";
 import AgregarExtra from "@/components/empleada/AgregarExtra";
 import FinalizarServicio from "@/components/empleada/FinalizarServicio";
+import IniciarServicio from "@/components/empleada/IniciarServicio";
 import ExtenderServicio from "@/components/empleada/ExtenderServicio";
 import MarcarLista from "@/components/empleada/MarcarLista";
-import PedirProrroga from "@/components/empleada/PedirProrroga";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { EmployeePortalActiveService } from "@/lib/types";
@@ -62,7 +63,8 @@ export default function ServicioAhora({
     );
   }
 
-  const enCurso = servicio.estado === "en_curso";
+  const acciones = new Set(servicio.accionesDisponibles);
+  const enCurso = acciones.has("finalizar_servicio");
   /*
    * La vuelta a casa.
    *
@@ -71,7 +73,11 @@ export default function ServicioAhora({
    * no se vuelve a finalizar. Lo unico que queda son los dos botones del
    * viaje.
    */
-  const enRegreso = servicio.estado === "finalizado";
+  const enRegreso = [
+    "preparando_regreso",
+    "transporte_regreso_asignado",
+    "empleada_de_regreso",
+  ].includes(servicio.estadoOperativo);
   // El viaje de vuelta tarda un momento en quedar pedido. Antes la tarjeta
   // desaparecia en ese hueco y volvia a aparecer sola despues, y desde fuera
   // parecia que el servicio se habia perdido.
@@ -89,7 +95,9 @@ export default function ServicioAhora({
     <section className="overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-black shadow-lg">
       <header className="flex items-center justify-between gap-3 border-b border-emerald-500/20 px-4 py-3">
         <span className="flex items-center gap-2">
-          <span className={`h-2.5 w-2.5 rounded-full bg-emerald-400 ${enCurso || enRegreso ? "animate-pulse" : ""}`} />
+          <span
+            className={`h-2.5 w-2.5 rounded-full bg-emerald-400 ${enCurso || enRegreso ? "animate-pulse" : ""}`}
+          />
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
             {enRegreso
               ? "Tu regreso"
@@ -110,8 +118,16 @@ export default function ServicioAhora({
       </header>
 
       <div className="grid grid-cols-3 gap-px bg-white/5">
-        <Dato icono={<Clock3 size={14} />} clave="Duración" valor={`${servicio.duracionHoras} h`} />
-        <Dato icono={<Wallet size={14} />} clave="Pago" valor={servicio.metodoPago} />
+        <Dato
+          icono={<Clock3 size={14} />}
+          clave="Duración"
+          valor={`${servicio.duracionHoras} h`}
+        />
+        <Dato
+          icono={<Wallet size={14} />}
+          clave="Pago"
+          valor={servicio.metodoPago}
+        />
         <Dato
           icono={<CalendarClock size={14} />}
           clave="Termina"
@@ -126,6 +142,14 @@ export default function ServicioAhora({
             {formatCurrency(servicio.gananciaEstimada)}
           </span>
         </p>
+
+        {acciones.has("aceptar_servicio") && (
+          <AceptarServicio
+            servicioId={servicio.id}
+            expiraAt={servicio.aceptacionExpiraAt}
+            token={token}
+          />
+        )}
 
         {alistandose && <MarcarLista servicio={servicio} token={token} />}
 
@@ -143,8 +167,14 @@ export default function ServicioAhora({
               {servicio.transporte.proveedor.toUpperCase()}
             </span>{" "}
             ({servicio.transporte.estado})
-            {servicio.transporte.choferNombre && <> · Chofer: {servicio.transporte.choferNombre}</>}
+            {servicio.transporte.choferNombre && (
+              <> · Chofer: {servicio.transporte.choferNombre}</>
+            )}
           </p>
+        )}
+
+        {!enlaceAPantallaPropia && acciones.has("iniciar_servicio") && (
+          <IniciarServicio servicioId={servicio.id} token={token} />
         )}
 
         {/*
@@ -192,7 +222,11 @@ export default function ServicioAhora({
           propio viaje, asi que las dos se mantienen sincronizadas solas.
         */}
         {!enlaceAPantallaPropia && servicio.transporte && !alistandose && (
-          <AccionesDelViaje transporte={servicio.transporte} token={token} />
+          <AccionesDelViaje
+            transporte={servicio.transporte}
+            accionesDisponibles={servicio.accionesDisponibles}
+            token={token}
+          />
         )}
 
         {/*
@@ -201,38 +235,38 @@ export default function ServicioAhora({
           empezado, lo que se alarga es el servicio, y para eso esta el boton de
           abajo.
         */}
-        {!enlaceAPantallaPropia && !enCurso && !enRegreso && (
-          <PedirProrroga
-            servicioId={servicio.id}
-            prorrogasUsadas={servicio.prorrogasUsadas ?? 0}
-            token={token}
-          />
+        {!enlaceAPantallaPropia && acciones.has("registrar_extra") && (
+          <AgregarExtra servicioId={servicio.id} token={token} />
         )}
-
-        {/* Extras y cierre: solo sobre un servicio ya arrancado. */}
-        {!enlaceAPantallaPropia && enCurso && (
-          <>
-            <AgregarExtra servicioId={servicio.id} token={token} />
-            {/* Extender va antes de finalizar: el orden es el de lo que ocurre
-                --primero se alarga, al final se cierra-- y ademas aleja el
-                boton de cierre del resto. */}
-            <ExtenderServicio servicioId={servicio.id} token={token} />
-            <FinalizarServicio servicioId={servicio.id} token={token} />
-          </>
+        {!enlaceAPantallaPropia && acciones.has("extender_servicio") && (
+          <ExtenderServicio servicioId={servicio.id} token={token} />
+        )}
+        {!enlaceAPantallaPropia && acciones.has("finalizar_servicio") && (
+          <FinalizarServicio servicioId={servicio.id} token={token} />
         )}
       </div>
     </section>
   );
 }
 
-function Dato({ icono, clave, valor }: { icono: React.ReactNode; clave: string; valor: string }) {
+function Dato({
+  icono,
+  clave,
+  valor,
+}: {
+  icono: React.ReactNode;
+  clave: string;
+  valor: string;
+}) {
   return (
     <div className="bg-black/40 px-3 py-3 text-center">
       <span className="flex items-center justify-center gap-1.5 text-[10px] uppercase tracking-wider text-gray-500">
         {icono}
         {clave}
       </span>
-      <span className="mt-1 block truncate text-sm font-bold capitalize text-white">{valor}</span>
+      <span className="mt-1 block truncate text-sm font-bold capitalize text-white">
+        {valor}
+      </span>
     </div>
   );
 }

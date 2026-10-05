@@ -39,6 +39,9 @@ export interface EmployeePortalServiceItem {
 export interface EmployeePortalActiveService {
   id: string;
   estado: string;
+  estadoOperativo: ServiceOperationState;
+  accionesDisponibles: EmployeeOperationAction[];
+  aceptacionExpiraAt?: string | null;
   duracionHoras: number;
   metodoPago: string;
   horaInicio?: string | null;
@@ -159,3 +162,7 @@ export interface EmployeePortalData {
    */
   canalSinLeer: number;
 }
+import type {
+  EmployeeOperationAction,
+  ServiceOperationState,
+} from '../../services/operations/service-operation-state';

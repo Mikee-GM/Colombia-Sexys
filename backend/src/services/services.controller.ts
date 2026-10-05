@@ -333,7 +333,7 @@ export class ServicesController {
     @Req() req: any,
   ) {
     const jefeId = req.user.id;
-    return this.servicesService.aceptar(
+    return this.servicesService.ofrecerAEmpleada(
       id,
       jefeId,
       dto.transportType,

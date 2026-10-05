@@ -52,4 +52,5 @@ export const ADVISORY_LOCKS = {
   authCleanup: 811_005,
   workShiftReset: 811_006,
   waitTimeoutSweep: 811_007,
+  serviceOperations: 811_008,
 } as const;

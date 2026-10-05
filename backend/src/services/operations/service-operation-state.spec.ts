@@ -1,5 +1,6 @@
 import {
   availableServiceOperationActions,
+  employeeOperationActions,
   nextServiceOperationState,
   operationStateFromLegacy,
 } from './service-operation-state';
@@ -53,6 +54,23 @@ describe('máquina de estados operativa del servicio', () => {
       'cancelar',
     ]);
     expect(availableServiceOperationActions('finalizado')).toEqual([]);
+  });
+
+  it('entrega al portal acciones explícitas y secuenciales', () => {
+    expect(employeeOperationActions('esperando_aceptacion_empleada')).toEqual([
+      'aceptar_servicio',
+      'rechazar_servicio',
+    ]);
+    expect(employeeOperationActions('empleada_llego')).toEqual([
+      'iniciar_servicio',
+    ]);
+    expect(employeeOperationActions('en_curso')).toEqual([
+      'finalizar_servicio',
+      'extender_servicio',
+      'registrar_extra',
+      'activar_panico',
+    ]);
+    expect(employeeOperationActions('esperando_transporte_ida')).toEqual([]);
   });
 
   it('conserva una interpretación compatible para filas históricas', () => {

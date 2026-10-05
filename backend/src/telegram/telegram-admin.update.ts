@@ -276,7 +276,7 @@ export class TelegramAdminUpdate {
     }
     const transportType = match[2] === 'same' ? 'chofer' : match[2];
     try {
-      const res = await this.servicesService.aceptar(
+      const res = await this.servicesService.ofrecerAEmpleada(
         serviceId,
         actor.id,
         transportType,
@@ -721,7 +721,7 @@ export class TelegramAdminUpdate {
       let empleadaTelegramChatId: string | null | undefined;
 
       if (accept) {
-        const res = await this.servicesService.aceptar(
+        const res = await this.servicesService.ofrecerAEmpleada(
           serviceId,
           user.id,
           transportType,

@@ -94,6 +94,36 @@ export class ServiceOperationsService {
       : this.services.manager.transaction(execute);
   }
 
+  async transitionMany(
+    serviceId: string,
+    actions: ServiceOperationAction[],
+    actor: OperationActor,
+    options: {
+      eventTypes?: string[];
+      payload?: Record<string, unknown>;
+      patch?: Partial<Servicios>;
+    } = {},
+  ): Promise<Servicios> {
+    if (actions.length === 0) {
+      const service = await this.services.findOne({ where: { id: serviceId } });
+      if (!service) throw new NotFoundException('Servicio no encontrado');
+      return service;
+    }
+
+    return this.services.manager.transaction(async (manager) => {
+      let service: Servicios | null = null;
+      for (const [index, action] of actions.entries()) {
+        service = await this.transition(serviceId, action, actor, {
+          manager,
+          eventType: options.eventTypes?.[index],
+          payload: options.payload,
+          patch: index === actions.length - 1 ? options.patch : undefined,
+        });
+      }
+      return service as Servicios;
+    });
+  }
+
   async recordEvent(
     serviceId: string,
     type: string,
