@@ -2041,8 +2041,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       servicio.habitacion ?? undefined,
     );
     const now = new Date();
-    const actions: ServiceOperationAction[] = ['aceptar_empleada'];
-    if (activated.estado !== 'agendado') actions.push('esperar_transporte_ida');
+    const actions: ServiceOperationAction[] = [
+      'aceptar_empleada',
+      'esperar_transporte_ida',
+    ];
     await this.serviceOperations.transitionMany(
       servicio.id,
       actions,
@@ -2114,7 +2116,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     const action =
-      state === 'esperando_transporte_ida'
+      state === 'esperando_transporte_ida' || state === 'aceptado'
         ? 'asignar_transporte_ida'
         : state === 'preparando_regreso'
           ? 'asignar_transporte_regreso'
@@ -2146,6 +2148,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     if (progress === 'en_route') {
       if (
         state === 'esperando_transporte_ida' ||
+        state === 'aceptado' ||
         state === 'preparando_regreso'
       ) {
         await this.markTransportAssigned(serviceId, actor.userId, actor.type);

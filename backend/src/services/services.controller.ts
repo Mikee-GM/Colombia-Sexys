@@ -34,6 +34,7 @@ import {
   UberFareDto,
   CancelledTripCostDto,
   UberStatusDto,
+  ExternalTransportDetailsDto,
 } from './dto/transport-action.dto';
 import {
   CancelServiceDto,
@@ -410,6 +411,19 @@ export class ServicesController {
       tripId,
       req.user.id,
       dto.amount,
+    );
+  }
+
+  @Post('trips/:tripId/external-details')
+  registerExternalTransportDetails(
+    @Param('tripId') tripId: string,
+    @Body() dto: ExternalTransportDetailsDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.registerExternalTransportDetails(
+      tripId,
+      req.user.id,
+      dto,
     );
   }
 
