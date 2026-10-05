@@ -24,6 +24,8 @@ import { DisciplineModule } from '../discipline/discipline.module';
 import { UploadModule } from '../upload/upload.module';
 import { ExtensionsModule } from '../extensions/extensions.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ServiceOperationsService } from './operations/service-operations.service';
+import { ServiceOperationEvent } from './operations/entities/service-operation-event.entity';
 
 import { GodEyeService } from './god-eye.service';
 import { GodEyeController } from './god-eye.controller';
@@ -48,6 +50,7 @@ import { ServiceScheduleScheduler } from './service-schedule.scheduler';
       ExtrasCatalogo,
       ExtrasServicio,
       ServiceParticipant,
+      ServiceOperationEvent,
     ]),
     forwardRef(() => TelegramModule),
     AiModule,
@@ -60,7 +63,12 @@ import { ServiceScheduleScheduler } from './service-schedule.scheduler';
     ExtensionsModule,
   ],
   controllers: [ServicesController, GodEyeController],
-  providers: [ServicesService, GodEyeService, ServiceScheduleScheduler],
-  exports: [ServicesService, GodEyeService],
+  providers: [
+    ServicesService,
+    ServiceOperationsService,
+    GodEyeService,
+    ServiceScheduleScheduler,
+  ],
+  exports: [ServicesService, ServiceOperationsService, GodEyeService],
 })
 export class ServicesModule {}

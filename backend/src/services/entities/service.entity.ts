@@ -25,6 +25,7 @@ import {
   CANCELLATION_REASONS,
   type CancellationReason,
 } from '../cancellation-reasons';
+import type { ServiceOperationState } from '../operations/service-operation-state';
 
 @Index('idx_servicios_cliente', ['clienteId'], {})
 @Index('idx_servicios_created_at', ['createdAt'], {})
@@ -378,6 +379,47 @@ export class Servicios {
     example: 'pendiente',
   })
   estado: 'pendiente' | 'agendado' | 'en_curso' | 'finalizado' | 'cancelado';
+
+  /**
+   * Estado detallado del flujo operativo. `estado` se conserva para no romper
+   * consultas, reportes y liquidaciones históricas.
+   */
+  @Column('varchar', {
+    name: 'estado_operativo',
+    length: 50,
+    default: 'preparacion',
+  })
+  operationalState: ServiceOperationState;
+
+  @Column('timestamp with time zone', {
+    name: 'aceptacion_empleada_expira_at',
+    nullable: true,
+  })
+  employeeAcceptanceExpiresAt: Date | null;
+
+  @Column('timestamp with time zone', {
+    name: 'aceptacion_empleada_recordada_at',
+    nullable: true,
+  })
+  employeeAcceptanceRemindedAt: Date | null;
+
+  @Column('timestamp with time zone', {
+    name: 'aceptacion_empleada_at',
+    nullable: true,
+  })
+  employeeAcceptedAt: Date | null;
+
+  @Column('timestamp with time zone', {
+    name: 'aceptacion_empleada_escalada_at',
+    nullable: true,
+  })
+  employeeAcceptanceEscalatedAt: Date | null;
+
+  @Column('timestamp with time zone', {
+    name: 'aviso_fin_proximo_at',
+    nullable: true,
+  })
+  endingSoonNotifiedAt: Date | null;
 
   @Column('varchar', {
     name: 'motivo_cancelacion',
