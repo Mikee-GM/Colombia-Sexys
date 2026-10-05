@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectBot } from 'nestjs-telegraf';
-import { LessThan, Repository } from 'typeorm';
+import { In, LessThan, Repository } from 'typeorm';
 import { Context, Telegraf } from 'telegraf';
 import { ConversacionesTelegram } from './entities/telegram-conversation.entity';
 import { Servicios } from '../services/entities/service.entity';
@@ -13,6 +13,7 @@ import { Usuarios } from '../users/entities/user.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { TelegramSession } from '../telegram/entities/telegram-session.entity';
 import { Clientes } from '../clients/entities/client.entity';
+import { parseSessionKey } from '../telegram/telegram-session.key';
 
 @Injectable()
 export class TelegramConversationsService {
@@ -110,12 +111,12 @@ export class TelegramConversationsService {
    * CRM Web: Lista todos los clientes con los que el bot ha interactuado recientemente,
    * independientemente de si pertenecen a una bookingSessionId o un servicio.
    */
-  async listRecentChats(actor: Usuarios, limit = 50) {
+  async listRecentChats(actor: Usuarios, limit = 50, search?: string) {
     if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
       throw new ConflictException('Solo un admin o jefe puede ver esto');
     }
     const take = Math.min(Math.max(limit || 50, 1), 300);
-    const rows = await this.conversationsRepository
+    const query = this.conversationsRepository
       .createQueryBuilder('c')
       .innerJoin('c.cliente', 'cliente')
       .select('c.clienteId', 'clienteId')
@@ -123,18 +124,50 @@ export class TelegramConversationsService {
       .addSelect('cliente.telegramChatId', 'clienteTelegramId')
       .addSelect('MAX(c.enviadoAt)', 'lastAt')
       .addSelect('COUNT(*)', 'messageCount')
+      .addSelect(
+        '(ARRAY_AGG(c.mensaje ORDER BY c.enviado_at DESC))[1]',
+        'lastMessage',
+      )
+      .addSelect(
+        '(ARRAY_AGG(c.ia_activa ORDER BY c.enviado_at DESC))[1]',
+        'iaActiva',
+      )
+      .addSelect(
+        '(SELECT s.id FROM servicios s WHERE s.cliente_id = c.cliente_id ORDER BY s.created_at DESC LIMIT 1)',
+        'serviceId',
+      )
+      .addSelect(
+        '(SELECT s.estado FROM servicios s WHERE s.cliente_id = c.cliente_id ORDER BY s.created_at DESC LIMIT 1)',
+        'serviceState',
+      )
+      .addSelect(
+        '(SELECT e.nombre_artistico FROM servicios s LEFT JOIN empleadas e ON e.id = s.empleada_id WHERE s.cliente_id = c.cliente_id ORDER BY s.created_at DESC LIMIT 1)',
+        'employeeName',
+      )
       .groupBy('c.clienteId')
       .addGroupBy('cliente.nombreTelegram')
       .addGroupBy('cliente.telegramChatId')
       .orderBy('MAX(c.enviadoAt)', 'DESC')
-      .limit(take)
-      .getRawMany<{
-        clienteId: string;
-        clienteNombre: string | null;
-        clienteTelegramId: string;
-        lastAt: Date;
-        messageCount: string;
-      }>();
+      .limit(take);
+    const term = search?.trim().toLowerCase();
+    if (term) {
+      query.andWhere(
+        "(LOWER(COALESCE(cliente.nombre_telegram, '')) LIKE :search OR cliente.telegram_chat_id LIKE :search)",
+        { search: `%${term}%` },
+      );
+    }
+    const rows = await query.getRawMany<{
+      clienteId: string;
+      clienteNombre: string | null;
+      clienteTelegramId: string;
+      lastAt: Date;
+      messageCount: string;
+      lastMessage: string;
+      iaActiva: boolean;
+      serviceId: string | null;
+      serviceState: string | null;
+      employeeName: string | null;
+    }>();
 
     return rows.map((r) => ({
       clienteId: r.clienteId,
@@ -142,6 +175,11 @@ export class TelegramConversationsService {
       clienteTelegramId: r.clienteTelegramId,
       lastAt: r.lastAt,
       messageCount: Number(r.messageCount),
+      lastMessage: r.lastMessage,
+      mode: r.iaActiva ? ('AI_ACTIVE' as const) : ('HUMAN_ACTIVE' as const),
+      serviceId: r.serviceId,
+      serviceState: r.serviceState,
+      employeeName: r.employeeName,
     }));
   }
 
@@ -153,7 +191,6 @@ export class TelegramConversationsService {
     return this.conversationsRepository.find({
       where: { cliente: { id: clientId } },
       order: { enviadoAt: 'ASC' },
-      take: 200, // Limitamos para no traer toda la historia si es muy larga
     });
   }
 
@@ -366,19 +403,33 @@ export class TelegramConversationsService {
       );
     }
 
+    const latest = await this.conversationsRepository.findOne({
+      where: { clienteId: clientId },
+      order: { enviadoAt: 'DESC' },
+    });
+    if (!latest || latest.iaActiva) {
+      throw new ConflictException(
+        'Toma el control de la conversación antes de responder',
+      );
+    }
+
     await this.bot.telegram.sendMessage(cliente.telegramChatId, message);
 
     // Guardar el mensaje en el historial
     const saved = await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: clientId,
-        servicioId: null,
-        bookingSessionId: null, // Lo dejamos nulo ya que es un mensaje global al cliente
+        servicioId: latest.servicioId,
+        bookingSessionId: latest.bookingSessionId,
         emisor: asIdentity,
         mensaje: message,
-        iaActiva: true, // asume true a menos que busquemos la sesion
+        iaActiva: false,
       }),
     );
+    this.realtimeEvents.emitToJefes({
+      type: 'chat_message',
+      data: saved,
+    });
     return saved;
   }
 
@@ -400,7 +451,7 @@ export class TelegramConversationsService {
     const activeServices = await this.servicesRepository.find({
       where: {
         clienteId: clientId,
-        estado: 'en_curso',
+        estado: In(['pendiente', 'agendado', 'en_curso']),
       },
     });
 
@@ -424,11 +475,15 @@ export class TelegramConversationsService {
     // Buscamos la sesión de telegraf para actualizarla si existe
     // Hacemos una consulta burda pero efectiva porque hay pocas sesiones
     const sessions = await this.telegramSessionRepository.find();
-    const clientSession = sessions.find((s) =>
-      s.key.includes(`:${cliente.telegramChatId}`),
-    );
+    const clientSessions = sessions.filter((session) => {
+      const key = parseSessionKey(session.key);
+      return (
+        key?.fromId === cliente.telegramChatId ||
+        key?.chatId === cliente.telegramChatId
+      );
+    });
 
-    if (clientSession) {
+    for (const clientSession of clientSessions) {
       const data = clientSession.data || {};
       data.iaActiva = iaActiva;
       data.humanTakeover = !iaActiva;
@@ -449,6 +504,14 @@ export class TelegramConversationsService {
         iaActiva,
       }),
     );
+
+    this.realtimeEvents.emitToJefes({
+      type: 'conversation_mode_changed',
+      data: {
+        clientId,
+        mode: iaActiva ? 'AI_ACTIVE' : 'HUMAN_ACTIVE',
+      },
+    });
 
     return { ok: true, iaActiva, clientId };
   }

@@ -9167,16 +9167,21 @@ export class TelegramBookingUpdate {
       where: { telegramChatId: telegramId },
     });
     if (!client) return;
-    await this.conversationsRepository.save(
+    const saved = await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: client.id,
         servicioId: null,
         bookingSessionId,
         emisor: sender,
         mensaje: message,
-        iaActiva: true,
+        iaActiva:
+          ctx.session?.iaActiva !== false && !ctx.session?.humanTakeover,
       }),
     );
+    this.realtimeEventsService.emitToJefes({
+      type: 'chat_message',
+      data: saved,
+    });
   }
 
   /**
