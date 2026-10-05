@@ -92,7 +92,15 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
             <LogOut size={18} />
           </button>
         </header>
-        <main className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-10">{children}</main>
+        <main
+          className={
+            pathname === "/jefe"
+              ? "w-full max-w-none p-2 sm:p-3 lg:p-4"
+              : "mx-auto max-w-7xl p-4 sm:p-6 lg:p-10"
+          }
+        >
+          {children}
+        </main>
       </div>
       {/*
        * Cinco destinos en cinco columnas, una sola fila.

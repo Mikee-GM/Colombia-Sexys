@@ -34,6 +34,140 @@ export async function getJefeServices(): Promise<Service[]> {
   return apiFetch<Service[]>("/services");
 }
 
+export type JefeTodaySnapshot = {
+  employees: Employee[];
+  services: Service[];
+  messagesByService: Record<string, ConversationMessage[]>;
+};
+
+async function getCompleteServiceMessages(
+  serviceId: string,
+): Promise<ConversationMessage[]> {
+  const messages: ConversationMessage[] = [];
+  let cursor: string | null = null;
+  const visitedCursors = new Set<string>();
+
+  do {
+    const params = new URLSearchParams({ limit: "100" });
+    if (cursor) params.set("cursor", cursor);
+    const page = await apiFetch<{
+      messages: ConversationMessage[];
+      nextCursor: string | null;
+    }>(`/telegram-conversations/service/${serviceId}?${params.toString()}`);
+    messages.unshift(...page.messages);
+    cursor = page.nextCursor;
+    if (cursor) {
+      if (visitedCursors.has(cursor)) {
+        throw new Error("La paginación del historial devolvió un cursor repetido");
+      }
+      visitedCursors.add(cursor);
+    }
+  } while (cursor);
+
+  return Array.from(
+    new Map(messages.map((message) => [message.id, message])).values(),
+  ).sort(
+    (left, right) =>
+      new Date(left.enviadoAt).getTime() - new Date(right.enviadoAt).getTime(),
+  );
+}
+
+/**
+ * Snapshot seguro de Hoy. La lista de servicios ya viene limitada por el
+ * backend al ambito del jefe, y cada historial vuelve a pasar por la
+ * autorizacion del endpoint de servicio.
+ */
+export async function getJefeTodaySnapshot(): Promise<JefeTodaySnapshot> {
+  const jefe = await requireJefe();
+  const [allEmployees, services] = await Promise.all([
+    apiFetch<Employee[]>("/employees"),
+    apiFetch<Service[]>("/services"),
+  ]);
+  const employees = allEmployees.filter(
+    (employee) =>
+      employee.jefeId === jefe.id || employee.jefeSecundarioId === jefe.id,
+  );
+  const withConversation = services.filter(
+    (service) => Boolean(service.clienteId),
+  );
+  const entries = await Promise.all(
+    withConversation.map(
+      async (service) =>
+        [service.id, await getCompleteServiceMessages(service.id)] as const,
+    ),
+  );
+
+  return {
+    employees,
+    services,
+    messagesByService: Object.fromEntries(entries),
+  };
+}
+
+async function assertOwnedServiceAndClient(
+  serviceId: string,
+  clientId: string,
+) {
+  const services = await getJefeServices();
+  const service = services.find((item) => item.id === serviceId);
+  if (!service || service.clienteId !== clientId) {
+    throw new Error("La conversacion no pertenece a tu equipo");
+  }
+  return service;
+}
+
+export async function setJefeConversationMode(
+  serviceId: string,
+  clientId: string,
+  iaActiva: boolean,
+) {
+  try {
+    await assertOwnedServiceAndClient(serviceId, clientId);
+    await apiFetch(`/telegram-conversations/chat/${clientId}/toggle-ai`, {
+      method: "POST",
+      body: JSON.stringify({ iaActiva }),
+    });
+    return { success: true as const };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false as const,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo cambiar el control de la conversacion",
+    };
+  }
+}
+
+export async function sendJefeConversationMessage(
+  serviceId: string,
+  clientId: string,
+  message: string,
+) {
+  try {
+    const service = await assertOwnedServiceAndClient(serviceId, clientId);
+    if (service.iaActiva) {
+      throw new Error("Toma la conversacion antes de responder");
+    }
+    const data = await apiFetch<ConversationMessage>(
+      `/telegram-conversations/service/${serviceId}/messages`,
+      {
+        method: "POST",
+        body: JSON.stringify({ message: message.trim() }),
+      },
+    );
+    return { success: true as const, data };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false as const,
+      error:
+        error instanceof Error ? error.message : "No se pudo enviar el mensaje",
+    };
+  }
+}
+
 export async function getJefeCashObligations(): Promise<CashObligationSummary> {
   await requireJefe();
   return apiFetch<CashObligationSummary>(
