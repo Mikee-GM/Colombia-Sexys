@@ -1,6 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, Max, Min } from 'class-validator';
+import { IsInt, IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 export class ExtendServiceDto {
   /**
@@ -13,4 +13,15 @@ export class ExtendServiceDto {
   @Min(1)
   @Max(12)
   horas: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Monto acordado para la extensión; puede diferir de la sugerencia',
+    example: 2500,
+  })
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  montoAcordado?: number;
 }

@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -22,6 +23,22 @@ export class SelectTransportDto {
 export class UberFareDto {
   @Type(() => Number)
   @IsNumber()
+  @Min(0.01)
+  amount: number;
+}
+
+export class ExternalTransportDetailsDto {
+  @IsString()
+  @MaxLength(50)
+  platform: string;
+
+  @IsString()
+  @IsUrl({ require_protocol: true })
+  @MaxLength(2000)
+  sharedLink: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   amount: number;
 }

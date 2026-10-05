@@ -303,11 +303,22 @@ export class EmployeePortalController {
       servicioId,
       userId,
       dto.horas,
+      false,
+      dto.montoAcordado,
     );
     return {
       id: servicio.id,
       duracionPactadaHoras: servicio.duracionPactadaHoras,
     };
+  }
+
+  @Post('services/:servicioId/panic')
+  @HttpCode(201)
+  activarPanico(
+    @PortalUser() userId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    return this.servicesService.activatePanic(servicioId, userId);
   }
 
   /**

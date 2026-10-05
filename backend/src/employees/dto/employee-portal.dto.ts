@@ -43,6 +43,7 @@ export interface EmployeePortalActiveService {
   accionesDisponibles: EmployeeOperationAction[];
   aceptacionExpiraAt?: string | null;
   duracionHoras: number;
+  tarifaHora: number;
   metodoPago: string;
   horaInicio?: string | null;
   horaFinEstimada?: string | null;
@@ -75,6 +76,8 @@ export interface EmployeePortalActiveService {
     choferNombre?: string;
     /** Captura del Uber, cuando el jefe ya la subio. */
     uberScreenshotUrl?: string;
+    externalPlatform?: string;
+    externalSharedLink?: string;
   } | null;
 }
 

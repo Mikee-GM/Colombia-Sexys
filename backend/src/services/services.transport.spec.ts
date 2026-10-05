@@ -49,6 +49,7 @@ describe('ServicesService transport settlement', () => {
       (item) => item.operationalState ?? operationStateFromLegacy(item),
     ),
     transition: jest.fn().mockResolvedValue(undefined),
+    recordEvent: jest.fn().mockResolvedValue(undefined),
   };
 
   /*
@@ -90,6 +91,7 @@ describe('ServicesService transport settlement', () => {
     extrasServicioRepository: {},
     serviceParticipantsRepository: {},
     serviceOperations,
+    notificationsService: { notificar: jest.fn().mockResolvedValue(1) },
   });
 
   beforeEach(() => jest.clearAllMocks());
@@ -265,6 +267,44 @@ describe('ServicesService transport settlement', () => {
       service.updateUberStatus('trip', 'boss', 'uber_en_route'),
     ).rejects.toThrow('Primero registra la tarifa');
     expect(viajesRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('registra plataforma, enlace y costo externo sin finalizar el viaje', async () => {
+    viajesRepository.findOne.mockResolvedValue({
+      id: 'trip',
+      servicioId: 'service',
+      tipo: 'ida',
+      estado: 'aceptado',
+      proveedorTransporte: 'uber',
+      servicio: {
+        jefeId: 'boss',
+        empleadaId: 'employee',
+        empleada: { usuarioId: 'employee-user', usuario: {} },
+      },
+    });
+    usuariosRepository.findOneBy.mockResolvedValue({ id: 'boss', rol: 'jefe' });
+
+    await service.registerExternalTransportDetails('trip', 'boss', {
+      platform: 'DiDi',
+      sharedLink: 'https://example.test/trip/123',
+      amount: 175.5,
+    });
+
+    expect(viajesRepository.update).toHaveBeenCalledWith('trip', {
+      externalPlatform: 'DiDi',
+      externalSharedLink: 'https://example.test/trip/123',
+      tarifa: 175.5,
+    });
+    expect(viajesRepository.update).not.toHaveBeenCalledWith(
+      'trip',
+      expect.objectContaining({ estado: 'finalizado' }),
+    );
+    expect(serviceOperations.recordEvent).toHaveBeenCalledWith(
+      'service',
+      'EXTERNAL_TRANSPORT_DETAILS_REGISTERED',
+      { userId: 'boss', type: 'jefe' },
+      expect.objectContaining({ platform: 'DiDi', cost: 175.5 }),
+    );
   });
 
   /*

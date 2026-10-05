@@ -1205,6 +1205,7 @@ export class EmployeesService {
           ? new Date(activeOrUpcoming.employeeAcceptanceExpiresAt).toISOString()
           : null,
         duracionHoras: duration,
+        tarifaHora: Number(activeOrUpcoming.precioBaseHoraPactado ?? 0),
         metodoPago: activeOrUpcoming.metodoPago,
         horaInicio: startTime?.toISOString() || null,
         horaFinEstimada: endTime?.toISOString() || null,
@@ -1240,6 +1241,8 @@ export class EmployeesService {
               // La captura del Uber: con transporte externo es lo unico que
               // le dice en que coche se sube. Llegaba solo por Telegram.
               uberScreenshotUrl: activeTrip.uberScreenshotUrl || undefined,
+              externalPlatform: activeTrip.externalPlatform || undefined,
+              externalSharedLink: activeTrip.externalSharedLink || undefined,
             }
           : null,
       };

@@ -129,12 +129,15 @@ export class ServiceOperationsService {
     type: string,
     actor: OperationActor,
     payload: Record<string, unknown> = {},
+    manager?: EntityManager,
   ): Promise<ServiceOperationEvent> {
-    const service = await this.services.findOne({ where: { id: serviceId } });
+    const services = manager?.getRepository(Servicios) ?? this.services;
+    const events = manager?.getRepository(ServiceOperationEvent) ?? this.events;
+    const service = await services.findOne({ where: { id: serviceId } });
     if (!service) throw new NotFoundException('Servicio no encontrado');
     const state = this.currentState(service);
-    return this.events.save(
-      this.events.create({
+    return events.save(
+      events.create({
         serviceId,
         type,
         fromState: state,

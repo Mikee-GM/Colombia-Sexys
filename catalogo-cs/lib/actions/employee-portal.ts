@@ -787,6 +787,7 @@ export async function pedirProrroga(
 export async function extenderMiServicio(
   servicioId: string,
   horas: number,
+  montoAcordado: number,
   token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
@@ -799,7 +800,7 @@ export async function extenderMiServicio(
           ...(await portalHeaders(token)),
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ horas }),
+        body: JSON.stringify({ horas, montoAcordado }),
       },
     );
     if (!response.ok) {
@@ -812,6 +813,36 @@ export async function extenderMiServicio(
     return { success: true };
   } catch (error: any) {
     console.error("Error al extender el servicio:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexión con el servidor",
+    };
+  }
+}
+
+export async function activarPanicoServicio(
+  servicioId: string,
+  token?: string,
+): Promise<{ success: boolean; eventId?: string; error?: string }> {
+  try {
+    const response = await fetch(
+      portalUrl(`/employee-portal/services/${servicioId}/panic`, token),
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: await portalHeaders(token),
+      },
+    );
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        success: false,
+        error: body.message || "No se pudo registrar la emergencia",
+      };
+    }
+    return { success: true, eventId: body.eventId };
+  } catch (error: any) {
+    console.error("Error al activar el botón de pánico:", error);
     return {
       success: false,
       error: error.message || "Error de conexión con el servidor",

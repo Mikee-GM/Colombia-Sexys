@@ -65,6 +65,7 @@ import { TransportOperationsService } from '../transport-operations/transport-op
 import type { InlineKeyboardButton } from 'telegraf/types';
 import { ServiceOperationsService } from './operations/service-operations.service';
 import type { ServiceOperationAction } from './operations/service-operation-state';
+import { ExtensionesServicio } from '../service-extensions/entities/service-extension.entity';
 
 /**
  * Si una persona del equipo puede hacerse cargo de algo ahora.
@@ -3244,6 +3245,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     actorUserId: string,
     horas: number,
     forceByBoss: boolean = false,
+    montoAcordado?: number,
   ): Promise<Servicios> {
     if (!Number.isInteger(horas) || horas < 1 || horas > 12) {
       throw new BadRequestException('La extensión debe ser de 1 a 12 horas');
@@ -3251,7 +3253,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const servicio = await this.serviciosRepository.findOne({
       where: { id: servicioId },
-      relations: { empleada: { usuario: true } },
+      relations: { cliente: true, empleada: { usuario: true } },
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
     if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
@@ -3261,26 +3263,61 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException('Este servicio ya no está activo');
     }
 
-    const duracionPrevia = Number(servicio.duracionPactadaHoras);
-    const resultado = await this.serviciosRepository
-      .createQueryBuilder()
-      .update(Servicios)
-      .set({
-        duracionPactadaHoras: duracionPrevia + horas,
-        // Se reabre el aviso para que vuelva a preguntar 15 minutos antes del
-        // nuevo final.
-        notificacionExtensionEnviada: false,
-      })
-      .where(
-        'id = :servicioId AND estado = :estado AND duracion_pactada_horas = :duracionPrevia',
-        { servicioId, estado: 'en_curso', duracionPrevia },
-      )
-      .execute();
-    if ((resultado.affected ?? 0) === 0) {
-      throw new ConflictException(
-        'La duración del servicio cambió mientras tanto; vuelve a intentarlo',
+    const montoSugerido = Number(servicio.precioBaseHoraPactado ?? 0) * horas;
+    const montoRegistrado = montoAcordado ?? montoSugerido;
+    if (!Number.isFinite(montoRegistrado) || montoRegistrado <= 0) {
+      throw new BadRequestException(
+        'El monto de la extensión debe ser mayor que cero',
       );
     }
+
+    const duracionPrevia = Number(servicio.duracionPactadaHoras);
+    await this.serviciosRepository.manager.transaction(async (manager) => {
+      const serviceRepository = manager.getRepository(Servicios);
+      const extensionRepository = manager.getRepository(ExtensionesServicio);
+      const resultado = await serviceRepository
+        .createQueryBuilder()
+        .update(Servicios)
+        .set({
+          duracionPactadaHoras: duracionPrevia + horas,
+          // Se reabre el aviso para que vuelva a preguntar 15 minutos antes del
+          // nuevo final.
+          notificacionExtensionEnviada: false,
+          endingSoonNotifiedAt: null,
+        })
+        .where(
+          'id = :servicioId AND estado = :estado AND duracion_pactada_horas = :duracionPrevia',
+          { servicioId, estado: 'en_curso', duracionPrevia },
+        )
+        .execute();
+      if ((resultado.affected ?? 0) === 0) {
+        throw new ConflictException(
+          'La duración del servicio cambió mientras tanto; vuelve a intentarlo',
+        );
+      }
+
+      await extensionRepository.save(
+        extensionRepository.create({
+          servicioId,
+          horasAgregadas: horas,
+          montoAgregado: montoRegistrado,
+          aceptadaPor: 'empleada',
+        }),
+      );
+      await this.serviceOperations.recordEvent(
+        servicioId,
+        'SERVICE_EXTENDED',
+        { userId: actorUserId, type: forceByBoss ? 'jefe' : 'empleada' },
+        {
+          hoursAdded: horas,
+          previousDurationHours: duracionPrevia,
+          newDurationHours: duracionPrevia + horas,
+          suggestedAmount: montoSugerido,
+          agreedAmount: montoRegistrado,
+        },
+        manager,
+      );
+    });
 
     await this.recalculateScheduledSuccessor(servicioId);
     this.realtimeEventsService.emitToJefes({
@@ -3288,12 +3325,118 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       empleadaId: servicio.empleadaId,
       activeServiceId: servicio.id,
     });
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'service_extended',
+      data: {
+        serviceId: servicio.id,
+        hoursAdded: horas,
+        agreedAmount: montoRegistrado,
+      },
+    });
+    await this.avisar(servicio.jefeId, {
+      titulo: 'Servicio extendido',
+      cuerpo: `Se agregaron ${horas} hora${horas === 1 ? '' : 's'} al servicio.`,
+      url: '/jefe',
+      tag: `extension-${servicio.id}`,
+    });
+    if (servicio.cliente?.telegramChatId) {
+      try {
+        await this.bot.telegram.sendMessage(
+          servicio.cliente.telegramChatId,
+          `La extensión de ${horas} hora${horas === 1 ? '' : 's'} quedó registrada.`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo avisar al cliente de la extensión: ${describeError(error)}`,
+        );
+      }
+    }
 
     // Se relee porque los totales los recalcula un trigger de la base.
     return (
       (await this.serviciosRepository.findOne({ where: { id: servicioId } })) ??
       servicio
     );
+  }
+
+  /** Registra primero la emergencia en el núcleo; los canales solo notifican. */
+  async activatePanic(
+    servicioId: string,
+    actorUserId: string,
+  ): Promise<{ eventId: string; registeredAt: Date }> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: { empleada: { usuario: true }, jefe: true },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (servicio.empleada?.usuarioId !== actorUserId) {
+      throw new ForbiddenException('Este servicio no es tuyo');
+    }
+    const state = this.serviceOperations.currentState(servicio);
+    if (state !== 'en_curso') {
+      throw new ConflictException(
+        'El botón de pánico solo está disponible durante un servicio activo',
+      );
+    }
+
+    const registeredAt = new Date();
+    const event = await this.serviceOperations.recordEvent(
+      servicio.id,
+      'SERVICE_PANIC_ACTIVATED',
+      { userId: actorUserId, type: 'empleada' },
+      {
+        priority: 'critical',
+        registeredAt: registeredAt.toISOString(),
+        operationalState: state,
+        location: {
+          lat: servicio.empleada?.ubicacionLat ?? null,
+          lng: servicio.empleada?.ubicacionLng ?? null,
+          updatedAt: servicio.empleada?.ultimaUbicacionAt ?? null,
+        },
+        serviceLocation: {
+          name: servicio.locationNameSnapshot ?? null,
+          address: servicio.locationAddressSnapshot ?? null,
+          room: servicio.habitacion ?? null,
+        },
+      },
+    );
+    const notification = {
+      type: 'SERVICE_PANIC_ACTIVATED',
+      priority: 'critical',
+      data: {
+        serviceId: servicio.id,
+        eventId: event.id,
+        employeeId: servicio.empleadaId,
+        registeredAt,
+      },
+    };
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, notification);
+    this.realtimeEventsService.emitToEmployee(
+      servicio.empleadaId,
+      notification,
+    );
+    await this.avisar(servicio.jefeId, {
+      titulo: 'EMERGENCIA EN SERVICIO',
+      cuerpo: 'La empleada activó el botón de pánico. Abre el servicio ahora.',
+      url: '/jefe',
+      tag: `panico-${servicio.id}`,
+      requireInteraction: true,
+    });
+    const bossChatId =
+      servicio.jefe?.grupoTelegramId ?? servicio.jefe?.telegramChatId;
+    if (bossChatId) {
+      try {
+        await this.bot.telegram.sendMessage(
+          bossChatId,
+          `🚨 EMERGENCIA registrada en el servicio ${servicio.id}. Revisa el panel inmediatamente.`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `No se pudo enviar el aviso auxiliar de pánico: ${describeError(error)}`,
+        );
+      }
+    }
+    return { eventId: event.id, registeredAt };
   }
 
   async dispatchScheduledTrip(
@@ -4994,6 +5137,28 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         registradoPor: actor,
       }),
     );
+    await this.serviceOperations.recordEvent(
+      servicio.id,
+      'SERVICE_EXTRA_ADDED',
+      {
+        userId: input.actorUserId,
+        type: input.forceByBoss ? 'jefe' : 'empleada',
+      },
+      {
+        catalogExtraId: extra.id,
+        participantId,
+        chargedAmount: input.precioCobrado ?? extra.precio,
+        paymentMethod: input.metodoPago,
+      },
+    );
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'service_extra_added',
+      data: {
+        serviceId: servicio.id,
+        amount: input.precioCobrado ?? extra.precio,
+        paymentMethod: input.metodoPago,
+      },
+    });
 
     // Se relee porque el total del servicio lo recalcula un trigger al insertar.
     const actualizado =
@@ -6191,6 +6356,76 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
     });
     return trip;
+  }
+
+  async registerExternalTransportDetails(
+    tripId: string,
+    actorId: string,
+    input: { platform: string; sharedLink: string; amount: number },
+  ): Promise<Viajes> {
+    const platform = input.platform.trim();
+    const sharedLink = input.sharedLink.trim();
+    if (!platform) {
+      throw new BadRequestException('Indica la plataforma de transporte');
+    }
+    if (
+      !Number.isFinite(input.amount) ||
+      input.amount <= 0 ||
+      Math.abs(Math.round(input.amount * 100) - input.amount * 100) > 1e-8
+    ) {
+      throw new BadRequestException(
+        'El costo debe ser positivo y tener máximo dos decimales',
+      );
+    }
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(sharedLink);
+    } catch {
+      throw new BadRequestException('El enlace compartido no es válido');
+    }
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new BadRequestException('El enlace debe usar http o https');
+    }
+
+    const trip = await this.getAuthorizedUberTrip(tripId, actorId);
+    if (['finalizado', 'cancelado'].includes(trip.estado)) {
+      throw new ConflictException(
+        'Los datos externos ya no pueden cambiarse en un viaje cerrado',
+      );
+    }
+    await this.viajesRepository.update(trip.id, {
+      externalPlatform: platform.slice(0, 50),
+      externalSharedLink: sharedLink,
+      tarifa: input.amount,
+    });
+    await this.serviceOperations.recordEvent(
+      trip.servicioId,
+      'EXTERNAL_TRANSPORT_DETAILS_REGISTERED',
+      { userId: actorId, type: 'jefe' },
+      {
+        tripId: trip.id,
+        tripType: trip.tipo,
+        platform: platform.slice(0, 50),
+        sharedLink,
+        cost: input.amount,
+      },
+    );
+    this.realtimeEventsService.emitToEmployee(trip.servicio.empleadaId, {
+      type: 'external_transport_updated',
+      data: { serviceId: trip.servicioId, tripId: trip.id },
+    });
+    await this.avisar(trip.servicio.empleada?.usuarioId, {
+      titulo: `Transporte en ${platform.slice(0, 50)}`,
+      cuerpo: 'Los datos de tu viaje ya están disponibles en el portal.',
+      url: '/empleada/servicio',
+      tag: `transporte-${trip.id}`,
+      requireInteraction: true,
+    });
+    return Object.assign(trip, {
+      externalPlatform: platform.slice(0, 50),
+      externalSharedLink: sharedLink,
+      tarifa: input.amount,
+    });
   }
 
   /**

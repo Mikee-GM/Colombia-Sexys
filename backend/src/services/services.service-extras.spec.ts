@@ -95,6 +95,9 @@ describe('ServicesService extras de servicio', () => {
       extrasCatalogoRepository,
       extrasServicioRepository,
       serviceParticipantsRepository: participantsRepository,
+      serviceOperations: {
+        recordEvent: jest.fn().mockResolvedValue(undefined),
+      },
     });
   });
 

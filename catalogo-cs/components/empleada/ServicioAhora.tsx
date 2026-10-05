@@ -17,6 +17,7 @@ import FinalizarServicio from "@/components/empleada/FinalizarServicio";
 import IniciarServicio from "@/components/empleada/IniciarServicio";
 import ExtenderServicio from "@/components/empleada/ExtenderServicio";
 import MarcarLista from "@/components/empleada/MarcarLista";
+import BotonPanico from "@/components/empleada/BotonPanico";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { EmployeePortalActiveService } from "@/lib/types";
@@ -206,6 +207,18 @@ export default function ServicioAhora({
           </a>
         )}
 
+        {!enlaceAPantallaPropia && servicio.transporte?.externalSharedLink && (
+          <a
+            href={servicio.transporte.externalSharedLink}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-center gap-2 rounded-xl border border-[#C5A55A]/50 bg-[#C5A55A]/10 px-4 py-3 text-sm font-bold text-[#E8D5A3]"
+          >
+            Abrir viaje en {servicio.transporte.externalPlatform ?? "app"}
+            <ArrowRight size={16} />
+          </a>
+        )}
+
         {enlaceAPantallaPropia && (
           <Link
             href="/empleada/servicio"
@@ -239,10 +252,17 @@ export default function ServicioAhora({
           <AgregarExtra servicioId={servicio.id} token={token} />
         )}
         {!enlaceAPantallaPropia && acciones.has("extender_servicio") && (
-          <ExtenderServicio servicioId={servicio.id} token={token} />
+          <ExtenderServicio
+            servicioId={servicio.id}
+            tarifaHora={servicio.tarifaHora}
+            token={token}
+          />
         )}
         {!enlaceAPantallaPropia && acciones.has("finalizar_servicio") && (
           <FinalizarServicio servicioId={servicio.id} token={token} />
+        )}
+        {!enlaceAPantallaPropia && acciones.has("activar_panico") && (
+          <BotonPanico servicioId={servicio.id} token={token} />
         )}
       </div>
     </section>

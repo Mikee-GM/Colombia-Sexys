@@ -211,6 +211,8 @@ export type Trip = {
     | "rechazado"
     | "cancelado";
   proveedorTransporte: "interno" | "uber";
+  externalPlatform?: string | null;
+  externalSharedLink?: string | null;
   zona?: TripZone;
   tarifa: string | number;
   telegramUberFileId?: string | null;
@@ -722,6 +724,7 @@ export type EmployeePortalActiveService = {
   >;
   aceptacionExpiraAt?: string | null;
   duracionHoras: number;
+  tarifaHora: number;
   metodoPago: string;
   horaInicio?: string | null;
   horaFinEstimada?: string | null;
@@ -751,6 +754,8 @@ export type EmployeePortalActiveService = {
     choferNombre?: string;
     /** Captura del Uber, cuando el jefe ya la subio. */
     uberScreenshotUrl?: string;
+    externalPlatform?: string;
+    externalSharedLink?: string;
   } | null;
 };
 
