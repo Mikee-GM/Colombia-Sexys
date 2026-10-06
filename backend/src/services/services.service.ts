@@ -2167,11 +2167,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       type: 'system' | 'jefe' | 'empleada' | 'chofer' | 'admin';
     },
   ): Promise<void> {
-    let service = await this.serviciosRepository.findOne({
+    const service = await this.serviciosRepository.findOne({
       where: { id: serviceId },
     });
     if (!service) throw new NotFoundException('Servicio no encontrado');
-    let state = this.serviceOperations.currentState(service);
+    const state = this.serviceOperations.currentState(service);
 
     if (progress === 'en_route') {
       const expected =
@@ -6122,7 +6122,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         trip.tarifa = provider === 'uber' ? 0 : this.driverPayoutFor(servicio);
         trip.driverPayout =
           provider === 'uber' ? 0 : this.driverPayoutFor(servicio);
-        servicio.transporteAgendado = provider === 'interno' ? 'chofer' : 'uber';
+        servicio.transporteAgendado =
+          provider === 'interno' ? 'chofer' : 'uber';
         await manager.save(Viajes, trip);
 
         if (trip.tipo === 'regreso') {
@@ -6451,8 +6452,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             const assigned = await manager.findOne(Viajes, {
               where: {
                 servicioId: service.id,
-                tipo:
-                  state === 'transporte_ida_asignado' ? 'ida' : 'regreso',
+                tipo: state === 'transporte_ida_asignado' ? 'ida' : 'regreso',
               },
             });
             if (assigned) return { trip: assigned, service, dispatch: false };

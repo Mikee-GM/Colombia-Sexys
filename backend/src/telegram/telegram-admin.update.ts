@@ -744,7 +744,6 @@ export class TelegramAdminUpdate {
       const options: any = { parse_mode: 'Markdown' };
       const inlineButtons: any[] = [];
 
-
       if (accept && viajeId && !empleadaTelegramChatId) {
         if (esperandoAlistado) {
           inlineButtons.push([

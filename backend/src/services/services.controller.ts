@@ -444,10 +444,7 @@ export class ServicesController {
 
   @Post(':id/internal-transport')
   assignInternalTransport(@Param('id') serviceId: string, @Req() req: any) {
-    return this.servicesService.assignInternalTransport(
-      serviceId,
-      req.user.id,
-    );
+    return this.servicesService.assignInternalTransport(serviceId, req.user.id);
   }
 
   // Bandeja del dinero de transporte que se gasto en servicios cancelados y

@@ -359,10 +359,19 @@ describe('ServicesService transport settlement', () => {
   });
 
   it.each([
-    [{ platform: '', sharedLink: 'https://example.test/trip', amount: 10 }, 'plataforma'],
+    [
+      { platform: '', sharedLink: 'https://example.test/trip', amount: 10 },
+      'plataforma',
+    ],
     [{ platform: 'Uber', sharedLink: '', amount: 10 }, 'enlace'],
-    [{ platform: 'Uber', sharedLink: 'https://example.test/trip', amount: 0 }, 'costo'],
-    [{ platform: 'Uber', sharedLink: 'http://example.test/trip', amount: 10 }, 'HTTPS'],
+    [
+      { platform: 'Uber', sharedLink: 'https://example.test/trip', amount: 0 },
+      'costo',
+    ],
+    [
+      { platform: 'Uber', sharedLink: 'http://example.test/trip', amount: 10 },
+      'HTTPS',
+    ],
   ])('rechaza transporte externo sin %s', async (input) => {
     await expect(
       service.assignExternalTransport('service', 'boss', input),
