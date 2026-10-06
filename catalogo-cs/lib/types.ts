@@ -371,10 +371,40 @@ export type ConversationMessage = {
   servicioId: string | null;
   groupRequestId?: string | null;
   bookingSessionId?: string | null;
+  intendedEmployeeId?: string | null;
   emisor: "ia" | "jefe" | "cliente" | "sistema";
   mensaje: string;
   iaActiva?: boolean;
   enviadoAt: string;
+};
+
+export type PreServiceConversation = {
+  conversationId: string;
+  bookingSessionId: string;
+  client: {
+    id: string;
+    name: string | null;
+    telegramId: string | null;
+  };
+  intendedEmployee: {
+    id: string;
+    name: string;
+  } | null;
+  service: null;
+  messages: ConversationMessage[];
+  mode: "AI_ACTIVE" | "HUMAN_ACTIVE";
+  lastMessage: string;
+  lastAt: string;
+  needsReply: boolean;
+  createdAt: string;
+  bookingData: {
+    durationHours: number | null;
+    openEndedDuration: boolean;
+    paymentMethod: string | null;
+    locationName: string | null;
+    locationAddress: string | null;
+    locationNotes: string | null;
+  };
 };
 
 export type CashObligation = {

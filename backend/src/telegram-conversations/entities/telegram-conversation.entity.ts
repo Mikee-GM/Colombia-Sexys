@@ -3,11 +3,13 @@ import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { Clientes } from '../../clients/entities/client.entity';
 import { Servicios } from '../../services/entities/service.entity';
 import { GroupServiceRequest } from '../../group-services/entities/group-service-request.entity';
+import { Empleadas } from '../../employees/entities/employee.entity';
 
 @Index('idx_conversaciones_cliente', ['clienteId'], {})
 @Index('idx_conversaciones_enviado_at', ['enviadoAt'], {})
 @Index('conversaciones_telegram_pkey', ['id'], { unique: true })
 @Index('idx_conversaciones_servicio', ['servicioId'], {})
+@Index('idx_conversaciones_intended_employee', ['intendedEmployeeId'], {})
 @Entity('conversaciones_telegram', { schema: 'public' })
 export class ConversacionesTelegram {
   @Column('uuid', {
@@ -40,6 +42,9 @@ export class ConversacionesTelegram {
 
   @Column('uuid', { name: 'group_request_id', nullable: true })
   groupRequestId: string | null;
+
+  @Column('uuid', { name: 'intended_employee_id', nullable: true })
+  intendedEmployeeId: string | null;
 
   @Column('enum', {
     name: 'emisor',
@@ -94,4 +99,8 @@ export class ConversacionesTelegram {
   })
   @JoinColumn([{ name: 'group_request_id', referencedColumnName: 'id' }])
   groupRequest: GroupServiceRequest | null;
+
+  @ManyToOne(() => Empleadas, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn([{ name: 'intended_employee_id', referencedColumnName: 'id' }])
+  intendedEmployee: Empleadas | null;
 }

@@ -82,7 +82,7 @@ describe('ServicesService transport settlement', () => {
     disciplineService: {},
     uploadService,
     // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
-    empleadasRepository: {},
+    empleadasRepository: { findOne: jest.fn() },
     clientesRepository: {},
     telegramSessionRepository: {},
     // catalogo de extras, extras cobrados y participantes: solo los usa
@@ -270,40 +270,175 @@ describe('ServicesService transport settlement', () => {
   });
 
   it('registra plataforma, enlace y costo externo sin finalizar el viaje', async () => {
-    viajesRepository.findOne.mockResolvedValue({
+    const serviceRow = {
+      id: 'service',
+      jefeId: 'boss',
+      empleadaId: 'employee',
+      operationalState: 'esperando_transporte_ida',
+    };
+    const tripRow = {
       id: 'trip',
       servicioId: 'service',
       tipo: 'ida',
       estado: 'aceptado',
       proveedorTransporte: 'uber',
-      servicio: {
-        jefeId: 'boss',
-        empleadaId: 'employee',
-        empleada: { usuarioId: 'employee-user', usuario: {} },
-      },
+      externalPlatform: null,
+      externalSharedLink: null,
+      tarifa: 0,
+      fareConfirmedAt: null,
+      choferId: null,
+    };
+    const serviceRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        setLock: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(serviceRow),
+      })),
+    };
+    const manager = {
+      getRepository: jest.fn(() => serviceRepository),
+      findOneBy: jest
+        .fn()
+        .mockResolvedValueOnce({ id: 'boss', rol: 'jefe' })
+        .mockResolvedValueOnce({
+          id: 'employee',
+          usuarioId: 'employee-user',
+          jefeId: 'boss',
+          jefeSecundarioId: null,
+        }),
+      findOne: jest.fn().mockResolvedValue(tripRow),
+      create: jest.fn((_entity, value) => value),
+      save: jest.fn((_entity, value) => value),
+    };
+    (serviciosRepository as any).manager = {
+      transaction: jest.fn((callback) => callback(manager)),
+    };
+    (service as any).empleadasRepository.findOne = jest.fn().mockResolvedValue({
+      usuario: { telegramChatId: null },
     });
-    usuariosRepository.findOneBy.mockResolvedValue({ id: 'boss', rol: 'jefe' });
 
-    await service.registerExternalTransportDetails('trip', 'boss', {
+    await service.assignExternalTransport('service', 'boss', {
       platform: 'DiDi',
       sharedLink: 'https://example.test/trip/123',
       amount: 175.5,
     });
 
-    expect(viajesRepository.update).toHaveBeenCalledWith('trip', {
-      externalPlatform: 'DiDi',
-      externalSharedLink: 'https://example.test/trip/123',
-      tarifa: 175.5,
-    });
-    expect(viajesRepository.update).not.toHaveBeenCalledWith(
-      'trip',
-      expect.objectContaining({ estado: 'finalizado' }),
+    expect(manager.save).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        externalPlatform: 'DiDi',
+        externalSharedLink: 'https://example.test/trip/123',
+        tarifa: 175.5,
+        fareConfirmedAt: expect.any(Date),
+      }),
     );
-    expect(serviceOperations.recordEvent).toHaveBeenCalledWith(
+    expect(serviceOperations.transition).toHaveBeenCalledWith(
       'service',
-      'EXTERNAL_TRANSPORT_DETAILS_REGISTERED',
+      'asignar_transporte_ida',
       { userId: 'boss', type: 'jefe' },
-      expect.objectContaining({ platform: 'DiDi', cost: 175.5 }),
+      expect.objectContaining({
+        eventType: 'EXTERNAL_TRANSPORT_ASSIGNED',
+      }),
+    );
+    serviceRow.operationalState = 'transporte_ida_asignado';
+    manager.findOneBy
+      .mockResolvedValueOnce({ id: 'boss', rol: 'jefe' })
+      .mockResolvedValueOnce({
+        id: 'employee',
+        usuarioId: 'employee-user',
+        jefeId: 'boss',
+        jefeSecundarioId: null,
+      });
+    const saves = manager.save.mock.calls.length;
+    await service.assignExternalTransport('service', 'boss', {
+      platform: 'DiDi',
+      sharedLink: 'https://example.test/trip/123',
+      amount: 175.5,
+    });
+    expect(manager.save).toHaveBeenCalledTimes(saves);
+  });
+
+  it.each([
+    [
+      { platform: '', sharedLink: 'https://example.test/trip', amount: 10 },
+      'plataforma',
+    ],
+    [{ platform: 'Uber', sharedLink: '', amount: 10 }, 'enlace'],
+    [
+      { platform: 'Uber', sharedLink: 'https://example.test/trip', amount: 0 },
+      'costo',
+    ],
+    [
+      { platform: 'Uber', sharedLink: 'http://example.test/trip', amount: 10 },
+      'HTTPS',
+    ],
+  ])('rechaza transporte externo sin %s', async (input) => {
+    await expect(
+      service.assignExternalTransport('service', 'boss', input),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('asigna regreso externo sin crear un paso de captura', async () => {
+    const serviceRow = {
+      id: 'service',
+      jefeId: 'boss',
+      empleadaId: 'employee',
+      operationalState: 'preparando_regreso',
+    };
+    const serviceRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        setLock: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(serviceRow),
+      })),
+    };
+    const manager = {
+      getRepository: jest.fn(() => serviceRepository),
+      findOneBy: jest
+        .fn()
+        .mockResolvedValueOnce({ id: 'boss', rol: 'jefe' })
+        .mockResolvedValueOnce({
+          id: 'employee',
+          usuarioId: 'employee-user',
+          jefeId: 'boss',
+          jefeSecundarioId: null,
+        }),
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((_entity, value) => ({
+        ...value,
+        id: 'return-trip',
+        proveedorTransporte: 'uber',
+      })),
+      save: jest.fn((_entity, value) => value),
+    };
+    (serviciosRepository as any).manager = {
+      transaction: jest.fn((callback) => callback(manager)),
+    };
+    (service as any).empleadasRepository.findOne = jest.fn().mockResolvedValue({
+      usuario: { telegramChatId: null },
+    });
+
+    const result = await service.assignExternalTransport('service', 'boss', {
+      platform: 'Otro',
+      sharedLink: 'https://example.test/return',
+      amount: 88.25,
+    });
+
+    expect(result.id).toBe('return-trip');
+    expect(manager.save).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        externalPlatform: 'Otro',
+        externalSharedLink: 'https://example.test/return',
+        tarifa: 88.25,
+        fareConfirmedAt: expect.any(Date),
+      }),
+    );
+    expect(serviceOperations.transition).toHaveBeenCalledWith(
+      'service',
+      'asignar_transporte_regreso',
+      { userId: 'boss', type: 'jefe' },
+      expect.objectContaining({ eventType: 'EXTERNAL_TRANSPORT_ASSIGNED' }),
     );
   });
 

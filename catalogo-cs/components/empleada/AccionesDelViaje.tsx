@@ -57,9 +57,23 @@ export default function AccionesDelViaje({
   // El viaje de vuelta es otra cosa que la ida y se dice con otras palabras:
   // no "voy en camino" al cliente, sino que ya subio al coche de regreso.
   const deRegreso = transporte.tipo === "regreso";
+  const plataforma = transporte.externalPlatform?.trim() || "";
+  const plataformaNormalizada = plataforma.toLocaleLowerCase();
   const textoEnCamino = deRegreso
-    ? "Ya estoy en el Uber de regreso"
-    : "Ya voy en camino";
+    ? plataformaNormalizada === "uber"
+      ? "Ya estoy en el Uber de regreso"
+      : plataformaNormalizada === "didi"
+        ? "Ya estoy en el DiDi de regreso"
+        : plataforma
+          ? `Ya estoy en ${plataforma}`
+          : "Ya estoy de regreso"
+    : plataformaNormalizada === "uber"
+      ? "Ya estoy en el Uber"
+      : plataformaNormalizada === "didi"
+        ? "Ya estoy en el DiDi"
+        : plataforma
+          ? `Ya estoy en ${plataforma}`
+          : "Ya estoy en camino";
   const textoLlegue = deRegreso ? "Ya llegué a mi casa" : "Ya llegué";
 
   const marcar = () => {

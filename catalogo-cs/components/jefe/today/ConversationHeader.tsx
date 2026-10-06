@@ -1,4 +1,10 @@
-import { ArrowLeft, Bot, ClipboardList, Loader2, UserRound } from "lucide-react";
+import {
+  ArrowLeft,
+  Bot,
+  ClipboardList,
+  Loader2,
+  UserRound,
+} from "lucide-react";
 import type { JefeConversation } from "./today-model";
 
 export default function ConversationHeader({
@@ -42,7 +48,10 @@ export default function ConversationHeader({
           </span>
         </div>
         <p className="mt-0.5 truncate text-[11px] text-zinc-500">
-          {conversation.employeeName} · {conversation.service.estado.replaceAll("_", " ")}
+          {conversation.employeeName} ·{" "}
+          {conversation.service
+            ? conversation.service.estado.replaceAll("_", " ")
+            : "conversación previa al servicio"}
         </p>
       </div>
       <button

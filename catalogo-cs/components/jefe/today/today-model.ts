@@ -1,6 +1,7 @@
 import type {
   ConversationMessage,
   Employee,
+  PreServiceConversation,
   Service,
   ServiceOperationState,
 } from "@/lib/types";
@@ -14,7 +15,9 @@ export type JefeConversation = {
   telegramId: string | null;
   employeeId: string;
   employeeName: string;
-  service: Service;
+  service: Service | null;
+  bookingSessionId: string | null;
+  bookingData: PreServiceConversation["bookingData"] | null;
   relatedServices: Service[];
   messages: ConversationMessage[];
   lastMessage: string;
@@ -70,7 +73,9 @@ function servicePriority(service: Service): number {
 function compareServices(left: Service, right: Service): number {
   const priority = servicePriority(right) - servicePriority(left);
   if (priority !== 0) return priority;
-  return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+  return (
+    new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+  );
 }
 
 function uniqueMessages(messages: ConversationMessage[]) {
@@ -90,6 +95,7 @@ function uniqueMessages(messages: ConversationMessage[]) {
 export function buildJefeConversations(
   services: Service[],
   messagesByService: Record<string, ConversationMessage[]>,
+  preServiceConversations: PreServiceConversation[] = [],
 ): JefeConversation[] {
   const byClient = new Map<string, Service[]>();
 
@@ -100,7 +106,7 @@ export function buildJefeConversations(
     byClient.set(service.clienteId, current);
   }
 
-  return services
+  const serviceConversations = services
     .filter((service) => {
       if (!service.clienteId) return false;
       return (
@@ -115,6 +121,9 @@ export function buildJefeConversations(
       );
       const messages = uniqueMessages(messagesByService[service.id] ?? []);
       const latest = messages[messages.length - 1];
+      const bookingSessionId =
+        messages.find((message) => message.bookingSessionId)
+          ?.bookingSessionId ?? null;
 
       return {
         id: service.id,
@@ -125,6 +134,8 @@ export function buildJefeConversations(
         employeeName:
           service.empleada?.nombreArtistico?.trim() || "Sin asignar",
         service,
+        bookingSessionId,
+        bookingData: null,
         relatedServices,
         messages,
         lastMessage: latest?.mensaje ?? "Sin mensajes",
@@ -133,11 +144,47 @@ export function buildJefeConversations(
         needsReply: latest?.emisor === "cliente",
         unreadCount: 0,
       } satisfies JefeConversation;
-    })
-    .sort(
-      (left, right) =>
-        new Date(right.lastAt).getTime() - new Date(left.lastAt).getTime(),
+    });
+
+  const linkedBookingSessionIds = new Set(
+    serviceConversations
+      .map((conversation) => conversation.bookingSessionId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const draftConversations = preServiceConversations
+    .filter(
+      (conversation) =>
+        !linkedBookingSessionIds.has(conversation.bookingSessionId),
+    )
+    .map(
+      (conversation) =>
+        ({
+          id: `session:${conversation.bookingSessionId}`,
+          clientId: conversation.client.id,
+          clientName: conversation.client.name?.trim() || "Cliente",
+          telegramId: conversation.client.telegramId,
+          employeeId: conversation.intendedEmployee?.id ?? "",
+          employeeName:
+            conversation.intendedEmployee?.name?.trim() || "Sin asignar",
+          service: null,
+          bookingSessionId: conversation.bookingSessionId,
+          bookingData: conversation.bookingData,
+          relatedServices: [
+            ...(byClient.get(conversation.client.id) ?? []),
+          ].sort(compareServices),
+          messages: uniqueMessages(conversation.messages),
+          lastMessage: conversation.lastMessage,
+          lastAt: conversation.lastAt,
+          mode: conversation.mode,
+          needsReply: conversation.needsReply,
+          unreadCount: 0,
+        }) satisfies JefeConversation,
     );
+
+  return [...serviceConversations, ...draftConversations].sort(
+    (left, right) =>
+      new Date(right.lastAt).getTime() - new Date(left.lastAt).getTime(),
+  );
 }
 
 export function filterConversations(
@@ -157,9 +204,11 @@ export function filterConversations(
     if (!matchesSearch) return false;
     if (filter === "unanswered") return conversation.needsReply;
     if (filter === "service")
-      return ACTIVE_STATES.has(conversation.service.estado);
+      return conversation.service
+        ? ACTIVE_STATES.has(conversation.service.estado)
+        : false;
     if (filter === "in_progress")
-      return conversation.service.estado === "en_curso";
+      return conversation.service?.estado === "en_curso";
     return true;
   });
 }
@@ -167,6 +216,9 @@ export function filterConversations(
 export function conversationNeedsAttention(
   conversation: JefeConversation,
 ): boolean {
+  if (!conversation.service) {
+    return conversation.needsReply || conversation.unreadCount > 0;
+  }
   const state =
     conversation.service.operationalState ??
     legacyOperationState(conversation.service);
@@ -199,7 +251,7 @@ export function buildEmployeeNavigation(
     name,
     available,
     hasActiveService: scoped.some(
-      (conversation) => conversation.service.estado === "en_curso",
+      (conversation) => conversation.service?.estado === "en_curso",
     ),
     attentionCount: scoped.filter(conversationNeedsAttention).length,
     conversationCount: scoped.length,
@@ -241,8 +293,8 @@ export function conversationsForEmployee(
 
 function isScheduled(conversation: JefeConversation): boolean {
   return (
-    conversation.service.estado === "agendado" ||
-    conversation.service.tipoAgenda === "programado"
+    conversation.service?.estado === "agendado" ||
+    conversation.service?.tipoAgenda === "programado"
   );
 }
 
@@ -288,7 +340,7 @@ export function buildOperationSections(
       id: "active",
       label: "Servicios activos",
       conversations: take(
-        (conversation) => conversation.service.estado === "en_curso",
+        (conversation) => conversation.service?.estado === "en_curso",
       ),
     },
     {
@@ -337,7 +389,14 @@ export function mergeRealtimeMessage(
 ): JefeConversation[] {
   return conversations
     .map((conversation) => {
-      if (conversation.service.id !== message.servicioId) {
+      const belongsToService =
+        Boolean(conversation.service) &&
+        conversation.service?.id === message.servicioId;
+      const belongsToSession =
+        !conversation.service &&
+        Boolean(conversation.bookingSessionId) &&
+        conversation.bookingSessionId === message.bookingSessionId;
+      if (!belongsToService && !belongsToSession) {
         return conversation;
       }
       if (conversation.messages.some((item) => item.id === message.id)) {
@@ -393,7 +452,9 @@ export function updateConversationMode(
       ? {
           ...conversation,
           mode,
-          service: { ...conversation.service, iaActiva },
+          service: conversation.service
+            ? { ...conversation.service, iaActiva }
+            : null,
         }
       : conversation,
   );

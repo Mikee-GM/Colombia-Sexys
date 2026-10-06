@@ -373,6 +373,12 @@ export interface DatosDeReserva {
   bookingSessionId: string | null;
 }
 
+export function isPreServiceHumanTakeover(
+  session: Pick<SessionData, 'humanTakeover' | 'iaActiva'> | undefined,
+): boolean {
+  return Boolean(session?.humanTakeover || session?.iaActiva === false);
+}
+
 interface BotContext extends Context {
   session?: SessionData;
 }
@@ -3706,6 +3712,7 @@ export class TelegramBookingUpdate {
           clienteId: client.id,
           servicioId: null,
           bookingSessionId: sessionData.bookingSessionId || null,
+          intendedEmployeeId: mainEmployee.id,
           emisor: 'ia',
           mensaje: clientMsg,
           iaActiva: true,
@@ -4118,6 +4125,7 @@ export class TelegramBookingUpdate {
             clienteId: client.id,
             servicioId: null,
             bookingSessionId: sessionData.bookingSessionId || null,
+            intendedEmployeeId: mainEmployee.id,
             emisor: 'ia',
             mensaje: otherMsg,
             iaActiva: true,
@@ -8038,6 +8046,7 @@ export class TelegramBookingUpdate {
                     clienteId: client.id,
                     servicioId: null,
                     bookingSessionId: matched.data.bookingSessionId || null,
+                    intendedEmployeeId: matched.data.empleadaId || null,
                     emisor: 'jefe',
                     mensaje: text,
                     iaActiva: false,
@@ -8323,16 +8332,13 @@ export class TelegramBookingUpdate {
           order: { createdAt: 'DESC' },
         });
 
-        if (
-          !activeService &&
-          (ctx.session?.humanTakeover || ctx.session?.iaActiva === false) &&
-          ctx.session?.bossGroupId &&
-          ctx.session?.bossThreadId
-        ) {
+        if (!activeService && isPreServiceHumanTakeover(ctx.session)) {
           await this.recordDraftConversation(ctx, 'cliente', text);
-          await this.bot.telegram.sendMessage(ctx.session.bossGroupId, text, {
-            message_thread_id: Number(ctx.session.bossThreadId),
-          });
+          if (ctx.session?.bossGroupId && ctx.session?.bossThreadId) {
+            await this.bot.telegram.sendMessage(ctx.session.bossGroupId, text, {
+              message_thread_id: Number(ctx.session.bossThreadId),
+            });
+          }
           return;
         }
 
@@ -9144,6 +9150,7 @@ export class TelegramBookingUpdate {
       this.conversationsRepository.create({
         clienteId: service.clienteId,
         servicioId: service.id,
+        intendedEmployeeId: service.empleadaId,
         emisor: sender,
         mensaje: message,
         iaActiva: service.iaActiva,
@@ -9167,21 +9174,35 @@ export class TelegramBookingUpdate {
       where: { telegramChatId: telegramId },
     });
     if (!client) return;
+    const intendedEmployeeId = ctx.session?.empleadaId ?? null;
+    const intendedEmployee = intendedEmployeeId
+      ? await this.empleadasRepository.findOne({
+          where: { id: intendedEmployeeId },
+          select: { id: true, jefeId: true, jefeSecundarioId: true },
+        })
+      : null;
     const saved = await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: client.id,
         servicioId: null,
         bookingSessionId,
+        intendedEmployeeId,
         emisor: sender,
         mensaje: message,
         iaActiva:
           ctx.session?.iaActiva !== false && !ctx.session?.humanTakeover,
       }),
     );
-    this.realtimeEventsService.emitToJefes({
-      type: 'chat_message',
-      data: saved,
-    });
+    const bossIds = [
+      intendedEmployee?.jefeId,
+      intendedEmployee?.jefeSecundarioId,
+    ].filter((id): id is string => Boolean(id));
+    if (bossIds.length) {
+      this.realtimeEventsService.emitToBosses(bossIds, {
+        type: 'chat_message',
+        data: saved,
+      });
+    }
   }
 
   /**
@@ -9220,6 +9241,7 @@ export class TelegramBookingUpdate {
           clienteId: client.id,
           servicioId,
           bookingSessionId: ctx.session?.bookingSessionId ?? null,
+          intendedEmployeeId: ctx.session?.empleadaId ?? null,
           emisor: 'ia',
           mensaje,
           iaActiva: false,
@@ -9364,7 +9386,11 @@ export class TelegramBookingUpdate {
     if (!messages.length) return;
     await this.conversationsRepository.update(
       { bookingSessionId },
-      { servicioId: service.id, iaActiva: false },
+      {
+        servicioId: service.id,
+        intendedEmployeeId: service.empleadaId,
+        iaActiva: false,
+      },
     );
 
     const transcript = buildConversationTranscript(messages);

@@ -6,7 +6,6 @@ import {
   CalendarClock,
   CheckCircle2,
   Clock3,
-  ImageIcon,
   Wallet,
 } from "lucide-react";
 
@@ -187,26 +186,6 @@ export default function ServicioAhora({
           donde mirarla. Se abre a tamaño completo porque los datos van escritos
           pequeño dentro de la imagen.
         */}
-        {!enlaceAPantallaPropia && servicio.transporte?.uberScreenshotUrl && (
-          <a
-            href={servicio.transporte.uberScreenshotUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block overflow-hidden rounded-xl border border-[#C5A55A]/40"
-          >
-            <span className="flex items-center gap-2 border-b border-[#C5A55A]/25 bg-[#C5A55A]/10 px-3 py-2 text-[11px] font-semibold text-[#E8D5A3]">
-              <ImageIcon size={14} />
-              Datos de tu Uber
-            </span>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={servicio.transporte.uberScreenshotUrl}
-              alt="Captura con los datos del Uber"
-              className="w-full"
-            />
-          </a>
-        )}
-
         {!enlaceAPantallaPropia && servicio.transporte?.externalSharedLink && (
           <a
             href={servicio.transporte.externalSharedLink}
@@ -214,7 +193,7 @@ export default function ServicioAhora({
             rel="noreferrer"
             className="flex items-center justify-center gap-2 rounded-xl border border-[#C5A55A]/50 bg-[#C5A55A]/10 px-4 py-3 text-sm font-bold text-[#E8D5A3]"
           >
-            Abrir viaje en {servicio.transporte.externalPlatform ?? "app"}
+              ABRIR VIAJE · {servicio.transporte.externalPlatform ?? "app"}
             <ArrowRight size={16} />
           </a>
         )}

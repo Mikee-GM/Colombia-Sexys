@@ -107,7 +107,7 @@ describe('flujo de aceptación de la empleada', () => {
       { userId: 'boss-1', type: 'jefe' },
       expect.objectContaining({
         patch: expect.objectContaining({
-          transporteAgendado: 'uber',
+          transporteAgendado: null,
           employeeAcceptanceExpiresAt: new Date('2026-10-05T12:15:00.000Z'),
         }),
       }),
@@ -147,6 +147,7 @@ describe('flujo de aceptación de la empleada', () => {
       'chofer',
       undefined,
       undefined,
+      true,
     );
     expect(transitionMany).toHaveBeenCalledWith(
       'service-1',

@@ -1,11 +1,12 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectBot } from 'nestjs-telegraf';
-import { In, LessThan, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Repository } from 'typeorm';
 import { Context, Telegraf } from 'telegraf';
 import { ConversacionesTelegram } from './entities/telegram-conversation.entity';
 import { Servicios } from '../services/entities/service.entity';
@@ -14,6 +15,16 @@ import { RealtimeEventsService } from '../realtime/realtime.service';
 import { TelegramSession } from '../telegram/entities/telegram-session.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { parseSessionKey } from '../telegram/telegram-session.key';
+import { Empleadas } from '../employees/entities/employee.entity';
+
+type PreServiceBookingData = {
+  durationHours: number | null;
+  openEndedDuration: boolean;
+  paymentMethod: string | null;
+  locationName: string | null;
+  locationAddress: string | null;
+  locationNotes: string | null;
+};
 
 @Injectable()
 export class TelegramConversationsService {
@@ -29,6 +40,108 @@ export class TelegramConversationsService {
     @InjectBot() private readonly bot: Telegraf<Context>,
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
+
+  /**
+   * Conversaciones todavia sin servicio, limitadas por la empleada que el
+   * cliente eligio en el deep-link del catalogo. El ownership se resuelve con
+   * las relaciones persistidas, nunca con ids enviados por el navegador.
+   */
+  async listPreServiceConversations(actor: Usuarios, requestedLimit = 100) {
+    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
+      throw new ForbiddenException('No puedes ver estas conversaciones');
+    }
+
+    const limit = Math.min(Math.max(requestedLimit || 100, 1), 200);
+    const sessionsQuery = this.conversationsRepository
+      .createQueryBuilder('conversation')
+      .leftJoin('conversation.intendedEmployee', 'employee')
+      .select('conversation.bookingSessionId', 'bookingSessionId')
+      .addSelect('MAX(conversation.enviadoAt)', 'lastAt')
+      .where('conversation.bookingSessionId IS NOT NULL')
+      .andWhere('conversation.servicioId IS NULL');
+
+    if (actor.rol === 'jefe') {
+      sessionsQuery
+        .andWhere('conversation.intendedEmployeeId IS NOT NULL')
+        .andWhere(
+          '(employee.jefeId = :actorId OR employee.jefeSecundarioId = :actorId)',
+          { actorId: actor.id },
+        );
+    }
+
+    const sessionRows = await sessionsQuery
+      .groupBy('conversation.bookingSessionId')
+      .orderBy('MAX(conversation.enviadoAt)', 'DESC')
+      .limit(limit)
+      .getRawMany<{ bookingSessionId: string; lastAt: Date }>();
+    const bookingSessionIds = sessionRows.map((row) => row.bookingSessionId);
+    if (!bookingSessionIds.length) return [];
+
+    const messages = await this.conversationsRepository.find({
+      where: {
+        bookingSessionId: In(bookingSessionIds),
+        servicioId: IsNull(),
+      },
+      relations: { cliente: true, intendedEmployee: true },
+      order: { enviadoAt: 'ASC' },
+    });
+    const sessionEntities = await this.telegramSessionRepository
+      .createQueryBuilder('session')
+      .where("session.data->>'bookingSessionId' IN (:...bookingSessionIds)", {
+        bookingSessionIds,
+      })
+      .orderBy('session.updatedAt', 'DESC')
+      .getMany();
+    const sessionDataByBooking = new Map<string, Record<string, unknown>>();
+    for (const entity of sessionEntities) {
+      const data = (entity.data ?? {}) as Record<string, unknown>;
+      const bookingSessionId = this.stringValue(data.bookingSessionId);
+      if (bookingSessionId && !sessionDataByBooking.has(bookingSessionId)) {
+        sessionDataByBooking.set(bookingSessionId, data);
+      }
+    }
+
+    const messagesByBooking = new Map<string, ConversacionesTelegram[]>();
+    for (const message of messages) {
+      if (!message.bookingSessionId) continue;
+      const current = messagesByBooking.get(message.bookingSessionId) ?? [];
+      current.push(message);
+      messagesByBooking.set(message.bookingSessionId, current);
+    }
+
+    return bookingSessionIds.flatMap((bookingSessionId) => {
+      const history = messagesByBooking.get(bookingSessionId) ?? [];
+      const first = history[0];
+      const latest = history.at(-1);
+      if (!first || !latest) return [];
+      const employee = history.find(
+        (message) => message.intendedEmployee,
+      )?.intendedEmployee;
+      const data = sessionDataByBooking.get(bookingSessionId) ?? {};
+      return [
+        {
+          conversationId: bookingSessionId,
+          bookingSessionId,
+          client: {
+            id: first.clienteId,
+            name: first.cliente?.nombreTelegram ?? null,
+            telegramId: first.cliente?.telegramChatId ?? null,
+          },
+          intendedEmployee: employee
+            ? { id: employee.id, name: employee.nombreArtistico }
+            : null,
+          service: null,
+          messages: history,
+          mode: latest.iaActiva ? 'AI_ACTIVE' : 'HUMAN_ACTIVE',
+          lastMessage: latest.mensaje,
+          lastAt: latest.enviadoAt,
+          needsReply: latest.emisor === 'cliente',
+          createdAt: first.enviadoAt,
+          bookingData: this.bookingData(data),
+        },
+      ];
+    });
+  }
 
   async findByService(
     serviceId: string,
@@ -112,8 +225,8 @@ export class TelegramConversationsService {
    * independientemente de si pertenecen a una bookingSessionId o un servicio.
    */
   async listRecentChats(actor: Usuarios, limit = 50, search?: string) {
-    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
-      throw new ConflictException('Solo un admin o jefe puede ver esto');
+    if (actor.rol !== 'admin') {
+      throw new ForbiddenException('Solo un admin puede ver este monitor');
     }
     const take = Math.min(Math.max(limit || 50, 1), 300);
     const query = this.conversationsRepository
@@ -185,8 +298,8 @@ export class TelegramConversationsService {
 
   /** CRM Web: Historial completo de un cliente, sin importar sesión o servicio. */
   async findHistoryByClient(clientId: string, actor: Usuarios) {
-    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
-      throw new ConflictException('Solo un admin o jefe puede ver esto');
+    if (actor.rol !== 'admin') {
+      throw new ForbiddenException('Solo un admin puede ver este monitor');
     }
     return this.conversationsRepository.find({
       where: { cliente: { id: clientId } },
@@ -196,9 +309,7 @@ export class TelegramConversationsService {
 
   /** Historial completo de una conversacion que nunca se convirtio en servicio. */
   async findByBookingSession(bookingSessionId: string, actor: Usuarios) {
-    if (actor.rol !== 'admin') {
-      throw new ConflictException('Solo un admin puede ver esto');
-    }
+    await this.getAuthorizedPreServiceConversation(bookingSessionId, actor);
     return this.conversationsRepository.find({
       where: { bookingSessionId },
       order: { enviadoAt: 'ASC' },
@@ -258,18 +369,17 @@ export class TelegramConversationsService {
     raw: string,
     asIdentity: 'ia' | 'jefe' = 'jefe',
   ) {
-    if (actor.rol !== 'admin') {
-      throw new ConflictException('Solo un admin puede ver esto');
+    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
+      throw new ForbiddenException('No puedes responder esta conversación');
     }
     const message = raw.trim();
     if (!message) throw new ConflictException('El mensaje está vacío');
 
     // Buscar al cliente asociado a esta sesión
-    const conversation = await this.conversationsRepository.findOne({
-      where: { bookingSessionId },
-      relations: { cliente: true },
-      order: { enviadoAt: 'ASC' },
-    });
+    const conversation = await this.getAuthorizedPreServiceConversation(
+      bookingSessionId,
+      actor,
+    );
 
     if (!conversation || !conversation.cliente) {
       throw new NotFoundException(
@@ -277,6 +387,11 @@ export class TelegramConversationsService {
       );
     }
 
+    if (conversation.iaActiva) {
+      throw new ConflictException(
+        'Toma el control de la conversación antes de responder',
+      );
+    }
     const clientChatId = conversation.cliente.telegramChatId;
     if (!clientChatId) {
       throw new ConflictException('El cliente no tiene Telegram vinculado');
@@ -290,12 +405,78 @@ export class TelegramConversationsService {
         clienteId: conversation.clienteId,
         servicioId: null,
         bookingSessionId,
+        intendedEmployeeId: conversation.intendedEmployeeId,
         emisor: asIdentity,
         mensaje: message,
-        iaActiva: conversation.iaActiva,
+        iaActiva: false,
       }),
     );
+    this.emitPreServiceEvent(conversation.intendedEmployee, {
+      type: 'chat_message',
+      data: saved,
+    });
     return saved;
+  }
+
+  async toggleAiByBookingSession(
+    bookingSessionId: string,
+    actor: Usuarios,
+    iaActiva: boolean,
+  ) {
+    const conversation = await this.getAuthorizedPreServiceConversation(
+      bookingSessionId,
+      actor,
+    );
+    const updatedSessions: Array<{ key: string }> =
+      await this.telegramSessionRepository.query(
+        `UPDATE telegram_sessions
+            SET data = jsonb_set(
+                         jsonb_set(COALESCE(data, '{}'::jsonb),
+                                   '{iaActiva}', to_jsonb($2::boolean), true),
+                         '{humanTakeover}', to_jsonb($3::boolean), true
+                       ),
+                version = version + 1,
+                updated_at = now()
+          WHERE data->>'bookingSessionId' = $1
+          RETURNING key`,
+        [bookingSessionId, iaActiva, !iaActiva],
+      );
+    if (!updatedSessions.length) {
+      throw new ConflictException(
+        'La sesión de Telegram ya no está disponible para cambiar el control',
+      );
+    }
+
+    await this.conversationsRepository.update(
+      { bookingSessionId },
+      { iaActiva },
+    );
+    const saved = await this.conversationsRepository.save(
+      this.conversationsRepository.create({
+        clienteId: conversation.clienteId,
+        servicioId: null,
+        bookingSessionId,
+        intendedEmployeeId: conversation.intendedEmployeeId,
+        emisor: 'sistema',
+        mensaje: iaActiva
+          ? 'Conversación devuelta a la IA por el jefe.'
+          : 'Conversación tomada por el jefe.',
+        iaActiva,
+      }),
+    );
+    this.emitPreServiceEvent(conversation.intendedEmployee, {
+      type: 'conversation_mode_changed',
+      data: {
+        bookingSessionId,
+        clientId: conversation.clienteId,
+        mode: iaActiva ? 'AI_ACTIVE' : 'HUMAN_ACTIVE',
+      },
+    });
+    this.emitPreServiceEvent(conversation.intendedEmployee, {
+      type: 'chat_message',
+      data: saved,
+    });
+    return { ok: true, bookingSessionId, iaActiva };
   }
 
   async pauseAi(serviceId: string, actor: Usuarios) {
@@ -346,6 +527,7 @@ export class TelegramConversationsService {
       this.conversationsRepository.create({
         clienteId: service.clienteId,
         servicioId: service.id,
+        intendedEmployeeId: service.empleadaId,
         emisor: sender as any,
         mensaje: message,
         iaActiva: service.iaActiva,
@@ -382,14 +564,73 @@ export class TelegramConversationsService {
     }
     return service;
   }
+
+  private async getAuthorizedPreServiceConversation(
+    bookingSessionId: string,
+    actor: Usuarios,
+  ): Promise<ConversacionesTelegram> {
+    const conversation = await this.conversationsRepository.findOne({
+      where: { bookingSessionId, servicioId: IsNull() },
+      relations: { cliente: true, intendedEmployee: true },
+      order: { enviadoAt: 'DESC' },
+    });
+    if (!conversation) {
+      throw new NotFoundException('Conversación pre-servicio no encontrada');
+    }
+    if (actor.rol === 'admin') return conversation;
+    const employee = conversation.intendedEmployee;
+    if (
+      actor.rol !== 'jefe' ||
+      !employee ||
+      (employee.jefeId !== actor.id && employee.jefeSecundarioId !== actor.id)
+    ) {
+      throw new ForbiddenException(
+        'No puedes acceder a esta conversación pre-servicio',
+      );
+    }
+    return conversation;
+  }
+
+  private emitPreServiceEvent(
+    employee: Empleadas | null,
+    event: Record<string, unknown>,
+  ): void {
+    if (!employee) return;
+    const bossIds = [employee.jefeId, employee.jefeSecundarioId].filter(
+      (id): id is string => Boolean(id),
+    );
+    if (!bossIds.length) return;
+    this.realtimeEvents.emitToBosses(bossIds, event);
+  }
+
+  private bookingData(data: Record<string, unknown>): PreServiceBookingData {
+    return {
+      durationHours: this.numberValue(data.duracionPactadaHoras),
+      openEndedDuration: data.duracionIndefinida === true,
+      paymentMethod: this.stringValue(data.metodoPago),
+      locationName: this.stringValue(data.locationNameSnapshot),
+      locationAddress: this.stringValue(data.locationAddressSnapshot),
+      locationNotes: this.stringValue(data.locationNotas),
+    };
+  }
+
+  private stringValue(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  private numberValue(value: unknown): number | null {
+    const number = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(number) && number > 0 ? number : null;
+  }
+
   async sendAdminMessageByClient(
     clientId: string,
     actor: Usuarios,
     raw: string,
     asIdentity: 'ia' | 'jefe' = 'jefe',
   ) {
-    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
-      throw new ConflictException('Solo un admin o jefe puede ver esto');
+    if (actor.rol !== 'admin') {
+      throw new ForbiddenException('Solo un admin puede usar este monitor');
     }
     const message = raw.trim();
     if (!message) throw new ConflictException('El mensaje está vacío');
@@ -405,6 +646,7 @@ export class TelegramConversationsService {
 
     const latest = await this.conversationsRepository.findOne({
       where: { clienteId: clientId },
+      relations: { intendedEmployee: true },
       order: { enviadoAt: 'DESC' },
     });
     if (!latest || latest.iaActiva) {
@@ -421,12 +663,13 @@ export class TelegramConversationsService {
         clienteId: clientId,
         servicioId: latest.servicioId,
         bookingSessionId: latest.bookingSessionId,
+        intendedEmployeeId: latest.intendedEmployeeId,
         emisor: asIdentity,
         mensaje: message,
         iaActiva: false,
       }),
     );
-    this.realtimeEvents.emitToJefes({
+    this.emitPreServiceEvent(latest.intendedEmployee, {
       type: 'chat_message',
       data: saved,
     });
@@ -434,8 +677,8 @@ export class TelegramConversationsService {
   }
 
   async toggleAiByClient(clientId: string, actor: Usuarios, iaActiva: boolean) {
-    if (actor.rol !== 'admin' && actor.rol !== 'jefe') {
-      throw new ConflictException('Solo un admin o jefe puede ver esto');
+    if (actor.rol !== 'admin') {
+      throw new ForbiddenException('Solo un admin puede usar este monitor');
     }
 
     const cliente = await this.clientesRepository.findOne({
@@ -491,21 +734,28 @@ export class TelegramConversationsService {
       await this.telegramSessionRepository.save(clientSession);
     }
 
+    const latest = await this.conversationsRepository.findOne({
+      where: { clienteId: clientId },
+      relations: { intendedEmployee: true },
+      order: { enviadoAt: 'DESC' },
+    });
+
     // Registrar en el historial para que el UI se entere y quede bitácora
     await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: clientId,
-        servicioId: null,
-        bookingSessionId: null,
+        servicioId: latest?.servicioId ?? null,
+        bookingSessionId: latest?.bookingSessionId ?? null,
+        intendedEmployeeId: latest?.intendedEmployeeId ?? null,
         emisor: 'sistema',
         mensaje: iaActiva
-          ? '🤖 Bot reanudado por el administrador.'
-          : '⏸️ Bot pausado por el administrador.',
+          ? 'Bot reanudado por el administrador.'
+          : 'Bot pausado por el administrador.',
         iaActiva,
       }),
     );
 
-    this.realtimeEvents.emitToJefes({
+    this.emitPreServiceEvent(latest?.intendedEmployee ?? null, {
       type: 'conversation_mode_changed',
       data: {
         clientId,
