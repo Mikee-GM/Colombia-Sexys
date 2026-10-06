@@ -1,9 +1,10 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { TelegramConversationsService } from './telegram-conversations.service';
 
 describe('TelegramConversationsService', () => {
   const queryBuilder = {
     innerJoin: jest.fn().mockReturnThis(),
+    leftJoin: jest.fn().mockReturnThis(),
     select: jest.fn().mockReturnThis(),
     addSelect: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
@@ -14,15 +15,26 @@ describe('TelegramConversationsService', () => {
     limit: jest.fn().mockReturnThis(),
     getRawMany: jest.fn(),
   };
+  const sessionQueryBuilder = {
+    where: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    getMany: jest.fn(),
+  };
   const conversations = {
     create: jest.fn((value) => value),
     save: jest.fn((value) => Promise.resolve({ id: 'message-1', ...value })),
     find: jest.fn(),
     findOne: jest.fn(),
+    update: jest.fn(),
     createQueryBuilder: jest.fn(() => queryBuilder),
   };
   const services = { findOne: jest.fn(), find: jest.fn(), save: jest.fn() };
-  const sessions = { find: jest.fn(), save: jest.fn() };
+  const sessions = {
+    find: jest.fn(),
+    save: jest.fn(),
+    query: jest.fn(),
+    createQueryBuilder: jest.fn(() => sessionQueryBuilder),
+  };
   const clients = { findOne: jest.fn() };
   const bot = { telegram: { sendMessage: jest.fn() } };
   const realtime = {
@@ -50,7 +62,15 @@ describe('TelegramConversationsService', () => {
     realtimeEvents: realtime,
   });
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    queryBuilder.getRawMany.mockResolvedValue([]);
+    sessionQueryBuilder.getMany.mockResolvedValue([]);
+    conversations.find.mockResolvedValue([]);
+    conversations.findOne.mockResolvedValue(null);
+    conversations.update.mockResolvedValue({ affected: 0 });
+    sessions.query.mockResolvedValue([]);
+  });
 
   it('envía, persiste y emite un mensaje del jefe asignado', async () => {
     services.findOne.mockResolvedValue({
@@ -139,24 +159,44 @@ describe('TelegramConversationsService', () => {
     ]);
   });
 
-  it('impide que un jefe lea una conversación sin concretar', async () => {
+  it('impide que otro jefe lea una conversación pre-servicio', async () => {
+    conversations.findOne.mockResolvedValue({
+      bookingSessionId: 'booking-1',
+      cliente: { id: 'client-1' },
+      intendedEmployee: {
+        id: 'employee-1',
+        jefeId: 'boss-owner',
+        jefeSecundarioId: null,
+      },
+    });
+
     await expect(
       subject.findByBookingSession('booking-1', {
-        id: 'boss-1',
+        id: 'boss-other',
         rol: 'jefe',
       } as any),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(conversations.find).not.toHaveBeenCalled();
   });
 
-  it('devuelve el historial completo de una conversación sin concretar', async () => {
+  it('devuelve al jefe autorizado el historial pre-servicio completo', async () => {
+    conversations.findOne.mockResolvedValue({
+      bookingSessionId: 'booking-1',
+      cliente: { id: 'client-1' },
+      intendedEmployee: {
+        id: 'employee-1',
+        jefeId: 'boss-1',
+        jefeSecundarioId: 'boss-2',
+      },
+    });
     conversations.find.mockResolvedValue([
       { id: 'm1', mensaje: 'hola' },
       { id: 'm2', mensaje: 'buenas' },
     ]);
 
     const result = await subject.findByBookingSession('booking-1', {
-      id: 'admin-1',
-      rol: 'admin',
+      id: 'boss-2',
+      rol: 'jefe',
     } as any);
 
     expect(conversations.find).toHaveBeenCalledWith({
@@ -213,7 +253,7 @@ describe('TelegramConversationsService', () => {
     await expect(
       subject.sendAdminMessageByClient(
         'client-1',
-        { id: 'boss-1', rol: 'jefe' } as any,
+        { id: 'admin-1', rol: 'admin' } as any,
         'Hola',
       ),
     ).rejects.toThrow('Toma el control');
@@ -234,7 +274,7 @@ describe('TelegramConversationsService', () => {
 
     await subject.sendAdminMessageByClient(
       'client-1',
-      { id: 'boss-1', rol: 'jefe' } as any,
+      { id: 'admin-1', rol: 'admin' } as any,
       'Hola',
     );
 
@@ -261,7 +301,7 @@ describe('TelegramConversationsService', () => {
 
     await subject.toggleAiByClient(
       'client-1',
-      { id: 'boss-1', rol: 'jefe' } as any,
+      { id: 'admin-1', rol: 'admin' } as any,
       false,
     );
 
@@ -274,5 +314,173 @@ describe('TelegramConversationsService', () => {
         }),
       }),
     );
+  });
+
+  it('lista el pre-servicio bajo la empleada para su jefe principal', async () => {
+    queryBuilder.getRawMany.mockResolvedValue([
+      {
+        bookingSessionId: 'booking-1',
+        lastAt: new Date('2026-10-06T10:01:00Z'),
+      },
+    ]);
+    conversations.find.mockResolvedValue([
+      {
+        id: 'message-1',
+        clienteId: 'client-1',
+        bookingSessionId: 'booking-1',
+        servicioId: null,
+        emisor: 'cliente',
+        mensaje: 'Hola, quiero información',
+        iaActiva: true,
+        enviadoAt: new Date('2026-10-06T10:01:00Z'),
+        cliente: { nombreTelegram: 'Carlos', telegramChatId: '999' },
+        intendedEmployee: {
+          id: 'employee-1',
+          nombreArtistico: 'Andrea',
+          jefeId: 'boss-1',
+          jefeSecundarioId: 'boss-2',
+        },
+      },
+    ]);
+    sessionQueryBuilder.getMany.mockResolvedValue([
+      {
+        updatedAt: new Date('2026-10-06T10:01:00Z'),
+        data: {
+          bookingSessionId: 'booking-1',
+          duracionPactadaHoras: 2,
+          metodoPago: 'efectivo',
+        },
+      },
+    ]);
+
+    const result = await subject.listPreServiceConversations({
+      id: 'boss-1',
+      rol: 'jefe',
+    } as any);
+
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      '(employee.jefeId = :actorId OR employee.jefeSecundarioId = :actorId)',
+      { actorId: 'boss-1' },
+    );
+    expect(result).toEqual([
+      expect.objectContaining({
+        bookingSessionId: 'booking-1',
+        service: null,
+        intendedEmployee: { id: 'employee-1', name: 'Andrea' },
+        bookingData: expect.objectContaining({
+          durationHours: 2,
+          paymentMethod: 'efectivo',
+        }),
+      }),
+    ]);
+  });
+
+  it('aplica takeover pre-servicio, sincroniza la sesión y emite solo al equipo', async () => {
+    conversations.findOne.mockResolvedValue({
+      clienteId: 'client-1',
+      intendedEmployeeId: 'employee-1',
+      cliente: { id: 'client-1', telegramChatId: '999' },
+      intendedEmployee: {
+        id: 'employee-1',
+        jefeId: 'boss-1',
+        jefeSecundarioId: 'boss-2',
+      },
+    });
+    sessions.query.mockResolvedValue([{ key: '999:999' }]);
+
+    await subject.toggleAiByBookingSession(
+      'booking-1',
+      { id: 'boss-1', rol: 'jefe' } as any,
+      false,
+    );
+
+    expect(sessions.query).toHaveBeenCalledWith(
+      expect.stringContaining("data->>'bookingSessionId' = $1"),
+      ['booking-1', false, true],
+    );
+    expect(conversations.update).toHaveBeenCalledWith(
+      { bookingSessionId: 'booking-1' },
+      { iaActiva: false },
+    );
+    expect(realtime.emitToBosses).toHaveBeenCalledWith(
+      ['boss-1', 'boss-2'],
+      expect.objectContaining({ type: 'conversation_mode_changed' }),
+    );
+    expect(realtime.emitToJefes).not.toHaveBeenCalled();
+  });
+
+  it('permite responder en pre-servicio solo tras el takeover', async () => {
+    conversations.findOne.mockResolvedValue({
+      clienteId: 'client-1',
+      intendedEmployeeId: 'employee-1',
+      iaActiva: false,
+      cliente: { id: 'client-1', telegramChatId: '999' },
+      intendedEmployee: {
+        id: 'employee-1',
+        jefeId: 'boss-1',
+        jefeSecundarioId: null,
+      },
+    });
+
+    const result = await subject.sendAdminMessageToSession(
+      'booking-1',
+      { id: 'boss-1', rol: 'jefe' } as any,
+      ' Buenas tardes ',
+    );
+
+    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
+      '999',
+      'Buenas tardes',
+    );
+    expect(conversations.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingSessionId: 'booking-1',
+        intendedEmployeeId: 'employee-1',
+        iaActiva: false,
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({ mensaje: 'Buenas tardes', iaActiva: false }),
+    );
+  });
+
+  it('devuelve el pre-servicio a la IA sin abrir acceso global', async () => {
+    conversations.findOne.mockResolvedValue({
+      clienteId: 'client-1',
+      intendedEmployeeId: 'employee-1',
+      cliente: { id: 'client-1', telegramChatId: '999' },
+      intendedEmployee: {
+        id: 'employee-1',
+        jefeId: 'boss-1',
+        jefeSecundarioId: null,
+      },
+    });
+    sessions.query.mockResolvedValue([{ key: '999:999' }]);
+
+    await subject.toggleAiByBookingSession(
+      'booking-1',
+      { id: 'boss-1', rol: 'jefe' } as any,
+      true,
+    );
+
+    expect(sessions.query).toHaveBeenCalledWith(expect.any(String), [
+      'booking-1',
+      true,
+      false,
+    ]);
+    expect(realtime.emitToJefes).not.toHaveBeenCalled();
+  });
+
+  it('reserva los monitores globales de clientes para admin', async () => {
+    await expect(
+      subject.listRecentChats({ id: 'boss-1', rol: 'jefe' } as any),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      subject.toggleAiByClient(
+        'client-1',
+        { id: 'boss-1', rol: 'jefe' } as any,
+        false,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

@@ -1,9 +1,6 @@
 import { Bot, UserRound } from "lucide-react";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
-import {
-  presentServiceState,
-  type JefeConversation,
-} from "./today-model";
+import { presentServiceState, type JefeConversation } from "./today-model";
 
 function conversationTime(value: string) {
   const date = new Date(value);
@@ -38,6 +35,7 @@ function scheduledTime(value: string | null | undefined) {
 
 function operationSummary(conversation: JefeConversation) {
   const service = conversation.service;
+  if (!service) return "Servicio todavía no creado";
   if (service.estado === "en_curso") {
     const startedAt = scheduledTime(service.horaInicioServicio);
     return startedAt

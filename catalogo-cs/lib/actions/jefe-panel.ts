@@ -7,6 +7,7 @@ import type {
   ConversationMessage,
   Employee,
   GroupServiceRequest,
+  PreServiceConversation,
   Service,
 } from "@/lib/types";
 import { redirect } from "next/navigation";
@@ -38,6 +39,7 @@ export type JefeTodaySnapshot = {
   employees: Employee[];
   services: Service[];
   messagesByService: Record<string, ConversationMessage[]>;
+  preServiceConversations: PreServiceConversation[];
 };
 
 async function getCompleteServiceMessages(
@@ -58,7 +60,9 @@ async function getCompleteServiceMessages(
     cursor = page.nextCursor;
     if (cursor) {
       if (visitedCursors.has(cursor)) {
-        throw new Error("La paginación del historial devolvió un cursor repetido");
+        throw new Error(
+          "La paginación del historial devolvió un cursor repetido",
+        );
       }
       visitedCursors.add(cursor);
     }
@@ -79,16 +83,19 @@ async function getCompleteServiceMessages(
  */
 export async function getJefeTodaySnapshot(): Promise<JefeTodaySnapshot> {
   const jefe = await requireJefe();
-  const [allEmployees, services] = await Promise.all([
+  const [allEmployees, services, preServiceConversations] = await Promise.all([
     apiFetch<Employee[]>("/employees"),
     apiFetch<Service[]>("/services"),
+    apiFetch<PreServiceConversation[]>(
+      "/telegram-conversations/pre-service?limit=100",
+    ),
   ]);
   const employees = allEmployees.filter(
     (employee) =>
       employee.jefeId === jefe.id || employee.jefeSecundarioId === jefe.id,
   );
-  const withConversation = services.filter(
-    (service) => Boolean(service.clienteId),
+  const withConversation = services.filter((service) =>
+    Boolean(service.clienteId),
   );
   const entries = await Promise.all(
     withConversation.map(
@@ -101,6 +108,7 @@ export async function getJefeTodaySnapshot(): Promise<JefeTodaySnapshot> {
     employees,
     services,
     messagesByService: Object.fromEntries(entries),
+    preServiceConversations,
   };
 }
 
@@ -116,16 +124,24 @@ async function assertOwnedServiceAndClient(
   return service;
 }
 
-export async function setJefeConversationMode(
-  serviceId: string,
-  clientId: string,
-  iaActiva: boolean,
-) {
+export async function setJefeConversationMode(input: {
+  serviceId: string | null;
+  bookingSessionId: string | null;
+  clientId: string;
+  iaActiva: boolean;
+}) {
   try {
-    await assertOwnedServiceAndClient(serviceId, clientId);
-    await apiFetch(`/telegram-conversations/chat/${clientId}/toggle-ai`, {
+    const { serviceId, bookingSessionId, clientId, iaActiva } = input;
+    const endpoint = serviceId
+      ? `/telegram-conversations/service/${serviceId}/${iaActiva ? "resume-ai" : "pause-ai"}`
+      : bookingSessionId
+        ? `/telegram-conversations/session/${bookingSessionId}/toggle-ai`
+        : null;
+    if (!endpoint) throw new Error("Conversacion sin referencia operable");
+    if (serviceId) await assertOwnedServiceAndClient(serviceId, clientId);
+    await apiFetch(endpoint, {
       method: "POST",
-      body: JSON.stringify({ iaActiva }),
+      body: serviceId ? undefined : JSON.stringify({ iaActiva }),
     });
     return { success: true as const };
   } catch (error) {
@@ -140,23 +156,29 @@ export async function setJefeConversationMode(
   }
 }
 
-export async function sendJefeConversationMessage(
-  serviceId: string,
-  clientId: string,
-  message: string,
-) {
+export async function sendJefeConversationMessage(input: {
+  serviceId: string | null;
+  bookingSessionId: string | null;
+  clientId: string;
+  mode: "AI_ACTIVE" | "HUMAN_ACTIVE";
+  message: string;
+}) {
   try {
-    const service = await assertOwnedServiceAndClient(serviceId, clientId);
-    if (service.iaActiva) {
+    const { serviceId, bookingSessionId, clientId, mode, message } = input;
+    if (mode !== "HUMAN_ACTIVE") {
       throw new Error("Toma la conversacion antes de responder");
     }
-    const data = await apiFetch<ConversationMessage>(
-      `/telegram-conversations/service/${serviceId}/messages`,
-      {
-        method: "POST",
-        body: JSON.stringify({ message: message.trim() }),
-      },
-    );
+    if (serviceId) await assertOwnedServiceAndClient(serviceId, clientId);
+    const endpoint = serviceId
+      ? `/telegram-conversations/service/${serviceId}/messages`
+      : bookingSessionId
+        ? `/telegram-conversations/session/${bookingSessionId}/messages`
+        : null;
+    if (!endpoint) throw new Error("Conversacion sin referencia operable");
+    const data = await apiFetch<ConversationMessage>(endpoint, {
+      method: "POST",
+      body: JSON.stringify({ message: message.trim() }),
+    });
     return { success: true as const, data };
   } catch (error) {
     if (isRedirectError(error)) throw error;

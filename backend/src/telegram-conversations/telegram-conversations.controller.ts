@@ -61,6 +61,17 @@ export class TelegramConversationsController {
     );
   }
 
+  @Get('pre-service')
+  listPreServiceConversations(
+    @Query('limit') limit: string | undefined,
+    @Req() req: any,
+  ) {
+    return this.conversationsService.listPreServiceConversations(
+      req.user,
+      limit ? Number(limit) : 100,
+    );
+  }
+
   @Get('session/:bookingSessionId')
   findByBookingSession(
     @Param('bookingSessionId') bookingSessionId: string,
@@ -120,6 +131,33 @@ export class TelegramConversationsController {
       req.user,
       dto.message,
       dto.asIdentity || 'jefe',
+    );
+  }
+
+  @Post('session/:bookingSessionId/messages')
+  sendSessionMessage(
+    @Param('bookingSessionId') bookingSessionId: string,
+    @Body() dto: SessionAdminMessageDto,
+    @Req() req: any,
+  ) {
+    return this.conversationsService.sendAdminMessageToSession(
+      bookingSessionId,
+      req.user,
+      dto.message,
+      'jefe',
+    );
+  }
+
+  @Post('session/:bookingSessionId/toggle-ai')
+  toggleSessionAi(
+    @Param('bookingSessionId') bookingSessionId: string,
+    @Body() dto: ToggleAiDto,
+    @Req() req: any,
+  ) {
+    return this.conversationsService.toggleAiByBookingSession(
+      bookingSessionId,
+      req.user,
+      dto.iaActiva,
     );
   }
 

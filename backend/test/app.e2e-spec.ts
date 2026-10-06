@@ -27,6 +27,8 @@ import {
 } from '../src/services/operations/service-operation-state';
 import { ServicesService } from '../src/services/services.service';
 import { TelegramConversationsService } from '../src/telegram-conversations/telegram-conversations.service';
+import { TelegramBookingUpdate } from '../src/telegram/telegram-booking.update';
+import { parseTelegramStartPayload } from '../src/telegram/telegram-start-payload';
 import { TelegramService } from '../src/telegram/telegram.service';
 import { Usuarios } from '../src/users/entities/user.entity';
 import { CreateServiceOperationsCore1810000000000 } from '../src/migrations/1810000000000-CreateServiceOperationsCore';
@@ -37,12 +39,16 @@ const IDS = {
   employeeUser: '22222222-2222-4222-8222-222222222222',
   otherEmployeeUser: '22222222-2222-4222-8222-333333333333',
   employee: '33333333-3333-4333-8333-333333333333',
+  otherEmployee: '33333333-3333-4333-8333-444444444444',
   client: '44444444-4444-4444-8444-444444444444',
   driverUser: '55555555-5555-4555-8555-555555555555',
   driver: '66666666-6666-4666-8666-666666666666',
   service: '77777777-7777-4777-8777-777777777777',
   extra: '88888888-8888-4888-8888-888888888888',
   timerService: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  draftService: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  booking: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  otherBooking: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
 } as const;
 
 const telegramMethods = new Map<PropertyKey, jest.Mock>();
@@ -119,6 +125,7 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
   let services: ServicesService;
   let driverTrips: DriverTripsService;
   let conversations: TelegramConversationsService;
+  let bookingUpdate: TelegramBookingUpdate;
 
   beforeAll(async () => {
     moduleFixture = await Test.createTestingModule({ imports: [AppModule] })
@@ -165,6 +172,7 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     services = moduleFixture.get(ServicesService);
     driverTrips = moduleFixture.get(DriverTripsService);
     conversations = moduleFixture.get(TelegramConversationsService);
+    bookingUpdate = moduleFixture.get(TelegramBookingUpdate);
   });
 
   afterAll(async () => {
@@ -204,9 +212,19 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
         (id, usuario_id, nombre_real, nombre_artistico, slug_catalogo,
          precio_base_hora, disponible, catalogo_activo, ubicacion_lat,
          ubicacion_lng, ultima_ubicacion_at, jefe_id, modo_bot)
-       VALUES ($1, $2, 'Empleada E2E', 'Luna E2E', 'luna-e2e', 200,
-               true, true, 4.7109000, -74.0721000, now(), $3, false)`,
-      [IDS.employee, IDS.employeeUser, IDS.boss],
+       VALUES
+        ($1, $2, 'Empleada E2E', 'Luna E2E', 'luna-e2e', 200,
+         true, true, 4.7109000, -74.0721000, now(), $3, false),
+        ($4, $5, 'Otra Empleada E2E', 'Sol E2E', 'sol-e2e', 220,
+         true, true, 4.7209000, -74.0821000, now(), $6, false)`,
+      [
+        IDS.employee,
+        IDS.employeeUser,
+        IDS.boss,
+        IDS.otherEmployee,
+        IDS.otherEmployeeUser,
+        IDS.otherBoss,
+      ],
     );
     await dataSource.query(
       `INSERT INTO "clientes" (id, telegram_chat_id, nombre_telegram)
@@ -581,32 +599,91 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     );
   });
 
-  it('bloquea la IA durante takeover, conserva historial y permite reactivarla', async () => {
+  it('opera de extremo a extremo una conversación pre-servicio con ownership', async () => {
+    const api = '/api/v1';
+    await dataSource.query('DELETE FROM servicios');
+    expect(
+      parseTelegramStartPayload(`/start contratar_${IDS.employee}`),
+    ).toEqual({ type: 'employee_hire', employeeId: IDS.employee });
     await dataSource.query(
       `INSERT INTO telegram_sessions (key, data)
-       VALUES ('9001:9001', '{"iaActiva":true,"humanTakeover":false}'::jsonb)`,
+       VALUES ('9001:9001', jsonb_build_object(
+         'bookingSessionId', $1::text,
+         'empleadaId', $2::text,
+         'iaActiva', true,
+         'humanTakeover', false,
+         'duracionPactadaHoras', 2,
+         'metodoPago', 'efectivo'
+       ))`,
+      [IDS.booking, IDS.employee],
     );
-    await dataSource.query(
-      `INSERT INTO conversaciones_telegram
-        (cliente_id, servicio_id, emisor, mensaje, ia_activa)
-       VALUES ($1, $2, 'cliente', 'Primer mensaje E2E', true)`,
-      [IDS.client, IDS.service],
-    );
-    const boss = { id: IDS.boss, rol: 'jefe' } as never;
-    await expect(
-      conversations.sendAdminMessageByClient(
-        IDS.client,
-        boss,
-        'Respuesta prematura',
-      ),
-    ).rejects.toBeInstanceOf(ConflictException);
 
-    const takeover = await conversations.toggleAiByClient(
-      IDS.client,
-      boss,
-      false,
+    await (bookingUpdate as any).recordDraftConversation(
+      {
+        from: { id: 9001 },
+        session: {
+          bookingSessionId: IDS.booking,
+          empleadaId: IDS.employee,
+          iaActiva: true,
+          humanTakeover: false,
+        },
+      },
+      'cliente',
+      'Primer mensaje pre-servicio E2E',
     );
-    expect(takeover.iaActiva).toBe(false);
+
+    expect(realtime.emitToBosses).toHaveBeenCalledWith(
+      [IDS.boss],
+      expect.objectContaining({
+        type: 'chat_message',
+        data: expect.objectContaining({
+          servicioId: null,
+          bookingSessionId: IDS.booking,
+          intendedEmployeeId: IDS.employee,
+        }),
+      }),
+    );
+    expect(realtime.emitToJefes).not.toHaveBeenCalled();
+
+    const bossToken = await accessToken(IDS.boss);
+    const otherBossToken = await accessToken(IDS.otherBoss);
+    const ownerList = await request(app!.getHttpServer())
+      .get(`${api}/telegram-conversations/pre-service`)
+      .set('Authorization', `Bearer ${bossToken}`)
+      .expect(200);
+    expect(ownerList.body).toEqual([
+      expect.objectContaining({
+        bookingSessionId: IDS.booking,
+        service: null,
+        intendedEmployee: { id: IDS.employee, name: 'Luna E2E' },
+        bookingData: expect.objectContaining({
+          durationHours: 2,
+          paymentMethod: 'efectivo',
+        }),
+      }),
+    ]);
+    await request(app!.getHttpServer())
+      .get(`${api}/telegram-conversations/pre-service`)
+      .set('Authorization', `Bearer ${otherBossToken}`)
+      .expect(200)
+      .expect([]);
+    await request(app!.getHttpServer())
+      .get(`${api}/telegram-conversations/session/${IDS.booking}`)
+      .set('Authorization', `Bearer ${otherBossToken}`)
+      .expect(403);
+    const history = await request(app!.getHttpServer())
+      .get(`${api}/telegram-conversations/session/${IDS.booking}`)
+      .set('Authorization', `Bearer ${bossToken}`)
+      .expect(200);
+    expect(history.body).toEqual([
+      expect.objectContaining({ mensaje: 'Primer mensaje pre-servicio E2E' }),
+    ]);
+
+    await request(app!.getHttpServer())
+      .post(`${api}/telegram-conversations/session/${IDS.booking}/toggle-ai`)
+      .set('Authorization', `Bearer ${bossToken}`)
+      .send({ iaActiva: false })
+      .expect(201);
     const [pausedSession] = await dataSource.query(
       `SELECT data FROM telegram_sessions WHERE key = '9001:9001'`,
     );
@@ -614,27 +691,29 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       iaActiva: false,
       humanTakeover: true,
     });
-    expect((await service()).iaActiva).toBe(false);
 
-    await conversations.sendAdminMessageByClient(
-      IDS.client,
-      boss,
-      'Respuesta humana E2E',
+    await request(app!.getHttpServer())
+      .post(`${api}/telegram-conversations/session/${IDS.booking}/messages`)
+      .set('Authorization', `Bearer ${bossToken}`)
+      .send({ message: 'Respuesta humana pre-servicio E2E' })
+      .expect(201);
+    const [persistedReply] = await dataSource.query(
+      `SELECT emisor, mensaje, ia_activa
+         FROM conversaciones_telegram
+        WHERE booking_session_id = $1 AND mensaje = $2`,
+      [IDS.booking, 'Respuesta humana pre-servicio E2E'],
     );
-    let history = await conversations.findHistoryByClient(IDS.client, boss);
-    expect(history.map((row) => row.mensaje)).toEqual(
-      expect.arrayContaining([
-        'Primer mensaje E2E',
-        '⏸️ Bot pausado por el administrador.',
-        'Respuesta humana E2E',
-      ]),
-    );
-    expect(history.at(-1)).toMatchObject({
+    expect(persistedReply).toMatchObject({
       emisor: 'jefe',
-      iaActiva: false,
+      mensaje: 'Respuesta humana pre-servicio E2E',
+      ia_activa: false,
     });
 
-    await conversations.toggleAiByClient(IDS.client, boss, true);
+    await request(app!.getHttpServer())
+      .post(`${api}/telegram-conversations/session/${IDS.booking}/toggle-ai`)
+      .set('Authorization', `Bearer ${bossToken}`)
+      .send({ iaActiva: true })
+      .expect(201);
     const [resumedSession] = await dataSource.query(
       `SELECT data FROM telegram_sessions WHERE key = '9001:9001'`,
     );
@@ -642,16 +721,84 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       iaActiva: true,
       humanTakeover: false,
     });
-    expect((await service()).iaActiva).toBe(true);
-    history = await conversations.findHistoryByClient(IDS.client, boss);
-    expect(history.at(-1)).toMatchObject({
-      emisor: 'sistema',
-      iaActiva: true,
-    });
-    expect(telegram.sendMessage).toHaveBeenCalledWith(
-      '9001',
-      'Respuesta humana E2E',
+
+    await insertService(IDS.draftService, 'preparacion');
+    await (bookingUpdate as any).attachAndReplayDraftConversation(
+      IDS.booking,
+      await service(IDS.draftService),
+      '-100-e2e',
     );
+    const afterLink = await request(app!.getHttpServer())
+      .get(`${api}/telegram-conversations/pre-service`)
+      .set('Authorization', `Bearer ${bossToken}`)
+      .expect(200);
+    expect(afterLink.body).toEqual([]);
+    const linkedHistory = await request(app!.getHttpServer())
+      .get(`${api}/telegram-conversations/service/${IDS.draftService}`)
+      .set('Authorization', `Bearer ${bossToken}`)
+      .expect(200);
+    expect(
+      linkedHistory.body.messages.map(
+        (row: { mensaje: string }) => row.mensaje,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        'Primer mensaje pre-servicio E2E',
+        'Respuesta humana pre-servicio E2E',
+      ]),
+    );
+    const [{ count }] = await dataSource.query(
+      `SELECT COUNT(DISTINCT booking_session_id)::int AS count
+         FROM conversaciones_telegram
+        WHERE booking_session_id = $1`,
+      [IDS.booking],
+    );
+    expect(count).toBe(1);
+  });
+
+  it('prohíbe el acceso cruzado a una conversación de otra empleada y equipo', async () => {
+    await dataSource.query(
+      `INSERT INTO telegram_sessions (key, data)
+       VALUES ('9001:other', jsonb_build_object(
+         'bookingSessionId', $1::text,
+         'empleadaId', $2::text,
+         'iaActiva', true,
+         'humanTakeover', false
+       ))`,
+      [IDS.otherBooking, IDS.otherEmployee],
+    );
+    await (bookingUpdate as any).recordDraftConversation(
+      {
+        from: { id: 9001 },
+        session: {
+          bookingSessionId: IDS.otherBooking,
+          empleadaId: IDS.otherEmployee,
+          iaActiva: true,
+        },
+      },
+      'cliente',
+      'Mensaje del otro equipo E2E',
+    );
+
+    const bossToken = await accessToken(IDS.boss);
+    const otherBossToken = await accessToken(IDS.otherBoss);
+    await request(app!.getHttpServer())
+      .get(`/api/v1/telegram-conversations/session/${IDS.otherBooking}`)
+      .set('Authorization', `Bearer ${bossToken}`)
+      .expect(403);
+    const otherTeamList = await request(app!.getHttpServer())
+      .get('/api/v1/telegram-conversations/pre-service')
+      .set('Authorization', `Bearer ${otherBossToken}`)
+      .expect(200);
+    expect(otherTeamList.body).toEqual([
+      expect.objectContaining({
+        bookingSessionId: IDS.otherBooking,
+        intendedEmployee: {
+          id: IDS.otherEmployee,
+          name: 'Sol E2E',
+        },
+      }),
+    ]);
   });
 
   describe('superficie HTTP del flujo operativo', () => {

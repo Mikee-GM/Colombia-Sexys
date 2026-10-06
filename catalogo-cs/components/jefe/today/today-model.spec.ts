@@ -1,4 +1,8 @@
-import type { ConversationMessage, Service } from "@/lib/types";
+import type {
+  ConversationMessage,
+  PreServiceConversation,
+  Service,
+} from "@/lib/types";
 import {
   buildEmployeeNavigation,
   buildJefeConversations,
@@ -84,47 +88,86 @@ function message(
   };
 }
 
+function preService(
+  overrides: Partial<PreServiceConversation> = {},
+): PreServiceConversation {
+  return {
+    conversationId: "booking-1",
+    bookingSessionId: "booking-1",
+    client: { id: "client-1", name: "Carlos", telegramId: "123" },
+    intendedEmployee: { id: "employee-1", name: "Andrea" },
+    service: null,
+    messages: [
+      {
+        ...message("draft-1", "cliente", "2026-10-06T10:00:00.000Z"),
+        servicioId: null,
+        bookingSessionId: "booking-1",
+        intendedEmployeeId: "employee-1",
+      },
+    ],
+    mode: "AI_ACTIVE",
+    lastMessage: "Hola, quiero información",
+    lastAt: "2026-10-06T10:00:00.000Z",
+    needsReply: true,
+    createdAt: "2026-10-06T10:00:00.000Z",
+    bookingData: {
+      durationHours: 2,
+      openEndedDuration: false,
+      paymentMethod: "efectivo",
+      locationName: null,
+      locationAddress: null,
+      locationNotes: null,
+    },
+    ...overrides,
+  };
+}
+
 describe("modelo puro de Hoy", () => {
   it("separa cada servicio autorizado aunque pertenezca al mismo cliente", () => {
     const older = service({ id: "service-older", estado: "finalizado" });
     const current = service({ id: "service-current", estado: "en_curso" });
-    const conversations = buildJefeConversations(
-      [older, current],
-      {
-        "service-older": [
-          { ...message("old", "cliente", "2026-10-05T09:00:00.000Z"), servicioId: "service-older" },
-        ],
-        "service-current": [
-          { ...message("new", "ia", "2026-10-05T11:00:00.000Z"), servicioId: "service-current" },
-        ],
-      },
-    );
+    const conversations = buildJefeConversations([older, current], {
+      "service-older": [
+        {
+          ...message("old", "cliente", "2026-10-05T09:00:00.000Z"),
+          servicioId: "service-older",
+        },
+      ],
+      "service-current": [
+        {
+          ...message("new", "ia", "2026-10-05T11:00:00.000Z"),
+          servicioId: "service-current",
+        },
+      ],
+    });
 
     expect(conversations).toHaveLength(2);
-    expect(conversations[0].service.id).toBe("service-current");
-    expect(conversations[0].messages.map((item) => item.id)).toEqual([
-      "new",
-    ]);
-    expect(conversations[1].service.id).toBe("service-older");
+    expect(conversations[0].service?.id).toBe("service-current");
+    expect(conversations[0].messages.map((item) => item.id)).toEqual(["new"]);
+    expect(conversations[1].service?.id).toBe("service-older");
     expect(conversations[1].messages.map((item) => item.id)).toEqual(["old"]);
   });
 
   it("filtra por atencion y agrupa por empleada", () => {
-    const conversations = buildJefeConversations(
-      [service()],
-      { "service-1": [message("m1", "cliente", "2026-10-05T11:00:00.000Z")] },
-    );
+    const conversations = buildJefeConversations([service()], {
+      "service-1": [message("m1", "cliente", "2026-10-05T11:00:00.000Z")],
+    });
 
-    expect(filterConversations(conversations, "unanswered", "carlos")).toHaveLength(1);
-    expect(filterConversations(conversations, "in_progress", "")).toHaveLength(0);
-    expect(groupConversationsByEmployee(conversations)[0].employeeName).toBe("Andrea");
+    expect(
+      filterConversations(conversations, "unanswered", "carlos"),
+    ).toHaveLength(1);
+    expect(filterConversations(conversations, "in_progress", "")).toHaveLength(
+      0,
+    );
+    expect(groupConversationsByEmployee(conversations)[0].employeeName).toBe(
+      "Andrea",
+    );
   });
 
   it("suma no leidos solo para mensajes entrantes fuera de la conversacion activa", () => {
-    const initial = buildJefeConversations(
-      [service()],
-      { "service-1": [message("m1", "ia", "2026-10-05T11:00:00.000Z")] },
-    );
+    const initial = buildJefeConversations([service()], {
+      "service-1": [message("m1", "ia", "2026-10-05T11:00:00.000Z")],
+    });
     const next = mergeRealtimeMessage(
       initial,
       message("m2", "cliente", "2026-10-05T11:01:00.000Z"),
@@ -139,27 +182,30 @@ describe("modelo puro de Hoy", () => {
   it("aplica un evento SSE solo a la operacion indicada", () => {
     const first = service({ id: "service-1", estado: "en_curso" });
     const second = service({ id: "service-2", estado: "finalizado" });
-    const initial = buildJefeConversations(
-      [first, second],
+    const initial = buildJefeConversations([first, second], {
+      "service-1": [message("m1", "ia", "2026-10-05T11:00:00.000Z")],
+      "service-2": [
+        {
+          ...message("m2", "ia", "2026-10-05T10:00:00.000Z"),
+          servicioId: "service-2",
+        },
+      ],
+    });
+    const next = mergeRealtimeMessage(
+      initial,
       {
-        "service-1": [message("m1", "ia", "2026-10-05T11:00:00.000Z")],
-        "service-2": [
-          {
-            ...message("m2", "ia", "2026-10-05T10:00:00.000Z"),
-            servicioId: "service-2",
-          },
-        ],
+        ...message("incoming", "cliente", "2026-10-05T11:02:00.000Z"),
+        servicioId: "service-1",
       },
+      null,
     );
-    const next = mergeRealtimeMessage(initial, {
-      ...message("incoming", "cliente", "2026-10-05T11:02:00.000Z"),
-      servicioId: "service-1",
-    }, null);
 
     expect(next.find((item) => item.id === "service-1")?.lastMessage).toBe(
       "Mensaje incoming",
     );
-    expect(next.find((item) => item.id === "service-2")?.messages).toHaveLength(1);
+    expect(next.find((item) => item.id === "service-2")?.messages).toHaveLength(
+      1,
+    );
   });
 
   it("construye tabs y secciones sin mezclar empleadas", () => {
@@ -212,8 +258,12 @@ describe("modelo puro de Hoy", () => {
       "Yaelin",
       "Sin asignar",
     ]);
-    expect(navigation.find((item) => item.id === "employee-1")?.hasActiveService).toBe(true);
-    expect(navigation.find((item) => item.id === "employee-2")?.attentionCount).toBe(1);
+    expect(
+      navigation.find((item) => item.id === "employee-1")?.hasActiveService,
+    ).toBe(true);
+    expect(
+      navigation.find((item) => item.id === "employee-2")?.attentionCount,
+    ).toBe(1);
     expect(andrea.map((item) => item.id)).toEqual(["service-andrea"]);
     expect(radar.map((section) => section.id)).toEqual([
       "unanswered",
@@ -237,7 +287,9 @@ describe("modelo puro de Hoy", () => {
     const conversations = buildJefeConversations([unassignedService], {});
     const navigation = buildEmployeeNavigation([], conversations);
 
-    expect(conversationsForEmployee(conversations, "unassigned")).toHaveLength(1);
+    expect(conversationsForEmployee(conversations, "unassigned")).toHaveLength(
+      1,
+    );
     expect(
       navigation.find((item) => item.id === "unassigned")?.conversationCount,
     ).toBe(1);
@@ -252,24 +304,82 @@ describe("modelo puro de Hoy", () => {
   });
 
   it("el takeover mantiene un unico control entre IA y humano", () => {
-    const initial = buildJefeConversations(
-      [service()],
-      {
-        "service-1": [
-          message("m1", "ia", "2026-10-05T11:00:00.000Z"),
-        ],
-      },
-    );
-    const human = updateConversationMode(
-      initial,
-      "client-1",
-      "HUMAN_ACTIVE",
-    );
+    const initial = buildJefeConversations([service()], {
+      "service-1": [message("m1", "ia", "2026-10-05T11:00:00.000Z")],
+    });
+    const human = updateConversationMode(initial, "client-1", "HUMAN_ACTIVE");
     const ai = updateConversationMode(human, "client-1", "AI_ACTIVE");
 
     expect(human[0].mode).toBe("HUMAN_ACTIVE");
-    expect(human[0].service.iaActiva).toBe(false);
+    expect(human[0].service?.iaActiva).toBe(false);
     expect(ai[0].mode).toBe("AI_ACTIVE");
-    expect(ai[0].service.iaActiva).toBe(true);
+    expect(ai[0].service?.iaActiva).toBe(true);
+  });
+
+  it("muestra el primer mensaje pre-servicio bajo la empleada elegida", () => {
+    const conversations = buildJefeConversations([], {}, [preService()]);
+
+    expect(conversations).toEqual([
+      expect.objectContaining({
+        id: "session:booking-1",
+        employeeId: "employee-1",
+        employeeName: "Andrea",
+        service: null,
+        needsReply: true,
+        bookingData: expect.objectContaining({ durationHours: 2 }),
+      }),
+    ]);
+    expect(conversationsForEmployee(conversations, "employee-1")).toHaveLength(
+      1,
+    );
+  });
+
+  it("incorpora por SSE mensajes sin serviceId usando bookingSessionId", () => {
+    const initial = buildJefeConversations([], {}, [preService()]);
+    const next = mergeRealtimeMessage(
+      initial,
+      {
+        ...message("draft-2", "cliente", "2026-10-06T10:01:00.000Z"),
+        servicioId: null,
+        bookingSessionId: "booking-1",
+        mensaje: "¿Cuánto cuesta?",
+      },
+      null,
+    );
+
+    expect(next[0].messages).toHaveLength(2);
+    expect(next[0].lastMessage).toBe("¿Cuánto cuesta?");
+    expect(next[0].unreadCount).toBe(1);
+  });
+
+  it("reemplaza el borrador por el servicio enlazado sin duplicar la fila", () => {
+    const linkedMessage = {
+      ...message("draft-1", "cliente", "2026-10-06T10:00:00.000Z"),
+      bookingSessionId: "booking-1",
+    };
+    const conversations = buildJefeConversations(
+      [service()],
+      { "service-1": [linkedMessage] },
+      [preService()],
+    );
+
+    expect(conversations).toHaveLength(1);
+    expect(conversations[0].id).toBe("service-1");
+    expect(conversations[0].bookingSessionId).toBe("booking-1");
+    expect(conversations[0].messages.map((item) => item.id)).toEqual([
+      "draft-1",
+    ]);
+  });
+
+  it("mantiene el takeover pre-servicio sin intentar mutar un servicio nulo", () => {
+    const initial = buildJefeConversations([], {}, [preService()]);
+    const human = updateConversationMode(
+      initial,
+      "session:booking-1",
+      "HUMAN_ACTIVE",
+    );
+
+    expect(human[0].mode).toBe("HUMAN_ACTIVE");
+    expect(human[0].service).toBeNull();
   });
 });

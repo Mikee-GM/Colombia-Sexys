@@ -12,7 +12,10 @@ import {
 } from "@/lib/actions/jefe-panel";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
 import type { ConversationMessage } from "@/lib/types";
-import { useJefeRealtime, type JefeRealtimeEvent } from "@/hooks/useJefeRealtime";
+import {
+  useJefeRealtime,
+  type JefeRealtimeEvent,
+} from "@/hooks/useJefeRealtime";
 import ConversationInbox from "./ConversationInbox";
 import ConversationWorkspace from "./ConversationWorkspace";
 import EmployeeTabStrip from "./EmployeeTabStrip";
@@ -74,17 +77,17 @@ export default function TodayWorkspace({
     buildJefeConversations(
       initialSnapshot.services,
       initialSnapshot.messagesByService,
+      initialSnapshot.preServiceConversations,
     ),
   );
-  const [selectedId, setSelectedId] = useState<string | null>(
-    () => {
-      const initialConversations = buildJefeConversations(
-        initialSnapshot.services,
-        initialSnapshot.messagesByService,
-      );
-      return firstConversationId(initialConversations, "all");
-    },
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    const initialConversations = buildJefeConversations(
+      initialSnapshot.services,
+      initialSnapshot.messagesByService,
+      initialSnapshot.preServiceConversations,
+    );
+    return firstConversationId(initialConversations, "all");
+  });
   const [selectedEmployeeId, setSelectedEmployeeId] =
     useState<EmployeeTabId>("all");
   const [view, setView] = useState<MobileView>("inbox");
@@ -97,7 +100,8 @@ export default function TodayWorkspace({
   const selectionByEmployee = useRef(new Map<EmployeeTabId, string>());
 
   const selected =
-    conversations.find((conversation) => conversation.id === selectedId) ?? null;
+    conversations.find((conversation) => conversation.id === selectedId) ??
+    null;
   const employeeNavigation = useMemo(
     () => buildEmployeeNavigation(employees, conversations),
     [employees, conversations],
@@ -150,7 +154,11 @@ export default function TodayWorkspace({
       setEmployees(snapshot.employees);
       setConversations((current) =>
         preserveTransientState(
-          buildJefeConversations(snapshot.services, snapshot.messagesByService),
+          buildJefeConversations(
+            snapshot.services,
+            snapshot.messagesByService,
+            snapshot.preServiceConversations,
+          ),
           current,
         ),
       );
@@ -174,7 +182,9 @@ export default function TodayWorkspace({
         setConversations((current) => {
           const belongs = current.some(
             (conversation) =>
-              conversation.service.id === message.servicioId,
+              conversation.service?.id === message.servicioId ||
+              (Boolean(message.bookingSessionId) &&
+                conversation.bookingSessionId === message.bookingSessionId),
           );
           if (!belongs) scheduleRefresh();
           return mergeRealtimeMessage(current, message, selectedId);
@@ -184,12 +194,16 @@ export default function TodayWorkspace({
 
       if (event.type === "conversation_mode_changed" && event.data) {
         const data = event.data as {
+          bookingSessionId?: string;
           clientId?: string;
           mode?: "AI_ACTIVE" | "HUMAN_ACTIVE";
         };
-        if (data.clientId && data.mode) {
+        const conversationId = data.bookingSessionId
+          ? `session:${data.bookingSessionId}`
+          : data.clientId;
+        if (conversationId && data.mode) {
           setConversations((current) =>
-            updateConversationMode(current, data.clientId!, data.mode!),
+            updateConversationMode(current, conversationId, data.mode!),
           );
         }
         return;
@@ -209,10 +223,7 @@ export default function TodayWorkspace({
       (item) => item.id === conversationId,
     );
     if (conversation?.employeeId) {
-      selectionByEmployee.current.set(
-        conversation.employeeId,
-        conversationId,
-      );
+      selectionByEmployee.current.set(conversation.employeeId, conversationId);
     }
     setConversations((current) =>
       markConversationRead(current, conversationId),
@@ -233,9 +244,7 @@ export default function TodayWorkspace({
         conversation.id === remembered || conversation.id === selectedId,
     );
     setSelectedEmployeeId(employeeId);
-    setSelectedId(
-      next?.id ?? firstConversationId(conversations, employeeId),
-    );
+    setSelectedId(next?.id ?? firstConversationId(conversations, employeeId));
     setSearch("");
     setText("");
     setView("inbox");
@@ -246,21 +255,24 @@ export default function TodayWorkspace({
     setChangingMode(true);
     const iaActiva = selected.mode === "HUMAN_ACTIVE";
     try {
-      const result = await setJefeConversationMode(
-        selected.service.id,
-        selected.clientId,
+      const result = await setJefeConversationMode({
+        serviceId: selected.service?.id ?? null,
+        bookingSessionId: selected.bookingSessionId,
+        clientId: selected.clientId,
         iaActiva,
-      );
+      });
       if (!result.success) return toast.error(result.error);
       setConversations((current) =>
         updateConversationMode(
           current,
-          selected.clientId,
+          selected.id,
           iaActiva ? "AI_ACTIVE" : "HUMAN_ACTIVE",
         ),
       );
       toast.success(
-        iaActiva ? "Conversación devuelta a la IA" : "Ahora controlas la conversación",
+        iaActiva
+          ? "Conversación devuelta a la IA"
+          : "Ahora controlas la conversación",
       );
       scheduleRefresh();
     } finally {
@@ -270,14 +282,17 @@ export default function TodayWorkspace({
 
   async function send() {
     const value = text.trim();
-    if (!selected || !value || sending || selected.mode !== "HUMAN_ACTIVE") return;
+    if (!selected || !value || sending || selected.mode !== "HUMAN_ACTIVE")
+      return;
     setSending(true);
     try {
-      const result = await sendJefeConversationMessage(
-        selected.service.id,
-        selected.clientId,
-        value,
-      );
+      const result = await sendJefeConversationMessage({
+        serviceId: selected.service?.id ?? null,
+        bookingSessionId: selected.bookingSessionId,
+        clientId: selected.clientId,
+        mode: selected.mode,
+        message: value,
+      });
       if (!result.success) return toast.error(result.error);
       setText("");
       setConversations((current) =>
@@ -310,7 +325,7 @@ export default function TodayWorkspace({
               title={
                 selectedEmployeeId === "all"
                   ? "Radar operacional"
-                  : selectedEmployee?.name ?? "Conversaciones"
+                  : (selectedEmployee?.name ?? "Conversaciones")
               }
               total={employeeConversations.length}
               search={search}
@@ -340,7 +355,7 @@ export default function TodayWorkspace({
             className={`${view === "service" ? "absolute inset-0 z-30 block" : "hidden"} h-full min-h-0 border-l border-zinc-800 bg-black md:left-auto md:w-[380px] md:shadow-2xl xl:static xl:block xl:w-auto xl:shadow-none`}
           >
             <ServiceInspector
-              key={selected?.service.id ?? "empty"}
+              key={selected?.id ?? "empty"}
               conversation={selected}
               employees={employees}
               onClose={() => setView("chat")}

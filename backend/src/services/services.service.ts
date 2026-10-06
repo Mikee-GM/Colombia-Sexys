@@ -5636,6 +5636,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               clienteId: client.id,
               servicioId: null,
               bookingSessionId: item.data.bookingSessionId,
+              intendedEmployeeId: item.data.empleadaId ?? empleadaId,
               emisor: 'ia',
               mensaje,
               iaActiva: true,

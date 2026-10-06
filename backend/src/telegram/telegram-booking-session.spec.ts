@@ -4,6 +4,7 @@ import {
   detectOpenEndedDuration,
   extractHireDuration,
   extractHirePaymentMethod,
+  isPreServiceHumanTakeover,
   isUberAdminInputSession,
   parseReceiptAmount,
   parseUberFareInput,
@@ -189,6 +190,18 @@ describe('Telegram booking session input parsing', () => {
     expect(session.humanTakeover).toBe(true);
     expect(session.iaActiva).toBe(false);
     expect(session.bossThreadId).toBe('12345');
+  });
+
+  it('mantiene la IA fuera del flujo mientras un jefe controla el pre-servicio', () => {
+    expect(
+      isPreServiceHumanTakeover({ humanTakeover: true, iaActiva: false }),
+    ).toBe(true);
+    expect(
+      isPreServiceHumanTakeover({ humanTakeover: false, iaActiva: false }),
+    ).toBe(true);
+    expect(
+      isPreServiceHumanTakeover({ humanTakeover: false, iaActiva: true }),
+    ).toBe(false);
   });
 
   it('permite estructurar correctamente una sesión con trío confirmado y tarifa combinada', () => {

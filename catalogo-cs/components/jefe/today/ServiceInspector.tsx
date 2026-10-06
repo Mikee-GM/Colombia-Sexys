@@ -42,9 +42,11 @@ function paymentLabel(value: Service["metodoPago"]) {
 
 function transportLabel(service: Service) {
   const trips = service.viajes ?? [];
-  const current = [...trips].reverse().find(
-    (trip) => !["finalizado", "cancelado", "rechazado"].includes(trip.estado),
-  );
+  const current = [...trips]
+    .reverse()
+    .find(
+      (trip) => !["finalizado", "cancelado", "rechazado"].includes(trip.estado),
+    );
   if (!current) return "Sin traslado activo";
   return `${current.tipo === "ida" ? "Ida" : "Regreso"} · ${current.proveedorTransporte} · ${current.estado.replaceAll("_", " ")}`;
 }
@@ -77,6 +79,94 @@ export default function ServiceInspector({
   }
 
   const service = conversation.service;
+  if (!service) {
+    const booking = conversation.bookingData;
+    const location =
+      booking?.locationName ??
+      booking?.locationAddress ??
+      booking?.locationNotes ??
+      null;
+    return (
+      <aside className="flex h-full min-h-0 flex-col bg-black">
+        <header className="flex min-h-16 items-center gap-3 border-b border-zinc-800 px-3 py-2.5">
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 xl:hidden"
+              aria-label="Volver al chat"
+            >
+              <ArrowLeft size={18} />
+            </button>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-[#C5A55A]">
+              Conversación previa
+            </p>
+            <h2 className="truncate text-sm font-semibold text-white">
+              {conversation.employeeName}
+            </h2>
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
+          <section className="rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3">
+            <p className="text-xs font-semibold text-[#E8D5A3]">
+              Servicio todavía no creado
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              La conversación ya pertenece a esta empleada. Los datos aparecen
+              aquí conforme el cliente avanza en la reserva.
+            </p>
+          </section>
+          <dl className="mt-4 divide-y divide-zinc-900 border-y border-zinc-900">
+            <div className="grid grid-cols-[88px_1fr] gap-3 py-3 text-xs">
+              <dt className="flex items-center gap-1.5 text-zinc-600">
+                <UserRound size={13} /> Cliente
+              </dt>
+              <dd className="text-right font-medium text-zinc-200">
+                {conversation.clientName}
+              </dd>
+            </div>
+            {booking?.durationHours != null && (
+              <div className="grid grid-cols-[88px_1fr] gap-3 py-3 text-xs">
+                <dt className="text-zinc-600">Duración</dt>
+                <dd className="text-right font-medium text-zinc-200">
+                  {booking.durationHours} h
+                </dd>
+              </div>
+            )}
+            {booking?.openEndedDuration && booking.durationHours == null && (
+              <div className="grid grid-cols-[88px_1fr] gap-3 py-3 text-xs">
+                <dt className="text-zinc-600">Duración</dt>
+                <dd className="text-right font-medium text-zinc-200">
+                  Por definir
+                </dd>
+              </div>
+            )}
+            {location && (
+              <div className="grid grid-cols-[88px_1fr] gap-3 py-3 text-xs">
+                <dt className="flex items-center gap-1.5 text-zinc-600">
+                  <MapPin size={13} /> Lugar
+                </dt>
+                <dd className="text-right font-medium leading-relaxed text-zinc-200">
+                  {location}
+                </dd>
+              </div>
+            )}
+            {booking?.paymentMethod && (
+              <div className="grid grid-cols-[88px_1fr] gap-3 py-3 text-xs">
+                <dt className="text-zinc-600">Pago</dt>
+                <dd className="text-right font-medium capitalize text-zinc-200">
+                  {booking.paymentMethod.replaceAll("_", " ")}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      </aside>
+    );
+  }
+  const serviceId = service.id;
   const state = service.operationalState ?? legacyOperationState(service);
   const previousService = conversation.relatedServices.find(
     (item) => item.id === service.servicioPrevioId,
@@ -94,7 +184,7 @@ export default function ServiceInspector({
   function accept(transport: "chofer" | "uber", notes?: string) {
     startTransition(async () => {
       const result = await decidePendingService(
-        service.id,
+        serviceId,
         "aceptar",
         transport,
         notes,
@@ -111,7 +201,7 @@ export default function ServiceInspector({
 
   function cancel(reason: CancellationReason, note: string) {
     startTransition(async () => {
-      const result = await cancelJefeService(service.id, reason, note);
+      const result = await cancelJefeService(serviceId, reason, note);
       if (!result.success) {
         toast.error(result.error);
         return;
@@ -222,11 +312,13 @@ export default function ServiceInspector({
             </button>
           ) : state === "esperando_aceptacion_empleada" ? (
             <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">
-              Esperar la decisión de la empleada. No hay una acción válida para el jefe ahora.
+              Esperar la decisión de la empleada. No hay una acción válida para
+              el jefe ahora.
             </p>
           ) : (
             <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">
-              Supervisa el servicio. Los controles excepcionales están en Más acciones.
+              Supervisa el servicio. Los controles excepcionales están en Más
+              acciones.
             </p>
           )}
         </section>
