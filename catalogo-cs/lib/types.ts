@@ -117,6 +117,25 @@ export type Client = {
 export type ServiceStatus =
   "pendiente" | "agendado" | "en_curso" | "finalizado" | "cancelado";
 
+export type ServiceOperationState =
+  | "preparacion"
+  | "preparado"
+  | "asignado"
+  | "esperando_aceptacion_empleada"
+  | "aceptado"
+  | "esperando_transporte_ida"
+  | "transporte_ida_asignado"
+  | "empleada_en_camino"
+  | "empleada_llego"
+  | "en_curso"
+  | "preparando_regreso"
+  | "transporte_regreso_asignado"
+  | "empleada_de_regreso"
+  | "finalizado"
+  | "rechazado"
+  | "cancelado"
+  | "expirado";
+
 export type Service = {
   id: string;
   serviceType?: "individual" | "grupal";
@@ -155,6 +174,8 @@ export type Service = {
   horaLlegadaCasa: string | null;
   prorrogasUsadas: number;
   estado: ServiceStatus;
+  /** Estado calculado por la maquina operacional del backend. */
+  operationalState?: ServiceOperationState | null;
   motivoCancelacion?: CancellationReason | null;
   notaCancelacion?: string | null;
   canceladoPorUserId?: string | null;
@@ -211,6 +232,8 @@ export type Trip = {
     | "rechazado"
     | "cancelado";
   proveedorTransporte: "interno" | "uber";
+  externalPlatform?: string | null;
+  externalSharedLink?: string | null;
   zona?: TripZone;
   tarifa: string | number;
   telegramUberFileId?: string | null;
@@ -350,6 +373,7 @@ export type ConversationMessage = {
   bookingSessionId?: string | null;
   emisor: "ia" | "jefe" | "cliente" | "sistema";
   mensaje: string;
+  iaActiva?: boolean;
   enviadoAt: string;
 };
 
@@ -689,7 +713,40 @@ export type EmployeePortalServiceItem = {
 export type EmployeePortalActiveService = {
   id: string;
   estado: string;
+  estadoOperativo:
+    | "preparacion"
+    | "preparado"
+    | "asignado"
+    | "esperando_aceptacion_empleada"
+    | "aceptado"
+    | "esperando_transporte_ida"
+    | "transporte_ida_asignado"
+    | "empleada_en_camino"
+    | "empleada_llego"
+    | "en_curso"
+    | "preparando_regreso"
+    | "transporte_regreso_asignado"
+    | "empleada_de_regreso"
+    | "finalizado"
+    | "rechazado"
+    | "cancelado"
+    | "expirado";
+  accionesDisponibles: Array<
+    | "aceptar_servicio"
+    | "rechazar_servicio"
+    | "marcar_en_camino"
+    | "marcar_llegada"
+    | "iniciar_servicio"
+    | "finalizar_servicio"
+    | "extender_servicio"
+    | "registrar_extra"
+    | "activar_panico"
+    | "marcar_regreso"
+    | "marcar_llegada_regreso"
+  >;
+  aceptacionExpiraAt?: string | null;
   duracionHoras: number;
+  tarifaHora: number;
   metodoPago: string;
   horaInicio?: string | null;
   horaFinEstimada?: string | null;
@@ -719,6 +776,8 @@ export type EmployeePortalActiveService = {
     choferNombre?: string;
     /** Captura del Uber, cuando el jefe ya la subio. */
     uberScreenshotUrl?: string;
+    externalPlatform?: string;
+    externalSharedLink?: string;
   } | null;
 };
 

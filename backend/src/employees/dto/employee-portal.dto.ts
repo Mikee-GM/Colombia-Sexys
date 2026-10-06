@@ -39,7 +39,11 @@ export interface EmployeePortalServiceItem {
 export interface EmployeePortalActiveService {
   id: string;
   estado: string;
+  estadoOperativo: ServiceOperationState;
+  accionesDisponibles: EmployeeOperationAction[];
+  aceptacionExpiraAt?: string | null;
   duracionHoras: number;
+  tarifaHora: number;
   metodoPago: string;
   horaInicio?: string | null;
   horaFinEstimada?: string | null;
@@ -72,6 +76,8 @@ export interface EmployeePortalActiveService {
     choferNombre?: string;
     /** Captura del Uber, cuando el jefe ya la subio. */
     uberScreenshotUrl?: string;
+    externalPlatform?: string;
+    externalSharedLink?: string;
   } | null;
 }
 
@@ -159,3 +165,7 @@ export interface EmployeePortalData {
    */
   canalSinLeer: number;
 }
+import type {
+  EmployeeOperationAction,
+  ServiceOperationState,
+} from '../../services/operations/service-operation-state';

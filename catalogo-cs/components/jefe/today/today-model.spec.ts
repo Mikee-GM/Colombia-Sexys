@@ -1,0 +1,275 @@
+import type { ConversationMessage, Service } from "@/lib/types";
+import {
+  buildEmployeeNavigation,
+  buildJefeConversations,
+  buildOperationSections,
+  conversationsForEmployee,
+  filterConversations,
+  groupConversationsByEmployee,
+  markConversationRead,
+  mergeRealtimeMessage,
+  presentServiceState,
+  updateConversationMode,
+} from "./today-model";
+
+function service(overrides: Partial<Service> = {}): Service {
+  return {
+    id: "service-1",
+    empleadaId: "employee-1",
+    clienteId: "client-1",
+    jefeId: "boss-1",
+    metodoPago: "efectivo",
+    duracionPactadaHoras: "2",
+    duracionFinalHoras: null,
+    ubicacionClienteLat: "19.4",
+    ubicacionClienteLng: "-99.1",
+    precioBaseHoraPactado: "1000",
+    totalBase: "2000",
+    totalExtras: "0",
+    totalFinal: "2000",
+    horaInicioServicio: null,
+    horaFinServicio: null,
+    horaLlegadaCasa: null,
+    prorrogasUsadas: 0,
+    estado: "agendado",
+    notas: null,
+    iaActiva: true,
+    calificacion: null,
+    comentariosCalificacion: null,
+    servicioPrevioId: null,
+    horaInicioEstimada: null,
+    createdAt: "2026-10-05T10:00:00.000Z",
+    calculationStatus: "ready",
+    pendingReason: null,
+    customerTotal: 2000,
+    uberDeduction: 0,
+    updatedAt: "2026-10-05T10:00:00.000Z",
+    cliente: {
+      id: "client-1",
+      telegramChatId: "123",
+      nombreTelegram: "Carlos",
+    },
+    empleada: {
+      id: "employee-1",
+      usuarioId: "user-1",
+      nombreReal: "Andrea",
+      nombreArtistico: "Andrea",
+      slugCatalogo: "andrea",
+      fotoPerfilUrl: null,
+      descripcion: null,
+      precioBaseHora: "1000",
+      disponible: true,
+      catalogoActivo: true,
+      totalServiciosValorados: 0,
+      promedioCalificacion: null,
+      ubicacionLat: null,
+      ubicacionLng: null,
+    },
+    ...overrides,
+  };
+}
+
+function message(
+  id: string,
+  emisor: ConversationMessage["emisor"],
+  enviadoAt: string,
+): ConversationMessage {
+  return {
+    id,
+    clienteId: "client-1",
+    servicioId: "service-1",
+    emisor,
+    mensaje: `Mensaje ${id}`,
+    enviadoAt,
+  };
+}
+
+describe("modelo puro de Hoy", () => {
+  it("separa cada servicio autorizado aunque pertenezca al mismo cliente", () => {
+    const older = service({ id: "service-older", estado: "finalizado" });
+    const current = service({ id: "service-current", estado: "en_curso" });
+    const conversations = buildJefeConversations(
+      [older, current],
+      {
+        "service-older": [
+          { ...message("old", "cliente", "2026-10-05T09:00:00.000Z"), servicioId: "service-older" },
+        ],
+        "service-current": [
+          { ...message("new", "ia", "2026-10-05T11:00:00.000Z"), servicioId: "service-current" },
+        ],
+      },
+    );
+
+    expect(conversations).toHaveLength(2);
+    expect(conversations[0].service.id).toBe("service-current");
+    expect(conversations[0].messages.map((item) => item.id)).toEqual([
+      "new",
+    ]);
+    expect(conversations[1].service.id).toBe("service-older");
+    expect(conversations[1].messages.map((item) => item.id)).toEqual(["old"]);
+  });
+
+  it("filtra por atencion y agrupa por empleada", () => {
+    const conversations = buildJefeConversations(
+      [service()],
+      { "service-1": [message("m1", "cliente", "2026-10-05T11:00:00.000Z")] },
+    );
+
+    expect(filterConversations(conversations, "unanswered", "carlos")).toHaveLength(1);
+    expect(filterConversations(conversations, "in_progress", "")).toHaveLength(0);
+    expect(groupConversationsByEmployee(conversations)[0].employeeName).toBe("Andrea");
+  });
+
+  it("suma no leidos solo para mensajes entrantes fuera de la conversacion activa", () => {
+    const initial = buildJefeConversations(
+      [service()],
+      { "service-1": [message("m1", "ia", "2026-10-05T11:00:00.000Z")] },
+    );
+    const next = mergeRealtimeMessage(
+      initial,
+      message("m2", "cliente", "2026-10-05T11:01:00.000Z"),
+      null,
+    );
+
+    expect(next[0].unreadCount).toBe(1);
+    expect(next[0].needsReply).toBe(true);
+    expect(markConversationRead(next, "service-1")[0].unreadCount).toBe(0);
+  });
+
+  it("aplica un evento SSE solo a la operacion indicada", () => {
+    const first = service({ id: "service-1", estado: "en_curso" });
+    const second = service({ id: "service-2", estado: "finalizado" });
+    const initial = buildJefeConversations(
+      [first, second],
+      {
+        "service-1": [message("m1", "ia", "2026-10-05T11:00:00.000Z")],
+        "service-2": [
+          {
+            ...message("m2", "ia", "2026-10-05T10:00:00.000Z"),
+            servicioId: "service-2",
+          },
+        ],
+      },
+    );
+    const next = mergeRealtimeMessage(initial, {
+      ...message("incoming", "cliente", "2026-10-05T11:02:00.000Z"),
+      servicioId: "service-1",
+    }, null);
+
+    expect(next.find((item) => item.id === "service-1")?.lastMessage).toBe(
+      "Mensaje incoming",
+    );
+    expect(next.find((item) => item.id === "service-2")?.messages).toHaveLength(1);
+  });
+
+  it("construye tabs y secciones sin mezclar empleadas", () => {
+    const andreaService = service({
+      id: "service-andrea",
+      estado: "en_curso",
+      horaInicioServicio: "2026-10-05T10:00:00.000Z",
+    });
+    const yaelinService = service({
+      id: "service-yaelin",
+      clienteId: "client-2",
+      empleadaId: "employee-2",
+      empleada: {
+        ...service().empleada!,
+        id: "employee-2",
+        nombreArtistico: "Yaelin",
+      },
+      cliente: {
+        id: "client-2",
+        telegramChatId: "456",
+        nombreTelegram: "Luis",
+      },
+    });
+    const conversations = buildJefeConversations(
+      [andreaService, yaelinService],
+      {
+        "service-andrea": [
+          {
+            ...message("andrea", "ia", "2026-10-05T11:00:00.000Z"),
+            servicioId: "service-andrea",
+          },
+        ],
+        "service-yaelin": [
+          {
+            ...message("yaelin", "cliente", "2026-10-05T11:01:00.000Z"),
+            clienteId: "client-2",
+            servicioId: "service-yaelin",
+          },
+        ],
+      },
+    );
+    const employees = [andreaService.empleada!, yaelinService.empleada!];
+    const navigation = buildEmployeeNavigation(employees, conversations);
+    const andrea = conversationsForEmployee(conversations, "employee-1");
+    const radar = buildOperationSections(conversations, "radar");
+
+    expect(navigation.map((item) => item.name)).toEqual([
+      "Todas",
+      "Andrea",
+      "Yaelin",
+      "Sin asignar",
+    ]);
+    expect(navigation.find((item) => item.id === "employee-1")?.hasActiveService).toBe(true);
+    expect(navigation.find((item) => item.id === "employee-2")?.attentionCount).toBe(1);
+    expect(andrea.map((item) => item.id)).toEqual(["service-andrea"]);
+    expect(radar.map((section) => section.id)).toEqual([
+      "unanswered",
+      "active",
+    ]);
+  });
+
+  it("mantiene Sin asignar limitado a operaciones autorizadas sin empleada", () => {
+    const unassignedService = service({
+      id: "service-unassigned",
+      clienteId: "client-unassigned",
+      empleadaId: "",
+      empleada: undefined,
+      cliente: {
+        id: "client-unassigned",
+        telegramChatId: "789",
+        nombreTelegram: "Roberto",
+      },
+      estado: "agendado",
+    });
+    const conversations = buildJefeConversations([unassignedService], {});
+    const navigation = buildEmployeeNavigation([], conversations);
+
+    expect(conversationsForEmployee(conversations, "unassigned")).toHaveLength(1);
+    expect(
+      navigation.find((item) => item.id === "unassigned")?.conversationCount,
+    ).toBe(1);
+  });
+
+  it("respeta el estado operacional entregado por el backend", () => {
+    expect(
+      presentServiceState(
+        service({ operationalState: "esperando_aceptacion_empleada" }),
+      ).label,
+    ).toBe("Esperando respuesta");
+  });
+
+  it("el takeover mantiene un unico control entre IA y humano", () => {
+    const initial = buildJefeConversations(
+      [service()],
+      {
+        "service-1": [
+          message("m1", "ia", "2026-10-05T11:00:00.000Z"),
+        ],
+      },
+    );
+    const human = updateConversationMode(
+      initial,
+      "client-1",
+      "HUMAN_ACTIVE",
+    );
+    const ai = updateConversationMode(human, "client-1", "AI_ACTIVE");
+
+    expect(human[0].mode).toBe("HUMAN_ACTIVE");
+    expect(human[0].service.iaActiva).toBe(false);
+    expect(ai[0].mode).toBe("AI_ACTIVE");
+    expect(ai[0].service.iaActiva).toBe(true);
+  });
+});

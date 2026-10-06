@@ -173,6 +173,11 @@ export class DriverTripsService {
 
     const viaje = await this.cargarViajeDelChofer(viajeId, choferId);
     const chofer = await this.choferes.findOne({ where: { id: choferId } });
+    await this.servicesService.markTransportAssigned(
+      viaje.servicioId,
+      chofer?.usuarioId,
+      'chofer',
+    );
 
     await this.avisarAlJefe(
       viaje,
@@ -344,6 +349,12 @@ export class DriverTripsService {
     this.servicesService.clearWaitTimeout(trip.servicioId);
 
     const chofer = await this.choferes.findOne({ where: { id: choferId } });
+    await this.servicesService.markEmployeeTripProgress(
+      trip.servicioId,
+      trip.tipo,
+      'en_route',
+      { userId: chofer?.usuarioId, type: 'chofer' },
+    );
 
     await this.avisarAlJefe(
       trip,
@@ -413,8 +424,6 @@ export class DriverTripsService {
     );
 
     const escrituras: Promise<unknown>[] = [];
-    const veniaAgendado = trip.servicio?.estado === 'agendado';
-
     escrituras.push(
       this.viajes.update(trip.id, {
         estado: 'finalizado',
@@ -428,42 +437,16 @@ export class DriverTripsService {
       const cambios: Partial<Servicios> = {};
 
       if (trip.tipo === 'ida') {
-        const horaInicio = new Date();
-        trip.servicio.horaInicioServicio = horaInicio;
-        cambios.horaInicioServicio = horaInicio;
-        if (trip.servicio.estado === 'agendado') {
-          trip.servicio.estado = 'en_curso';
-          cambios.estado = 'en_curso';
-          cambios.servicioPrevioId = null;
-          cambios.horaInicioEstimada = horaInicio;
-        }
-
         const employeeChatId = trip.servicio.empleada?.usuario?.telegramChatId;
         if (employeeChatId) {
           try {
             await this.telegram.sendMessage(
               employeeChatId,
-              'Tu chofer ha finalizado el viaje de ida. Cuando termines el servicio, usa el botón de abajo para finalizarlo:',
-              {
-                buttons: [
-                  [
-                    Markup.button.callback(
-                      '🏁 Finalizar Servicio',
-                      `finalizar_servicio:${trip.servicio.id}`,
-                    ),
-                  ],
-                  [
-                    Markup.button.callback(
-                      '➕ Agregar Extra',
-                      `agregar_extra_list:${trip.servicio.id}`,
-                    ),
-                  ],
-                ],
-              },
+              'Llegaste al destino. Inicia el servicio desde tu portal web cuando estés lista.',
             );
           } catch (err) {
             this.logger.error(
-              'No se pudo enviar boton de finalizar a la empleada:',
+              'No se pudo enviar el aviso de llegada a la empleada:',
               err,
             );
           }
@@ -498,9 +481,12 @@ export class DriverTripsService {
         ),
       );
 
-    if (trip.tipo === 'ida' && veniaAgendado && trip.servicio) {
-      await this.servicesService.notifyScheduledServiceStarted(
+    if (trip.servicio) {
+      await this.servicesService.markEmployeeTripProgress(
         trip.servicio.id,
+        trip.tipo,
+        'arrived',
+        { userId: chofer?.usuarioId, type: 'chofer' },
       );
     }
 

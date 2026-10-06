@@ -85,7 +85,10 @@ export async function decideServiceAction(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo procesar la acción",
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo procesar la acción",
     };
   }
 }
@@ -203,14 +206,19 @@ export async function cancelServiceAction(
   }
 }
 
-export async function getServiceMessagesAction(serviceId: string): Promise<ConversationMessage[]> {
+export async function getServiceMessagesAction(
+  serviceId: string,
+): Promise<ConversationMessage[]> {
   const result = await apiFetch<{ messages: ConversationMessage[] }>(
     `/telegram-conversations/service/${serviceId}`,
   );
   return result.messages || [];
 }
 
-export async function sendServiceMessageAction(serviceId: string, message: string) {
+export async function sendServiceMessageAction(
+  serviceId: string,
+  message: string,
+) {
   try {
     const data = await apiFetch<ConversationMessage>(
       `/telegram-conversations/service/${serviceId}/messages`,
@@ -223,7 +231,8 @@ export async function sendServiceMessageAction(serviceId: string, message: strin
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo enviar el mensaje",
+      error:
+        error instanceof Error ? error.message : "No se pudo enviar el mensaje",
     };
   }
 }
@@ -242,7 +251,8 @@ export async function chooseReturnTransportAction(
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo elegir el regreso",
+      error:
+        error instanceof Error ? error.message : "No se pudo elegir el regreso",
     };
   }
 }
@@ -280,7 +290,32 @@ export async function confirmUberFareAction(tripId: string, amount: number) {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo registrar la tarifa",
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo registrar la tarifa",
+    };
+  }
+}
+
+export async function registerExternalTransportDetailsAction(
+  tripId: string,
+  input: { platform: string; sharedLink: string; amount: number },
+) {
+  try {
+    await apiFetch(`/services/trips/${tripId}/external-details`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidateAdminViews();
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudieron registrar los datos del transporte externo",
     };
   }
 }
@@ -301,7 +336,8 @@ export async function uploadUberScreenshotAction(formData: FormData) {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo enviar la captura",
+      error:
+        error instanceof Error ? error.message : "No se pudo enviar la captura",
     };
   }
 }
@@ -346,19 +382,27 @@ export async function getClientsAction() {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo cargar la lista de clientes",
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo cargar la lista de clientes",
     };
   }
 }
 
 export async function getActiveLocationsAction() {
   try {
-    const locations = await apiFetch<any[]>("/transport-operations/locations/active");
+    const locations = await apiFetch<any[]>(
+      "/transport-operations/locations/active",
+    );
     return { success: true, data: locations };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo cargar las ubicaciones",
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo cargar las ubicaciones",
     };
   }
 }
@@ -377,7 +421,8 @@ export async function createManualServiceAction(payload: any) {
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "No se pudo crear el servicio",
+      error:
+        error instanceof Error ? error.message : "No se pudo crear el servicio",
     };
   }
 }
@@ -487,7 +532,9 @@ export async function reasignarChoferAction(
     return {
       success: false,
       error:
-        error instanceof Error ? error.message : "No se pudo reasignar el viaje",
+        error instanceof Error
+          ? error.message
+          : "No se pudo reasignar el viaje",
     };
   }
 }

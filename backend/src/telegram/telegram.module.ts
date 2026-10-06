@@ -55,6 +55,7 @@ import { serializeBySessionKey } from './telegram-session.lock';
 import { TelegramLinkAttempt } from './entities/telegram-link-attempt.entity';
 import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
 import { TeamChannelModule } from '../team-channel/team-channel.module';
+import { isDummyTelegramToken } from './telegram-transport';
 
 @Module({
   imports: [
@@ -115,7 +116,7 @@ import { TeamChannelModule } from '../team-channel/team-channel.module';
         return {
           token,
           launchOptions:
-            token.includes('dummy') ||
+            isDummyTelegramToken(token) ||
             token.includes('fake') ||
             token.startsWith('123456789')
               ? false

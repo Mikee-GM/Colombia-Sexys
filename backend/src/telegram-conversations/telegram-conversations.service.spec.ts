@@ -18,11 +18,18 @@ describe('TelegramConversationsService', () => {
     create: jest.fn((value) => value),
     save: jest.fn((value) => Promise.resolve({ id: 'message-1', ...value })),
     find: jest.fn(),
+    findOne: jest.fn(),
     createQueryBuilder: jest.fn(() => queryBuilder),
   };
-  const services = { findOne: jest.fn() };
+  const services = { findOne: jest.fn(), find: jest.fn(), save: jest.fn() };
+  const sessions = { find: jest.fn(), save: jest.fn() };
+  const clients = { findOne: jest.fn() };
   const bot = { telegram: { sendMessage: jest.fn() } };
-  const realtime = { emitToBoss: jest.fn(), emitToBosses: jest.fn() };
+  const realtime = {
+    emitToBoss: jest.fn(),
+    emitToBosses: jest.fn(),
+    emitToJefes: jest.fn(),
+  };
   /*
    * Se construye por nombre y no con `new`.
    *
@@ -37,6 +44,8 @@ describe('TelegramConversationsService', () => {
   Object.assign(subject, {
     conversationsRepository: conversations,
     servicesRepository: services,
+    telegramSessionRepository: sessions,
+    clientesRepository: clients,
     bot,
     realtimeEvents: realtime,
   });
@@ -155,5 +164,115 @@ describe('TelegramConversationsService', () => {
       order: { enviadoAt: 'ASC' },
     });
     expect(result).toHaveLength(2);
+  });
+
+  it('lista resumen, modo y ficha operativa de cada chat', async () => {
+    queryBuilder.getRawMany.mockResolvedValue([
+      {
+        clienteId: 'client-1',
+        clienteNombre: 'Juan',
+        clienteTelegramId: '999',
+        lastAt: new Date('2026-10-05T12:00:00Z'),
+        messageCount: '7',
+        lastMessage: '¿A qué hora llega?',
+        iaActiva: false,
+        serviceId: 'service-1',
+        serviceState: 'en_curso',
+        employeeName: 'Valentina',
+      },
+    ]);
+
+    const result = await subject.listRecentChats(
+      { id: 'admin-1', rol: 'admin' } as any,
+      50,
+      'juan',
+    );
+
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      expect.stringContaining('nombre_telegram'),
+      { search: '%juan%' },
+    );
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        lastMessage: '¿A qué hora llega?',
+        mode: 'HUMAN_ACTIVE',
+        serviceId: 'service-1',
+        serviceState: 'en_curso',
+        employeeName: 'Valentina',
+      }),
+    );
+  });
+
+  it('no permite responder si la IA sigue activa', async () => {
+    clients.findOne.mockResolvedValue({
+      id: 'client-1',
+      telegramChatId: '999',
+    });
+    conversations.findOne.mockResolvedValue({ iaActiva: true });
+
+    await expect(
+      subject.sendAdminMessageByClient(
+        'client-1',
+        { id: 'boss-1', rol: 'jefe' } as any,
+        'Hola',
+      ),
+    ).rejects.toThrow('Toma el control');
+    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('mantiene HUMAN_ACTIVE al enviar la respuesta del jefe', async () => {
+    clients.findOne.mockResolvedValue({
+      id: 'client-1',
+      telegramChatId: '999',
+    });
+    conversations.findOne.mockResolvedValue({
+      clienteId: 'client-1',
+      servicioId: 'service-1',
+      bookingSessionId: 'booking-1',
+      iaActiva: false,
+    });
+
+    await subject.sendAdminMessageByClient(
+      'client-1',
+      { id: 'boss-1', rol: 'jefe' } as any,
+      'Hola',
+    );
+
+    expect(conversations.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        servicioId: 'service-1',
+        bookingSessionId: 'booking-1',
+        iaActiva: false,
+      }),
+    );
+  });
+
+  it('aplica takeover a todas las sesiones Telegram del cliente', async () => {
+    clients.findOne.mockResolvedValue({
+      id: 'client-1',
+      telegramChatId: '999',
+    });
+    services.find.mockResolvedValue([]);
+    sessions.find.mockResolvedValue([
+      { key: '999:999', data: {} },
+      { key: 'employee:999:999', data: {} },
+      { key: '888:888', data: {} },
+    ]);
+
+    await subject.toggleAiByClient(
+      'client-1',
+      { id: 'boss-1', rol: 'jefe' } as any,
+      false,
+    );
+
+    expect(sessions.save).toHaveBeenCalledTimes(2);
+    expect(sessions.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          iaActiva: false,
+          humanTakeover: true,
+        }),
+      }),
+    );
   });
 });

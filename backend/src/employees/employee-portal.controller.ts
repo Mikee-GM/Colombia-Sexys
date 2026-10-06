@@ -60,6 +60,50 @@ export class EmployeePortalController {
     return this.employeesService.getEmployeePortalData(userId);
   }
 
+  @Post('services/:servicioId/accept')
+  @HttpCode(200)
+  async aceptarServicio(
+    @PortalUser() userId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    const servicio = await this.servicesService.acceptByEmployee(
+      servicioId,
+      userId,
+    );
+    return {
+      id: servicio.id,
+      estadoOperativo: servicio.operationalState,
+      viajeId: servicio.viajeId,
+    };
+  }
+
+  @Post('services/:servicioId/reject')
+  @HttpCode(200)
+  async rechazarServicio(
+    @PortalUser() userId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    await this.servicesService.rejectByEmployee(servicioId, userId);
+    return { rechazado: true };
+  }
+
+  @Post('services/:servicioId/start')
+  @HttpCode(200)
+  async iniciarServicio(
+    @PortalUser() userId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    const servicio = await this.servicesService.startByEmployee(
+      servicioId,
+      userId,
+    );
+    return {
+      id: servicio.id,
+      estadoOperativo: servicio.operationalState,
+      horaInicio: servicio.horaInicioServicio,
+    };
+  }
+
   /**
    * Avance del viaje: voy en camino y ya llegue.
    *
@@ -259,11 +303,22 @@ export class EmployeePortalController {
       servicioId,
       userId,
       dto.horas,
+      false,
+      dto.montoAcordado,
     );
     return {
       id: servicio.id,
       duracionPactadaHoras: servicio.duracionPactadaHoras,
     };
+  }
+
+  @Post('services/:servicioId/panic')
+  @HttpCode(201)
+  activarPanico(
+    @PortalUser() userId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    return this.servicesService.activatePanic(servicioId, userId);
   }
 
   /**

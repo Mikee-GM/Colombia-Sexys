@@ -177,6 +177,18 @@ export class Viajes {
   })
   proveedorTransporte: string;
 
+  @Column('varchar', {
+    name: 'external_platform',
+    length: 50,
+    nullable: true,
+  })
+  @ApiPropertyOptional({ description: 'Plataforma externa (Uber, DiDi, otra)' })
+  externalPlatform: string | null;
+
+  @Column('text', { name: 'external_shared_link', nullable: true })
+  @ApiPropertyOptional({ description: 'Enlace compartido del viaje externo' })
+  externalSharedLink: string | null;
+
   @Column('varchar', { name: 'telegram_uber_file_id', nullable: true })
   @ApiPropertyOptional({ description: 'File ID de la captura de Uber' })
   telegramUberFileId: string | null;

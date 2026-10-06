@@ -105,12 +105,14 @@ export default function TeamOperations({
   initialCashSummary,
   initialGroupRequests,
   tabInicial,
+  fixedTab,
 }: {
   initialEmployees: Employee[];
   initialServices: Service[];
   initialCashSummary: CashObligationSummary;
   initialGroupRequests: GroupServiceRequest[];
   tabInicial?: "grupos";
+  fixedTab?: "equipo" | "grupos" | "historial" | "efectivo";
 }) {
   const [employees, setEmployees] = useState(initialEmployees);
   const [services, setServices] = useState(initialServices);
@@ -131,7 +133,7 @@ export default function TeamOperations({
    */
   const [tab, setTab] = useState<
     "equipo" | "grupos" | "activos" | "historial" | "efectivo"
-  >(tabInicial ?? "activos");
+  >(fixedTab ?? tabInicial ?? "activos");
   const [cashSummary, setCashSummary] = useState(initialCashSummary);
   const [chatService, setChatService] = useState<Service | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -539,18 +541,28 @@ export default function TeamOperations({
       <header className="mb-4 flex items-center justify-between gap-4 sm:mb-7">
         <div className="hidden sm:block">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#C5A55A]">
-            Operación diaria
+            {fixedTab ? "Gestión" : "Operación diaria"}
           </p>
           <h1 className="font-heading text-4xl font-semibold sm:text-5xl">
-            Mi equipo
+            {fixedTab === "equipo"
+              ? "Equipo"
+              : fixedTab === "efectivo"
+                ? "Caja"
+                : fixedTab === "historial"
+                  ? "Historial"
+                  : fixedTab === "grupos"
+                    ? "Servicios grupales"
+                    : "Mi equipo"}
           </h1>
           <p className="mt-2 text-sm text-zinc-500">
-            Disponibilidad, servicios, transporte y conversaciones de tu equipo.
+            {fixedTab
+              ? "Esta función sigue disponible fuera de la mesa de trabajo Hoy."
+              : "Disponibilidad, servicios, transporte y conversaciones de tu equipo."}
           </p>
         </div>
         {/* Registrar a mano es cosa de una vez al dia: en el telefono se queda en
           el icono y el texto vuelve en cuanto hay ancho. */}
-        <button
+        {!fixedTab && <button
           type="button"
           onClick={() => setCreatingService(true)}
           aria-label="Crear servicio manual"
@@ -558,7 +570,7 @@ export default function TeamOperations({
         >
           <Plus size={16} />
           <span className="hidden sm:inline">Crear Servicio Manual</span>
-        </button>
+        </button>}
       </header>
       {/*
        * Tres vistas del mismo ancho, siempre enteras.
@@ -569,7 +581,7 @@ export default function TeamOperations({
        * es donde urgen, y el historial se abre desde el final de la lista -- pero
        * dejan de competir por el sitio con lo que si tiene reloj corriendo.
        */}
-      <div className="mb-5 grid grid-cols-3 gap-1.5">
+      {!fixedTab && <div className="mb-5 grid grid-cols-3 gap-1.5">
         {(
           [
             ["activos", "Activos", active.length],
@@ -593,12 +605,12 @@ export default function TeamOperations({
             )}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* El historial y los grupos siguen siendo estados de esta pantalla; solo
         se llega a ellos desde donde tienen sentido. Con uno abierto, la forma
         de volver tiene que estar a la vista. */}
-      {(tab === "historial" || tab === "grupos") && (
+      {!fixedTab && (tab === "historial" || tab === "grupos") && (
         <button
           type="button"
           onClick={() => setTab("activos")}
@@ -1687,7 +1699,7 @@ function HistoryList({
   );
 }
 
-function EditPendingServiceDialog({
+export function EditPendingServiceDialog({
   service,
   onClose,
   onSaved,
@@ -1846,7 +1858,7 @@ function ReceiptEvidenceList({ service }: { service: Service }) {
   );
 }
 
-function AcceptServiceDialog({
+export function AcceptServiceDialog({
   service,
   previousService,
   disabled,
@@ -2313,7 +2325,7 @@ function ServiceRating({ service }: { service: Service }) {
   );
 }
 
-function TransportPanel({
+export function TransportPanel({
   service,
   onRefresh,
 }: {

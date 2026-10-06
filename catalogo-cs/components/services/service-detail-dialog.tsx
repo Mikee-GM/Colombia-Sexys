@@ -37,6 +37,7 @@ import {
   deleteServiceAction,
   getServiceByIdAction,
   getServiceMessagesAction,
+  registerExternalTransportDetailsAction,
   sendServiceMessageAction,
   updateCancellationAction,
   updateServiceAction,
@@ -67,7 +68,9 @@ export default function ServiceDetailDialog({
   onUpdated,
 }: ServiceDetailDialogProps) {
   const [service, setService] = useState<Service | null>(initialService);
-  const [activeTab, setActiveTab] = useState<"detalles" | "chat" | "transporte">("detalles");
+  const [activeTab, setActiveTab] = useState<
+    "detalles" | "chat" | "transporte"
+  >("detalles");
   const [editing, setEditing] = useState(false);
   const [reprogramando, setReprogramando] = useState(false);
   const [cambiandoUbicacion, setCambiandoUbicacion] = useState(false);
@@ -78,7 +81,9 @@ export default function ServiceDetailDialog({
 
   // Edit form state
   const [duracion, setDuracion] = useState<number | string>(1);
-  const [metodoPago, setMetodoPago] = useState<"efectivo" | "tarjeta" | "transferencia" | "mixto">("efectivo");
+  const [metodoPago, setMetodoPago] = useState<
+    "efectivo" | "tarjeta" | "transferencia" | "mixto"
+  >("efectivo");
   const [notas, setNotas] = useState("");
   const [notasJefe, setNotasJefe] = useState("");
 
@@ -97,7 +102,7 @@ export default function ServiceDetailDialog({
   useEffect(() => {
     if (service) {
       setDuracion(Number(service.duracionPactadaHoras) || 1);
-      setMetodoPago(service.metodoPago as any || "efectivo");
+      setMetodoPago((service.metodoPago as any) || "efectivo");
       setNotas(service.notas || "");
       setNotasJefe(service.notasJefe || "");
       setEditing(false);
@@ -131,14 +136,21 @@ export default function ServiceDetailDialog({
     onUpdated();
   };
 
-  const previous = allServices.find((item) => item.id === service.servicioPrevioId);
-  const receipts = (service.receiptValidations ?? []).filter((item) => item.imageUrl);
+  const previous = allServices.find(
+    (item) => item.id === service.servicioPrevioId,
+  );
+  const receipts = (service.receiptValidations ?? []).filter(
+    (item) => item.imageUrl,
+  );
   const trips = service.viajes || [];
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPendingAction(true);
-    const duracionNum = Math.max(1, Math.min(24, parseInt(String(duracion), 10) || 1));
+    const duracionNum = Math.max(
+      1,
+      Math.min(24, parseInt(String(duracion), 10) || 1),
+    );
     try {
       const res = await updateServiceAction(service.id, {
         duracionPactadaHoras: duracionNum,
@@ -159,14 +171,24 @@ export default function ServiceDetailDialog({
     }
   };
 
-  const handleDecide = async (decision: "aceptar" | "rechazar", transportType: "chofer" | "uber" = "chofer") => {
+  const handleDecide = async (
+    decision: "aceptar" | "rechazar",
+    transportType: "chofer" | "uber" = "chofer",
+  ) => {
     setPendingAction(true);
     try {
-      const res = await decideServiceAction(service.id, decision, transportType, bossNotes);
+      const res = await decideServiceAction(
+        service.id,
+        decision,
+        transportType,
+        bossNotes,
+      );
       if (!res.success) {
         throw new Error(res.error || "Error al procesar acción");
       }
-      toast.success(decision === "aceptar" ? "Servicio aceptado" : "Servicio rechazado");
+      toast.success(
+        decision === "aceptar" ? "Servicio aceptado" : "Servicio rechazado",
+      );
       setAccepting(false);
       await reloadCurrentService();
     } catch (err: any) {
@@ -197,7 +219,12 @@ export default function ServiceDetailDialog({
   };
 
   const handleDeleteService = async () => {
-    if (!confirm("¿Estás seguro de que deseas ELIMINAR este servicio de la base de datos? Esto destruirá el historial y no se puede deshacer.")) return;
+    if (
+      !confirm(
+        "¿Estás seguro de que deseas ELIMINAR este servicio de la base de datos? Esto destruirá el historial y no se puede deshacer.",
+      )
+    )
+      return;
     setPendingAction(true);
     try {
       const res = await deleteServiceAction(service.id);
@@ -249,17 +276,32 @@ export default function ServiceDetailDialog({
     }
   };
 
-  const senderPresentation: Record<ConversationMessage["emisor"], { label: string; className: string }> = {
+  const senderPresentation: Record<
+    ConversationMessage["emisor"],
+    { label: string; className: string }
+  > = {
     cliente: { label: "Cliente", className: "bg-zinc-900 text-zinc-200" },
-    ia: { label: "Asistente IA", className: "ml-auto border border-[#C5A55A]/35 bg-[#C5A55A]/10 text-[#E8D5A3]" },
-    sistema: { label: "Sistema", className: "mx-auto border border-zinc-800 bg-black text-zinc-400" },
-    jefe: { label: "Administración / Jefe", className: "ml-auto bg-[#C5A55A] text-black" },
+    ia: {
+      label: "Asistente IA",
+      className:
+        "ml-auto border border-[#C5A55A]/35 bg-[#C5A55A]/10 text-[#E8D5A3]",
+    },
+    sistema: {
+      label: "Sistema",
+      className: "mx-auto border border-zinc-800 bg-black text-zinc-400",
+    },
+    jefe: {
+      label: "Administración / Jefe",
+      className: "ml-auto bg-[#C5A55A] text-black",
+    },
   };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
-      onClick={(e) => e.target === e.currentTarget && !pendingAction && onClose()}
+      onClick={(e) =>
+        e.target === e.currentTarget && !pendingAction && onClose()
+      }
     >
       {cancelling && (
         <CancelServiceDialog
@@ -386,7 +428,9 @@ export default function ServiceDetailDialog({
                     <button
                       type="button"
                       disabled={pendingAction}
-                      onClick={() => setEditingCancellation(!editingCancellation)}
+                      onClick={() =>
+                        setEditingCancellation(!editingCancellation)
+                      }
                       className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white transition-colors disabled:opacity-50"
                     >
                       {editingCancellation ? "Cerrar" : "Editar motivo"}
@@ -414,7 +458,9 @@ export default function ServiceDetailDialog({
                         {service.canceladoAt
                           ? `Cancelado el ${formatAvailabilityTime(service.canceladoAt)}`
                           : "Sin fecha de cancelacion registrada"}
-                        {service.canceladoPorUserId ? "" : " - cancelacion automatica del sistema"}
+                        {service.canceladoPorUserId
+                          ? ""
+                          : " - cancelacion automatica del sistema"}
                       </p>
                     </>
                   )}
@@ -450,7 +496,8 @@ export default function ServiceDetailDialog({
                   onClick={() => setEditing(!editing)}
                   className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-200 hover:border-[#C5A55A] hover:text-[#E8D5A3] transition-all disabled:opacity-50"
                 >
-                  <Pencil size={15} /> {editing ? "Cerrar Edición" : "Editar Datos"}
+                  <Pencil size={15} />{" "}
+                  {editing ? "Cerrar Edición" : "Editar Datos"}
                 </button>
 
                 {/*
@@ -483,34 +530,37 @@ export default function ServiceDetailDialog({
                   </>
                 )}
 
-                {service.estado !== "cancelado" && service.estado !== "finalizado" && (
-                  <div className="flex gap-2 ml-auto">
-                    <button
-                      type="button"
-                      disabled={pendingAction}
-                      onClick={() => setCancelling(true)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-red-950 bg-red-950/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-400 hover:bg-red-900/40 transition-all disabled:opacity-50"
-                    >
-                      <Ban size={15} /> Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pendingAction}
-                      onClick={handleDeleteService}
-                      className="inline-flex items-center gap-2 rounded-xl border border-red-950 bg-red-950/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-500 hover:bg-red-900/60 transition-all disabled:opacity-50"
-                      title="Eliminar servicio de la base de datos (Destructivo)"
-                    >
-                      <X size={15} /> Borrar
-                    </button>
-                  </div>
-                )}
+                {service.estado !== "cancelado" &&
+                  service.estado !== "finalizado" && (
+                    <div className="flex gap-2 ml-auto">
+                      <button
+                        type="button"
+                        disabled={pendingAction}
+                        onClick={() => setCancelling(true)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-950 bg-red-950/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-400 hover:bg-red-900/40 transition-all disabled:opacity-50"
+                      >
+                        <Ban size={15} /> Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pendingAction}
+                        onClick={handleDeleteService}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-950 bg-red-950/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-500 hover:bg-red-900/60 transition-all disabled:opacity-50"
+                        title="Eliminar servicio de la base de datos (Destructivo)"
+                      >
+                        <X size={15} /> Borrar
+                      </button>
+                    </div>
+                  )}
               </div>
 
               {/* Formulario de Aceptación con Selección de Transporte */}
               {accepting && (
                 <div className="rounded-2xl border border-[#C5A55A]/50 bg-black/60 p-5 space-y-4 animate-in fade-in">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-heading text-lg text-white">Aceptar Servicio</h3>
+                    <h3 className="font-heading text-lg text-white">
+                      Aceptar Servicio
+                    </h3>
                     <button
                       type="button"
                       onClick={() => setAccepting(false)}
@@ -554,8 +604,13 @@ export default function ServiceDetailDialog({
 
               {/* Formulario de Edición */}
               {editing && (
-                <form onSubmit={handleSaveEdit} className="rounded-2xl border border-zinc-800 bg-black/60 p-5 space-y-4 animate-in fade-in">
-                  <h3 className="font-heading text-lg text-white">Editar Información del Servicio</h3>
+                <form
+                  onSubmit={handleSaveEdit}
+                  className="rounded-2xl border border-zinc-800 bg-black/60 p-5 space-y-4 animate-in fade-in"
+                >
+                  <h3 className="font-heading text-lg text-white">
+                    Editar Información del Servicio
+                  </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
@@ -650,12 +705,16 @@ export default function ServiceDetailDialog({
                     </p>
                     {service.cliente?.telefono && (
                       <p className="text-zinc-300">
-                        <span className="text-zinc-500">Teléfono:</span> {service.cliente.telefono}
+                        <span className="text-zinc-500">Teléfono:</span>{" "}
+                        {service.cliente.telefono}
                       </p>
                     )}
                     {service.locationNameSnapshot && (
                       <p className="text-zinc-300 flex items-start gap-1">
-                        <MapPin size={14} className="mt-0.5 text-[#C5A55A] shrink-0" />
+                        <MapPin
+                          size={14}
+                          className="mt-0.5 text-[#C5A55A] shrink-0"
+                        />
                         <span>{service.locationNameSnapshot}</span>
                       </p>
                     )}
@@ -664,21 +723,33 @@ export default function ServiceDetailDialog({
                         {service.locationAddressSnapshot}
                       </p>
                     )}
-                    {service.tipoAgenda === "programado" && service.fechaProgramada && (
-                      <p className="text-xs text-purple-300 font-medium flex items-center gap-1">
-                        <Clock3 size={13} className="text-purple-400 shrink-0" />
-                        Cita pactada: {new Date(service.fechaProgramada).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
-                      </p>
-                    )}
-                    {service.horaInicioEstimada && service.tipoAgenda !== "programado" && (
-                      <p className="text-xs text-zinc-400 flex items-center gap-1">
-                        <Clock3 size={13} className="text-zinc-500" />
-                        Llegada estimada: {formatAvailabilityTime(service.horaInicioEstimada)}
-                      </p>
-                    )}
+                    {service.tipoAgenda === "programado" &&
+                      service.fechaProgramada && (
+                        <p className="text-xs text-purple-300 font-medium flex items-center gap-1">
+                          <Clock3
+                            size={13}
+                            className="text-purple-400 shrink-0"
+                          />
+                          Cita pactada:{" "}
+                          {new Date(service.fechaProgramada).toLocaleString(
+                            "es-MX",
+                            { dateStyle: "short", timeStyle: "short" },
+                          )}
+                        </p>
+                      )}
+                    {service.horaInicioEstimada &&
+                      service.tipoAgenda !== "programado" && (
+                        <p className="text-xs text-zinc-400 flex items-center gap-1">
+                          <Clock3 size={13} className="text-zinc-500" />
+                          Llegada estimada:{" "}
+                          {formatAvailabilityTime(service.horaInicioEstimada)}
+                        </p>
+                      )}
                     {service.servicioPrevioId && (
                       <p className="text-xs text-[#E8D5A3]">
-                        Servicio en cadena: después del #{previous?.id.slice(-6).toUpperCase() || service.servicioPrevioId.slice(-6).toUpperCase()}
+                        Servicio en cadena: después del #
+                        {previous?.id.slice(-6).toUpperCase() ||
+                          service.servicioPrevioId.slice(-6).toUpperCase()}
                       </p>
                     )}
                   </div>
@@ -692,32 +763,51 @@ export default function ServiceDetailDialog({
                   <div className="space-y-1.5 text-sm">
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Duración:</span>
-                      <span className="text-zinc-200 font-semibold">{service.duracionPactadaHoras} horas</span>
+                      <span className="text-zinc-200 font-semibold">
+                        {service.duracionPactadaHoras} horas
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Método de Pago:</span>
-                      <span className="text-zinc-200 font-semibold uppercase">{service.metodoPago}</span>
+                      <span className="text-zinc-200 font-semibold uppercase">
+                        {service.metodoPago}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Tarifa Base:</span>
-                      <span className="text-zinc-200">${parseFloat(service.totalBase || "0").toLocaleString()}</span>
+                      <span className="text-zinc-200">
+                        ${parseFloat(service.totalBase || "0").toLocaleString()}
+                      </span>
                     </div>
                     {parseFloat(service.totalExtras || "0") > 0 && (
                       <div className="flex justify-between">
                         <span className="text-zinc-500">Extras:</span>
-                        <span className="text-zinc-200">${parseFloat(service.totalExtras || "0").toLocaleString()}</span>
+                        <span className="text-zinc-200">
+                          $
+                          {parseFloat(
+                            service.totalExtras || "0",
+                          ).toLocaleString()}
+                        </span>
                       </div>
                     )}
                     {parseFloat(service.totalTransporte || "0") > 0 && (
                       <div className="flex justify-between">
-                        <span className="text-zinc-500">Transporte Cliente:</span>
-                        <span className="text-zinc-200">${parseFloat(service.totalTransporte || "0").toLocaleString()}</span>
+                        <span className="text-zinc-500">
+                          Transporte Cliente:
+                        </span>
+                        <span className="text-zinc-200">
+                          $
+                          {parseFloat(
+                            service.totalTransporte || "0",
+                          ).toLocaleString()}
+                        </span>
                       </div>
                     )}
                     <div className="border-t border-zinc-800 pt-2 flex justify-between items-center">
                       <span className="font-bold text-white">Total Final:</span>
                       <span className="text-base font-bold text-[#E8D5A3]">
-                        ${parseFloat(service.totalFinal || "0").toLocaleString()}
+                        $
+                        {parseFloat(service.totalFinal || "0").toLocaleString()}
                       </span>
                     </div>
                   </div>
@@ -732,7 +822,9 @@ export default function ServiceDetailDialog({
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                         Instrucciones del Cliente
                       </p>
-                      <p className="mt-1 text-sm text-zinc-200 whitespace-pre-wrap">{service.notas}</p>
+                      <p className="mt-1 text-sm text-zinc-200 whitespace-pre-wrap">
+                        {service.notas}
+                      </p>
                     </div>
                   )}
                   {service.notasJefe && (
@@ -740,7 +832,9 @@ export default function ServiceDetailDialog({
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-[#C5A55A]">
                         Notas Internas
                       </p>
-                      <p className="mt-1 text-sm text-zinc-200 whitespace-pre-wrap">{service.notasJefe}</p>
+                      <p className="mt-1 text-sm text-zinc-200 whitespace-pre-wrap">
+                        {service.notasJefe}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -810,10 +904,16 @@ export default function ServiceDetailDialog({
                       <Star
                         key={val}
                         size={16}
-                        className={val <= service.calificacion! ? "fill-[#C5A55A] text-[#C5A55A]" : "text-zinc-700"}
+                        className={
+                          val <= service.calificacion!
+                            ? "fill-[#C5A55A] text-[#C5A55A]"
+                            : "text-zinc-700"
+                        }
                       />
                     ))}
-                    <span className="ml-2 text-sm font-bold text-[#E8D5A3]">{service.calificacion}/5</span>
+                    <span className="ml-2 text-sm font-bold text-[#E8D5A3]">
+                      {service.calificacion}/5
+                    </span>
                   </div>
                   {service.comentariosCalificacion && (
                     <blockquote className="mt-2 text-xs italic text-zinc-300 border-l border-zinc-700 pl-3">
@@ -829,20 +929,34 @@ export default function ServiceDetailDialog({
             <div className="flex flex-col h-[450px] rounded-2xl border border-zinc-800 bg-black/50 overflow-hidden">
               <div className="flex-1 space-y-3 overflow-y-auto p-4">
                 {chatLoading ? (
-                  <p className="py-12 text-center text-xs text-zinc-500">Cargando mensajes...</p>
+                  <p className="py-12 text-center text-xs text-zinc-500">
+                    Cargando mensajes...
+                  </p>
                 ) : messages.length === 0 ? (
-                  <p className="py-12 text-center text-xs text-zinc-600">No hay mensajes en esta conversación.</p>
+                  <p className="py-12 text-center text-xs text-zinc-600">
+                    No hay mensajes en esta conversación.
+                  </p>
                 ) : (
                   messages.map((msg) => {
-                    const pres = senderPresentation[msg.emisor] || senderPresentation.sistema;
+                    const pres =
+                      senderPresentation[msg.emisor] ||
+                      senderPresentation.sistema;
                     return (
-                      <div key={msg.id} className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs ${pres.className}`}>
+                      <div
+                        key={msg.id}
+                        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs ${pres.className}`}
+                      >
                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider opacity-60">
                           {pres.label}
                         </p>
-                        <p className="whitespace-pre-wrap leading-relaxed">{msg.mensaje}</p>
+                        <p className="whitespace-pre-wrap leading-relaxed">
+                          {msg.mensaje}
+                        </p>
                         <p className="mt-1 text-right text-[8px] opacity-40">
-                          {new Date(msg.enviadoAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(msg.enviadoAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </p>
                       </div>
                     );
@@ -897,52 +1011,60 @@ export default function ServiceDetailDialog({
               )}
 
               {/* Botón para solicitar regreso si está pendiente */}
-              {service.estadoLiquidacion === "transporte_pendiente" && !trips.some((t) => t.tipo === "regreso") && (
-                <div className="rounded-2xl border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-4 space-y-3">
-                  <p className="text-xs font-bold text-[#E8D5A3] uppercase tracking-wider">
-                    Transporte de regreso pendiente
-                  </p>
-                  <p className="text-xs text-zinc-400">
-                    El servicio ha finalizado pero no se ha asignado el transporte de retorno de la modelo.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      disabled={pendingAction}
-                      onClick={async () => {
-                        setPendingAction(true);
-                        const res = await chooseReturnTransportAction(service.id, "chofer");
-                        setPendingAction(false);
-                        if (!res.success) toast.error(res.error);
-                        else {
-                          toast.success("Regreso asignado con chofer");
-                          await reloadCurrentService();
-                        }
-                      }}
-                      className="px-4 py-2 rounded-xl bg-[#C5A55A] text-black font-bold text-xs uppercase"
-                    >
-                      Regreso con Chofer
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pendingAction}
-                      onClick={async () => {
-                        setPendingAction(true);
-                        const res = await chooseReturnTransportAction(service.id, "uber");
-                        setPendingAction(false);
-                        if (!res.success) toast.error(res.error);
-                        else {
-                          toast.success("Regreso asignado con Uber");
-                          await reloadCurrentService();
-                        }
-                      }}
-                      className="px-4 py-2 rounded-xl border border-[#C5A55A] text-[#C5A55A] font-bold text-xs uppercase"
-                    >
-                      Regreso con Uber
-                    </button>
+              {service.estadoLiquidacion === "transporte_pendiente" &&
+                !trips.some((t) => t.tipo === "regreso") && (
+                  <div className="rounded-2xl border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-4 space-y-3">
+                    <p className="text-xs font-bold text-[#E8D5A3] uppercase tracking-wider">
+                      Transporte de regreso pendiente
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      El servicio ha finalizado pero no se ha asignado el
+                      transporte de retorno de la modelo.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={pendingAction}
+                        onClick={async () => {
+                          setPendingAction(true);
+                          const res = await chooseReturnTransportAction(
+                            service.id,
+                            "chofer",
+                          );
+                          setPendingAction(false);
+                          if (!res.success) toast.error(res.error);
+                          else {
+                            toast.success("Regreso asignado con chofer");
+                            await reloadCurrentService();
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl bg-[#C5A55A] text-black font-bold text-xs uppercase"
+                      >
+                        Regreso con Chofer
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pendingAction}
+                        onClick={async () => {
+                          setPendingAction(true);
+                          const res = await chooseReturnTransportAction(
+                            service.id,
+                            "uber",
+                          );
+                          setPendingAction(false);
+                          if (!res.success) toast.error(res.error);
+                          else {
+                            toast.success("Regreso asignado con Uber");
+                            await reloadCurrentService();
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl border border-[#C5A55A] text-[#C5A55A] font-bold text-xs uppercase"
+                      >
+                        Regreso con Uber
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           )}
         </div>
@@ -973,16 +1095,31 @@ function AdminTripCard({
 }) {
   const [editingFare, setEditingFare] = useState(false);
   const [fare, setFare] = useState(String(trip.tarifa || ""));
+  const [externalPlatform, setExternalPlatform] = useState(
+    trip.externalPlatform || "Uber",
+  );
+  const [externalLink, setExternalLink] = useState(
+    trip.externalSharedLink || "",
+  );
+  const [savingExternal, setSavingExternal] = useState(false);
   const [savingFare, setSavingFare] = useState(false);
   const [changingTransport, setChangingTransport] = useState(false);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isIda = trip.tipo === "ida";
-  const pickupLat = isIda ? service?.empleada?.ubicacionLat : service?.ubicacionClienteLat;
-  const pickupLng = isIda ? service?.empleada?.ubicacionLng : service?.ubicacionClienteLng;
-  const dropoffLat = isIda ? service?.ubicacionClienteLat : service?.empleada?.ubicacionLat;
-  const dropoffLng = isIda ? service?.ubicacionClienteLng : service?.empleada?.ubicacionLng;
+  const pickupLat = isIda
+    ? service?.empleada?.ubicacionLat
+    : service?.ubicacionClienteLat;
+  const pickupLng = isIda
+    ? service?.empleada?.ubicacionLng
+    : service?.ubicacionClienteLng;
+  const dropoffLat = isIda
+    ? service?.ubicacionClienteLat
+    : service?.empleada?.ubicacionLat;
+  const dropoffLng = isIda
+    ? service?.ubicacionClienteLng
+    : service?.empleada?.ubicacionLng;
 
   let uberDeeplink = "https://m.uber.com/ul/?action=setPickup";
   if (pickupLat && pickupLng) {
@@ -1012,7 +1149,34 @@ function AdminTripCard({
     onRefresh();
   };
 
-  const handleUploadScreenshot = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSaveExternal = async () => {
+    const amount = Number(fare);
+    if (!externalPlatform.trim() || !externalLink.trim()) {
+      toast.error("Indica la plataforma y pega el enlace compartido");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Ingresa el costo manual del viaje");
+      return;
+    }
+    setSavingExternal(true);
+    const result = await registerExternalTransportDetailsAction(trip.id, {
+      platform: externalPlatform,
+      sharedLink: externalLink,
+      amount,
+    });
+    setSavingExternal(false);
+    if (!result.success) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success("Transporte externo registrado");
+    onRefresh();
+  };
+
+  const handleUploadScreenshot = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingScreenshot(true);
@@ -1060,7 +1224,9 @@ function AdminTripCard({
             <p className="text-xs font-bold uppercase tracking-wider text-zinc-100">
               Viaje de {trip.tipo}
             </p>
-            <p className="text-[11px] font-semibold text-zinc-500 uppercase">{trip.proveedorTransporte}</p>
+            <p className="text-[11px] font-semibold text-zinc-500 uppercase">
+              {trip.proveedorTransporte}
+            </p>
           </div>
         </div>
         <span className="text-[11px] font-bold uppercase px-2.5 py-0.5 rounded-full border border-zinc-700 text-zinc-300">
@@ -1070,6 +1236,46 @@ function AdminTripCard({
 
       {trip.proveedorTransporte === "uber" ? (
         <div className="space-y-3">
+          <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/80 p-3">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#E8D5A3]">
+              Transporte externo
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={externalPlatform}
+                onChange={(event) => setExternalPlatform(event.target.value)}
+                placeholder="Uber, DiDi…"
+                maxLength={50}
+                className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs text-white outline-none focus:border-[#C5A55A]"
+              />
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={fare}
+                onChange={(event) => setFare(event.target.value)}
+                placeholder="Costo manual"
+                className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs text-white outline-none focus:border-[#C5A55A]"
+              />
+            </div>
+            <input
+              type="url"
+              value={externalLink}
+              onChange={(event) => setExternalLink(event.target.value)}
+              placeholder="Pega aquí el enlace compartido del viaje"
+              className="w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs text-white outline-none focus:border-[#C5A55A]"
+            />
+            <button
+              type="button"
+              disabled={savingExternal}
+              onClick={handleSaveExternal}
+              className="w-full rounded-lg border border-[#C5A55A]/60 bg-[#C5A55A]/10 py-2 text-xs font-bold text-[#E8D5A3] disabled:opacity-50"
+            >
+              {savingExternal
+                ? "Guardando…"
+                : "Guardar plataforma, enlace y costo"}
+            </button>
+          </div>
           <a
             href={uberDeeplink}
             target="_blank"
@@ -1096,7 +1302,8 @@ function AdminTripCard({
               <div className="rounded-xl border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3 text-xs space-y-2 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-[#E8D5A3] font-bold flex items-center gap-1.5">
-                    <Camera size={14} className="text-[#C5A55A]" /> Captura Registrada
+                    <Camera size={14} className="text-[#C5A55A]" /> Captura
+                    Registrada
                   </span>
                   <a
                     href={trip.uberScreenshotUrl}
@@ -1112,7 +1319,8 @@ function AdminTripCard({
                     htmlFor={`uber-screenshot-${trip.id}`}
                     className="text-[11px] font-semibold text-zinc-400 hover:text-[#C5A55A] cursor-pointer flex items-center gap-1 transition-colors"
                   >
-                    <Upload size={12} /> {uploadingScreenshot ? "Subiendo..." : "Reemplazar captura"}
+                    <Upload size={12} />{" "}
+                    {uploadingScreenshot ? "Subiendo..." : "Reemplazar captura"}
                   </label>
                 </div>
               </div>
@@ -1120,7 +1328,8 @@ function AdminTripCard({
               <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/80 p-3 text-xs space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-zinc-300 font-semibold flex items-center gap-1.5">
-                    <Camera size={14} className="text-[#C5A55A]" /> Captura de Uber
+                    <Camera size={14} className="text-[#C5A55A]" /> Captura de
+                    Uber
                   </span>
                   <span className="text-[10px] text-amber-400 font-bold uppercase bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
                     Pendiente
@@ -1136,7 +1345,9 @@ function AdminTripCard({
                   }`}
                 >
                   <Upload size={14} />
-                  {uploadingScreenshot ? "Subiendo captura..." : "Subir Captura"}
+                  {uploadingScreenshot
+                    ? "Subiendo captura..."
+                    : "Subir Captura"}
                 </label>
               </div>
             )}
@@ -1174,7 +1385,9 @@ function AdminTripCard({
               <span className="text-zinc-400">Tarifa Uber:</span>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-[#E8D5A3] text-sm">
-                  {Number(trip.tarifa) > 0 ? `$${Number(trip.tarifa).toFixed(2)}` : "Sin registrar"}
+                  {Number(trip.tarifa) > 0
+                    ? `$${Number(trip.tarifa).toFixed(2)}`
+                    : "Sin registrar"}
                 </span>
                 <button
                   type="button"

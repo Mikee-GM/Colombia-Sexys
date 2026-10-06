@@ -1,4 +1,5 @@
 import { ServicesService } from './services.service';
+import { operationStateFromLegacy } from './operations/service-operation-state';
 
 /**
  * Cierre de un servicio por la empleada.
@@ -40,6 +41,7 @@ describe('ServicesService.finishByEmployee', () => {
   const enCurso = (overrides: Record<string, unknown> = {}): any => ({
     id: 'srv-1',
     estado: 'en_curso',
+    operationalState: 'en_curso',
     serviceType: 'individual',
     empleadaId: EMPLEADA,
     duracionPactadaHoras: 2,
@@ -129,6 +131,20 @@ describe('ServicesService.finishByEmployee', () => {
       extrasServicioRepository,
       serviceParticipantsRepository: {
         findOne: jest.fn().mockResolvedValue(null),
+      },
+      serviceOperations: {
+        currentState: jest.fn(
+          (item) => item.operationalState ?? operationStateFromLegacy(item),
+        ),
+        transition: jest.fn(async (id, action) => {
+          const item = await serviciosRepository.findOne({ where: { id } });
+          if (action === 'preparar_regreso') {
+            item.operationalState = 'preparando_regreso';
+          } else if (action === 'finalizar') {
+            item.operationalState = 'finalizado';
+          }
+          return item;
+        }),
       },
     });
 

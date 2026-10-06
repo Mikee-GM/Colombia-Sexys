@@ -63,6 +63,9 @@ import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 import { kilometrosEntre } from '../common/geo';
 import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 import type { InlineKeyboardButton } from 'telegraf/types';
+import { ServiceOperationsService } from './operations/service-operations.service';
+import type { ServiceOperationAction } from './operations/service-operation-state';
+import { ExtensionesServicio } from '../service-extensions/entities/service-extension.entity';
 
 /**
  * Si una persona del equipo puede hacerse cargo de algo ahora.
@@ -222,6 +225,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
      * las mismas reglas con las que se eligio el sitio al reservar.
      */
     private readonly transportOperations: TransportOperationsService,
+    private readonly serviceOperations: ServiceOperationsService,
   ) {}
 
   private estimatedEnd(service: Servicios): Date | null {
@@ -1151,6 +1155,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private async assertUserCanManageService(
+    service: Servicios,
+    actorUserId: string,
+  ): Promise<void> {
+    const actor = await this.usuariosRepository.findOneBy({ id: actorUserId });
+    if (!actor) throw new ConflictException('Usuario no autorizado');
+    this.assertActorCanManageService(service, actor);
+  }
+
   async updateForActor(
     id: string,
     updateData: UpdateServiceDto,
@@ -1868,6 +1881,381 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * El jefe asigna el servicio y abre la ventana de respuesta de la empleada.
+   * No crea viajes ni marca el servicio en curso: esas dos cosas ocurren solo
+   * después de que ella acepte desde su portal.
+   */
+  async ofrecerAEmpleada(
+    id: string,
+    jefeId: string,
+    tipoTransporte: 'chofer' | 'uber' = 'chofer',
+    bossNotes?: string,
+    habitacion?: string,
+  ): Promise<
+    Servicios & {
+      uberLink?: string;
+      viajeId?: string;
+      esperandoAlistado?: boolean;
+    }
+  > {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id },
+      relations: { cliente: true, empleada: { usuario: true } },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (servicio.estado !== 'pendiente') {
+      throw new ConflictException(
+        'El servicio ya no está pendiente de asignación',
+      );
+    }
+    if (servicio.serviceType === 'grupal') {
+      throw new ConflictException(
+        'Los servicios grupales se inician desde su organizador',
+      );
+    }
+
+    const user = await this.usuariosRepository.findOne({
+      where: { id: jefeId },
+    });
+    if (!user || (user.rol !== 'jefe' && user.rol !== 'admin')) {
+      throw new ConflictException(
+        'No tienes permisos para asignar este servicio',
+      );
+    }
+    this.assertActorCanManageService(servicio, user);
+    await this.disciplineService.assertOperationallyAllowed(
+      'employee',
+      servicio.empleadaId,
+    );
+    if (servicio.clienteId) {
+      await this.disciplineService.assertOperationallyAllowed(
+        'client',
+        servicio.clienteId,
+      );
+    }
+
+    const current = this.serviceOperations.currentState(servicio);
+    if (current === 'esperando_aceptacion_empleada') return servicio;
+
+    const actionsByState: Partial<
+      Record<typeof current, ServiceOperationAction[]>
+    > = {
+      preparacion: ['preparar', 'asignar', 'solicitar_aceptacion_empleada'],
+      preparado: ['asignar', 'solicitar_aceptacion_empleada'],
+      asignado: ['solicitar_aceptacion_empleada'],
+    };
+    const actions = actionsByState[current];
+    if (!actions) {
+      throw new ConflictException(
+        `El servicio no puede asignarse desde el estado operativo "${current}"`,
+      );
+    }
+
+    const expiresAt = new Date(
+      Date.now() +
+        ServiceOperationsService.EMPLOYEE_ACCEPTANCE_MINUTES * 60_000,
+    );
+    const offered = await this.serviceOperations.transitionMany(
+      servicio.id,
+      actions,
+      { userId: jefeId, type: user.rol },
+      {
+        eventTypes: actions.map((action) =>
+          action === 'solicitar_aceptacion_empleada'
+            ? 'EMPLOYEE_ACCEPTANCE_REQUESTED'
+            : action.toUpperCase(),
+        ),
+        payload: { transportType: tipoTransporte },
+        patch: {
+          jefeId,
+          notasJefe: bossNotes?.trim() || null,
+          habitacion: habitacion?.trim() || null,
+          transporteAgendado: tipoTransporte,
+          employeeAcceptanceExpiresAt: expiresAt,
+          employeeAcceptanceRemindedAt: null,
+          employeeAcceptedAt: null,
+          employeeAcceptanceEscalatedAt: null,
+        },
+      },
+    );
+
+    this.realtimeEventsService.emitToBoss(jefeId, {
+      type: 'service_waiting_employee_acceptance',
+      data: { serviceId: servicio.id, expiresAt },
+    });
+    this.realtimeEventsService.emitToEmployee(servicio.empleadaId, {
+      type: 'service_waiting_employee_acceptance',
+      data: { serviceId: servicio.id, expiresAt },
+    });
+    await this.avisar(servicio.empleada?.usuarioId, {
+      titulo: 'Tienes un servicio por aceptar',
+      cuerpo: 'Revisa los datos y responde desde tu portal.',
+      url: '/empleada/servicio',
+      tag: `aceptacion-${servicio.id}`,
+      requireInteraction: true,
+    });
+
+    const chatId = servicio.empleada?.usuario?.telegramChatId;
+    if (chatId) {
+      try {
+        await this.bot.telegram.sendMessage(
+          chatId,
+          'Tienes un servicio por aceptar. Revisa los datos y responde desde tu portal web.',
+        );
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo enviar el aviso informativo de asignación: ${describeError(error)}`,
+        );
+      }
+    }
+
+    return offered;
+  }
+
+  /** Aceptación de la empleada; recién entonces se activa transporte. */
+  async acceptByEmployee(
+    id: string,
+    actorUserId: string,
+  ): Promise<Servicios & { uberLink?: string; viajeId?: string }> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id },
+      relations: { empleada: { usuario: true } },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (servicio.empleada?.usuarioId !== actorUserId) {
+      throw new ForbiddenException('Este servicio no es tuyo');
+    }
+    if (
+      this.serviceOperations.currentState(servicio) !==
+      'esperando_aceptacion_empleada'
+    ) {
+      throw new ConflictException('Este servicio ya no espera tu aceptación');
+    }
+    if (
+      servicio.employeeAcceptanceRemindedAt &&
+      servicio.employeeAcceptanceExpiresAt &&
+      new Date(servicio.employeeAcceptanceExpiresAt).getTime() <= Date.now()
+    ) {
+      throw new ConflictException(
+        'La ventana de aceptación venció; coordinación ya fue avisada',
+      );
+    }
+
+    const activated = await this.aceptar(
+      servicio.id,
+      servicio.jefeId,
+      servicio.transporteAgendado ?? 'chofer',
+      servicio.notasJefe ?? undefined,
+      servicio.habitacion ?? undefined,
+    );
+    const now = new Date();
+    const actions: ServiceOperationAction[] = [
+      'aceptar_empleada',
+      'esperar_transporte_ida',
+    ];
+    const deferStartUntilEmployeeAction = activated.estado === 'en_curso';
+    const accepted = await this.serviceOperations.transitionMany(
+      servicio.id,
+      actions,
+      { userId: actorUserId, type: 'empleada' },
+      {
+        eventTypes: actions.map((action) =>
+          action === 'aceptar_empleada'
+            ? 'EMPLOYEE_ACCEPTED_SERVICE'
+            : action.toUpperCase(),
+        ),
+        patch: {
+          employeeAcceptedAt: now,
+          employeeAcceptanceExpiresAt: null,
+          // `aceptar` conserva efectos heredados necesarios (reserva de la
+          // empleada y creación del viaje), pero el servicio no empieza hasta
+          // que ella pulse INICIAR después de llegar. Mantener aquí
+          // `en_curso` permitía finalizar o agregar extras antes de ese paso.
+          ...(deferStartUntilEmployeeAction
+            ? {
+                estado: 'pendiente' as const,
+                horaInicioServicio: null,
+                horaInicioEstimada: null,
+              }
+            : {}),
+        },
+      },
+    );
+
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'employee_accepted_service',
+      data: { serviceId: servicio.id, acceptedAt: now },
+    });
+    // `activated` fue leído antes de las transiciones operativas. Devolverlo
+    // hacía que el portal recibiera todavía "esperando_aceptacion_empleada"
+    // aunque la base ya estuviera esperando transporte.
+    return Object.assign(accepted, {
+      uberLink: activated.uberLink,
+      viajeId: activated.viajeId,
+    });
+  }
+
+  async rejectByEmployee(id: string, actorUserId: string): Promise<void> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id },
+      relations: { empleada: true },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (servicio.empleada?.usuarioId !== actorUserId) {
+      throw new ForbiddenException('Este servicio no es tuyo');
+    }
+    await this.serviceOperations.transition(
+      servicio.id,
+      'rechazar_empleada',
+      { userId: actorUserId, type: 'empleada' },
+      {
+        eventType: 'EMPLOYEE_REJECTED_SERVICE',
+        patch: {
+          estado: 'cancelado',
+          motivoCancelacion: 'modelo_no_disponible',
+          canceladoPorUserId: actorUserId,
+          canceladoAt: new Date(),
+          employeeAcceptanceExpiresAt: null,
+        },
+      },
+    );
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'employee_rejected_service',
+      data: { serviceId: servicio.id },
+    });
+  }
+
+  async markTransportAssigned(
+    serviceId: string,
+    actorUserId?: string,
+    actorType: 'system' | 'jefe' | 'empleada' | 'chofer' | 'admin' = 'system',
+  ): Promise<void> {
+    const service = await this.serviciosRepository.findOne({
+      where: { id: serviceId },
+    });
+    if (!service) throw new NotFoundException('Servicio no encontrado');
+    const state = this.serviceOperations.currentState(service);
+    if (
+      state === 'transporte_ida_asignado' ||
+      state === 'transporte_regreso_asignado'
+    ) {
+      return;
+    }
+    const action =
+      state === 'esperando_transporte_ida' || state === 'aceptado'
+        ? 'asignar_transporte_ida'
+        : state === 'preparando_regreso'
+          ? 'asignar_transporte_regreso'
+          : null;
+    if (!action) return;
+    await this.serviceOperations.transition(
+      serviceId,
+      action,
+      { userId: actorUserId, type: actorType },
+      { eventType: 'TRANSPORT_ASSIGNED' },
+    );
+  }
+
+  async markEmployeeTripProgress(
+    serviceId: string,
+    tripType: 'ida' | 'regreso',
+    progress: 'en_route' | 'arrived',
+    actor: {
+      userId?: string;
+      type: 'system' | 'jefe' | 'empleada' | 'chofer' | 'admin';
+    },
+  ): Promise<void> {
+    let service = await this.serviciosRepository.findOne({
+      where: { id: serviceId },
+    });
+    if (!service) throw new NotFoundException('Servicio no encontrado');
+    let state = this.serviceOperations.currentState(service);
+
+    if (progress === 'en_route') {
+      if (
+        state === 'esperando_transporte_ida' ||
+        state === 'aceptado' ||
+        state === 'preparando_regreso'
+      ) {
+        await this.markTransportAssigned(serviceId, actor.userId, actor.type);
+        service =
+          (await this.serviciosRepository.findOne({
+            where: { id: serviceId },
+          })) ?? service;
+        state = this.serviceOperations.currentState(service);
+      }
+      const expected =
+        tripType === 'regreso'
+          ? 'transporte_regreso_asignado'
+          : 'transporte_ida_asignado';
+      if (state !== expected) return;
+      await this.serviceOperations.transition(
+        serviceId,
+        tripType === 'regreso' ? 'empleada_regresa' : 'empleada_sale',
+        actor,
+        {
+          eventType:
+            tripType === 'regreso' ? 'EMPLOYEE_RETURNING' : 'EMPLOYEE_EN_ROUTE',
+        },
+      );
+      return;
+    }
+
+    const expected =
+      tripType === 'regreso' ? 'empleada_de_regreso' : 'empleada_en_camino';
+    if (state !== expected) return;
+    await this.serviceOperations.transition(
+      serviceId,
+      tripType === 'regreso' ? 'finalizar' : 'empleada_llega',
+      actor,
+      {
+        eventType:
+          tripType === 'regreso'
+            ? 'SERVICE_FLOW_COMPLETED'
+            : 'EMPLOYEE_ARRIVED',
+      },
+    );
+  }
+
+  async startByEmployee(
+    serviceId: string,
+    actorUserId: string,
+  ): Promise<Servicios> {
+    const service = await this.serviciosRepository.findOne({
+      where: { id: serviceId },
+      relations: { empleada: true },
+    });
+    if (!service) throw new NotFoundException('Servicio no encontrado');
+    if (service.empleada?.usuarioId !== actorUserId) {
+      throw new ForbiddenException('Este servicio no es tuyo');
+    }
+    const startedAt = new Date();
+    const started = await this.serviceOperations.transition(
+      service.id,
+      'iniciar_servicio',
+      { userId: actorUserId, type: 'empleada' },
+      {
+        eventType: 'SERVICE_STARTED',
+        patch: {
+          estado: 'en_curso',
+          horaInicioServicio: startedAt,
+          horaInicioEstimada: startedAt,
+          servicioPrevioId: null,
+        },
+      },
+    );
+    this.realtimeEventsService.emitToBoss(service.jefeId, {
+      type: 'service_started',
+      data: { serviceId: service.id, startedAt },
+    });
+    this.realtimeEventsService.emitToEmployee(service.empleadaId, {
+      type: 'service_started',
+      data: { serviceId: service.id, startedAt },
+    });
+    return started;
+  }
+
   async aceptar(
     id: string,
     jefeId: string,
@@ -2122,44 +2510,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         const threadId = undefined;
 
         if (targetChatId) {
-          const inlineButtons: any[] = [
-            [
-              Markup.button.callback(
-                '🏁 Finalizar Servicio',
-                `finalizar_servicio:${servicio.id}`,
-              ),
-            ],
-          ];
-
-          inlineButtons.push([
-            Markup.button.callback(
-              '➕ Agregar Extra',
-              `agregar_extra_list:${servicio.id}`,
-            ),
-          ]);
-
-          /*
-           * Con Uber, primero el aviso para alistarse.
-           *
-           * Los botones del traslado --ya subi, ya llegue-- no sirven de nada
-           * mientras no haya coche, y el coche no se pide hasta que ella avise.
-           * Aparecen cuando pulsa "Ya estoy lista", que es el momento en que el
-           * jefe recibe el enlace.
-           */
-          if (tipoTransporte === 'uber' && esperandoAlistado) {
-            inlineButtons.unshift([
-              Markup.button.callback(
-                'Ya estoy lista',
-                `lista_servicio:${servicio.id}`,
-              ),
-            ]);
-          }
-
           const empMsg = await this.bot.telegram.sendMessage(
             targetChatId,
             (esperandoAlistado
-              ? `*Servicio autorizado. Alístate.*\n\n`
-              : `💼 *¡Servicio en Curso!* 🟢\n\n`) +
+              ? `*Servicio aceptado. Espera el transporte.*\n\n`
+              : `*Servicio aceptado.*\n\n`) +
               `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
               `• *Duración:* ${servicio.duracionPactadaHoras} horas\n` +
               `• *Método de Pago:* ${servicio.metodoPago.toUpperCase()}\n\n` +
@@ -2169,13 +2524,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               (servicio.notasJefe
                 ? `• *Notas del jefe:* ${servicio.notasJefe}\n\n`
                 : '') +
-              (esperandoAlistado
-                ? 'Cuando estés lista para salir, tócalo abajo y en ese momento te pedimos el Uber. No se pide antes para que no te espere con el taxímetro corriendo.'
-                : 'Cuando hayas terminado el servicio, presiona el botón de abajo para finalizarlo:'),
+              'Continúa el flujo desde tu portal web. Este mensaje es únicamente informativo.',
             {
               message_thread_id: threadId,
               parse_mode: 'Markdown',
-              ...Markup.inlineKeyboard(inlineButtons),
             },
           );
           servicio.telegramEmpleadaMensajeId = empMsg.message_id.toString();
@@ -2292,7 +2644,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
 
-    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    } else if (servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('Este servicio no es tuyo');
     }
     if (servicio.estado !== 'en_curso') {
@@ -2542,10 +2896,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
-    if (
-      !forceByBoss &&
-      !(await this.puedePedirProrroga(servicio, actorUserId))
-    ) {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    } else if (!(await this.puedePedirProrroga(servicio, actorUserId))) {
       throw new ForbiddenException(
         'No puedes solicitar prórrogas para este servicio',
       );
@@ -2923,6 +3276,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     actorUserId: string,
     horas: number,
     forceByBoss: boolean = false,
+    montoAcordado?: number,
   ): Promise<Servicios> {
     if (!Number.isInteger(horas) || horas < 1 || horas > 12) {
       throw new BadRequestException('La extensión debe ser de 1 a 12 horas');
@@ -2930,36 +3284,73 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const servicio = await this.serviciosRepository.findOne({
       where: { id: servicioId },
-      relations: { empleada: { usuario: true } },
+      relations: { cliente: true, empleada: { usuario: true } },
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
-    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    } else if (servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('No puedes extender este servicio');
     }
     if (servicio.estado !== 'en_curso') {
       throw new ConflictException('Este servicio ya no está activo');
     }
 
-    const duracionPrevia = Number(servicio.duracionPactadaHoras);
-    const resultado = await this.serviciosRepository
-      .createQueryBuilder()
-      .update(Servicios)
-      .set({
-        duracionPactadaHoras: duracionPrevia + horas,
-        // Se reabre el aviso para que vuelva a preguntar 15 minutos antes del
-        // nuevo final.
-        notificacionExtensionEnviada: false,
-      })
-      .where(
-        'id = :servicioId AND estado = :estado AND duracion_pactada_horas = :duracionPrevia',
-        { servicioId, estado: 'en_curso', duracionPrevia },
-      )
-      .execute();
-    if ((resultado.affected ?? 0) === 0) {
-      throw new ConflictException(
-        'La duración del servicio cambió mientras tanto; vuelve a intentarlo',
+    const montoSugerido = Number(servicio.precioBaseHoraPactado ?? 0) * horas;
+    const montoRegistrado = montoAcordado ?? montoSugerido;
+    if (!Number.isFinite(montoRegistrado) || montoRegistrado <= 0) {
+      throw new BadRequestException(
+        'El monto de la extensión debe ser mayor que cero',
       );
     }
+
+    const duracionPrevia = Number(servicio.duracionPactadaHoras);
+    await this.serviciosRepository.manager.transaction(async (manager) => {
+      const serviceRepository = manager.getRepository(Servicios);
+      const extensionRepository = manager.getRepository(ExtensionesServicio);
+      const resultado = await serviceRepository
+        .createQueryBuilder()
+        .update(Servicios)
+        .set({
+          duracionPactadaHoras: duracionPrevia + horas,
+          // Se reabre el aviso para que vuelva a preguntar 15 minutos antes del
+          // nuevo final.
+          notificacionExtensionEnviada: false,
+          endingSoonNotifiedAt: null,
+        })
+        .where(
+          'id = :servicioId AND estado = :estado AND duracion_pactada_horas = :duracionPrevia',
+          { servicioId, estado: 'en_curso', duracionPrevia },
+        )
+        .execute();
+      if ((resultado.affected ?? 0) === 0) {
+        throw new ConflictException(
+          'La duración del servicio cambió mientras tanto; vuelve a intentarlo',
+        );
+      }
+
+      await extensionRepository.save(
+        extensionRepository.create({
+          servicioId,
+          horasAgregadas: horas,
+          montoAgregado: montoRegistrado,
+          aceptadaPor: 'empleada',
+        }),
+      );
+      await this.serviceOperations.recordEvent(
+        servicioId,
+        'SERVICE_EXTENDED',
+        { userId: actorUserId, type: forceByBoss ? 'jefe' : 'empleada' },
+        {
+          hoursAdded: horas,
+          previousDurationHours: duracionPrevia,
+          newDurationHours: duracionPrevia + horas,
+          suggestedAmount: montoSugerido,
+          agreedAmount: montoRegistrado,
+        },
+        manager,
+      );
+    });
 
     await this.recalculateScheduledSuccessor(servicioId);
     this.realtimeEventsService.emitToJefes({
@@ -2967,12 +3358,118 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       empleadaId: servicio.empleadaId,
       activeServiceId: servicio.id,
     });
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'service_extended',
+      data: {
+        serviceId: servicio.id,
+        hoursAdded: horas,
+        agreedAmount: montoRegistrado,
+      },
+    });
+    await this.avisar(servicio.jefeId, {
+      titulo: 'Servicio extendido',
+      cuerpo: `Se agregaron ${horas} hora${horas === 1 ? '' : 's'} al servicio.`,
+      url: '/jefe',
+      tag: `extension-${servicio.id}`,
+    });
+    if (servicio.cliente?.telegramChatId) {
+      try {
+        await this.bot.telegram.sendMessage(
+          servicio.cliente.telegramChatId,
+          `La extensión de ${horas} hora${horas === 1 ? '' : 's'} quedó registrada.`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo avisar al cliente de la extensión: ${describeError(error)}`,
+        );
+      }
+    }
 
     // Se relee porque los totales los recalcula un trigger de la base.
     return (
       (await this.serviciosRepository.findOne({ where: { id: servicioId } })) ??
       servicio
     );
+  }
+
+  /** Registra primero la emergencia en el núcleo; los canales solo notifican. */
+  async activatePanic(
+    servicioId: string,
+    actorUserId: string,
+  ): Promise<{ eventId: string; registeredAt: Date }> {
+    const servicio = await this.serviciosRepository.findOne({
+      where: { id: servicioId },
+      relations: { empleada: { usuario: true }, jefe: true },
+    });
+    if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    if (servicio.empleada?.usuarioId !== actorUserId) {
+      throw new ForbiddenException('Este servicio no es tuyo');
+    }
+    const state = this.serviceOperations.currentState(servicio);
+    if (state !== 'en_curso') {
+      throw new ConflictException(
+        'El botón de pánico solo está disponible durante un servicio activo',
+      );
+    }
+
+    const registeredAt = new Date();
+    const event = await this.serviceOperations.recordEvent(
+      servicio.id,
+      'SERVICE_PANIC_ACTIVATED',
+      { userId: actorUserId, type: 'empleada' },
+      {
+        priority: 'critical',
+        registeredAt: registeredAt.toISOString(),
+        operationalState: state,
+        location: {
+          lat: servicio.empleada?.ubicacionLat ?? null,
+          lng: servicio.empleada?.ubicacionLng ?? null,
+          updatedAt: servicio.empleada?.ultimaUbicacionAt ?? null,
+        },
+        serviceLocation: {
+          name: servicio.locationNameSnapshot ?? null,
+          address: servicio.locationAddressSnapshot ?? null,
+          room: servicio.habitacion ?? null,
+        },
+      },
+    );
+    const notification = {
+      type: 'SERVICE_PANIC_ACTIVATED',
+      priority: 'critical',
+      data: {
+        serviceId: servicio.id,
+        eventId: event.id,
+        employeeId: servicio.empleadaId,
+        registeredAt,
+      },
+    };
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, notification);
+    this.realtimeEventsService.emitToEmployee(
+      servicio.empleadaId,
+      notification,
+    );
+    await this.avisar(servicio.jefeId, {
+      titulo: 'EMERGENCIA EN SERVICIO',
+      cuerpo: 'La empleada activó el botón de pánico. Abre el servicio ahora.',
+      url: '/jefe',
+      tag: `panico-${servicio.id}`,
+      requireInteraction: true,
+    });
+    const bossChatId =
+      servicio.jefe?.grupoTelegramId ?? servicio.jefe?.telegramChatId;
+    if (bossChatId) {
+      try {
+        await this.bot.telegram.sendMessage(
+          bossChatId,
+          `🚨 EMERGENCIA registrada en el servicio ${servicio.id}. Revisa el panel inmediatamente.`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `No se pudo enviar el aviso auxiliar de pánico: ${describeError(error)}`,
+        );
+      }
+    }
+    return { eventId: event.id, registeredAt };
   }
 
   async dispatchScheduledTrip(
@@ -3367,6 +3864,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     if (this.maintenanceInterval) clearInterval(this.maintenanceInterval);
+    for (const timeout of this.waitTimeouts.values()) clearTimeout(timeout);
+    for (const timeout of this.dispatchTimeouts.values()) clearTimeout(timeout);
+    this.waitTimeouts.clear();
+    this.dispatchTimeouts.clear();
   }
 
   async checkActiveServicesForExtension() {
@@ -4156,6 +4657,165 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Ventana 15 + 6 para responder una asignación, sin sanción automática. */
+  async sweepEmployeeAcceptanceDeadlines(now = new Date()): Promise<void> {
+    const due = await this.serviciosRepository.find({
+      where: {
+        operationalState: 'esperando_aceptacion_empleada',
+        employeeAcceptanceExpiresAt: LessThanOrEqual(now),
+      },
+      relations: { empleada: { usuario: true } },
+    });
+
+    for (const service of due) {
+      if (!service.employeeAcceptanceRemindedAt) {
+        const nextDeadline = new Date(
+          now.getTime() +
+            ServiceOperationsService.EMPLOYEE_ACCEPTANCE_GRACE_MINUTES * 60_000,
+        );
+        const updated = await this.serviciosRepository
+          .createQueryBuilder()
+          .update(Servicios)
+          .set({
+            employeeAcceptanceRemindedAt: now,
+            employeeAcceptanceExpiresAt: nextDeadline,
+          })
+          .where(
+            'id = :id AND estado_operativo = :state AND aceptacion_empleada_recordada_at IS NULL',
+            { id: service.id, state: 'esperando_aceptacion_empleada' },
+          )
+          .execute();
+        if (!updated.affected) continue;
+
+        await this.serviceOperations.recordEvent(
+          service.id,
+          'EMPLOYEE_ACCEPTANCE_REMINDER',
+          { type: 'system' },
+          { nextDeadline: nextDeadline.toISOString() },
+        );
+        await this.avisar(service.empleada?.usuarioId, {
+          titulo: 'Responde tu servicio ahora',
+          cuerpo: 'Quedan 6 minutos antes de avisar a coordinación.',
+          url: '/empleada/servicio',
+          tag: `aceptacion-${service.id}`,
+          requireInteraction: true,
+        });
+        if (service.empleada?.usuario?.telegramChatId) {
+          try {
+            await this.bot.telegram.sendMessage(
+              service.empleada.usuario.telegramChatId,
+              'Recordatorio: responde el servicio desde tu portal web. Quedan 6 minutos antes de avisar a coordinación.',
+            );
+          } catch (error) {
+            this.logger.warn(
+              `No se pudo enviar recordatorio informativo: ${describeError(error)}`,
+            );
+          }
+        }
+        this.realtimeEventsService.emitToEmployee(service.empleadaId, {
+          type: 'employee_acceptance_reminder',
+          data: { serviceId: service.id, expiresAt: nextDeadline },
+        });
+        continue;
+      }
+
+      await this.serviceOperations.transition(
+        service.id,
+        'expirar',
+        { type: 'system' },
+        {
+          eventType: 'EMPLOYEE_ACCEPTANCE_ESCALATED',
+          patch: {
+            employeeAcceptanceEscalatedAt: now,
+            employeeAcceptanceExpiresAt: null,
+          },
+        },
+      );
+      await this.avisar(service.jefeId, {
+        titulo: 'Servicio sin respuesta',
+        cuerpo: 'La empleada no respondió; revisa el caso en el panel.',
+        url: '/jefe',
+        tag: `aceptacion-${service.id}`,
+        requireInteraction: true,
+      });
+      this.realtimeEventsService.emitToBoss(service.jefeId, {
+        type: 'employee_acceptance_escalated',
+        data: { serviceId: service.id, escalatedAt: now },
+      });
+    }
+  }
+
+  /** Emite una sola vez el aviso cuando quedan 15 minutos o menos. */
+  async sweepServicesEndingSoon(now = new Date()): Promise<void> {
+    const active = await this.serviciosRepository.find({
+      where: {
+        operationalState: 'en_curso',
+        endingSoonNotifiedAt: IsNull(),
+      },
+      relations: { cliente: true, empleada: { usuario: true } },
+    });
+    const threshold = now.getTime() + 15 * 60_000;
+
+    for (const service of active) {
+      const end = this.estimatedEnd(service);
+      if (!end || end.getTime() <= now.getTime() || end.getTime() > threshold) {
+        continue;
+      }
+      const updated = await this.serviciosRepository
+        .createQueryBuilder()
+        .update(Servicios)
+        .set({ endingSoonNotifiedAt: now })
+        .where('id = :id AND aviso_fin_proximo_at IS NULL', { id: service.id })
+        .execute();
+      if (!updated.affected) continue;
+
+      await this.serviceOperations.recordEvent(
+        service.id,
+        'SERVICE_ENDING_SOON',
+        { type: 'system' },
+        { expectedEndAt: end.toISOString() },
+      );
+      const event = {
+        type: 'SERVICE_ENDING_SOON',
+        data: { serviceId: service.id, expectedEndAt: end },
+      };
+      this.realtimeEventsService.emitToEmployee(service.empleadaId, event);
+      this.realtimeEventsService.emitToBoss(service.jefeId, event);
+      if (service.clienteId) {
+        this.realtimeEventsService.emitToClient(service.clienteId, event);
+      }
+      await Promise.all([
+        this.avisar(service.empleada?.usuarioId, {
+          titulo: 'Tu servicio termina pronto',
+          cuerpo:
+            'Faltan aproximadamente 15 minutos. Confirma si habrá extensión.',
+          url: '/empleada/servicio',
+          tag: `fin-proximo-${service.id}`,
+          requireInteraction: true,
+        }),
+        this.avisar(service.jefeId, {
+          titulo: 'Prepara el transporte de regreso',
+          cuerpo: 'Un servicio termina en aproximadamente 15 minutos.',
+          url: '/jefe',
+          tag: `fin-proximo-${service.id}`,
+          requireInteraction: true,
+        }),
+      ]);
+      if (service.cliente?.telegramChatId) {
+        try {
+          await this.bot.telegram.sendMessage(
+            service.cliente.telegramChatId,
+            'El servicio termina en aproximadamente 15 minutos. Si deseas extenderlo, indícaselo a la empleada.',
+          );
+        } catch (error) {
+          this.logger.warn(
+            `No se pudo avisar al cliente del fin próximo: ${describeError(error)}`,
+          );
+        }
+      }
+    }
+  }
+
   async handleWaitTimeoutExpired(servicioId: string): Promise<void> {
     this.clearWaitTimeout(servicioId);
 
@@ -4379,6 +5039,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     actorUserId: string,
     forceByBoss: boolean = false,
   ): Promise<{ employeeId: string; participantId: string | null }> {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    }
     if (servicio.serviceType === 'grupal') {
       const participant = await this.serviceParticipantsRepository.findOne({
         where: {
@@ -4514,6 +5177,28 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         registradoPor: actor,
       }),
     );
+    await this.serviceOperations.recordEvent(
+      servicio.id,
+      'SERVICE_EXTRA_ADDED',
+      {
+        userId: input.actorUserId,
+        type: input.forceByBoss ? 'jefe' : 'empleada',
+      },
+      {
+        catalogExtraId: extra.id,
+        participantId,
+        chargedAmount: input.precioCobrado ?? extra.precio,
+        paymentMethod: input.metodoPago,
+      },
+    );
+    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
+      type: 'service_extra_added',
+      data: {
+        serviceId: servicio.id,
+        amount: input.precioCobrado ?? extra.precio,
+        paymentMethod: input.metodoPago,
+      },
+    });
 
     // Se relee porque el total del servicio lo recalcula un trigger al insertar.
     const actualizado =
@@ -4645,7 +5330,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'Un servicio grupal lo cierra la responsable desde su flujo de grupo',
       );
     }
-    if (!forceByBoss && servicio.empleada?.usuarioId !== actorUserId) {
+    if (forceByBoss) {
+      await this.assertUserCanManageService(servicio, actorUserId);
+    } else if (servicio.empleada?.usuarioId !== actorUserId) {
       throw new ForbiddenException('No puedes finalizar este servicio');
     }
 
@@ -4765,12 +5452,38 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     servicio.proximoRecordatorioRegresoAt = new Date(Date.now() + 5 * 60_000);
     await this.serviciosRepository.save(servicio);
 
+    // El cierre del trabajo no cierra todavía el flujo operativo: primero hay
+    // que resolver y completar el regreso. Las filas históricas sin estado
+    // explícito ya se interpretan como `preparando_regreso` por compatibilidad.
+    if (this.serviceOperations.currentState(servicio) === 'en_curso') {
+      await this.serviceOperations.transition(
+        servicio.id,
+        'preparar_regreso',
+        { userId: servicio.empleada?.usuarioId, type: 'empleada' },
+        { eventType: 'RETURN_PREPARATION_STARTED' },
+      );
+    }
+
     const successor = await this.activateScheduledSuccessor(servicio.id);
     if (successor.hasSuccessor) {
       // Encadena con otro servicio: no hay regreso que cuadrar ni corte abierto.
       servicio.estadoLiquidacion = 'cerrada';
       servicio.proximoRecordatorioRegresoAt = null;
       await this.serviciosRepository.save(servicio);
+      const current = await this.serviciosRepository.findOne({
+        where: { id: servicio.id },
+      });
+      if (
+        current &&
+        this.serviceOperations.currentState(current) === 'preparando_regreso'
+      ) {
+        await this.serviceOperations.transition(
+          servicio.id,
+          'finalizar',
+          { type: 'system' },
+          { eventType: 'SERVICE_FLOW_COMPLETED_WITH_SUCCESSOR' },
+        );
+      }
     }
 
     this.realtimeEventsService.emitToJefes({
@@ -5275,6 +5988,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         ),
       );
 
+    // Un transporte externo queda asignado al elegirlo; uno interno solo
+    // queda asignado cuando un chofer acepta la oferta.
+    if (provider === 'uber') {
+      await this.markTransportAssigned(result.servicio.id, actorId, 'jefe');
+    }
+
     if (provider === 'interno') {
       await this.dispatchViaje(result.trip.id).catch((error) =>
         this.logger.error(
@@ -5417,6 +6136,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
     await this.liquidationSync.syncOfficeRecord(servicio.id);
+
+    if (provider === 'uber') {
+      await this.markTransportAssigned(servicio.id, actorId, 'jefe');
+    }
 
     let uberLink: string | undefined;
     if (provider === 'interno') {
@@ -5675,6 +6398,76 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       },
     });
     return trip;
+  }
+
+  async registerExternalTransportDetails(
+    tripId: string,
+    actorId: string,
+    input: { platform: string; sharedLink: string; amount: number },
+  ): Promise<Viajes> {
+    const platform = input.platform.trim();
+    const sharedLink = input.sharedLink.trim();
+    if (!platform) {
+      throw new BadRequestException('Indica la plataforma de transporte');
+    }
+    if (
+      !Number.isFinite(input.amount) ||
+      input.amount <= 0 ||
+      Math.abs(Math.round(input.amount * 100) - input.amount * 100) > 1e-8
+    ) {
+      throw new BadRequestException(
+        'El costo debe ser positivo y tener máximo dos decimales',
+      );
+    }
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(sharedLink);
+    } catch {
+      throw new BadRequestException('El enlace compartido no es válido');
+    }
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new BadRequestException('El enlace debe usar http o https');
+    }
+
+    const trip = await this.getAuthorizedUberTrip(tripId, actorId);
+    if (['finalizado', 'cancelado'].includes(trip.estado)) {
+      throw new ConflictException(
+        'Los datos externos ya no pueden cambiarse en un viaje cerrado',
+      );
+    }
+    await this.viajesRepository.update(trip.id, {
+      externalPlatform: platform.slice(0, 50),
+      externalSharedLink: sharedLink,
+      tarifa: input.amount,
+    });
+    await this.serviceOperations.recordEvent(
+      trip.servicioId,
+      'EXTERNAL_TRANSPORT_DETAILS_REGISTERED',
+      { userId: actorId, type: 'jefe' },
+      {
+        tripId: trip.id,
+        tripType: trip.tipo,
+        platform: platform.slice(0, 50),
+        sharedLink,
+        cost: input.amount,
+      },
+    );
+    this.realtimeEventsService.emitToEmployee(trip.servicio.empleadaId, {
+      type: 'external_transport_updated',
+      data: { serviceId: trip.servicioId, tripId: trip.id },
+    });
+    await this.avisar(trip.servicio.empleada?.usuarioId, {
+      titulo: `Transporte en ${platform.slice(0, 50)}`,
+      cuerpo: 'Los datos de tu viaje ya están disponibles en el portal.',
+      url: '/empleada/servicio',
+      tag: `transporte-${trip.id}`,
+      requireInteraction: true,
+    });
+    return Object.assign(trip, {
+      externalPlatform: platform.slice(0, 50),
+      externalSharedLink: sharedLink,
+      tarifa: input.amount,
+    });
   }
 
   /**
@@ -5971,12 +6764,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         },
       },
     });
-    if (!trip || trip.proveedorTransporte !== 'uber') {
-      throw new NotFoundException('Viaje Uber no encontrado');
-    }
+    if (!trip) throw new NotFoundException('Viaje no encontrado');
     const actor = await this.usuariosRepository.findOneBy({ id: actorId });
     if (!actor) throw new ConflictException('Usuario no autorizado');
     const bossAction = action === 'uber_en_route' || action === 'uber_arrived';
+    if (bossAction && trip.proveedorTransporte !== 'uber') {
+      throw new NotFoundException('Viaje Uber no encontrado');
+    }
     if (
       bossAction &&
       actor.rol !== 'admin' &&
@@ -5995,6 +6789,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException(
         'Solo la empleada asignada puede actualizar el viaje',
       );
+    }
+    if (!bossAction && forceByBoss) {
+      this.assertActorCanManageService(trip.servicio, actor);
     }
 
     let resultingState = trip.estado;
@@ -6063,9 +6860,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         });
       }
       if (trip.tipo === 'regreso') {
-        await this.serviciosRepository.update(trip.servicioId, {
-          ...(trip.servicio.horaLlegadaCasa ? {} : { horaLlegadaCasa: now }),
-        });
+        // Un segundo toque sobre "llegué" es idempotente. TypeORM no admite
+        // `update(id, {})`: si la llegada ya estaba registrada, no hay ninguna
+        // escritura que hacer y se continúa con las comprobaciones de cierre.
+        if (!trip.servicio.horaLlegadaCasa) {
+          await this.serviciosRepository.update(trip.servicioId, {
+            horaLlegadaCasa: now,
+          });
+        }
         // Quien decide si ya se puede cerrar es `cerrarLiquidacionSiProcede`,
         // que mira TODOS los viajes: aqui solo se sabe de este.
         await this.cerrarLiquidacionSiProcede(trip.servicioId);
@@ -6077,55 +6879,18 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
               error,
             ),
           );
-      } else {
-        /*
-         * Viaje de ida: la hora real de inicio es cuando la empleada llega,
-         * no cuando el jefe autorizo el servicio. Con chofer propio esto ya
-         * se corrige al llegar (telegram-driver.update.ts); con Uber antes
-         * solo se corregia si el servicio era una cita agendada, dejando el
-         * traslado facturado como tiempo de servicio en los inmediatos.
-         */
-        const eraAgendado = trip.servicio.estado === 'agendado';
-        await this.serviciosRepository.update(trip.servicioId, {
-          horaInicioServicio: now,
-          ...(eraAgendado
-            ? {
-                estado: 'en_curso',
-                servicioPrevioId: null,
-                horaInicioEstimada: now,
-              }
-            : {}),
-        });
-        if (eraAgendado) {
-          this.realtimeEventsService.emitToBoss(trip.servicio.jefeId, {
-            type: 'scheduled_service_started',
-            data: { serviceId: trip.servicioId, tripId: trip.id },
-          });
-          await this.notifyScheduledServiceStarted(trip.servicioId);
-        }
       }
     }
+
+    await this.advanceOperationForTrip(trip, action, actorId);
 
     const employeeChatId = trip.servicio.empleada?.usuario?.telegramChatId;
     if (bossAction && employeeChatId && trip.proveedorTransporte === 'uber') {
       const message =
         action === 'uber_arrived'
-          ? '📍 Tu Uber ya llegó. Cuando subas, presiona “Ya estoy en el Uber”.'
-          : '🚗 Tu Uber va en camino a recogerte.';
-      await this.bot.telegram.sendMessage(employeeChatId, message, {
-        ...Markup.inlineKeyboard(
-          action === 'uber_arrived'
-            ? [
-                [
-                  Markup.button.callback(
-                    '🚗 Ya estoy en el Uber',
-                    `eu:${trip.id}:i`,
-                  ),
-                ],
-              ]
-            : [],
-        ),
-      });
+          ? 'Tu Uber ya llegó. Continúa el flujo desde tu portal web.'
+          : 'Tu Uber va en camino a recogerte. Consulta los detalles en tu portal web.';
+      await this.bot.telegram.sendMessage(employeeChatId, message);
       this.realtimeEventsService.emitToEmployee(trip.servicio.empleadaId, {
         type: action,
         data: { tripId: trip.id, serviceId: trip.servicioId },
@@ -6138,48 +6903,23 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           if (action === 'employee_en_route') {
             await this.bot.telegram.sendMessage(
               chatId,
-              '🚗 Has marcado que ya estás en el Uber. Presiona el botón cuando llegues a tu destino:',
-              {
-                ...Markup.inlineKeyboard([
-                  [Markup.button.callback('📍 Ya llegué', `eu:${trip.id}:f`)],
-                ]),
-              },
+              'Registramos que vas en camino. Marca tu llegada desde el portal web.',
             );
           } else if (action === 'employee_arrived') {
             if (trip.tipo === 'ida') {
               await this.bot.telegram.sendMessage(
                 chatId,
-                'Cuando termines el servicio, usa el botón de abajo para finalizarlo:',
-                {
-                  ...Markup.inlineKeyboard([
-                    [
-                      Markup.button.callback(
-                        '🏁 Finalizar Servicio',
-                        `finalizar_servicio:${trip.servicio.id}`,
-                      ),
-                    ],
-                    [
-                      Markup.button.callback(
-                        '⏳ Extender +1h',
-                        `extender_servicio:${trip.servicio.id}:1`,
-                      ),
-                      Markup.button.callback(
-                        '➕ Agregar Extra',
-                        `agregar_extra_list:${trip.servicio.id}`,
-                      ),
-                    ],
-                  ]),
-                },
+                'Registramos tu llegada. Inicia el servicio desde el portal web.',
               );
             } else {
               await this.bot.telegram.sendMessage(
                 chatId,
-                '🎉 ¡Servicio finalizado por completo! Has llegado a salvo. El jefe ha sido notificado.',
+                'El flujo del servicio quedó finalizado. El jefe fue notificado.',
               );
             }
           }
         } catch (err) {
-          this.logger.error('No se pudo enviar botones a la empleada:', err);
+          this.logger.error('No se pudo enviar el aviso a la empleada:', err);
         }
       }
 
@@ -6253,5 +6993,29 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         employeeName: trip.servicio.empleada?.nombreArtistico ?? null,
       },
     });
+  }
+
+  private async advanceOperationForTrip(
+    trip: Viajes,
+    action:
+      | 'uber_en_route'
+      | 'uber_arrived'
+      | 'employee_en_route'
+      | 'employee_arrived',
+    actorId: string,
+  ): Promise<void> {
+    const state = this.serviceOperations.currentState(trip.servicio);
+    if (action === 'uber_en_route' && state === 'esperando_transporte_ida') {
+      await this.markTransportAssigned(trip.servicioId, actorId, 'jefe');
+      return;
+    }
+    if (action === 'uber_arrived') return;
+
+    await this.markEmployeeTripProgress(
+      trip.servicioId,
+      trip.tipo,
+      action === 'employee_en_route' ? 'en_route' : 'arrived',
+      { userId: actorId, type: 'empleada' },
+    );
   }
 }

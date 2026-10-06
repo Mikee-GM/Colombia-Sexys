@@ -215,6 +215,9 @@ describe('ServicesService.aceptar (concurrencia)', () => {
 describe('ServicesService.extendByEmployee', () => {
   let serviciosRepository: any;
   let updateBuilder: any;
+  let serviceExtensionsRepository: any;
+  let serviceOperations: any;
+  let extensionManager: any;
   let service: ServicesService;
 
   beforeEach(() => {
@@ -231,11 +234,28 @@ describe('ServicesService.extendByEmployee', () => {
         estado: 'en_curso',
         empleadaId: 'emp-1',
         duracionPactadaHoras: 2,
+        precioBaseHoraPactado: 2000,
         totalFinal: 4000,
+        jefeId: 'boss-1',
         empleada: { usuarioId: 'user-emp', usuario: {} },
       }),
-      createQueryBuilder: jest.fn(() => updateBuilder),
       manager: {},
+    };
+    serviceExtensionsRepository = {
+      create: jest.fn((value) => value),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    serviceOperations = {
+      recordEvent: jest.fn().mockResolvedValue(undefined),
+    };
+    extensionManager = {
+      getRepository: jest
+        .fn()
+        .mockReturnValueOnce({ createQueryBuilder: () => updateBuilder })
+        .mockReturnValueOnce(serviceExtensionsRepository),
+    };
+    serviciosRepository.manager = {
+      transaction: jest.fn((callback) => callback(extensionManager)),
     };
     /*
      * Se construye por nombre y no con `new`.
@@ -260,7 +280,7 @@ describe('ServicesService.extendByEmployee', () => {
       bankAccountsRepository: {},
       paymentReceiptValidationsRepository: {},
       realtimeEventsService: { emitToJefes: jest.fn(), emitToBoss: jest.fn() },
-      bot: {},
+      bot: { telegram: { sendMessage: jest.fn() } },
       telegramService: {},
       aiMessageService: {},
       loyaltyService: {},
@@ -274,6 +294,9 @@ describe('ServicesService.extendByEmployee', () => {
       extrasCatalogoRepository: {},
       extrasServicioRepository: {},
       serviceParticipantsRepository: {},
+      serviceExtensionsRepository,
+      serviceOperations,
+      notificationsService: { notificar: jest.fn().mockResolvedValue(1) },
     });
     jest
       .spyOn(service, 'recalculateScheduledSuccessor')
@@ -285,6 +308,28 @@ describe('ServicesService.extendByEmployee', () => {
 
     expect(updateBuilder.set).toHaveBeenCalledWith(
       expect.objectContaining({ duracionPactadaHoras: 3 }),
+    );
+    expect(serviceExtensionsRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        horasAgregadas: 1,
+        montoAgregado: 2000,
+        aceptadaPor: 'empleada',
+      }),
+    );
+  });
+
+  it('conserva el monto manual acordado sin cambiar la tarifa base', async () => {
+    await service.extendByEmployee('srv-1', 'user-emp', 2, false, 3500);
+
+    expect(serviceExtensionsRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({ horasAgregadas: 2, montoAgregado: 3500 }),
+    );
+    expect(serviceOperations.recordEvent).toHaveBeenCalledWith(
+      'srv-1',
+      'SERVICE_EXTENDED',
+      expect.objectContaining({ type: 'empleada' }),
+      expect.objectContaining({ suggestedAmount: 4000, agreedAmount: 3500 }),
+      extensionManager,
     );
   });
 
