@@ -1,6 +1,9 @@
 import { Bot, UserRound } from "lucide-react";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
-import type { JefeConversation } from "./today-model";
+import {
+  presentServiceState,
+  type JefeConversation,
+} from "./today-model";
 
 function conversationTime(value: string) {
   const date = new Date(value);
@@ -24,13 +27,41 @@ function conversationTime(value: string) {
   });
 }
 
+function scheduledTime(value: string | null | undefined) {
+  if (!value) return null;
+  return new Date(value).toLocaleTimeString(APP_LOCALE, {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: APP_TIME_ZONE,
+  });
+}
+
+function operationSummary(conversation: JefeConversation) {
+  const service = conversation.service;
+  if (service.estado === "en_curso") {
+    const startedAt = scheduledTime(service.horaInicioServicio);
+    return startedAt
+      ? `Servicio en curso · desde ${startedAt}`
+      : "Servicio en curso";
+  }
+  if (service.tipoAgenda === "programado" || service.estado === "agendado") {
+    const time = scheduledTime(
+      service.fechaProgramada ?? service.horaInicioEstimada,
+    );
+    return time ? `Agendado · ${time}` : "Agendado";
+  }
+  return presentServiceState(service).label;
+}
+
 export default function ConversationRow({
   conversation,
   selected,
+  showEmployee = false,
   onSelect,
 }: {
   conversation: JefeConversation;
   selected: boolean;
+  showEmployee?: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -38,15 +69,12 @@ export default function ConversationRow({
       type="button"
       onClick={onSelect}
       aria-current={selected ? "true" : undefined}
-      className={`grid min-h-[76px] w-full grid-cols-[40px_minmax(0,1fr)_auto] gap-3 border-b border-zinc-900 px-3 py-3 text-left transition-colors ${
+      className={`grid min-h-[68px] w-full grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-zinc-900 px-3 py-2.5 text-left transition-colors ${
         selected
-          ? "bg-[#C5A55A]/10"
+          ? "bg-[#C5A55A]/10 shadow-[inset_2px_0_0_#C5A55A]"
           : "bg-black hover:bg-zinc-950 focus-visible:bg-zinc-950"
       }`}
     >
-      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-800 bg-zinc-950 text-sm font-semibold text-[#E8D5A3]">
-        {conversation.clientName.slice(0, 1).toUpperCase()}
-      </span>
       <span className="min-w-0">
         <span className="flex items-center gap-2">
           <span className="truncate text-sm font-semibold text-zinc-100">
@@ -59,7 +87,19 @@ export default function ConversationRow({
         <span className="mt-1 block truncate text-xs text-zinc-500">
           {conversation.lastMessage}
         </span>
-        <span className="mt-1.5 flex items-center gap-2 text-[10px] uppercase tracking-[0.08em] text-zinc-600">
+        <span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[10px] text-zinc-600">
+          {showEmployee && (
+            <>
+              <span className="max-w-20 truncate text-zinc-500">
+                {conversation.employeeName}
+              </span>
+              <span aria-hidden="true">·</span>
+            </>
+          )}
+          <span className="truncate text-zinc-500">
+            {operationSummary(conversation)}
+          </span>
+          <span aria-hidden="true">·</span>
           <span className="flex items-center gap-1">
             {conversation.mode === "AI_ACTIVE" ? (
               <Bot size={11} />
@@ -68,7 +108,6 @@ export default function ConversationRow({
             )}
             {conversation.mode === "AI_ACTIVE" ? "IA" : "Humano"}
           </span>
-          <span>{conversation.service.estado.replaceAll("_", " ")}</span>
         </span>
       </span>
       <span className="flex flex-col items-end gap-2">

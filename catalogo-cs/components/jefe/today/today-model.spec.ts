@@ -1,6 +1,9 @@
 import type { ConversationMessage, Service } from "@/lib/types";
 import {
+  buildEmployeeNavigation,
   buildJefeConversations,
+  buildOperationSections,
+  conversationsForEmployee,
   filterConversations,
   groupConversationsByEmployee,
   markConversationRead,
@@ -82,7 +85,7 @@ function message(
 }
 
 describe("modelo puro de Hoy", () => {
-  it("agrupa varios servicios autorizados del mismo cliente en una conversacion", () => {
+  it("separa cada servicio autorizado aunque pertenezca al mismo cliente", () => {
     const older = service({ id: "service-older", estado: "finalizado" });
     const current = service({ id: "service-current", estado: "en_curso" });
     const conversations = buildJefeConversations(
@@ -97,12 +100,13 @@ describe("modelo puro de Hoy", () => {
       },
     );
 
-    expect(conversations).toHaveLength(1);
+    expect(conversations).toHaveLength(2);
     expect(conversations[0].service.id).toBe("service-current");
     expect(conversations[0].messages.map((item) => item.id)).toEqual([
-      "old",
       "new",
     ]);
+    expect(conversations[1].service.id).toBe("service-older");
+    expect(conversations[1].messages.map((item) => item.id)).toEqual(["old"]);
   });
 
   it("filtra por atencion y agrupa por empleada", () => {
@@ -129,7 +133,114 @@ describe("modelo puro de Hoy", () => {
 
     expect(next[0].unreadCount).toBe(1);
     expect(next[0].needsReply).toBe(true);
-    expect(markConversationRead(next, "client-1")[0].unreadCount).toBe(0);
+    expect(markConversationRead(next, "service-1")[0].unreadCount).toBe(0);
+  });
+
+  it("aplica un evento SSE solo a la operacion indicada", () => {
+    const first = service({ id: "service-1", estado: "en_curso" });
+    const second = service({ id: "service-2", estado: "finalizado" });
+    const initial = buildJefeConversations(
+      [first, second],
+      {
+        "service-1": [message("m1", "ia", "2026-10-05T11:00:00.000Z")],
+        "service-2": [
+          {
+            ...message("m2", "ia", "2026-10-05T10:00:00.000Z"),
+            servicioId: "service-2",
+          },
+        ],
+      },
+    );
+    const next = mergeRealtimeMessage(initial, {
+      ...message("incoming", "cliente", "2026-10-05T11:02:00.000Z"),
+      servicioId: "service-1",
+    }, null);
+
+    expect(next.find((item) => item.id === "service-1")?.lastMessage).toBe(
+      "Mensaje incoming",
+    );
+    expect(next.find((item) => item.id === "service-2")?.messages).toHaveLength(1);
+  });
+
+  it("construye tabs y secciones sin mezclar empleadas", () => {
+    const andreaService = service({
+      id: "service-andrea",
+      estado: "en_curso",
+      horaInicioServicio: "2026-10-05T10:00:00.000Z",
+    });
+    const yaelinService = service({
+      id: "service-yaelin",
+      clienteId: "client-2",
+      empleadaId: "employee-2",
+      empleada: {
+        ...service().empleada!,
+        id: "employee-2",
+        nombreArtistico: "Yaelin",
+      },
+      cliente: {
+        id: "client-2",
+        telegramChatId: "456",
+        nombreTelegram: "Luis",
+      },
+    });
+    const conversations = buildJefeConversations(
+      [andreaService, yaelinService],
+      {
+        "service-andrea": [
+          {
+            ...message("andrea", "ia", "2026-10-05T11:00:00.000Z"),
+            servicioId: "service-andrea",
+          },
+        ],
+        "service-yaelin": [
+          {
+            ...message("yaelin", "cliente", "2026-10-05T11:01:00.000Z"),
+            clienteId: "client-2",
+            servicioId: "service-yaelin",
+          },
+        ],
+      },
+    );
+    const employees = [andreaService.empleada!, yaelinService.empleada!];
+    const navigation = buildEmployeeNavigation(employees, conversations);
+    const andrea = conversationsForEmployee(conversations, "employee-1");
+    const radar = buildOperationSections(conversations, "radar");
+
+    expect(navigation.map((item) => item.name)).toEqual([
+      "Todas",
+      "Andrea",
+      "Yaelin",
+      "Sin asignar",
+    ]);
+    expect(navigation.find((item) => item.id === "employee-1")?.hasActiveService).toBe(true);
+    expect(navigation.find((item) => item.id === "employee-2")?.attentionCount).toBe(1);
+    expect(andrea.map((item) => item.id)).toEqual(["service-andrea"]);
+    expect(radar.map((section) => section.id)).toEqual([
+      "unanswered",
+      "active",
+    ]);
+  });
+
+  it("mantiene Sin asignar limitado a operaciones autorizadas sin empleada", () => {
+    const unassignedService = service({
+      id: "service-unassigned",
+      clienteId: "client-unassigned",
+      empleadaId: "",
+      empleada: undefined,
+      cliente: {
+        id: "client-unassigned",
+        telegramChatId: "789",
+        nombreTelegram: "Roberto",
+      },
+      estado: "agendado",
+    });
+    const conversations = buildJefeConversations([unassignedService], {});
+    const navigation = buildEmployeeNavigation([], conversations);
+
+    expect(conversationsForEmployee(conversations, "unassigned")).toHaveLength(1);
+    expect(
+      navigation.find((item) => item.id === "unassigned")?.conversationCount,
+    ).toBe(1);
   });
 
   it("respeta el estado operacional entregado por el backend", () => {

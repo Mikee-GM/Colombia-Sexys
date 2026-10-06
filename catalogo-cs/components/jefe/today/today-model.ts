@@ -1,5 +1,6 @@
 import type {
   ConversationMessage,
+  Employee,
   Service,
   ServiceOperationState,
 } from "@/lib/types";
@@ -23,6 +24,31 @@ export type JefeConversation = {
   unreadCount: number;
 };
 
+export type EmployeeTabId = string;
+
+export type EmployeeNavigationItem = {
+  id: EmployeeTabId;
+  name: string;
+  available: boolean | null;
+  hasActiveService: boolean;
+  attentionCount: number;
+  conversationCount: number;
+};
+
+export type OperationSectionKind =
+  | "attention"
+  | "unanswered"
+  | "active"
+  | "scheduled"
+  | "conversations"
+  | "results";
+
+export type OperationSection = {
+  id: OperationSectionKind;
+  label: string;
+  conversations: JefeConversation[];
+};
+
 export type EmployeeConversationGroup = {
   employeeId: string;
   employeeName: string;
@@ -30,6 +56,12 @@ export type EmployeeConversationGroup = {
 };
 
 const ACTIVE_STATES = new Set(["pendiente", "agendado", "en_curso"]);
+const ATTENTION_OPERATION_STATES = new Set<ServiceOperationState>([
+  "preparado",
+  "esperando_aceptacion_empleada",
+  "esperando_transporte_ida",
+  "preparando_regreso",
+]);
 
 function servicePriority(service: Service): number {
   return ACTIVE_STATES.has(service.estado) ? 1 : 0;
@@ -52,8 +84,8 @@ function uniqueMessages(messages: ConversationMessage[]) {
 
 /**
  * Construye la bandeja solo con servicios que el backend ya autorizo para el
- * jefe. Un cliente con varios servicios aparece una vez, pero su historial
- * conserva los mensajes de todos esos servicios autorizados.
+ * jefe. Cada fila representa una operacion concreta: un mismo cliente puede
+ * aparecer varias veces si tuvo servicios distintos.
  */
 export function buildJefeConversations(
   services: Service[],
@@ -63,24 +95,29 @@ export function buildJefeConversations(
 
   for (const service of services) {
     if (!service.clienteId) continue;
-    const messages = messagesByService[service.id] ?? [];
-    if (messages.length === 0) continue;
     const current = byClient.get(service.clienteId) ?? [];
     current.push(service);
     byClient.set(service.clienteId, current);
   }
 
-  return Array.from(byClient.entries())
-    .map(([clientId, related]) => {
-      const relatedServices = [...related].sort(compareServices);
-      const service = relatedServices[0];
-      const messages = uniqueMessages(
-        relatedServices.flatMap((item) => messagesByService[item.id] ?? []),
+  return services
+    .filter((service) => {
+      if (!service.clienteId) return false;
+      return (
+        (messagesByService[service.id] ?? []).length > 0 ||
+        ACTIVE_STATES.has(service.estado)
       );
+    })
+    .map((service) => {
+      const clientId = service.clienteId;
+      const relatedServices = [...(byClient.get(clientId) ?? [service])].sort(
+        compareServices,
+      );
+      const messages = uniqueMessages(messagesByService[service.id] ?? []);
       const latest = messages[messages.length - 1];
 
       return {
-        id: clientId,
+        id: service.id,
         clientId,
         clientName: service.cliente?.nombreTelegram?.trim() || "Cliente",
         telegramId: service.cliente?.telegramChatId ?? null,
@@ -127,6 +164,153 @@ export function filterConversations(
   });
 }
 
+export function conversationNeedsAttention(
+  conversation: JefeConversation,
+): boolean {
+  const state =
+    conversation.service.operationalState ??
+    legacyOperationState(conversation.service);
+  return (
+    conversation.needsReply ||
+    conversation.unreadCount > 0 ||
+    ATTENTION_OPERATION_STATES.has(state)
+  );
+}
+
+export function buildEmployeeNavigation(
+  employees: Employee[],
+  conversations: JefeConversation[],
+): EmployeeNavigationItem[] {
+  const byEmployee = new Map<string, JefeConversation[]>();
+  for (const conversation of conversations) {
+    const key = conversation.employeeId || "unassigned";
+    const scoped = byEmployee.get(key) ?? [];
+    scoped.push(conversation);
+    byEmployee.set(key, scoped);
+  }
+
+  const itemFor = (
+    id: EmployeeTabId,
+    name: string,
+    available: boolean | null,
+    scoped: JefeConversation[],
+  ): EmployeeNavigationItem => ({
+    id,
+    name,
+    available,
+    hasActiveService: scoped.some(
+      (conversation) => conversation.service.estado === "en_curso",
+    ),
+    attentionCount: scoped.filter(conversationNeedsAttention).length,
+    conversationCount: scoped.length,
+  });
+
+  const employeeItems = [...employees]
+    .sort((left, right) =>
+      left.nombreArtistico.localeCompare(right.nombreArtistico, "es"),
+    )
+    .map((employee) =>
+      itemFor(
+        employee.id,
+        employee.nombreArtistico,
+        employee.disponible,
+        byEmployee.get(employee.id) ?? [],
+      ),
+    );
+  const unassigned = byEmployee.get("unassigned") ?? [];
+
+  return [
+    itemFor("all", "Todas", null, conversations),
+    ...employeeItems,
+    itemFor("unassigned", "Sin asignar", null, unassigned),
+  ];
+}
+
+export function conversationsForEmployee(
+  conversations: JefeConversation[],
+  employeeId: EmployeeTabId,
+): JefeConversation[] {
+  if (employeeId === "all") return conversations;
+  if (employeeId === "unassigned") {
+    return conversations.filter((conversation) => !conversation.employeeId);
+  }
+  return conversations.filter(
+    (conversation) => conversation.employeeId === employeeId,
+  );
+}
+
+function isScheduled(conversation: JefeConversation): boolean {
+  return (
+    conversation.service.estado === "agendado" ||
+    conversation.service.tipoAgenda === "programado"
+  );
+}
+
+export function buildOperationSections(
+  conversations: JefeConversation[],
+  scope: "radar" | "employee",
+  search = "",
+): OperationSection[] {
+  const matches = filterConversations(conversations, "all", search);
+  if (search.trim()) {
+    return matches.length > 0
+      ? [{ id: "results", label: "Resultados", conversations: matches }]
+      : [];
+  }
+
+  const remaining = new Set(matches.map((conversation) => conversation.id));
+  const take = (
+    predicate: (conversation: JefeConversation) => boolean,
+  ): JefeConversation[] =>
+    matches.filter((conversation) => {
+      if (!remaining.has(conversation.id) || !predicate(conversation)) {
+        return false;
+      }
+      remaining.delete(conversation.id);
+      return true;
+    });
+
+  const sections: OperationSection[] = [
+    {
+      id: "attention",
+      label: "Requiere atención",
+      conversations: take(
+        (conversation) =>
+          !conversation.needsReply && conversationNeedsAttention(conversation),
+      ),
+    },
+    {
+      id: "unanswered",
+      label: "Sin responder",
+      conversations: take((conversation) => conversation.needsReply),
+    },
+    {
+      id: "active",
+      label: "Servicios activos",
+      conversations: take(
+        (conversation) => conversation.service.estado === "en_curso",
+      ),
+    },
+    {
+      id: "scheduled",
+      label: "Próximos y agendados",
+      conversations: take(isScheduled),
+    },
+  ];
+
+  if (scope === "employee") {
+    sections.push({
+      id: "conversations",
+      label: "Conversaciones",
+      conversations: matches.filter((conversation) =>
+        remaining.has(conversation.id),
+      ),
+    });
+  }
+
+  return sections.filter((section) => section.conversations.length > 0);
+}
+
 export function groupConversationsByEmployee(
   conversations: JefeConversation[],
 ): EmployeeConversationGroup[] {
@@ -153,12 +337,7 @@ export function mergeRealtimeMessage(
 ): JefeConversation[] {
   return conversations
     .map((conversation) => {
-      if (
-        conversation.clientId !== message.clienteId &&
-        !conversation.relatedServices.some(
-          (service) => service.id === message.servicioId,
-        )
-      ) {
+      if (conversation.service.id !== message.servicioId) {
         return conversation;
       }
       if (conversation.messages.some((item) => item.id === message.id)) {
@@ -204,12 +383,13 @@ export function markConversationRead(
 
 export function updateConversationMode(
   conversations: JefeConversation[],
-  conversationId: string,
+  conversationIdOrClientId: string,
   mode: "AI_ACTIVE" | "HUMAN_ACTIVE",
 ): JefeConversation[] {
   const iaActiva = mode === "AI_ACTIVE";
   return conversations.map((conversation) =>
-    conversation.id === conversationId
+    conversation.id === conversationIdOrClientId ||
+    conversation.clientId === conversationIdOrClientId
       ? {
           ...conversation,
           mode,
