@@ -443,6 +443,48 @@ export async function chooseReturnTransport(
   }
 }
 
+export async function assignExternalTransport(
+  serviceId: string,
+  input: { platform: string; sharedLink: string; amount: number },
+) {
+  try {
+    await assertOwnedService(serviceId);
+    const data = await apiFetch(`/services/${serviceId}/external-transport`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return { success: true, data };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo asignar el transporte externo",
+    };
+  }
+}
+
+export async function assignInternalTransport(serviceId: string) {
+  try {
+    await assertOwnedService(serviceId);
+    const data = await apiFetch(`/services/${serviceId}/internal-transport`, {
+      method: "POST",
+    });
+    return { success: true, data };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo asignar el chofer interno",
+    };
+  }
+}
+
 export async function updateUberStatus(
   tripId: string,
   status: "en_camino" | "llegado",

@@ -257,6 +257,28 @@ export async function chooseReturnTransportAction(
   }
 }
 
+export async function assignExternalTransportAction(
+  serviceId: string,
+  input: { platform: string; sharedLink: string; amount: number },
+) {
+  try {
+    await apiFetch(`/services/${serviceId}/external-transport`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidateAdminViews();
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo asignar el transporte externo",
+    };
+  }
+}
+
 export async function changeTripTransportAction(
   tripId: string,
   transportType: "chofer" | "uber",

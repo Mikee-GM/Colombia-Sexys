@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Ban,
   Calendar,
-  Camera,
   Car,
   Check,
   CalendarClock,
@@ -12,15 +11,12 @@ import {
   Clock3,
   ExternalLink,
   FileCheck2,
-  Image as ImageIcon,
   MapPin,
   MapPinned,
   MessageCircle,
   Pencil,
   Send,
-  Smartphone,
   Star,
-  Upload,
   User,
   X,
 } from "lucide-react";
@@ -41,12 +37,11 @@ import {
   sendServiceMessageAction,
   updateCancellationAction,
   updateServiceAction,
-  uploadUberScreenshotAction,
 } from "@/lib/data/services";
-import { comprimirCaptura } from "@/lib/comprimir-imagen";
 import CancelServiceDialog from "./cancel-service-dialog";
 import ServiceRescheduleDialog from "./service-reschedule-dialog";
 import ServiceLocationDialog from "./service-location-dialog";
+import ExternalTransportSheet from "@/components/jefe/ExternalTransportSheet";
 import {
   CANCELLATION_REASON_LABEL,
   SELECTABLE_CANCELLATION_REASONS,
@@ -78,6 +73,7 @@ export default function ServiceDetailDialog({
   const [cancelling, setCancelling] = useState(false);
   const [editingCancellation, setEditingCancellation] = useState(false);
   const [pendingAction, setPendingAction] = useState(false);
+  const [externalReturnOpen, setExternalReturnOpen] = useState(false);
 
   // Edit form state
   const [duracion, setDuracion] = useState<number | string>(1);
@@ -581,22 +577,14 @@ export default function ServiceDetailDialog({
                       className="w-full bg-black border border-zinc-800 px-4 py-2 rounded-xl text-sm text-white focus:border-[#C5A55A] outline-none resize-none"
                     />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="pt-1">
                     <button
                       type="button"
                       disabled={pendingAction}
                       onClick={() => handleDecide("aceptar", "chofer")}
-                      className="flex items-center justify-center gap-2 rounded-xl bg-[#C5A55A] py-3 text-xs font-bold uppercase tracking-wider text-black hover:bg-[#D4AF37] transition-all disabled:opacity-50"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#C5A55A] py-3 text-xs font-bold uppercase tracking-wider text-black hover:bg-[#D4AF37] transition-all disabled:opacity-50"
                     >
-                      <Car size={16} /> Aceptar con Chofer Interno
-                    </button>
-                    <button
-                      type="button"
-                      disabled={pendingAction}
-                      onClick={() => handleDecide("aceptar", "uber")}
-                      className="flex items-center justify-center gap-2 rounded-xl border border-[#C5A55A] py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A] hover:bg-[#C5A55A]/10 transition-all disabled:opacity-50"
-                    >
-                      <Smartphone size={16} /> Aceptar con Uber
+                      <Car size={16} /> Enviar servicio a la empleada
                     </button>
                   </div>
                 </div>
@@ -845,7 +833,7 @@ export default function ServiceDetailDialog({
                 <div className="rounded-2xl border border-[#C5A55A]/30 bg-black/40 p-4 space-y-3">
                   <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                     <p className="text-xs font-bold uppercase tracking-wider text-[#C5A55A] flex items-center gap-1.5">
-                      <Car size={14} /> Traslados Uber & Capturas
+                      <Car size={14} /> Traslados externos
                     </p>
                     <button
                       type="button"
@@ -1045,22 +1033,10 @@ export default function ServiceDetailDialog({
                       <button
                         type="button"
                         disabled={pendingAction}
-                        onClick={async () => {
-                          setPendingAction(true);
-                          const res = await chooseReturnTransportAction(
-                            service.id,
-                            "uber",
-                          );
-                          setPendingAction(false);
-                          if (!res.success) toast.error(res.error);
-                          else {
-                            toast.success("Regreso asignado con Uber");
-                            await reloadCurrentService();
-                          }
-                        }}
+                        onClick={() => setExternalReturnOpen(true)}
                         className="px-4 py-2 rounded-xl border border-[#C5A55A] text-[#C5A55A] font-bold text-xs uppercase"
                       >
-                        Regreso con Uber
+                        Transporte externo
                       </button>
                     </div>
                   </div>
@@ -1068,6 +1044,17 @@ export default function ServiceDetailDialog({
             </div>
           )}
         </div>
+
+        {externalReturnOpen && (
+          <ExternalTransportSheet
+            serviceId={service.id}
+            onClose={() => setExternalReturnOpen(false)}
+            onSaved={async () => {
+              setExternalReturnOpen(false);
+              await reloadCurrentService();
+            }}
+          />
+        )}
 
         {/* Footer */}
         <div className="flex justify-end px-6 py-4 border-t border-zinc-800 bg-black/40">
@@ -1104,34 +1091,12 @@ function AdminTripCard({
   const [savingExternal, setSavingExternal] = useState(false);
   const [savingFare, setSavingFare] = useState(false);
   const [changingTransport, setChangingTransport] = useState(false);
-  const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const isIda = trip.tipo === "ida";
-  const pickupLat = isIda
-    ? service?.empleada?.ubicacionLat
-    : service?.ubicacionClienteLat;
-  const pickupLng = isIda
-    ? service?.empleada?.ubicacionLng
-    : service?.ubicacionClienteLng;
-  const dropoffLat = isIda
-    ? service?.ubicacionClienteLat
-    : service?.empleada?.ubicacionLat;
-  const dropoffLng = isIda
-    ? service?.ubicacionClienteLng
-    : service?.empleada?.ubicacionLng;
-
-  let uberDeeplink = "https://m.uber.com/ul/?action=setPickup";
-  if (pickupLat && pickupLng) {
-    uberDeeplink += `&pickup[latitude]=${pickupLat}&pickup[longitude]=${pickupLng}`;
-  } else {
-    uberDeeplink += "&pickup=my_location";
-  }
-  if (dropoffLat && dropoffLng) {
-    uberDeeplink += `&dropoff[latitude]=${dropoffLat}&dropoff[longitude]=${dropoffLng}`;
-  }
 
   const handleSaveFare = async () => {
+    if (trip.externalPlatform) {
+      toast.error("El transporte externo ya tiene plataforma, link y costo");
+      return;
+    }
     const amount = Number(fare);
     if (!Number.isFinite(amount) || amount <= 0) {
       toast.error("Ingresa una tarifa válida");
@@ -1172,32 +1137,6 @@ function AdminTripCard({
     }
     toast.success("Transporte externo registrado");
     onRefresh();
-  };
-
-  const handleUploadScreenshot = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingScreenshot(true);
-    try {
-      // Una captura de un movil moderno pesa mas de lo que admite el servidor.
-      const comprimida = await comprimirCaptura(file);
-      const formData = new FormData();
-      formData.append("tripId", trip.id);
-      formData.append("file", comprimida);
-      const res = await uploadUberScreenshotAction(formData);
-      if (!res.success) {
-        throw new Error(res.error || "Error al subir la captura");
-      }
-      toast.success("Captura de Uber registrada con éxito");
-      onRefresh();
-    } catch (err: any) {
-      toast.error(err.message || "No se pudo subir la captura");
-    } finally {
-      setUploadingScreenshot(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
   };
 
   const handleChangeTransport = async () => {
@@ -1276,83 +1215,6 @@ function AdminTripCard({
                 : "Guardar plataforma, enlace y costo"}
             </button>
           </div>
-          <a
-            href={uberDeeplink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full rounded-xl bg-[#C5A55A] py-2.5 text-xs font-bold uppercase tracking-wider text-black hover:bg-[#D4AF37] transition-all shadow-sm"
-          >
-            <Smartphone size={15} /> Abrir / Pedir Uber
-          </a>
-
-          {/* Sección de Captura de Pantalla */}
-          <div className="space-y-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              disabled={uploadingScreenshot}
-              aria-busy={uploadingScreenshot}
-              onChange={handleUploadScreenshot}
-              className="hidden"
-              id={`uber-screenshot-${trip.id}`}
-            />
-
-            {trip.uberScreenshotUrl ? (
-              <div className="rounded-xl border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3 text-xs space-y-2 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-[#E8D5A3] font-bold flex items-center gap-1.5">
-                    <Camera size={14} className="text-[#C5A55A]" /> Captura
-                    Registrada
-                  </span>
-                  <a
-                    href={trip.uberScreenshotUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#C5A55A] hover:underline flex items-center gap-1 font-bold bg-[#C5A55A]/10 px-2.5 py-1 rounded-lg border border-[#C5A55A]/30 text-xs"
-                  >
-                    Ver Captura <ExternalLink size={11} />
-                  </a>
-                </div>
-                <div className="pt-2 border-t border-zinc-800/80 flex justify-end">
-                  <label
-                    htmlFor={`uber-screenshot-${trip.id}`}
-                    className="text-[11px] font-semibold text-zinc-400 hover:text-[#C5A55A] cursor-pointer flex items-center gap-1 transition-colors"
-                  >
-                    <Upload size={12} />{" "}
-                    {uploadingScreenshot ? "Subiendo..." : "Reemplazar captura"}
-                  </label>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/80 p-3 text-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-300 font-semibold flex items-center gap-1.5">
-                    <Camera size={14} className="text-[#C5A55A]" /> Captura de
-                    Uber
-                  </span>
-                  <span className="text-[10px] text-amber-400 font-bold uppercase bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
-                    Pendiente
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-400">
-                  Sube el comprobante o captura del viaje de Uber.
-                </p>
-                <label
-                  htmlFor={`uber-screenshot-${trip.id}`}
-                  className={`flex items-center justify-center gap-2 w-full rounded-xl border border-[#C5A55A]/50 bg-[#C5A55A]/10 py-2 text-xs font-bold uppercase tracking-wider text-[#E8D5A3] hover:bg-[#C5A55A]/20 transition-all cursor-pointer ${
-                    uploadingScreenshot ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                >
-                  <Upload size={14} />
-                  {uploadingScreenshot
-                    ? "Subiendo captura..."
-                    : "Subir Captura"}
-                </label>
-              </div>
-            )}
-          </div>
-
           {/* Sección de Tarifa Uber */}
           {editingFare ? (
             <div className="flex gap-2">
@@ -1389,13 +1251,15 @@ function AdminTripCard({
                     ? `$${Number(trip.tarifa).toFixed(2)}`
                     : "Sin registrar"}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setEditingFare(true)}
-                  className="text-[#C5A55A] hover:underline text-xs font-bold"
-                >
-                  {Number(trip.tarifa) > 0 ? "Cambiar" : "+ Registrar Tarifa"}
-                </button>
+                {!trip.externalPlatform && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingFare(true)}
+                    className="text-[#C5A55A] hover:underline text-xs font-bold"
+                  >
+                    {Number(trip.tarifa) > 0 ? "Cambiar" : "+ Registrar Tarifa"}
+                  </button>
+                )}
               </div>
             </div>
           )}

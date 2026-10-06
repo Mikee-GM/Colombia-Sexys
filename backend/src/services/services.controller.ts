@@ -429,6 +429,27 @@ export class ServicesController {
     );
   }
 
+  @Post(':id/external-transport')
+  assignExternalTransport(
+    @Param('id') serviceId: string,
+    @Body() dto: ExternalTransportDetailsDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.assignExternalTransport(
+      serviceId,
+      req.user.id,
+      dto,
+    );
+  }
+
+  @Post(':id/internal-transport')
+  assignInternalTransport(@Param('id') serviceId: string, @Req() req: any) {
+    return this.servicesService.assignInternalTransport(
+      serviceId,
+      req.user.id,
+    );
+  }
+
   // Bandeja del dinero de transporte que se gasto en servicios cancelados y
   // todavia no entra a ningun corte.
   @Get('trips/pending-cancellation-cost')

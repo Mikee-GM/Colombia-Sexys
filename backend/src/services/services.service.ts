@@ -1971,7 +1971,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           jefeId,
           notasJefe: bossNotes?.trim() || null,
           habitacion: habitacion?.trim() || null,
-          transporteAgendado: tipoTransporte,
+          transporteAgendado: null,
           employeeAcceptanceExpiresAt: expiresAt,
           employeeAcceptanceRemindedAt: null,
           employeeAcceptedAt: null,
@@ -2048,6 +2048,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       servicio.transporteAgendado ?? 'chofer',
       servicio.notasJefe ?? undefined,
       servicio.habitacion ?? undefined,
+      true,
     );
     const now = new Date();
     const actions: ServiceOperationAction[] = [
@@ -2173,23 +2174,21 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     let state = this.serviceOperations.currentState(service);
 
     if (progress === 'en_route') {
-      if (
-        state === 'esperando_transporte_ida' ||
-        state === 'aceptado' ||
-        state === 'preparando_regreso'
-      ) {
-        await this.markTransportAssigned(serviceId, actor.userId, actor.type);
-        service =
-          (await this.serviciosRepository.findOne({
-            where: { id: serviceId },
-          })) ?? service;
-        state = this.serviceOperations.currentState(service);
-      }
       const expected =
         tripType === 'regreso'
           ? 'transporte_regreso_asignado'
           : 'transporte_ida_asignado';
-      if (state !== expected) return;
+      if (state !== expected) {
+        const alreadyInTransit =
+          tripType === 'regreso'
+            ? state === 'empleada_de_regreso'
+            : state === 'empleada_en_camino';
+        if (alreadyInTransit) return;
+        if (!service.operationalState) return;
+        throw new ConflictException(
+          'El transporte debe estar asignado antes de iniciar el trayecto',
+        );
+      }
       await this.serviceOperations.transition(
         serviceId,
         tripType === 'regreso' ? 'empleada_regresa' : 'empleada_sale',
@@ -2204,7 +2203,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const expected =
       tripType === 'regreso' ? 'empleada_de_regreso' : 'empleada_en_camino';
-    if (state !== expected) return;
+    if (state !== expected) {
+      const alreadyArrived =
+        tripType === 'regreso'
+          ? state === 'finalizado'
+          : state === 'empleada_llego';
+      if (alreadyArrived) return;
+      if (!service.operationalState) return;
+      throw new ConflictException(
+        'El trayecto debe estar en camino antes de registrar la llegada',
+      );
+    }
     await this.serviceOperations.transition(
       serviceId,
       tripType === 'regreso' ? 'finalizar' : 'empleada_llega',
@@ -2262,6 +2271,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     tipoTransporte: 'chofer' | 'uber' = 'chofer',
     bossNotes?: string,
     habitacion?: string,
+    deferTransport = false,
   ): Promise<
     Servicios & {
       uberLink?: string;
@@ -2337,7 +2347,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           // entero-- eso significaba que no se guardaba: la empleada la veia en
           // su mensaje, pero la ficha del panel la mostraba vacia.
           habitacion: servicio.habitacion,
-          transporteAgendado: tipoTransporte,
+          transporteAgendado: deferTransport ? null : tipoTransporte,
         },
       );
       if (!gano) {
@@ -2346,7 +2356,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         );
       }
       servicio.estado = 'agendado';
-      servicio.transporteAgendado = tipoTransporte;
+      servicio.transporteAgendado = deferTransport ? null : tipoTransporte;
       this.realtimeEventsService.emitToBoss(servicio.jefeId, {
         type: 'service_scheduled',
         data: servicio,
@@ -2430,7 +2440,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
              * viaje. Con eso, nada fuera del viaje podia saber que el servicio
              * iba en Uber, incluida la espera a que la modelo se aliste.
              */
-            transporteAgendado: tipoTransporte,
+            transporteAgendado: deferTransport ? null : tipoTransporte,
           },
           manager,
         );
@@ -2454,7 +2464,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
     }
     servicio.estado = 'en_curso';
-    servicio.transporteAgendado = tipoTransporte;
+    servicio.transporteAgendado = deferTransport ? null : tipoTransporte;
 
     /*
      * Con Uber se espera a que la modelo avise que ya puede salir.
@@ -2465,26 +2475,30 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
      * pasa por aqui porque ahi nada cobra por esperar.
      */
     const esperandoAlistado =
-      tipoTransporte === 'uber' && !servicio.empleadaListaAt;
+      !deferTransport && tipoTransporte === 'uber' && !servicio.empleadaListaAt;
 
     // 2. Crear viaje (viaje de ida para la empleada) sin chofer asignado inicialmente
-    const nuevoViaje = this.viajesRepository.create({
-      servicioId: servicio.id,
-      choferId: null,
-      tipo: 'ida',
-      zona: 'domicilio',
-      tarifa: tipoTransporte === 'uber' ? 0 : this.driverPayoutFor(servicio),
-      driverPayout:
-        tipoTransporte === 'uber' ? 0 : this.driverPayoutFor(servicio),
-      estado: tipoTransporte === 'uber' ? 'aceptado' : 'notificado',
-      proveedorTransporte: tipoTransporte,
-    });
-    const viajeGuardado = await this.viajesRepository.save(nuevoViaje);
+    const viajeGuardado = deferTransport
+      ? null
+      : await this.viajesRepository.save(
+          this.viajesRepository.create({
+            servicioId: servicio.id,
+            choferId: null,
+            tipo: 'ida',
+            zona: 'domicilio',
+            tarifa:
+              tipoTransporte === 'uber' ? 0 : this.driverPayoutFor(servicio),
+            driverPayout:
+              tipoTransporte === 'uber' ? 0 : this.driverPayoutFor(servicio),
+            estado: tipoTransporte === 'uber' ? 'aceptado' : 'notificado',
+            proveedorTransporte: tipoTransporte,
+          }),
+        );
 
     // 3. Notificar a Jefes via SSE
     this.realtimeEventsService.emitToBoss(servicio.jefeId, {
       type: 'service_accepted',
-      data: { id: servicio.id, viajeId: viajeGuardado.id },
+      data: { id: servicio.id, viajeId: viajeGuardado?.id },
     });
 
     // 4. Notificar a Empleada via SSE
@@ -2563,13 +2577,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     // 5. Iniciar despacho de choferes por proximidad
     let uberLink: string | undefined;
-    if (tipoTransporte === 'uber') {
+    if (!deferTransport && viajeGuardado && tipoTransporte === 'uber') {
       // Retenido a proposito: lo entrega `marcarEmpleadaLista`, que es quien
       // sabe que ella ya puede salir.
       if (!esperandoAlistado) {
         uberLink = this.buildUberLinkForTrip(servicio, 'ida');
       }
-    } else {
+    } else if (!deferTransport && viajeGuardado) {
       // Si todos los choferes registrados tienen modoBot=false, no hay ninguno
       // que use el app: se trata el viaje como Uber automatico en lugar de
       // intentar un despacho que siempre fallaria.
@@ -2614,7 +2628,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return {
       ...servicio,
       uberLink,
-      viajeId: viajeGuardado.id,
+      viajeId: viajeGuardado?.id,
       esperandoAlistado,
     };
   }
@@ -5802,15 +5816,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
-          '🚕 Chofer',
+          'Chofer interno',
           `regreso_transporte:${servicio.id}:interno`,
-        ),
-        Markup.button.callback(
-          '🚗 Uber',
-          `regreso_transporte:${servicio.id}:uber`,
         ),
       ],
     ]);
+    const panelHint =
+      '\nPara transporte externo, abre el panel y registra plataforma, enlace y costo.';
     const messages: Array<{ destination: string; request: Promise<unknown> }> =
       [];
     const usedChatIds = new Set<string>();
@@ -5818,7 +5830,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       usedChatIds.add(String(topic.chatId));
       messages.push({
         destination: `hilo ${topic.threadId}`,
-        request: this.bot.telegram.sendMessage(topic.chatId, text, {
+        request: this.bot.telegram.sendMessage(topic.chatId, text + panelHint, {
           message_thread_id: topic.threadId,
           ...keyboard,
         }),
@@ -5839,7 +5851,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           usedChatIds.add(groupId);
           messages.push({
             destination: `grupo del jefe ${boss!.id}`,
-            request: this.bot.telegram.sendMessage(groupId, text, {
+            request: this.bot.telegram.sendMessage(groupId, text + panelHint, {
               ...keyboard,
             }),
           });
@@ -5925,6 +5937,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     actorId: string,
     provider: 'interno' | 'uber',
   ): Promise<{ trip: Viajes; uberLink?: string }> {
+    if (provider === 'uber') {
+      throw new BadRequestException(
+        'Para transporte externo registra plataforma, enlace compartido y costo',
+      );
+    }
     const result = await this.serviciosRepository.manager.transaction(
       async (manager) => {
         const servicio = await manager.findOne(Servicios, {
@@ -5959,24 +5976,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             choferId: null,
             tipo: 'regreso',
             zona: 'domicilio',
-            tarifa: provider === 'uber' ? 0 : this.driverPayoutFor(servicio),
-            driverPayout:
-              provider === 'uber' ? 0 : this.driverPayoutFor(servicio),
-            estado: provider === 'uber' ? 'aceptado' : 'notificado',
+            tarifa: this.driverPayoutFor(servicio),
+            driverPayout: this.driverPayoutFor(servicio),
+            estado: 'notificado',
             proveedorTransporte: provider,
           }),
         );
         servicio.proximoRecordatorioRegresoAt = null;
         await manager.save(Servicios, servicio);
 
-        // Keep the row lock query free of outer joins. PostgreSQL cannot apply
-        // FOR UPDATE to the nullable side generated by TypeORM relation joins.
-        if (provider === 'uber') {
-          const empleada = await manager.findOneBy(Empleadas, {
-            id: servicio.empleadaId,
-          });
-          if (empleada) servicio.empleada = empleada;
-        }
         return { trip, servicio };
       },
     );
@@ -5991,10 +5999,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     // Un transporte externo queda asignado al elegirlo; uno interno solo
     // queda asignado cuando un chofer acepta la oferta.
-    if (provider === 'uber') {
-      await this.markTransportAssigned(result.servicio.id, actorId, 'jefe');
-    }
-
     if (provider === 'interno') {
       await this.dispatchViaje(result.trip.id).catch((error) =>
         this.logger.error(
@@ -6118,6 +6122,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         trip.tarifa = provider === 'uber' ? 0 : this.driverPayoutFor(servicio);
         trip.driverPayout =
           provider === 'uber' ? 0 : this.driverPayoutFor(servicio);
+        servicio.transporteAgendado = provider === 'interno' ? 'chofer' : 'uber';
         await manager.save(Viajes, trip);
 
         if (trip.tipo === 'regreso') {
@@ -6137,10 +6142,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
     await this.liquidationSync.syncOfficeRecord(servicio.id);
-
-    if (provider === 'uber') {
-      await this.markTransportAssigned(servicio.id, actorId, 'jefe');
-    }
 
     let uberLink: string | undefined;
     if (provider === 'interno') {
@@ -6359,15 +6360,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'La entrega de efectivo ya fue saldada; la corrección requiere un ajuste administrativo independiente',
       );
     }
-    const hasScreenshot = Boolean(
-      trip.uberScreenshotUrl || trip.telegramUberFileId,
-    );
-    const override = !hasScreenshot && actor.rol === 'admin';
-    if (!hasScreenshot && !override) {
-      throw new ConflictException(
-        'El jefe debe adjuntar la captura del Uber antes de confirmar la tarifa',
-      );
-    }
     const newEstado = ['aceptado', 'en_camino', 'llegado', 'en_curso'].includes(
       trip.estado,
     )
@@ -6377,7 +6369,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       tarifa: amount,
       fareConfirmedAt: new Date(),
       fareConfirmedByUserId: actorId,
-      fareConfirmationOverride: override,
+      fareConfirmationOverride: false,
       estado: newEstado,
     });
     await this.liquidationSync.syncOfficeRecord(trip.servicioId);
@@ -6406,6 +6398,127 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     actorId: string,
     input: { platform: string; sharedLink: string; amount: number },
   ): Promise<Viajes> {
+    const trip = await this.getAuthorizedUberTrip(tripId, actorId);
+    return this.assignExternalTransport(
+      trip.servicioId,
+      actorId,
+      input,
+      trip.id,
+    );
+  }
+
+  async assignInternalTransport(
+    serviceId: string,
+    actorId: string,
+  ): Promise<Viajes> {
+    const result = await this.serviciosRepository.manager.transaction(
+      async (manager) => {
+        const service = await manager
+          .getRepository(Servicios)
+          .createQueryBuilder('service')
+          .setLock('pessimistic_write')
+          .where('service.id = :serviceId', { serviceId })
+          .getOne();
+        if (!service) throw new NotFoundException('Servicio no encontrado');
+
+        const [actor, employee] = await Promise.all([
+          manager.findOneBy(Usuarios, { id: actorId }),
+          manager.findOneBy(Empleadas, { id: service.empleadaId }),
+        ]);
+        if (
+          !actor ||
+          (actor.rol !== 'admin' &&
+            (actor.rol !== 'jefe' ||
+              (service.jefeId !== actor.id &&
+                employee?.jefeId !== actor.id &&
+                employee?.jefeSecundarioId !== actor.id)))
+        ) {
+          throw new ConflictException('No puedes gestionar este servicio');
+        }
+
+        const state = this.serviceOperations.currentState(service);
+        const tripType =
+          state === 'esperando_transporte_ida'
+            ? ('ida' as const)
+            : state === 'preparando_regreso'
+              ? ('regreso' as const)
+              : null;
+        if (!tripType) {
+          if (
+            state === 'transporte_ida_asignado' ||
+            state === 'transporte_regreso_asignado'
+          ) {
+            const assigned = await manager.findOne(Viajes, {
+              where: {
+                servicioId: service.id,
+                tipo:
+                  state === 'transporte_ida_asignado' ? 'ida' : 'regreso',
+              },
+            });
+            if (assigned) return { trip: assigned, service, dispatch: false };
+          }
+          throw new ConflictException(
+            `El transporte interno no puede asignarse desde el estado operativo "${state}"`,
+          );
+        }
+
+        let trip = await manager.findOne(Viajes, {
+          where: { servicioId: service.id, tipo: tripType },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (trip?.choferId && !['notificado', 'creado'].includes(trip.estado)) {
+          throw new ConflictException(
+            'El viaje ya tiene un chofer interno asignado',
+          );
+        }
+        trip ??= manager.create(Viajes, {
+          servicioId: service.id,
+          tipo: tripType,
+          zona: 'domicilio',
+        });
+        Object.assign(trip, {
+          choferId: null,
+          choferesNotificados: [],
+          telegramChoferMsgOfertaId: null,
+          proveedorTransporte: 'interno',
+          externalPlatform: null,
+          externalSharedLink: null,
+          tarifa: this.driverPayoutFor(service),
+          driverPayout: this.driverPayoutFor(service),
+          fareConfirmedAt: null,
+          fareConfirmedByUserId: null,
+          fareConfirmationOverride: false,
+          estado: 'notificado',
+          horaAceptacion: null,
+          horaInicioViaje: null,
+          horaFinViaje: null,
+        });
+        trip = await manager.save(Viajes, trip);
+        return { trip, service, dispatch: true };
+      },
+    );
+
+    if (result.dispatch) {
+      await this.dispatchViaje(result.trip.id);
+      this.realtimeEventsService.emitToBoss(result.service.jefeId, {
+        type: 'internal_transport_selected',
+        data: { serviceId, tripId: result.trip.id, tripType: result.trip.tipo },
+      });
+      this.realtimeEventsService.emitToEmployee(result.service.empleadaId, {
+        type: 'internal_transport_selected',
+        data: { serviceId, tripId: result.trip.id, tripType: result.trip.tipo },
+      });
+    }
+    await this.liquidationSync.syncOfficeRecord(serviceId);
+    return result.trip;
+  }
+
+  async assignExternalTransport(
+    serviceId: string,
+    actorId: string,
+    input: { platform: string; sharedLink: string; amount: number },
+    expectedTripId?: string,
+  ): Promise<Viajes> {
     const platform = input.platform.trim();
     const sharedLink = input.sharedLink.trim();
     if (!platform) {
@@ -6426,49 +6539,203 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     } catch {
       throw new BadRequestException('El enlace compartido no es válido');
     }
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      throw new BadRequestException('El enlace debe usar http o https');
+    if (parsedUrl.protocol !== 'https:') {
+      throw new BadRequestException('El enlace debe usar HTTPS');
     }
+    const normalizedPlatform = platform.slice(0, 50);
+    const result = await this.serviciosRepository.manager.transaction(
+      async (manager) => {
+        const service = await manager
+          .getRepository(Servicios)
+          .createQueryBuilder('service')
+          .setLock('pessimistic_write')
+          .where('service.id = :serviceId', { serviceId })
+          .getOne();
+        if (!service) throw new NotFoundException('Servicio no encontrado');
 
-    const trip = await this.getAuthorizedUberTrip(tripId, actorId);
-    if (['finalizado', 'cancelado'].includes(trip.estado)) {
-      throw new ConflictException(
-        'Los datos externos ya no pueden cambiarse en un viaje cerrado',
-      );
-    }
-    await this.viajesRepository.update(trip.id, {
-      externalPlatform: platform.slice(0, 50),
-      externalSharedLink: sharedLink,
-      tarifa: input.amount,
-    });
-    await this.serviceOperations.recordEvent(
-      trip.servicioId,
-      'EXTERNAL_TRANSPORT_DETAILS_REGISTERED',
-      { userId: actorId, type: 'jefe' },
-      {
-        tripId: trip.id,
-        tripType: trip.tipo,
-        platform: platform.slice(0, 50),
-        sharedLink,
-        cost: input.amount,
+        const [actor, employee] = await Promise.all([
+          manager.findOneBy(Usuarios, { id: actorId }),
+          manager.findOneBy(Empleadas, { id: service.empleadaId }),
+        ]);
+        if (
+          !actor ||
+          (actor.rol !== 'admin' &&
+            (actor.rol !== 'jefe' ||
+              (service.jefeId !== actor.id &&
+                employee?.jefeId !== actor.id &&
+                employee?.jefeSecundarioId !== actor.id)))
+        ) {
+          throw new ConflictException('No puedes gestionar este servicio');
+        }
+
+        const state = this.serviceOperations.currentState(service);
+        const tripType = [
+          'esperando_transporte_ida',
+          'transporte_ida_asignado',
+        ].includes(state)
+          ? ('ida' as const)
+          : ['preparando_regreso', 'transporte_regreso_asignado'].includes(
+                state,
+              )
+            ? ('regreso' as const)
+            : null;
+        if (!tripType) {
+          throw new ConflictException(
+            `El transporte externo no puede asignarse desde el estado operativo "${state}"`,
+          );
+        }
+
+        let trip = await manager.findOne(Viajes, {
+          where: { servicioId: service.id, tipo: tripType },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (expectedTripId && trip?.id !== expectedTripId) {
+          throw new ConflictException('El viaje ya no es el traslado activo');
+        }
+
+        const assignedState =
+          tripType === 'ida'
+            ? 'transporte_ida_asignado'
+            : 'transporte_regreso_asignado';
+        const alreadyAssigned = state === assignedState;
+        if (
+          alreadyAssigned &&
+          trip?.proveedorTransporte === 'uber' &&
+          trip.externalPlatform === normalizedPlatform &&
+          trip.externalSharedLink === sharedLink &&
+          Number(trip.tarifa) === input.amount &&
+          trip.fareConfirmedAt
+        ) {
+          return {
+            trip,
+            service,
+            employeeUserId: employee?.usuarioId ?? null,
+            assignedNow: false,
+          };
+        }
+        if (alreadyAssigned && trip?.externalSharedLink) {
+          throw new ConflictException('El transporte externo ya fue asignado');
+        }
+        if (
+          trip?.choferId &&
+          !['notificado', 'creado', 'pendiente'].includes(trip.estado)
+        ) {
+          throw new ConflictException(
+            'El viaje ya tiene un chofer interno asignado',
+          );
+        }
+
+        const now = new Date();
+        trip ??= manager.create(Viajes, {
+          servicioId: service.id,
+          tipo: tripType,
+          zona: 'domicilio',
+        });
+        Object.assign(trip, {
+          choferId: null,
+          choferesNotificados: [],
+          telegramChoferMsgOfertaId: null,
+          proveedorTransporte: 'uber',
+          externalPlatform: normalizedPlatform,
+          externalSharedLink: sharedLink,
+          tarifa: input.amount,
+          driverPayout: 0,
+          fareConfirmedAt: now,
+          fareConfirmedByUserId: actorId,
+          fareConfirmationOverride: false,
+          estado: 'aceptado',
+          horaAceptacion: now,
+          horaInicioViaje: null,
+          horaFinViaje: null,
+        });
+        trip = await manager.save(Viajes, trip);
+
+        const waitingState =
+          tripType === 'ida'
+            ? 'esperando_transporte_ida'
+            : 'preparando_regreso';
+        if (state === waitingState) {
+          await this.serviceOperations.transition(
+            service.id,
+            tripType === 'ida'
+              ? 'asignar_transporte_ida'
+              : 'asignar_transporte_regreso',
+            { userId: actorId, type: actor.rol },
+            {
+              manager,
+              eventType: 'EXTERNAL_TRANSPORT_ASSIGNED',
+              payload: {
+                tripId: trip.id,
+                tripType,
+                platform: normalizedPlatform,
+                cost: input.amount,
+              },
+              patch:
+                tripType === 'regreso'
+                  ? { proximoRecordatorioRegresoAt: null }
+                  : undefined,
+            },
+          );
+        } else {
+          await this.serviceOperations.recordEvent(
+            service.id,
+            'EXTERNAL_TRANSPORT_DETAILS_REGISTERED',
+            { userId: actorId, type: actor.rol },
+            {
+              tripId: trip.id,
+              tripType,
+              platform: normalizedPlatform,
+              cost: input.amount,
+            },
+            manager,
+          );
+        }
+        return {
+          trip,
+          service,
+          employeeUserId: employee?.usuarioId ?? null,
+          assignedNow: true,
+        };
       },
     );
-    this.realtimeEventsService.emitToEmployee(trip.servicio.empleadaId, {
-      type: 'external_transport_updated',
-      data: { serviceId: trip.servicioId, tripId: trip.id },
+
+    if (!result.assignedNow) return result.trip;
+    await this.liquidationSync.syncOfficeRecord(serviceId);
+    this.realtimeEventsService.emitToEmployee(result.service.empleadaId, {
+      type: 'external_transport_assigned',
+      data: { serviceId, tripId: result.trip.id, tripType: result.trip.tipo },
     });
-    await this.avisar(trip.servicio.empleada?.usuarioId, {
-      titulo: `Transporte en ${platform.slice(0, 50)}`,
-      cuerpo: 'Los datos de tu viaje ya están disponibles en el portal.',
-      url: '/empleada/servicio',
-      tag: `transporte-${trip.id}`,
-      requireInteraction: true,
+    this.realtimeEventsService.emitToBoss(result.service.jefeId, {
+      type: 'external_transport_assigned',
+      data: { serviceId, tripId: result.trip.id, tripType: result.trip.tipo },
     });
-    return Object.assign(trip, {
-      externalPlatform: platform.slice(0, 50),
-      externalSharedLink: sharedLink,
-      tarifa: input.amount,
+    if (result.employeeUserId) {
+      await this.avisar(result.employeeUserId, {
+        titulo: 'Tu transporte está listo',
+        cuerpo: 'Abre tu portal para ver el viaje.',
+        url: '/empleada/servicio',
+        tag: `transporte-${result.trip.id}`,
+        requireInteraction: true,
+      });
+    }
+    const employee = await this.empleadasRepository.findOne({
+      where: { id: result.service.empleadaId },
+      relations: { usuario: true },
     });
+    const employeeChatId = employee?.usuario?.telegramChatId;
+    if (employeeChatId) {
+      await this.bot.telegram
+        .sendMessage(
+          employeeChatId,
+          'Tu transporte está listo. Abre tu portal para ver el viaje.',
+        )
+        .catch((error) =>
+          this.logger.warn(
+            `No se pudo enviar el aviso auxiliar del viaje ${result.trip.id}: ${describeError(error)}`,
+          ),
+        );
+    }
+    return result.trip;
   }
 
   /**

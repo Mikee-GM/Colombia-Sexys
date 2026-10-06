@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   INestApplication,
   RequestMethod,
@@ -362,6 +363,14 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       services.finishByEmployee(IDS.service, IDS.employeeUser),
     ).rejects.toBeInstanceOf(ConflictException);
 
+    const [outboundBeforeAssignment] = await dataSource.query(
+      `SELECT id, chofer_id, proveedor_transporte, estado
+         FROM viajes WHERE servicio_id = $1 AND tipo = 'ida'`,
+      [IDS.service],
+    );
+    expect(outboundBeforeAssignment).toBeUndefined();
+
+    await services.assignInternalTransport(IDS.service, IDS.boss);
     const [outbound] = await dataSource.query(
       `SELECT id, chofer_id, proveedor_transporte, estado
          FROM viajes WHERE servicio_id = $1 AND tipo = 'ida'`,
@@ -369,7 +378,7 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     );
     expect(outbound).toMatchObject({
       chofer_id: IDS.driver,
-      proveedor_transporte: 'chofer',
+      proveedor_transporte: 'interno',
       estado: 'notificado',
     });
 
@@ -459,18 +468,11 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     expect(persisted.operationalState).toBe('preparando_regreso');
     expect(persisted.estado).toBe('finalizado');
 
-    const returnChoice = await services.chooseReturnTransport(
+    await expect(
+      services.chooseReturnTransport(IDS.service, IDS.boss, 'uber'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    const returnTrip = await services.assignExternalTransport(
       IDS.service,
-      IDS.boss,
-      'uber',
-    );
-    persisted = await service();
-    expect(persisted.operationalState).toBe('transporte_regreso_asignado');
-    expect(employeeOperationActions(persisted.operationalState)).toEqual([
-      'marcar_regreso',
-    ]);
-    await services.registerExternalTransportDetails(
-      returnChoice.trip.id,
       IDS.boss,
       {
         platform: 'DiDi',
@@ -478,10 +480,16 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
         amount: 123.45,
       },
     );
+    persisted = await service();
+    expect(persisted.operationalState).toBe('transporte_regreso_asignado');
+    expect(employeeOperationActions(persisted.operationalState)).toEqual([
+      'marcar_regreso',
+    ]);
     const [externalTrip] = await dataSource.query(
-      `SELECT proveedor_transporte, external_platform, external_shared_link, tarifa
+      `SELECT proveedor_transporte, external_platform, external_shared_link, tarifa,
+              uber_screenshot_url
          FROM viajes WHERE id = $1`,
-      [returnChoice.trip.id],
+      [returnTrip.id],
     );
     expect(externalTrip).toMatchObject({
       proveedor_transporte: 'uber',
@@ -489,9 +497,10 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       external_shared_link: 'https://example.com/viaje-e2e',
     });
     expect(Number(externalTrip.tarifa)).toBe(123.45);
+    expect(externalTrip.uber_screenshot_url).toBeNull();
 
     await services.updateUberStatus(
-      returnChoice.trip.id,
+      returnTrip.id,
       IDS.employeeUser,
       'employee_en_route',
     );
@@ -501,7 +510,7 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       'marcar_llegada_regreso',
     ]);
     await services.updateUberStatus(
-      returnChoice.trip.id,
+      returnTrip.id,
       IDS.employeeUser,
       'employee_arrived',
     );
@@ -522,14 +531,14 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
         'SERVICE_EXTRA_ADDED',
         'SERVICE_PANIC_ACTIVATED',
         'RETURN_PREPARATION_STARTED',
-        'EXTERNAL_TRANSPORT_DETAILS_REGISTERED',
+        'EXTERNAL_TRANSPORT_ASSIGNED',
         'EMPLOYEE_RETURNING',
         'SERVICE_FLOW_COMPLETED',
       ]),
     );
     const completedCount = completedEvents.length;
     await services.updateUberStatus(
-      returnChoice.trip.id,
+      returnTrip.id,
       IDS.employeeUser,
       'employee_arrived',
     );

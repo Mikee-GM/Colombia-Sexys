@@ -286,17 +286,6 @@ export class TelegramAdminUpdate {
       await ctx.answerCbQuery('Servicio aceptado con notas.');
 
       const inlineButtons: any[] = [];
-      if (transportType === 'uber' && res.uberLink) {
-        inlineButtons.push([Markup.button.url('Pedir Uber', res.uberLink)]);
-        if (res.viajeId) {
-          inlineButtons.push([
-            Markup.button.callback(
-              'Adjuntar captura',
-              `uber_attach:${res.viajeId}`,
-            ),
-          ]);
-        }
-      }
       if (res.viajeId) {
         inlineButtons.push([
           Markup.button.callback(
@@ -376,6 +365,13 @@ export class TelegramAdminUpdate {
     if (!actor)
       return ctx.answerCbQuery('Usuario no autorizado', { show_alert: true });
     const match = (ctx as any).match;
+    if (match[2] === 'uber') {
+      await ctx.answerCbQuery(
+        'Registra plataforma, enlace y costo desde el panel web.',
+        { show_alert: true },
+      );
+      return;
+    }
     try {
       const result = await this.servicesService.chooseReturnTransport(
         match[1],
@@ -400,13 +396,6 @@ export class TelegramAdminUpdate {
       } else {
         await ctx.editMessageText('Regreso con Uber seleccionado.', {
           ...Markup.inlineKeyboard([
-            [Markup.button.url('Pedir Uber', result.uberLink!)],
-            [
-              Markup.button.callback(
-                'Adjuntar captura',
-                `uber_attach:${result.trip.id}`,
-              ),
-            ],
             [
               Markup.button.callback(
                 'Cambiar a chofer',
@@ -446,7 +435,6 @@ export class TelegramAdminUpdate {
       const buttons =
         provider === 'uber'
           ? [
-              [Markup.button.url('Pedir Uber', result.uberLink!)],
               [
                 Markup.button.callback(
                   'Cambiar a chofer',
@@ -756,17 +744,6 @@ export class TelegramAdminUpdate {
       const options: any = { parse_mode: 'Markdown' };
       const inlineButtons: any[] = [];
 
-      if (accept && transportType === 'uber' && uberLink) {
-        inlineButtons.push([Markup.button.url('Pedir Uber', uberLink)]);
-        if (viajeId) {
-          inlineButtons.push([
-            Markup.button.callback(
-              'Adjuntar captura',
-              `uber_attach:${viajeId}`,
-            ),
-          ]);
-        }
-      }
 
       if (accept && viajeId && !empleadaTelegramChatId) {
         if (esperandoAlistado) {
@@ -791,9 +768,6 @@ export class TelegramAdminUpdate {
       let resolutionMsg = `\n\n📢 *Resolución:* ${statusLabel} por ${user.email}`;
       if (accept && esperandoAlistado) {
         resolutionMsg += `\n${ESPERANDO_ALISTADO}`;
-      }
-      if (accept && transportType === 'uber' && uberLink) {
-        resolutionMsg += `\n🔗 *Enlace Uber:* [Pedir Uber](${uberLink})`;
       }
 
       await ctx.editMessageText(originalText + resolutionMsg, options);
@@ -841,20 +815,9 @@ export class TelegramAdminUpdate {
       const originalText = (ctx.callbackQuery?.message as any)?.text || '';
       const resolutionMsg = `\n\n📢 *Traslado despachado:* ${
         transportType === 'uber' ? 'Uber' : 'Chofer'
-      } por ${user.email}${res.uberLink ? `\n🔗 *Enlace Uber:* [Pedir Uber](${res.uberLink})` : ''}`;
+      } por ${user.email}`;
 
       const inlineButtons: any[] = [];
-      if (transportType === 'uber' && res.uberLink) {
-        inlineButtons.push([Markup.button.url('Pedir Uber', res.uberLink)]);
-        if (res.viajeId) {
-          inlineButtons.push([
-            Markup.button.callback(
-              'Adjuntar captura',
-              `uber_attach:${res.viajeId}`,
-            ),
-          ]);
-        }
-      }
 
       await ctx.editMessageText(originalText + resolutionMsg, {
         parse_mode: 'Markdown',
