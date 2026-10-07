@@ -181,6 +181,7 @@ export function detectGlobalBookingIntent(
   if (
     hasAny(normalized, [
       /\b(horas?|duraci[oó]n|ubicaci[oó]n|pin|pago|efectivo|tarjeta|transferencia)\b/,
+      /\b\d{1,2}\s*(?:h|hr|hrs|hora|horas|horita|horitas|hra|hras)\b/,
       /^\d{1,2}$/,
     ])
   ) {

@@ -201,8 +201,58 @@ describe('TelegramBookingUpdate global booking router', () => {
       nombreArtistico: 'Andrea',
     });
 
+    expect(update.entregarConversacionAlJefe).not.toHaveBeenCalled();
+    expect(ctx.reply).not.toHaveBeenCalled();
+    expect(update.startHireSession).not.toHaveBeenCalled();
+  });
+
+  it('no consume una duraciÃ³n informal antes del parser de slots', async () => {
+    const { update, ctx } = setup();
+
+    const handled = await update.routeGlobalBookingIntent(ctx, '1hr bb', {
+      id: 'employee-a',
+      nombreArtistico: 'Andrea',
+    });
+
+    expect(handled).toBe(false);
+    expect(ctx.reply).not.toHaveBeenCalled();
+    expect(update.startHireSession).not.toHaveBeenCalled();
+  });
+
+  it('reinicia Ãºnicamente cuando se pulsa explÃ­citamente el callback', async () => {
+    const { update, ctx } = setup();
+    ctx.answerCbQuery = jest.fn().mockResolvedValue(undefined);
+
+    await update.onRestartBooking(ctx);
+
+    expect(update.startHireSession).toHaveBeenCalledWith(ctx, 'employee-a');
+  });
+
+  it('aplica el loop breaker solo tras tres fallos sin avance', async () => {
+    const { update, ctx } = setup();
+    ctx.session.bookingLastIntent = 'UNKNOWN';
+    const handleUnknown = (...args: any[]) =>
+      (update as any).handleUnrecognizedBookingMessage(...args);
+
+    await handleUnknown(ctx, {
+      id: 'employee-a',
+      nombreArtistico: 'Andrea',
+    });
+    await handleUnknown(ctx, {
+      id: 'employee-a',
+      nombreArtistico: 'Andrea',
+    });
+    await handleUnknown(ctx, {
+      id: 'employee-a',
+      nombreArtistico: 'Andrea',
+    });
+
     expect(update.entregarConversacionAlJefe).toHaveBeenCalledTimes(1);
     expect(ctx.session.bookingFailureCount).toBe(0);
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.stringContaining('empezar de nuevo'),
+      expect.anything(),
+    );
   });
 
   it('mantiene HUMAN_ACTIVE y no responde al abrir un nuevo deep-link', async () => {

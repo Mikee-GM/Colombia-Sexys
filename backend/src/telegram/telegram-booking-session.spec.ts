@@ -72,6 +72,20 @@ describe('Telegram booking session input parsing', () => {
     expect(extractHireDuration('2h')).toBe(2);
   });
 
+  it.each([
+    ['1hr bb', 1],
+    ['1 h', 1],
+    ['1hrs', 1],
+    ['1h amor', 1],
+    ['1 horita', 1],
+    ['una hora', 1],
+    ['2hrs bb', 2],
+    ['serÃ­an 2hrs', 2],
+    ['quiero 2 horas montecarlo en efectivo', 2],
+  ])('entiende respuestas informales de duraciÃ³n: %s', (text, expected) => {
+    expect(extractHireDuration(text)).toBe(expected);
+  });
+
   /**
    * "Abierto" se evalua en cada mensaje: suelto, una pregunta por el motel
    * borraba las horas ya pactadas y pasaba el servicio a indefinido.

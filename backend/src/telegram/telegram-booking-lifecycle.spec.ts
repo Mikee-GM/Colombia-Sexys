@@ -10,6 +10,7 @@ import {
 describe('telegram booking lifecycle', () => {
   it.each([
     ['quiero otro servicio', 'START_NEW_BOOKING'],
+    ['1hr bb', 'PROVIDE_EXPECTED_DATA'],
     ['mejor quiero a Paula', 'CHANGE_EMPLOYEE'],
     ['reiniciar desde cero', 'RESTART_BOOKING'],
     ['cancelar la solicitud', 'CANCEL_BOOKING'],
