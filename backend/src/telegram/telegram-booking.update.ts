@@ -640,7 +640,7 @@ export function extractHireDuration(text: string): number | undefined {
   // Se recorren todas las cifras con unidad, no solo la primera: en "llego a
   // las 9, quiero 3 horas" la que vale es la segunda.
   for (const match of text.matchAll(
-    /\b(\d+)\s*(?:h|hr|hrs|hora|horas|horitas|hras)[a-z]*\b/gi,
+    /\b(\d+)\s*(?:h|hr|hrs|hora|horas|horita|horitas|hra|hras)[a-z]*\b/gi,
   )) {
     const hours = parseInt(match[1], 10);
     if (hours >= 1 && hours <= 24) return hours;
@@ -666,9 +666,9 @@ export function extractHireDuration(text: string): number | undefined {
   const word = Object.keys(wordDurations).find(
     (candidate) =>
       normalized === candidate ||
-      new RegExp(`\\b${candidate}\\s+(?:h|hr|hrs|hora|horas)\\b`).test(
-        normalized,
-      ),
+      new RegExp(
+        `\\b${candidate}\\s+(?:h|hr|hrs|hora|horas|horita|horitas)\\b`,
+      ).test(normalized),
   );
   return word ? wordDurations[word] : undefined;
 }
@@ -8778,14 +8778,9 @@ export class TelegramBookingUpdate {
 
     if (step === 'AWAITING_DURATION') {
       const text = (ctx.message as { text?: string })?.text || '';
-      const duracion = parseInt(text.trim(), 10);
+      const duracion = extractHireDuration(text);
 
-      if (
-        isNaN(duracion) ||
-        duracion < 1 ||
-        duracion > 24 ||
-        /\d+[.,]\d+/.test(text)
-      ) {
+      if (duracion === undefined) {
         await ctx.reply(
           'La duración debe ser un número entero válido de horas (ejemplo: 1, 2, 3 entre 1 y 24).\n' +
             'Por favor, intenta nuevamente:',
@@ -9715,6 +9710,75 @@ export class TelegramBookingUpdate {
     );
   }
 
+  private async handleUnrecognizedBookingMessage(
+    ctx: BotContext,
+    currentEmployee: Empleadas,
+  ): Promise<void> {
+    const session = ctx.session;
+    if (!session) return;
+
+    const loop = registerLoopFailure(
+      {
+        lastStep: session.bookingLastStep,
+        lastIntent: session.bookingLastIntent,
+        failureCount: session.bookingFailureCount ?? 0,
+      },
+      session.step,
+      'UNKNOWN',
+      DEFAULT_LOOP_BREAKER_MAX_FAILURES,
+    );
+    session.bookingFailureCount = loop.state.failureCount;
+    session.bookingLastStep = loop.state.lastStep;
+
+    if (loop.shouldEscalate) {
+      session.bookingFailureCount = 0;
+      await this.entregarConversacionAlJefe(
+        ctx,
+        currentEmployee,
+        'No fue posible interpretar varios mensajes consecutivos durante la reserva.',
+      );
+      await ctx.reply(
+        'Si prefieres, también puedes empezar de nuevo desde el catálogo.',
+        Markup.inlineKeyboard([
+          [Markup.button.callback('Empezar de nuevo', 'restart_booking')],
+        ]),
+      );
+      return;
+    }
+
+    const missing = nextMissingRequirement({
+      employeeId: session.empleadaId,
+      durationHours: session.duracionPactadaHoras,
+      openEnded: session.duracionIndefinida,
+      locationConfirmed: this.hasConfirmedLocation(session),
+      paymentMethod: session.metodoPago,
+    });
+    const firstPrompts: Record<string, string> = {
+      duration:
+        'No alcancé a entender cuántas horas quieres, mor. ¿Cuánto tiempo vamos a estar juntos?',
+      location:
+        'No alcancé a ubicar el lugar, mor. ¿Será uno de mis moteles o me compartes tu pin?',
+      payment:
+        'No alcancé a identificar el pago, mor. ¿Prefieres efectivo, tarjeta o transferencia?',
+      confirmation: 'No alcancé a entender si confirmamos la solicitud, mor.',
+    };
+    const secondPrompts: Record<string, string> = {
+      duration:
+        'Para seguir, escríbeme algo como “1 hora”, “2 hrs” o “indefinido”, porfa.',
+      location:
+        'Para seguir, escribe el nombre del motel o envíame el pin de ubicación.',
+      payment: 'Para seguir, responde “efectivo”, “tarjeta” o “transferencia”.',
+      confirmation:
+        'Para seguir, dime si confirmamos la solicitud o la dejamos pendiente.',
+    };
+    const key = missing ?? 'duration';
+    const prompt = (
+      loop.state.failureCount === 1 ? firstPrompts : secondPrompts
+    )[key];
+    await ctx.reply(prompt);
+    await this.recordDraftConversation(ctx, 'ia', prompt);
+  }
+
   /**
    * Intenciones que pueden interrumpir cualquier currentStep de una booking.
    * Se ejecuta antes del prompt de IA, de la duración y de la ubicación.
@@ -9842,38 +9906,10 @@ export class TelegramBookingUpdate {
       return true;
     }
 
-    if (routed.intent === 'UNKNOWN') {
-      const loop = registerLoopFailure(
-        {
-          lastStep: session.bookingLastStep,
-          lastIntent: session.bookingLastIntent,
-          failureCount: session.bookingFailureCount ?? 0,
-        },
-        session.step,
-        routed.intent,
-        DEFAULT_LOOP_BREAKER_MAX_FAILURES,
-      );
-      session.bookingFailureCount = loop.state.failureCount;
-      session.bookingLastStep = loop.state.lastStep;
-      if (loop.shouldEscalate) {
-        session.bookingFailureCount = 0;
-        await this.entregarConversacionAlJefe(
-          ctx,
-          currentEmployee,
-          'No fue posible interpretar varios mensajes consecutivos durante la reserva.',
-        );
-      } else {
-        await ctx.reply(
-          'No quiero asumir y cambiar tu solicitud por error. Puedes decir “otra empleada”, “empezar de nuevo”, “cancelar” o pedirme atención humana.',
-          Markup.inlineKeyboard([
-            [Markup.button.callback('Empezar de nuevo', 'restart_booking')],
-            [Markup.button.callback('Hablar con una persona', 'request_human')],
-          ]),
-        );
-      }
-      return true;
-    }
-
+    // Los mensajes que pueden contener datos del formulario, preguntas
+    // laterales o texto ambiguo deben continuar por el pipeline normal. Si se
+    // consumen aquí, el parser de duración/ubicación/pago nunca tiene ocasión
+    // de interpretar respuestas como “1hr bb”.
     return false;
   }
 
@@ -9940,6 +9976,9 @@ export class TelegramBookingUpdate {
       );
       routingMs = Date.now() - updateReceivedAt;
       if (handledGlobalIntent) return;
+
+      const unknownBookingIntent = session.bookingLastIntent === 'UNKNOWN';
+      let parserUnderstoodMessage = false;
 
       if (session.bookingStatus === 'READY') {
         const waitingForBoss =
@@ -10048,15 +10087,18 @@ export class TelegramBookingUpdate {
       if (detectOpenEndedDuration(userMessage)) {
         session.duracionIndefinida = true;
         session.duracionPactadaHoras = undefined;
+        parserUnderstoodMessage = true;
       } else {
         const extractedDuration = extractHireDuration(userMessage);
         if (extractedDuration) {
           session.duracionPactadaHoras = extractedDuration;
           session.duracionIndefinida = false;
+          parserUnderstoodMessage = true;
         }
       }
       if (extractedPayment) {
         session.metodoPago = extractedPayment;
+        parserUnderstoodMessage = true;
       }
       extractionMs = Date.now() - extractionStartedAt;
 
@@ -10080,6 +10122,18 @@ export class TelegramBookingUpdate {
         this.transportOperations.externalLocationFee().catch(() => 0),
         this.transportOperations.coverageArea().catch(() => null),
       ]);
+      const normalizedBookingMessage = normalizeBookingText(userMessage);
+      const bookingMessageWords = new Set(normalizedBookingMessage.split(' '));
+      if (
+        presetLocations.some((location) => {
+          const locationWords = normalizeBookingText(location.name).split(' ');
+          return locationWords.some(
+            (word) => word.length >= 4 && bookingMessageWords.has(word),
+          );
+        })
+      ) {
+        parserUnderstoodMessage = true;
+      }
 
       const allLinkedIds = Array.from(
         new Set(
@@ -10613,6 +10667,7 @@ export class TelegramBookingUpdate {
                 parsedDuracion <= 24);
 
             if (traeDuracion) {
+              parserUnderstoodMessage = true;
               if (isOpenEndedData) {
                 session.duracionIndefinida = true;
                 session.duracionPactadaHoras = undefined;
@@ -10653,6 +10708,7 @@ export class TelegramBookingUpdate {
              */
             if (userProvidedPayment) {
               session.metodoPago = userProvidedPayment;
+              parserUnderstoodMessage = true;
             } else if (
               parsedData.pago &&
               ['efectivo', 'tarjeta', 'transferencia', 'mixto'].includes(
@@ -10661,6 +10717,7 @@ export class TelegramBookingUpdate {
             ) {
               session.metodoPago = parsedData.pago as
                 'efectivo' | 'tarjeta' | 'transferencia' | 'mixto';
+              parserUnderstoodMessage = true;
             }
 
             /* Se cierra en cuanto estan los dos datos, los diera el turno que los diera. */
@@ -10710,6 +10767,18 @@ export class TelegramBookingUpdate {
           )
         ) {
           return;
+        }
+
+        // El loop breaker solo se ejecuta después del parser y de la IA. Las
+        // órdenes globales ya salieron arriba; si aquí no hubo ningún dato ni
+        // avance, se pide el requisito pendiente sin bloquear mensajes válidos.
+        if (unknownBookingIntent && !parserUnderstoodMessage) {
+          await this.handleUnrecognizedBookingMessage(ctx, empleada);
+          return;
+        }
+        if (parserUnderstoodMessage || !unknownBookingIntent) {
+          session.bookingFailureCount = 0;
+          session.bookingLastStep = undefined;
         }
 
         /*
