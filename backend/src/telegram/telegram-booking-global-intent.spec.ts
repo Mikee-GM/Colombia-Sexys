@@ -107,8 +107,12 @@ describe('TelegramBookingUpdate global booking router', () => {
   it('does not mutate Service A when Booking B includes a payment word', async () => {
     const update: any = Object.create(TelegramBookingUpdate.prototype);
     const changePaymentMethodByClient = jest.fn();
-    update.manualServiceWizard = { manejarTexto: jest.fn().mockResolvedValue(false) };
-    update.teamChannelUpdate = { manejarTexto: jest.fn().mockResolvedValue(false) };
+    update.manualServiceWizard = {
+      manejarTexto: jest.fn().mockResolvedValue(false),
+    };
+    update.teamChannelUpdate = {
+      manejarTexto: jest.fn().mockResolvedValue(false),
+    };
     update.clienteBloqueado = jest.fn().mockResolvedValue(false);
     update.usuariosRepository = {
       findOne: jest.fn().mockResolvedValue(null),
