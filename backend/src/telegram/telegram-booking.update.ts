@@ -110,6 +110,17 @@ import { multiplyMoney, roundMoney, sumMoney } from '../common/money';
 import { interpretarFechaEscrita } from '../common/fecha-escrita';
 import { TelegramOnboardingService } from './telegram-onboarding.service';
 import { EmployeeOnboardingService } from '../employee-onboarding/employee-onboarding.service';
+import {
+  DEFAULT_LOOP_BREAKER_MAX_FAILURES,
+  detectGlobalBookingIntent,
+  isBookingStale,
+  normalizeBookingText,
+  nextMissingRequirement,
+  registerLoopFailure,
+  transitionBookingStatus,
+  type BookingStatus,
+  type GlobalBookingIntent,
+} from './telegram-booking-lifecycle';
 
 interface SessionData {
   step?:
@@ -201,6 +212,14 @@ interface SessionData {
   mensajesDesdeUltimoEmoji?: number;
   chatHistory?: { role: 'user' | 'model'; parts: { text: string }[] }[];
   bookingSessionId?: string;
+  /** Estado temporal de ESTA solicitud, nunca del historial del cliente. */
+  bookingStatus?: BookingStatus;
+  bookingLastIntent?: GlobalBookingIntent;
+  bookingFailureCount?: number;
+  bookingLastStep?: string;
+  bookingStaleSince?: string;
+  bookingConfirmationPending?: boolean;
+  bookingServiceId?: string;
   selectedEmployeeBusy?: boolean;
   waitingForBusyChoice?: boolean;
   /**
@@ -2012,14 +2031,69 @@ export class TelegramBookingUpdate {
   async onResumeSession(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery().catch(() => undefined);
     const empleadaId = (ctx as any).match[1];
+    if (ctx.session?.bookingStatus === 'STALE_PENDING') {
+      ctx.session.bookingStatus = 'COLLECTING';
+      ctx.session.bookingStaleSince = undefined;
+      ctx.session.hireStartedAt = new Date().toISOString();
+      ctx.session.bookingLastIntent = 'CONTINUE_BOOKING';
+    }
     await this.startHireSession(ctx, empleadaId);
+  }
+
+  @Action('restart_booking')
+  async onRestartBooking(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => undefined);
+    const employeeId = ctx.session?.empleadaId;
+    if (ctx.session?.bookingSessionId) {
+      ctx.session.bookingStatus = 'ABANDONED';
+      ctx.session.bookingLastIntent = 'RESTART_BOOKING';
+      await this.recordDraftConversation(
+        ctx,
+        'sistema',
+        'La solicitud anterior fue reemplazada por una nueva.',
+      );
+    }
+    if (employeeId) {
+      await this.startHireSession(ctx, employeeId);
+      return;
+    }
+    ctx.session = undefined;
+    await ctx.reply('Listo. Empecemos una solicitud nueva desde el catálogo.');
+    await this.replyWithAvailableEmployees(ctx);
+  }
+
+  @Action('request_human')
+  async onRequestHuman(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery().catch(() => undefined);
+    const employeeId = ctx.session?.empleadaId;
+    const employee = employeeId
+      ? await this.empleadasRepository.findOne({ where: { id: employeeId } })
+      : null;
+    await this.entregarConversacionAlJefe(
+      ctx,
+      employee,
+      'El cliente solicitó atención humana desde las acciones rápidas.',
+    );
   }
 
   @Action(/^cancel_session$/)
   async onCancelSession(@Ctx() ctx: BotContext) {
     await ctx.answerCbQuery().catch(() => undefined);
     // Vaciamos la sesión anterior para permitir nuevas conversaciones
-    ctx.session = undefined;
+    if (ctx.session?.bookingSessionId) {
+      ctx.session.bookingStatus = 'CANCELLED';
+      ctx.session.bookingLastIntent = 'CANCEL_BOOKING';
+      ctx.session.step = undefined;
+      ctx.session.hireStartedAt = undefined;
+      await this.recordDraftConversation(
+        ctx,
+        'sistema',
+        'La solicitud fue cancelada por el cliente.',
+      );
+      await this.persistSession(ctx);
+    } else {
+      ctx.session = undefined;
+    }
     await ctx.reply(
       'Reserva cancelada exitosamente. Ya puedes elegir otra chica del catálogo o intentar de nuevo.',
     );
@@ -2561,6 +2635,16 @@ export class TelegramBookingUpdate {
   private terminarContratacionEnSesion(ctx: BotContext): void {
     const previa = ctx.session;
     ctx.session = {
+      ...(isPreServiceHumanTakeover(previa)
+        ? { humanTakeover: true, iaActiva: false }
+        : {}),
+      ...(previa?.bookingSessionId
+        ? {
+            bookingSessionId: previa.bookingSessionId,
+            bookingStatus: 'ABANDONED' as const,
+            bookingStaleSince: new Date().toISOString(),
+          }
+        : {}),
       ...(previa?.rechazoAvisadoServicioId
         ? { rechazoAvisadoServicioId: previa.rechazoAvisadoServicioId }
         : {}),
@@ -2568,6 +2652,8 @@ export class TelegramBookingUpdate {
   }
 
   async startHireSession(ctx: any, empleadaId: string) {
+    const sesionPreviaInicial = ctx.session as SessionData | undefined;
+    const humanTakeoverInicial = isPreServiceHumanTakeover(sesionPreviaInicial);
     const empleada = await this.empleadasRepository.findOne({
       where: { id: empleadaId },
       relations: { usuario: true },
@@ -2578,6 +2664,7 @@ export class TelegramBookingUpdate {
       // que escriba despues lo sigue contestando la modelo de antes.
       this.terminarContratacionEnSesion(ctx);
       await this.persistSession(ctx);
+      if (humanTakeoverInicial) return;
       await ctx.reply(
         'Esa chica no esta disponible por ahora. Estas son las que si pueden atenderte:',
       );
@@ -2597,6 +2684,7 @@ export class TelegramBookingUpdate {
     if (empleada.usuario && empleada.usuario.enJornada === false) {
       this.terminarContratacionEnSesion(ctx);
       await this.persistSession(ctx);
+      if (humanTakeoverInicial) return;
       await ctx.reply(
         `${empleada.nombreArtistico} ya termino por hoy y no va a tomar mas servicios. Estas si estan disponibles ahora:`,
       );
@@ -2607,6 +2695,7 @@ export class TelegramBookingUpdate {
     if (!activeService && !empleada.disponible) {
       this.terminarContratacionEnSesion(ctx);
       await this.persistSession(ctx);
+      if (humanTakeoverInicial) return;
       await ctx.reply(
         `${empleada.nombreArtistico} no puede atenderte en este momento. Estas si estan disponibles:`,
       );
@@ -2632,6 +2721,10 @@ export class TelegramBookingUpdate {
 
     const apiKey = process.env.XAI_API_KEY || process.env.GROQ_API_KEY;
     if (!apiKey) {
+      if (humanTakeoverInicial) {
+        await this.persistSession(ctx);
+        return;
+      }
       this.logger.error(
         'Falta XAI_API_KEY/GROQ_API_KEY: no se puede iniciar la conversación.',
       );
@@ -2656,20 +2749,95 @@ export class TelegramBookingUpdate {
      * Solo se continua si es la MISMA modelo y la contratacion es reciente. Al
      * cambiar de modelo, o pasado el plazo, se empieza de cero como antes.
      */
-    const sesionPrevia = ctx.session as SessionData | undefined;
+    const sesionPrevia = sesionPreviaInicial;
     const abiertaHace = sesionPrevia?.hireStartedAt
       ? Date.now() - new Date(sesionPrevia.hireStartedAt).getTime()
       : Number.POSITIVE_INFINITY;
-    const mismaContratacion =
+    const statusPrevio =
+      sesionPrevia?.bookingStatus ??
+      (sesionPrevia?.bookingSessionId && sesionPrevia.step
+        ? 'COLLECTING'
+        : undefined);
+    let mismaContratacion =
+      statusPrevio !== 'SERVICE_CREATED' &&
+      statusPrevio !== 'CANCELLED' &&
+      statusPrevio !== 'ABANDONED' &&
+      statusPrevio !== 'STALE_PENDING' &&
       sesionPrevia?.empleadaId === empleadaId &&
       Boolean(sesionPrevia?.bookingSessionId) &&
       abiertaHace < TelegramBookingUpdate.VENTANA_REINGRESO_MS;
 
-    const esRancia = abiertaHace >= TelegramBookingUpdate.VENTANA_REINGRESO_MS;
+    const esRancia =
+      statusPrevio === 'COLLECTING' &&
+      isBookingStale(
+        sesionPrevia?.hireStartedAt,
+        Date.now(),
+        TelegramBookingUpdate.VENTANA_REINGRESO_MS,
+      );
 
     if (
       !mismaContratacion &&
       !esRancia &&
+      statusPrevio === 'COLLECTING' &&
+      sesionPrevia?.bookingSessionId &&
+      sesionPrevia.empleadaId &&
+      sesionPrevia.empleadaId !== empleadaId
+    ) {
+      const humanTakeover = isPreServiceHumanTakeover(sesionPrevia);
+      const previousEmployee = await this.empleadasRepository.findOne({
+        where: { id: sesionPrevia.empleadaId },
+      });
+      sesionPrevia.empleadaId = empleadaId;
+      sesionPrevia.bookingStatus = 'COLLECTING';
+      sesionPrevia.bookingLastIntent = 'CHANGE_EMPLOYEE';
+      sesionPrevia.hireStartedAt = new Date().toISOString();
+      sesionPrevia.selectedEmployeeBusy = Boolean(activeService);
+      sesionPrevia.waitingForBusyChoice = Boolean(activeService);
+      sesionPrevia.trioSelectedEmployeeId = undefined;
+      sesionPrevia.trioSelectedEmployeeName = undefined;
+      sesionPrevia.trioCombinedRatePerHour = undefined;
+      sesionPrevia.trioStatus = undefined;
+      sesionPrevia.step = 'CHAT_CON_EMPLEADA';
+      mismaContratacion = true;
+      const changeMessage = `Listo, cambiamos de ${previousEmployee?.nombreArtistico || 'la chica anterior'} a ${empleada.nombreArtistico}. Conservé lo que ya estaba válido y revisamos lo que dependa de ella.`;
+      if (humanTakeover) {
+        await this.recordDraftConversation(ctx, 'sistema', changeMessage);
+        await this.persistSession(ctx);
+        return;
+      }
+      await ctx.reply(changeMessage);
+      await this.recordDraftConversation(ctx, 'ia', changeMessage);
+      await this.persistSession(ctx);
+      return;
+    }
+
+    if (
+      esRancia &&
+      sesionPrevia?.bookingSessionId &&
+      sesionPrevia.empleadaId === empleadaId
+    ) {
+      sesionPrevia.bookingStatus = 'STALE_PENDING';
+      sesionPrevia.bookingStaleSince = new Date().toISOString();
+      await this.persistSession(ctx);
+      await ctx.reply(
+        `Veo que dejamos pendiente una solicitud con ${empleada.nombreArtistico}. ¿Quieres continuarla o empezar un servicio nuevo?`,
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback(
+              'Continuar solicitud',
+              `resume_session:${empleada.id}`,
+            ),
+          ],
+          [Markup.button.callback('Empezar servicio nuevo', 'restart_booking')],
+        ]),
+      );
+      return;
+    }
+
+    if (
+      !mismaContratacion &&
+      !esRancia &&
+      statusPrevio === 'COLLECTING' &&
       sesionPrevia?.empleadaId &&
       sesionPrevia?.step
     ) {
@@ -2717,7 +2885,10 @@ export class TelegramBookingUpdate {
      * diera de alta un segundo servicio y dejara a la empleada doblemente
      * reservada.
      */
-    if (mismaContratacion && sesionPrevia?.servicioPendienteComprobanteId) {
+    if (
+      sesionPrevia?.servicioPendienteComprobanteId &&
+      sesionPrevia.empleadaId === empleadaId
+    ) {
       const enCurso =
         'Ya tenemos apartado lo tuyo mi amor, seguimos con eso mismo.';
       await ctx.reply(enCurso);
@@ -2727,9 +2898,16 @@ export class TelegramBookingUpdate {
 
     if (mismaContratacion && !activeService && sesionPrevia) {
       sesionPrevia.step = 'CHAT_CON_EMPLEADA';
+      sesionPrevia.bookingStatus = 'COLLECTING';
+      sesionPrevia.bookingLastIntent = 'CONTINUE_BOOKING';
       sesionPrevia.selectedEmployeeBusy = false;
       sesionPrevia.waitingForBusyChoice = false;
       sesionPrevia.hireStartedAt = new Date().toISOString();
+
+      if (isPreServiceHumanTakeover(sesionPrevia)) {
+        await this.persistSession(ctx);
+        return;
+      }
 
       const retomar = 'Aquí sigo, mi amor, seguimos donde quedamos.';
       await ctx.reply(retomar);
@@ -2744,13 +2922,20 @@ export class TelegramBookingUpdate {
     // Contratación nueva: sin datos residuales de servicios, calificaciones o
     // conversaciones anteriores.
     ctx.session = {
+      ...(humanTakeoverInicial ? { humanTakeover: true, iaActiva: false } : {}),
       step: 'CHAT_CON_EMPLEADA',
       empleadaId,
       bookingSessionId: randomUUID(),
+      bookingStatus: 'COLLECTING',
       hireStartedAt: new Date().toISOString(),
       selectedEmployeeBusy: Boolean(activeService),
       waitingForBusyChoice: Boolean(activeService),
     };
+
+    if (humanTakeoverInicial) {
+      await this.persistSession(ctx);
+      return;
+    }
 
     if (activeService) {
       const estimated = activeService.horaInicioServicio
@@ -2935,6 +3120,7 @@ export class TelegramBookingUpdate {
   async startDirectGroupSession(ctx: BotContext) {
     ctx.session = {
       bookingSessionId: randomUUID(),
+      bookingStatus: 'COLLECTING',
     };
     try {
       await this.handoffGroupRequest(ctx);
@@ -6667,6 +6853,26 @@ export class TelegramBookingUpdate {
       }
       const jefeId = jefe.id;
 
+      // Idempotencia de dominio: un reintento del mismo update no puede crear
+      // otro servicio para la misma booking session.
+      if (reserva.bookingSessionId) {
+        const existente = await this.serviciosRepository.findOne({
+          where: { bookingSessionId: reserva.bookingSessionId },
+        });
+        if (existente) {
+          if (ctx.session) {
+            ctx.session.bookingStatus = 'SERVICE_CREATED';
+            ctx.session.bookingServiceId = existente.id;
+            ctx.session.servicioPendienteComprobanteId =
+              existente.comprobantePendiente ? existente.id : undefined;
+          }
+          this.logger.warn(
+            `Booking ${reserva.bookingSessionId} ya estaba vinculada al servicio ${existente.id}; se evita duplicar la reserva.`,
+          );
+          return existente;
+        }
+      }
+
       // ─── FLUJO NORMAL ────────────────────────────────────────────────────────
       const isProgramado = reserva.tipoAgenda === 'programado';
       const fechaProg = reserva.fechaProgramada
@@ -6689,6 +6895,7 @@ export class TelegramBookingUpdate {
 
       const nuevoServicio = await this.servicesService.reserveNext({
         clienteId: client.id,
+        bookingSessionId: reserva.bookingSessionId,
         empleadaId: empleada.id,
         jefeId: jefeId,
         duracionPactadaHoras: isOpenEnded ? 1 : duracionPactadaHoras,
@@ -6996,11 +7203,16 @@ export class TelegramBookingUpdate {
        * ubicacion-- para engancharla a ESTE servicio en vez de crear otro.
        */
       if (ctx.from?.id.toString() === telegramId) {
-        if (esperaComprobante && ctx.session) {
-          ctx.session.servicioPendienteComprobanteId = nuevoServicio.id;
-        } else {
-          ctx.session = {};
-        }
+        const terminalSession: SessionData = {
+          bookingSessionId: reserva.bookingSessionId ?? undefined,
+          bookingStatus: 'SERVICE_CREATED',
+          bookingServiceId: nuevoServicio.id,
+          empleadaId: empleada.id,
+          ...(esperaComprobante
+            ? { servicioPendienteComprobanteId: nuevoServicio.id }
+            : {}),
+        };
+        ctx.session = terminalSession;
       }
 
       // Acumulamos en memoria
@@ -8529,6 +8741,33 @@ export class TelegramBookingUpdate {
     if (!session) return;
     const step = session.step;
 
+    // Las intenciones globales tienen prioridad incluso si el formulario
+    // estaba esperando duración, ubicación o pago.
+    if (
+      ctx.chat?.type === 'private' &&
+      session.bookingSessionId &&
+      session.empleadaId &&
+      (step === 'CHAT_CON_EMPLEADA' ||
+        step === 'AWAITING_DURATION' ||
+        step === 'AWAITING_LOCATION' ||
+        step === 'AWAITING_PAYMENT_METHOD' ||
+        step === 'AWAITING_PAYMENT_RECEIPT' ||
+        step === 'AWAITING_MIXED_TRANSFER_AMOUNT')
+    ) {
+      const currentEmployee = await this.empleadasRepository.findOne({
+        where: { id: session.empleadaId },
+      });
+      const globalText = (ctx.message as { text?: string })?.text || '';
+      if (currentEmployee && globalText.trim()) {
+        const handled = await this.routeGlobalBookingIntent(
+          ctx,
+          globalText,
+          currentEmployee,
+        );
+        if (handled) return;
+      }
+    }
+
     // El cliente decidió esperar a una empleada ocupada: no se le responde
     // nada hasta que ella vuelva a estar disponible. Solo se guarda lo que
     // escriba para no perder el historial.
@@ -8808,6 +9047,39 @@ export class TelegramBookingUpdate {
         nombreTelegram: fullName,
       });
       await this.clientesRepository.save(client);
+    }
+
+    // Un cliente puede volver meses después sin que el JSON de Telegram siga
+    // representando una solicitud activa. Las intenciones explícitas deben
+    // abrir una booking nueva, no quedarse en el mensaje genérico del catálogo.
+    const catalogEmployees = await this.empleadasRepository.find({
+      where: { catalogoActivo: true },
+      relations: { usuario: true },
+    });
+    const coldIntent = detectGlobalBookingIntent(text, {
+      employeeNames: catalogEmployees.map(
+        (employee) => employee.nombreArtistico,
+      ),
+    });
+    if (
+      coldIntent.intent === 'START_NEW_BOOKING' ||
+      coldIntent.intent === 'CHANGE_EMPLOYEE'
+    ) {
+      const wanted = coldIntent.employeeName
+        ? normalizeBookingText(coldIntent.employeeName)
+        : '';
+      const selected = wanted
+        ? catalogEmployees.find(
+            (employee) =>
+              normalizeBookingText(employee.nombreArtistico) === wanted,
+          )
+        : null;
+      if (selected) {
+        await this.startHireSession(ctx, selected.id);
+      } else {
+        await this.replyWithAvailableEmployees(ctx);
+      }
+      return;
     }
 
     /*
@@ -9458,6 +9730,188 @@ export class TelegramBookingUpdate {
     session.chatHistory = history;
   }
 
+  /**
+   * Busca una empleada únicamente entre perfiles visibles del catálogo. La
+   * mención de un nombre nunca se resuelve contra toda la base de datos.
+   */
+  private async findEmployeeMentioned(
+    name: string | undefined,
+  ): Promise<Empleadas | null> {
+    if (!name) return null;
+    const employees = await this.empleadasRepository.find({
+      where: { catalogoActivo: true },
+      relations: { usuario: true },
+    });
+    const wanted = normalizeBookingText(name);
+    return (
+      employees.find(
+        (employee) => normalizeBookingText(employee.nombreArtistico) === wanted,
+      ) ?? null
+    );
+  }
+
+  /**
+   * Intenciones que pueden interrumpir cualquier currentStep de una booking.
+   * Se ejecuta antes del prompt de IA, de la duración y de la ubicación.
+   */
+  private async routeGlobalBookingIntent(
+    ctx: BotContext,
+    text: string,
+    currentEmployee: Empleadas,
+  ): Promise<boolean> {
+    const session = ctx.session;
+    if (!session) return false;
+
+    const employeeNames = (
+      await this.empleadasRepository.find({
+        where: { catalogoActivo: true },
+        select: { nombreArtistico: true },
+      })
+    ).map((employee) => employee.nombreArtistico);
+    const routed = detectGlobalBookingIntent(text, { employeeNames });
+    session.bookingLastIntent = routed.intent;
+
+    if (routed.intent === 'REQUEST_HUMAN') {
+      await this.entregarConversacionAlJefe(
+        ctx,
+        currentEmployee,
+        'El cliente solicitó hablar con una persona.',
+      );
+      return true;
+    }
+
+    if (routed.intent === 'CANCEL_BOOKING') {
+      if (session.servicioPendienteComprobanteId || session.bookingServiceId) {
+        await ctx.reply(
+          'Esta solicitud ya generó un servicio. Para cancelarlo aplican las reglas del servicio activo; no crearé ni cancelaré otro por este mensaje.',
+        );
+        return true;
+      }
+      session.bookingStatus = transitionBookingStatus(
+        session.bookingStatus ?? 'COLLECTING',
+        'CANCELLED',
+      );
+      session.step = undefined;
+      await this.recordDraftConversation(
+        ctx,
+        'sistema',
+        'La solicitud fue cancelada por el cliente.',
+      );
+      await this.persistSession(ctx);
+      await ctx.reply(
+        'Listo, cancelé únicamente esta solicitud. Tus servicios anteriores siguen intactos. Cuando quieras, podemos empezar otra.',
+        Markup.inlineKeyboard([
+          [Markup.button.callback('Empezar servicio nuevo', 'restart_booking')],
+        ]),
+      );
+      return true;
+    }
+
+    if (
+      routed.intent === 'START_NEW_BOOKING' ||
+      routed.intent === 'RESTART_BOOKING'
+    ) {
+      if (session.servicioPendienteComprobanteId || session.bookingServiceId) {
+        await ctx.reply(
+          'Ese servicio ya quedó creado. Si quieres agendar otro, abre de nuevo el perfil de la empleada desde el catálogo.',
+        );
+        return true;
+      }
+      if (session.bookingSessionId) {
+        session.bookingStatus = transitionBookingStatus(
+          session.bookingStatus ?? 'COLLECTING',
+          'ABANDONED',
+        );
+        await this.recordDraftConversation(
+          ctx,
+          'sistema',
+          'La solicitud anterior fue reemplazada por una nueva.',
+        );
+      }
+      session.bookingLastIntent = routed.intent;
+      const requestedEmployee = await this.findEmployeeMentioned(
+        routed.employeeName,
+      );
+      await this.startHireSession(
+        ctx,
+        requestedEmployee?.id ?? currentEmployee.id,
+      );
+      return true;
+    }
+
+    if (routed.intent === 'CHANGE_EMPLOYEE') {
+      const target = await this.findEmployeeMentioned(routed.employeeName);
+      if (!target) {
+        await this.showAvailableEmployeeCatalog(ctx);
+        return true;
+      }
+      if (target.id === currentEmployee.id) {
+        await ctx.reply(
+          `Sí, seguimos con ${currentEmployee.nombreArtistico}. Dime el dato que falta y avanzamos.`,
+        );
+        return true;
+      }
+      await this.startHireSession(ctx, target.id);
+      return true;
+    }
+
+    if (routed.intent === 'ASK_STATUS') {
+      const missing = nextMissingRequirement({
+        employeeId: session.empleadaId,
+        durationHours: session.duracionPactadaHoras,
+        openEnded: session.duracionIndefinida,
+        locationConfirmed: this.hasConfirmedLocation(session),
+        paymentMethod: session.metodoPago,
+      });
+      const labels: Record<string, string> = {
+        duration: 'la duración',
+        location: 'la ubicación',
+        payment: 'el método de pago',
+        employee: 'la empleada',
+      };
+      await ctx.reply(
+        missing
+          ? `Seguimos con ${currentEmployee.nombreArtistico}; solo falta ${labels[missing] || 'un dato'}.`
+          : 'Ya tengo los datos principales y estoy validando la solicitud.',
+      );
+      return true;
+    }
+
+    if (routed.intent === 'UNKNOWN') {
+      const loop = registerLoopFailure(
+        {
+          lastStep: session.bookingLastStep,
+          lastIntent: session.bookingLastIntent,
+          failureCount: session.bookingFailureCount ?? 0,
+        },
+        session.step,
+        routed.intent,
+        DEFAULT_LOOP_BREAKER_MAX_FAILURES,
+      );
+      session.bookingFailureCount = loop.state.failureCount;
+      session.bookingLastStep = loop.state.lastStep;
+      if (loop.shouldEscalate) {
+        session.bookingFailureCount = 0;
+        await this.entregarConversacionAlJefe(
+          ctx,
+          currentEmployee,
+          'No fue posible interpretar varios mensajes consecutivos durante la reserva.',
+        );
+      } else {
+        await ctx.reply(
+          'No quiero asumir y cambiar tu solicitud por error. Puedes decir “otra empleada”, “empezar de nuevo”, “cancelar” o pedirme atención humana.',
+          Markup.inlineKeyboard([
+            [Markup.button.callback('Empezar de nuevo', 'restart_booking')],
+            [Markup.button.callback('Hablar con una persona', 'request_human')],
+          ]),
+        );
+      }
+      return true;
+    }
+
+    return false;
+  }
+
   private async flushClientMessageBuffer(
     bufferKey: string,
     empleada: Empleadas,
@@ -9506,6 +9960,15 @@ export class TelegramBookingUpdate {
         await this.replyWithDeflection(ctx, session, userMessage);
         return;
       }
+
+      // El router global tiene prioridad sobre el currentStep: “mejor quiero
+      // a Paula” no puede terminar otra vez en la pregunta de ubicación.
+      const handledGlobalIntent = await this.routeGlobalBookingIntent(
+        ctx,
+        userMessage,
+        empleada,
+      );
+      if (handledGlobalIntent) return;
 
       /*
        * "¿En cuánto llegas?" no tiene respuesta que el personaje pueda dar: el

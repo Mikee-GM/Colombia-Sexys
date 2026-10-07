@@ -11,7 +11,7 @@ import { Context, Telegraf } from 'telegraf';
 describe('TelegramService', () => {
   let service: TelegramService;
   let bot: Telegraf<Context>;
-  let externalCall: jest.Mock;
+  let externalCall: jest.SpyInstance;
 
   beforeEach(async () => {
     bot = new Telegraf<Context>('123456789:dummy-unit-test');

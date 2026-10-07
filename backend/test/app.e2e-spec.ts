@@ -93,6 +93,7 @@ const notifications = {
     }
     return Promise.resolve();
   }),
+  notificarJefeServicioPendiente: jest.fn().mockResolvedValue(undefined),
 };
 const aiMessages = {
   generate: jest.fn((_event: string, _context: unknown, fallback: string) =>
@@ -990,5 +991,153 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       expect(Number((await service()).duracionPactadaHoras)).toBe(1);
       expect(await eventTypes()).toEqual([]);
     });
+  });
+
+  it('crea dos servicios independientes para el mismo cliente y conserva el historial', async () => {
+    await dataSource.query('DELETE FROM servicios');
+    await dataSource.query(
+      `UPDATE usuarios SET telegram_chat_id = CASE WHEN id = $1 THEN 9012 ELSE 9013 END
+         WHERE id IN ($1, $2)`,
+      [IDS.boss, IDS.otherBoss],
+    );
+
+    const [client] = await dataSource.query(
+      `SELECT id, nombre_telegram AS "nombreTelegram"
+         FROM clientes WHERE id = $1`,
+      [IDS.client],
+    );
+    const [employeeA] = await dataSource.query(
+      `SELECT id, nombre_artistico AS "nombreArtistico", precio_base_hora AS "precioBaseHora", jefe_id AS "jefeId"
+         FROM empleadas WHERE id = $1`,
+      [IDS.employee],
+    );
+    const [employeeB] = await dataSource.query(
+      `SELECT id, nombre_artistico AS "nombreArtistico", precio_base_hora AS "precioBaseHora", jefe_id AS "jefeId"
+         FROM empleadas WHERE id = $1`,
+      [IDS.otherEmployee],
+    );
+    const pause = jest
+      .spyOn(bookingUpdate as any, 'pausaComoSiLoEstuvieraEscribiendo')
+      .mockResolvedValue(undefined);
+
+    const buildContext = (bookingSessionId: string, employeeId: string) =>
+      ({
+        from: { id: 9001, first_name: 'Cliente E2E' },
+        session: {
+          bookingSessionId,
+          bookingStatus: 'READY',
+          empleadaId: employeeId,
+          duracionPactadaHoras: 2,
+          metodoPago: 'efectivo',
+          locationNameSnapshot: 'Hotel E2E',
+        },
+        reply: jest.fn().mockResolvedValue(undefined),
+        sendChatAction: jest.fn().mockResolvedValue(undefined),
+        telegram: {
+          sendChatAction: jest.fn().mockResolvedValue(undefined),
+          sendMessage: jest.fn().mockResolvedValue({ message_id: 901 }),
+        },
+      }) as any;
+
+    try {
+      const first = buildContext(IDS.booking, employeeB.id);
+      await (bookingUpdate as any).recordDraftConversation(
+        first,
+        'cliente',
+        'Quiero dos horas con Sol E2E',
+      );
+      const serviceOne = await bookingUpdate.finalizeBooking(
+        first,
+        client,
+        employeeB,
+        2,
+        'efectivo',
+        '4.7109000',
+        '-74.0721000',
+        'Hotel E2E',
+        '9001',
+      );
+      expect(serviceOne).toBeDefined();
+      expect(first.session.bookingStatus).toBe('SERVICE_CREATED');
+      expect(first.session.bookingServiceId).toBe(serviceOne!.id);
+
+      const duplicate = await bookingUpdate.finalizeBooking(
+        first,
+        client,
+        employeeB,
+        2,
+        'efectivo',
+        '4.7109000',
+        '-74.0721000',
+        'Hotel E2E',
+        '9001',
+      );
+      expect(duplicate!.id).toBe(serviceOne!.id);
+
+      const second = buildContext(IDS.otherBooking, employeeA.id);
+      await (bookingUpdate as any).recordDraftConversation(
+        second,
+        'cliente',
+        'Una semana despues quiero otro servicio con Luna E2E',
+      );
+      const serviceTwo = await bookingUpdate.finalizeBooking(
+        second,
+        client,
+        employeeA,
+        1,
+        'tarjeta',
+        '4.7209000',
+        '-74.0821000',
+        'Domicilio E2E',
+        '9001',
+      );
+      expect(serviceTwo).toBeDefined();
+      expect(serviceTwo!.id).not.toBe(serviceOne!.id);
+      expect(second.session.bookingSessionId).toBe(IDS.otherBooking);
+
+      const services = await dataSource.query(
+        `SELECT id, booking_session_id, empleada_id, metodo_pago
+           FROM servicios
+          WHERE id IN ($1, $2)
+          ORDER BY id`,
+        [serviceOne!.id, serviceTwo!.id],
+      );
+      expect(services).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: serviceOne!.id,
+            booking_session_id: IDS.booking,
+            empleada_id: employeeB.id,
+          }),
+          expect.objectContaining({
+            id: serviceTwo!.id,
+            booking_session_id: IDS.otherBooking,
+            empleada_id: employeeA.id,
+          }),
+        ]),
+      );
+
+      const history = await dataSource.query(
+        `SELECT booking_session_id, servicio_id, mensaje
+           FROM conversaciones_telegram
+          WHERE booking_session_id IN ($1, $2)
+          ORDER BY enviado_at`,
+        [IDS.booking, IDS.otherBooking],
+      );
+      expect(history).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            booking_session_id: IDS.booking,
+            servicio_id: serviceOne!.id,
+          }),
+          expect.objectContaining({
+            booking_session_id: IDS.otherBooking,
+            servicio_id: serviceTwo!.id,
+          }),
+        ]),
+      );
+    } finally {
+      pause.mockRestore();
+    }
   });
 });
