@@ -2732,9 +2732,6 @@ export class TelegramBookingUpdate {
       sesionPrevia.empleadaId !== empleadaId
     ) {
       const humanTakeover = isPreServiceHumanTakeover(sesionPrevia);
-      const previousEmployee = await this.empleadasRepository.findOne({
-        where: { id: sesionPrevia.empleadaId },
-      });
       sesionPrevia.empleadaId = empleadaId;
       sesionPrevia.bookingStatus = 'COLLECTING';
       sesionPrevia.bookingLastIntent = 'CHANGE_EMPLOYEE';
@@ -2747,7 +2744,7 @@ export class TelegramBookingUpdate {
       sesionPrevia.trioStatus = undefined;
       sesionPrevia.step = 'CHAT_CON_EMPLEADA';
       mismaContratacion = true;
-      const changeMessage = `Listo, cambiamos de ${previousEmployee?.nombreArtistico || 'la chica anterior'} a ${empleada.nombreArtistico}. Conservé lo que ya estaba válido y revisamos lo que dependa de ella.`;
+      const changeMessage = `Claro amor, con ${empleada.nombreArtistico} entonces. ¿Seguimos desde donde quedamos?`;
       if (humanTakeover) {
         await this.recordDraftConversation(ctx, 'sistema', changeMessage);
         await this.persistSession(ctx);
