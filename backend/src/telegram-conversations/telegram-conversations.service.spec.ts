@@ -72,6 +72,63 @@ describe('TelegramConversationsService', () => {
     sessions.query.mockResolvedValue([]);
   });
 
+  it('makes accepting an already-created draft idempotent', async () => {
+    const mutableSubject = subject as any;
+    const draft = {
+      id: 'booking-1',
+      clientId: 'client-1',
+      intendedEmployeeId: 'employee-1',
+      ownerBossId: 'boss-1',
+      status: 'SERVICE_CREATED',
+      mode: 'HUMAN_ACTIVE',
+      serviceId: 'service-1',
+      version: 4,
+      metadata: {},
+      updatedAt: new Date(),
+      durationHours: 2,
+      openEndedDuration: false,
+      placeType: 'external',
+      presetLocationId: null,
+      locationName: 'Montecarlo',
+      locationAddress: null,
+      locationNotes: null,
+      locationLat: 20.5,
+      locationLng: -100.4,
+      room: null,
+      paymentMethod: 'efectivo',
+      scheduleType: 'inmediato',
+      scheduledAt: null,
+      currentRequirement: null,
+      lastInteractionAt: new Date(),
+      createdAt: new Date(),
+    } as any;
+    mutableSubject.bookingDraftRepository = {
+      findOne: jest.fn().mockResolvedValue(draft),
+    } as any;
+    mutableSubject.empleadasRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'employee-1',
+        jefeId: 'boss-1',
+        jefeSecundarioId: null,
+      }),
+    } as any;
+    mutableSubject.servicesService = { reserveNext: jest.fn() } as any;
+
+    const result = await subject.acceptBookingDraft('booking-1', {
+      id: 'boss-1',
+      rol: 'jefe',
+    } as any);
+
+    expect(result).toEqual({
+      draft: expect.objectContaining({ serviceId: 'service-1' }),
+      idempotent: true,
+    });
+    expect(mutableSubject.servicesService.reserveNext).not.toHaveBeenCalled();
+    mutableSubject.bookingDraftRepository = undefined;
+    mutableSubject.empleadasRepository = undefined;
+    mutableSubject.servicesService = undefined;
+  });
+
   it('envía, persiste y emite un mensaje del jefe asignado', async () => {
     services.findOne.mockResolvedValue({
       id: 'service-1',

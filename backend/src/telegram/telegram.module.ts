@@ -56,6 +56,8 @@ import { TelegramLinkAttempt } from './entities/telegram-link-attempt.entity';
 import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
 import { TeamChannelModule } from '../team-channel/team-channel.module';
 import { isDummyTelegramToken } from './telegram-transport';
+import { TelegramConversationsModule } from '../telegram-conversations/telegram-conversations.module';
+import { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
 
 @Module({
   imports: [
@@ -73,6 +75,7 @@ import { isDummyTelegramToken } from './telegram-transport';
       AuthorizedBankAccounts,
       PaymentReceiptValidations,
       TelegramLinkAttempt,
+      CustomerBookingSession,
     ]),
     AuthModule,
     LoyaltyModule,
@@ -94,6 +97,7 @@ import { isDummyTelegramToken } from './telegram-transport';
     // El canal con las modelos manda por el bot y el bot le cede el texto de
     // quien pulsa "Responder": los dos lados se necesitan.
     forwardRef(() => TeamChannelModule),
+    forwardRef(() => TelegramConversationsModule),
     TelegrafModule.forRootAsync({
       imports: [ConfigModule, TypeOrmModule.forFeature([TelegramSession])],
       useFactory: (

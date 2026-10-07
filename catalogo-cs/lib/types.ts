@@ -404,7 +404,30 @@ export type PreServiceConversation = {
     locationName: string | null;
     locationAddress: string | null;
     locationNotes: string | null;
+    locationLat?: number | null;
+    locationLng?: number | null;
+    placeType?: string | null;
+    room?: string | null;
+    scheduleType?: string | null;
+    scheduledAt?: string | null;
+    currentRequirement?: string | null;
+    status?: string;
+    version?: number;
   };
+  bookingDraft?: {
+    id: string;
+    clientId: string;
+    intendedEmployeeId: string | null;
+    ownerBossId: string | null;
+    status: string;
+    mode: "AI_ACTIVE" | "HUMAN_ACTIVE";
+    serviceId: string | null;
+    version: number;
+    bookingData: PreServiceConversation["bookingData"];
+    room: string | null;
+    metadata: Record<string, unknown>;
+    updatedAt: string;
+  } | null;
 };
 
 export type CashObligation = {

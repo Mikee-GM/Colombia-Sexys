@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   ArrowLeft,
   CalendarClock,
@@ -29,6 +29,8 @@ import {
   cerrarServicioPorOficina,
   decidePendingService,
   reasignarEmpleadaDeServicio,
+  updateJefeBookingDraft,
+  acceptJefeBookingDraft,
 } from "@/lib/actions/jefe-panel";
 import type { CancellationReason } from "@/lib/cancellation-reasons";
 import type { Employee, Service } from "@/lib/types";
@@ -69,6 +71,35 @@ export default function ServiceInspector({
   const [relocating, setRelocating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [pending, startTransition] = useTransition();
+  const draft = conversation?.bookingDraft;
+  const [draftForm, setDraftForm] = useState({
+    employeeId: "",
+    durationHours: "",
+    locationName: "",
+    locationAddress: "",
+    locationNotes: "",
+    locationLat: "",
+    locationLng: "",
+    paymentMethod: "",
+  });
+
+  useEffect(() => {
+    if (!conversation || conversation.service) return;
+    const booking = conversation.bookingData;
+    setDraftForm({
+      employeeId: conversation.employeeId,
+      durationHours:
+        booking?.durationHours != null ? String(booking.durationHours) : "",
+      locationName: booking?.locationName ?? "",
+      locationAddress: booking?.locationAddress ?? "",
+      locationNotes: booking?.locationNotes ?? "",
+      locationLat:
+        booking?.locationLat != null ? String(booking.locationLat) : "",
+      locationLng:
+        booking?.locationLng != null ? String(booking.locationLng) : "",
+      paymentMethod: booking?.paymentMethod ?? "",
+    });
+  }, [conversation, conversation?.bookingData, conversation?.employeeId]);
 
   if (!conversation) {
     return (
@@ -86,6 +117,75 @@ export default function ServiceInspector({
       booking?.locationAddress ??
       booking?.locationNotes ??
       null;
+    const saveDraft = () => {
+      if (!conversation.bookingSessionId) return;
+      startTransition(async () => {
+        const result = await updateJefeBookingDraft({
+          bookingSessionId: conversation.bookingSessionId!,
+          patch: {
+            intendedEmployeeId: draftForm.employeeId || undefined,
+            durationHours: draftForm.durationHours
+              ? Number(draftForm.durationHours)
+              : undefined,
+            locationName: draftForm.locationName || undefined,
+            locationAddress: draftForm.locationAddress || undefined,
+            locationNotes: draftForm.locationNotes || undefined,
+            locationLat: draftForm.locationLat
+              ? Number(draftForm.locationLat)
+              : undefined,
+            locationLng: draftForm.locationLng
+              ? Number(draftForm.locationLng)
+              : undefined,
+            paymentMethod: draftForm.paymentMethod || undefined,
+          },
+        });
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success("Borrador actualizado");
+        await onRefresh();
+      });
+    };
+
+    const acceptDraft = () => {
+      if (!conversation.bookingSessionId) return;
+      startTransition(async () => {
+        const saved = await updateJefeBookingDraft({
+          bookingSessionId: conversation.bookingSessionId!,
+          patch: {
+            intendedEmployeeId: draftForm.employeeId || undefined,
+            durationHours: draftForm.durationHours
+              ? Number(draftForm.durationHours)
+              : undefined,
+            locationName: draftForm.locationName || undefined,
+            locationAddress: draftForm.locationAddress || undefined,
+            locationNotes: draftForm.locationNotes || undefined,
+            locationLat: draftForm.locationLat
+              ? Number(draftForm.locationLat)
+              : undefined,
+            locationLng: draftForm.locationLng
+              ? Number(draftForm.locationLng)
+              : undefined,
+            paymentMethod: draftForm.paymentMethod || undefined,
+          },
+        });
+        if (!saved.success) {
+          toast.error(saved.error);
+          return;
+        }
+        const result = await acceptJefeBookingDraft(
+          conversation.bookingSessionId!,
+        );
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success("Servicio aceptado y enviado a la empleada");
+        await onRefresh();
+      });
+    };
+
     return (
       <aside className="flex h-full min-h-0 flex-col bg-black">
         <header className="flex min-h-16 items-center gap-3 border-b border-zinc-800 px-3 py-2.5">
@@ -162,6 +262,142 @@ export default function ServiceInspector({
               </div>
             )}
           </dl>
+          <section className="mt-4 space-y-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
+              Datos de la reserva
+            </p>
+            <label className="block text-xs text-zinc-500">
+              Empleada
+              <select
+                value={draftForm.employeeId}
+                onChange={(event) =>
+                  setDraftForm((current) => ({
+                    ...current,
+                    employeeId: event.target.value,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+              >
+                <option value="">Selecciona una empleada</option>
+                {employees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>
+                    {employee.nombreArtistico}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs text-zinc-500">
+              Duración (horas)
+              <input
+                type="number"
+                min="0.25"
+                step="0.25"
+                value={draftForm.durationHours}
+                onChange={(event) =>
+                  setDraftForm((current) => ({
+                    ...current,
+                    durationHours: event.target.value,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+              />
+            </label>
+            <label className="block text-xs text-zinc-500">
+              Lugar / nombre
+              <input
+                value={draftForm.locationName}
+                onChange={(event) =>
+                  setDraftForm((current) => ({
+                    ...current,
+                    locationName: event.target.value,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+              />
+            </label>
+            <label className="block text-xs text-zinc-500">
+              Dirección
+              <input
+                value={draftForm.locationAddress}
+                onChange={(event) =>
+                  setDraftForm((current) => ({
+                    ...current,
+                    locationAddress: event.target.value,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+              />
+            </label>
+            <label className="block text-xs text-zinc-500">
+              Pago
+              <select
+                value={draftForm.paymentMethod}
+                onChange={(event) =>
+                  setDraftForm((current) => ({
+                    ...current,
+                    paymentMethod: event.target.value,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm capitalize text-white"
+              >
+                <option value="">Selecciona un método</option>
+                <option value="efectivo">Efectivo</option>
+                <option value="tarjeta">Tarjeta</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="mixto">Mixto</option>
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs text-zinc-500">
+                Latitud
+                <input
+                  type="number"
+                  step="any"
+                  value={draftForm.locationLat}
+                  onChange={(event) =>
+                    setDraftForm((current) => ({
+                      ...current,
+                      locationLat: event.target.value,
+                    }))
+                  }
+                  className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+                />
+              </label>
+              <label className="block text-xs text-zinc-500">
+                Longitud
+                <input
+                  type="number"
+                  step="any"
+                  value={draftForm.locationLng}
+                  onChange={(event) =>
+                    setDraftForm((current) => ({
+                      ...current,
+                      locationLng: event.target.value,
+                    }))
+                  }
+                  className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+                />
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={saveDraft}
+                disabled={pending}
+                className="h-10 flex-1 rounded border border-zinc-700 px-3 text-xs font-semibold text-zinc-200 disabled:opacity-50"
+              >
+                Guardar cambios
+              </button>
+              <button
+                type="button"
+                onClick={acceptDraft}
+                disabled={pending || !draft}
+                className="h-10 flex-1 rounded bg-[#C5A55A] px-3 text-xs font-bold text-black disabled:opacity-50"
+              >
+                ACEPTAR SERVICIO
+              </button>
+            </div>
+          </section>
         </div>
       </aside>
     );

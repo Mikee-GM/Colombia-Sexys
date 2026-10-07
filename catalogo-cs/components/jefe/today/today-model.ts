@@ -18,6 +18,7 @@ export type JefeConversation = {
   service: Service | null;
   bookingSessionId: string | null;
   bookingData: PreServiceConversation["bookingData"] | null;
+  bookingDraft: PreServiceConversation["bookingDraft"] | null;
   relatedServices: Service[];
   messages: ConversationMessage[];
   lastMessage: string;
@@ -136,6 +137,7 @@ export function buildJefeConversations(
         service,
         bookingSessionId,
         bookingData: null,
+        bookingDraft: null,
         relatedServices,
         messages,
         lastMessage: latest?.mensaje ?? "Sin mensajes",
@@ -169,6 +171,7 @@ export function buildJefeConversations(
           service: null,
           bookingSessionId: conversation.bookingSessionId,
           bookingData: conversation.bookingData,
+          bookingDraft: conversation.bookingDraft ?? null,
           relatedServices: [
             ...(byClient.get(conversation.client.id) ?? []),
           ].sort(compareServices),
