@@ -33,6 +33,7 @@ import { DisciplineService } from '../discipline/discipline.service';
 import { hashLinkCode } from './telegram-link-code';
 import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
+import { TelegramConversationsService } from '../telegram-conversations/telegram-conversations.service';
 
 @Update()
 export class TelegramAuthUpdate {
@@ -63,6 +64,8 @@ export class TelegramAuthUpdate {
     private readonly weeklyContentService: WeeklyContentService,
     private readonly candidateScreeningService: CandidateScreeningService,
     private readonly disciplineService: DisciplineService,
+    @Inject(forwardRef(() => TelegramConversationsService))
+    private readonly telegramConversationsService: TelegramConversationsService,
   ) {}
 
   @Start()
@@ -119,6 +122,39 @@ export class TelegramAuthUpdate {
         startPayload.employeeId,
       );
       return;
+    }
+
+    if (!user && client) {
+      const activeDraft =
+        await this.telegramConversationsService.findActiveBookingDraftForClient(
+          client.id,
+        );
+      if (activeDraft) {
+        const session = ((ctx as any).session ??= {});
+        this.telegramConversationsService.hydrateSessionFromBookingDraft(
+          session,
+          activeDraft,
+        );
+
+        // HUMAN_ACTIVE means the office owns the conversation. Hydrate the
+        // session but do not let /start make the bot speak over the boss.
+        if (activeDraft.mode === 'HUMAN_ACTIVE') return;
+
+        const employee = activeDraft.intendedEmployeeId
+          ? await this.empleadasRepository.findOne({
+              where: { id: activeDraft.intendedEmployeeId },
+              select: { id: true, nombreArtistico: true },
+            })
+          : null;
+        if (employee) {
+          const continuation =
+            activeDraft.status === 'READY'
+              ? `Ya tengo tu solicitud completa con ${employee.nombreArtistico}. El jefe la está revisando y te confirmo apenas la acepte.`
+              : `Claro, seguimos con ${employee.nombreArtistico}. Continuemos desde donde quedamos.`;
+          await ctx.reply(continuation);
+          return;
+        }
+      }
     }
 
     if (user) {

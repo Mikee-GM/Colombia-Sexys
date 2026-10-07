@@ -129,6 +129,30 @@ describe('TelegramConversationsService', () => {
     mutableSubject.servicesService = undefined;
   });
 
+  it('resolves /start to the latest open draft, never to a created service', async () => {
+    const mutableSubject = subject as any;
+    const findOne = jest.fn().mockResolvedValue({
+      id: 'booking-open',
+      clientId: 'client-1',
+      status: 'READY',
+    });
+    mutableSubject.bookingDraftRepository = { findOne };
+
+    const result = await subject.findActiveBookingDraftForClient('client-1');
+
+    expect(result).toEqual(
+      expect.objectContaining({ id: 'booking-open', status: 'READY' }),
+    );
+    expect(findOne).toHaveBeenCalledWith({
+      where: {
+        clientId: 'client-1',
+        status: expect.anything(),
+      },
+      order: { updatedAt: 'DESC' },
+    });
+    mutableSubject.bookingDraftRepository = undefined;
+  });
+
   it('envía, persiste y emite un mensaje del jefe asignado', async () => {
     services.findOne.mockResolvedValue({
       id: 'service-1',

@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectBot } from 'nestjs-telegraf';
-import { In, IsNull, LessThan, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
 import { Context, Telegraf } from 'telegraf';
 import { ConversacionesTelegram } from './entities/telegram-conversation.entity';
 import { Servicios } from '../services/entities/service.entity';
@@ -193,6 +193,23 @@ export class TelegramConversationsService {
     if (!draft)
       throw new NotFoundException('Borrador de reserva no encontrado');
     return draft;
+  }
+
+  /**
+   * Returns the latest still-open booking for a client. A service already
+   * created is deliberately excluded: a new /start must never hydrate a
+   * historical service as if it were the current booking form.
+   */
+  async findActiveBookingDraftForClient(
+    clientId: string,
+  ): Promise<CustomerBookingSession | null> {
+    return this.bookingDraftRepository.findOne({
+      where: {
+        clientId,
+        status: Not(In(['SERVICE_CREATED', 'CANCELLED', 'ABANDONED'])),
+      },
+      order: { updatedAt: 'DESC' },
+    });
   }
 
   async markBookingDraftReady(
