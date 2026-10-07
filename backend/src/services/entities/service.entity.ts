@@ -33,6 +33,7 @@ import type { ServiceOperationState } from '../operations/service-operation-stat
 @Index('idx_servicios_estado', ['estado'], {})
 @Index('servicios_pkey', ['id'], { unique: true })
 @Index('idx_servicios_jefe', ['jefeId'], {})
+@Index('idx_servicios_booking_session', ['bookingSessionId'], {})
 @Entity('servicios', { schema: 'public' })
 export class Servicios {
   @Column('uuid', {
@@ -81,6 +82,13 @@ export class Servicios {
   })
   @ApiPropertyOptional({ description: 'Nombre del cliente sin registrar' })
   clienteNombreLibre: string | null;
+
+  /**
+   * Solicitud temporal que originó este servicio. Es nullable para conservar
+   * compatibilidad con servicios creados desde el panel o registrados a mano.
+   */
+  @Column('uuid', { name: 'booking_session_id', nullable: true })
+  bookingSessionId: string | null;
 
   /**
    * El servicio no lo creo el flujo de reservas: lo registro la empleada a

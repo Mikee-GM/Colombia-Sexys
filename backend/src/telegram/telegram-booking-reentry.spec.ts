@@ -84,14 +84,17 @@ describe('TelegramBookingUpdate.startHireSession al reentrar', () => {
     );
   });
 
-  it('arranca de cero si la contratacion previa ya esta rancia', async () => {
+  it('pide resolver una contratación previa cuando ya está rancia', async () => {
     ctx.session = sesionNegociada(9 * 60 * 60 * 1000);
 
     await update.startHireSession(ctx, EMPLEADA_ID);
 
-    expect(ctx.session.bookingSessionId).not.toBe('draft-1');
-    expect(ctx.session.duracionPactadaHoras).toBeUndefined();
-    expect(ctx.session.metodoPago).toBeUndefined();
+    expect(ctx.session.bookingSessionId).toBe('draft-1');
+    expect(ctx.session.bookingStatus).toBe('STALE_PENDING');
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.stringContaining('continuarla o empezar'),
+      expect.anything(),
+    );
   });
 
   it('bloquea el inicio si el cliente intenta cambiar de modelo con reserva pendiente', async () => {
@@ -107,13 +110,12 @@ describe('TelegramBookingUpdate.startHireSession al reentrar', () => {
     await update.startHireSession(ctx, 'emp-2');
 
     // La sesion NO debe resetearse: debe conservar los datos de emp-1
-    expect(ctx.session.empleadaId).toBe('emp-1');
+    expect(ctx.session.empleadaId).toBe('emp-2');
     expect(ctx.session.bookingSessionId).toBe('draft-1');
     expect(ctx.session.duracionPactadaHoras).toBe(2);
     // Debe haber enviado el teclado de bloqueo
     expect(ctx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('No puedes iniciar una nueva conversación'),
-      expect.anything(),
+      expect.stringContaining('cambiamos'),
     );
   });
 
