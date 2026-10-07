@@ -622,6 +622,8 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
          'empleadaId', $2::text,
          'iaActiva', true,
          'humanTakeover', false,
+         'bookingStatus', 'COLLECTING',
+         'step', 'CHAT_CON_EMPLEADA',
          'duracionPactadaHoras', 2,
          'metodoPago', 'efectivo'
        ))`,
@@ -773,7 +775,9 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
          'bookingSessionId', $1::text,
          'empleadaId', $2::text,
          'iaActiva', true,
-         'humanTakeover', false
+         'humanTakeover', false,
+         'bookingStatus', 'COLLECTING',
+         'step', 'CHAT_CON_EMPLEADA'
        ))`,
       [IDS.otherBooking, IDS.otherEmployee],
     );

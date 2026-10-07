@@ -41,6 +41,13 @@ type PreServiceBookingData = {
   version: number;
 };
 
+const ACTIVE_BOOKING_DRAFT_STATUSES = new Set([
+  'COLLECTING',
+  'READY',
+  'HUMAN_ACTIVE',
+  'ACCEPTING',
+]);
+
 @Injectable()
 export class TelegramConversationsService {
   constructor(
@@ -571,10 +578,38 @@ export class TelegramConversationsService {
     const sessionsQuery = this.conversationsRepository
       .createQueryBuilder('conversation')
       .leftJoin('conversation.intendedEmployee', 'employee')
+      .leftJoin(
+        CustomerBookingSession,
+        'bookingDraft',
+        'bookingDraft.id = conversation.bookingSessionId',
+      )
+      .leftJoin(
+        TelegramSession,
+        'telegram_session',
+        "telegram_session.data->>'bookingSessionId' = CAST(conversation.bookingSessionId AS text)",
+      )
       .select('conversation.bookingSessionId', 'bookingSessionId')
       .addSelect('MAX(conversation.enviadoAt)', 'lastAt')
       .where('conversation.bookingSessionId IS NOT NULL')
-      .andWhere('conversation.servicioId IS NULL');
+      .andWhere('conversation.servicioId IS NULL')
+      .andWhere(
+        `(
+          (bookingDraft.id IS NOT NULL AND bookingDraft.status IN (:...activeDraftStatuses))
+          OR
+          (bookingDraft.id IS NULL AND telegram_session.key IS NOT NULL AND
+            COALESCE(telegram_session.data->>'bookingServiceId', '') = '' AND
+            COALESCE(telegram_session.data->>'bookingStaleSince', '') = '' AND
+            (
+              telegram_session.data->>'bookingStatus' IN (:...activeDraftStatuses)
+              OR (
+                telegram_session.data->>'bookingStatus' IS NULL AND
+                telegram_session.data ? 'step'
+              )
+            )
+          )
+        )`,
+        { activeDraftStatuses: [...ACTIVE_BOOKING_DRAFT_STATUSES] },
+      );
 
     if (actor.rol === 'jefe') {
       sessionsQuery
@@ -631,7 +666,24 @@ export class TelegramConversationsService {
       messagesByBooking.set(message.bookingSessionId, current);
     }
 
-    return bookingSessionIds.flatMap((bookingSessionId) => {
+    const activeBookingSessionIds = bookingSessionIds.filter(
+      (bookingSessionId) => {
+        const draft = draftByBooking.get(bookingSessionId);
+        if (draft) return ACTIVE_BOOKING_DRAFT_STATUSES.has(draft.status);
+
+        const data = sessionDataByBooking.get(bookingSessionId);
+        if (!data || data.bookingSessionId !== bookingSessionId) return false;
+        if (this.stringValue(data.bookingServiceId)) return false;
+        if (this.stringValue(data.bookingStaleSince)) return false;
+
+        const status = this.stringValue(data.bookingStatus);
+        return status
+          ? ACTIVE_BOOKING_DRAFT_STATUSES.has(status)
+          : Boolean(this.stringValue(data.step));
+      },
+    );
+
+    return activeBookingSessionIds.flatMap((bookingSessionId) => {
       const history = messagesByBooking.get(bookingSessionId) ?? [];
       const first = history[0];
       const latest = history.at(-1);
