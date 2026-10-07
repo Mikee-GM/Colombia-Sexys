@@ -72,6 +72,87 @@ describe('TelegramConversationsService', () => {
     sessions.query.mockResolvedValue([]);
   });
 
+  it('makes accepting an already-created draft idempotent', async () => {
+    const mutableSubject = subject as any;
+    const draft = {
+      id: 'booking-1',
+      clientId: 'client-1',
+      intendedEmployeeId: 'employee-1',
+      ownerBossId: 'boss-1',
+      status: 'SERVICE_CREATED',
+      mode: 'HUMAN_ACTIVE',
+      serviceId: 'service-1',
+      version: 4,
+      metadata: {},
+      updatedAt: new Date(),
+      durationHours: 2,
+      openEndedDuration: false,
+      placeType: 'external',
+      presetLocationId: null,
+      locationName: 'Montecarlo',
+      locationAddress: null,
+      locationNotes: null,
+      locationLat: 20.5,
+      locationLng: -100.4,
+      room: null,
+      paymentMethod: 'efectivo',
+      scheduleType: 'inmediato',
+      scheduledAt: null,
+      currentRequirement: null,
+      lastInteractionAt: new Date(),
+      createdAt: new Date(),
+    } as any;
+    mutableSubject.bookingDraftRepository = {
+      findOne: jest.fn().mockResolvedValue(draft),
+    } as any;
+    mutableSubject.empleadasRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'employee-1',
+        jefeId: 'boss-1',
+        jefeSecundarioId: null,
+      }),
+    } as any;
+    mutableSubject.servicesService = { reserveNext: jest.fn() } as any;
+
+    const result = await subject.acceptBookingDraft('booking-1', {
+      id: 'boss-1',
+      rol: 'jefe',
+    } as any);
+
+    expect(result).toEqual({
+      draft: expect.objectContaining({ serviceId: 'service-1' }),
+      idempotent: true,
+    });
+    expect(mutableSubject.servicesService.reserveNext).not.toHaveBeenCalled();
+    mutableSubject.bookingDraftRepository = undefined;
+    mutableSubject.empleadasRepository = undefined;
+    mutableSubject.servicesService = undefined;
+  });
+
+  it('resolves /start to the latest open draft, never to a created service', async () => {
+    const mutableSubject = subject as any;
+    const findOne = jest.fn().mockResolvedValue({
+      id: 'booking-open',
+      clientId: 'client-1',
+      status: 'READY',
+    });
+    mutableSubject.bookingDraftRepository = { findOne };
+
+    const result = await subject.findActiveBookingDraftForClient('client-1');
+
+    expect(result).toEqual(
+      expect.objectContaining({ id: 'booking-open', status: 'READY' }),
+    );
+    expect(findOne).toHaveBeenCalledWith({
+      where: {
+        clientId: 'client-1',
+        status: expect.anything(),
+      },
+      order: { updatedAt: 'DESC' },
+    });
+    mutableSubject.bookingDraftRepository = undefined;
+  });
+
   it('envía, persiste y emite un mensaje del jefe asignado', async () => {
     services.findOne.mockResolvedValue({
       id: 'service-1',
@@ -347,6 +428,7 @@ describe('TelegramConversationsService', () => {
         updatedAt: new Date('2026-10-06T10:01:00Z'),
         data: {
           bookingSessionId: 'booking-1',
+          bookingStatus: 'COLLECTING',
           duracionPactadaHoras: 2,
           metodoPago: 'efectivo',
         },
@@ -373,6 +455,171 @@ describe('TelegramConversationsService', () => {
         }),
       }),
     ]);
+  });
+
+  it.each(['COLLECTING', 'READY', 'HUMAN_ACTIVE', 'ACCEPTING'])(
+    'muestra un draft pre-servicio en estado activo: %s',
+    async (status) => {
+      queryBuilder.getRawMany.mockResolvedValue([
+        { bookingSessionId: 'booking-active', lastAt: new Date() },
+      ]);
+      conversations.find.mockResolvedValue([
+        {
+          id: 'message-active',
+          clienteId: 'client-1',
+          bookingSessionId: 'booking-active',
+          servicioId: null,
+          emisor: 'cliente',
+          mensaje: 'Solicitud activa',
+          iaActiva: status !== 'HUMAN_ACTIVE',
+          enviadoAt: new Date(),
+          cliente: { nombreTelegram: 'Carlos', telegramChatId: '999' },
+          intendedEmployee: {
+            id: 'employee-1',
+            nombreArtistico: 'Andrea',
+            jefeId: 'boss-1',
+          },
+        },
+      ]);
+      sessionQueryBuilder.getMany.mockResolvedValue([]);
+      (subject as any).bookingDraftRepository = {
+        findBy: jest.fn().mockResolvedValue([
+          {
+            id: 'booking-active',
+            status,
+            mode: status === 'HUMAN_ACTIVE' ? 'HUMAN_ACTIVE' : 'AI_ACTIVE',
+            durationHours: 2,
+            openEndedDuration: false,
+            paymentMethod: 'efectivo',
+            locationLat: 20,
+            locationLng: -100,
+            updatedAt: new Date(),
+            version: 1,
+          },
+        ]),
+      };
+
+      const result = await subject.listPreServiceConversations({
+        id: 'boss-1',
+        rol: 'jefe',
+      } as any);
+
+      expect(result).toHaveLength(1);
+      (subject as any).bookingDraftRepository = undefined;
+    },
+  );
+
+  it.each(['SERVICE_CREATED', 'CANCELLED', 'ABANDONED'])(
+    'no muestra un draft terminal aunque su conversación tenga servicio_id nulo: %s',
+    async (status) => {
+      queryBuilder.getRawMany.mockResolvedValue([
+        { bookingSessionId: 'booking-terminal', lastAt: new Date() },
+      ]);
+      conversations.find.mockResolvedValue([
+        {
+          id: 'message-terminal',
+          clienteId: 'client-1',
+          bookingSessionId: 'booking-terminal',
+          servicioId: null,
+          emisor: 'cliente',
+          mensaje: 'Historial',
+          iaActiva: true,
+          enviadoAt: new Date(),
+          cliente: { nombreTelegram: 'Carlos', telegramChatId: '999' },
+          intendedEmployee: {
+            id: 'employee-1',
+            nombreArtistico: 'Andrea',
+            jefeId: 'boss-1',
+          },
+        },
+      ]);
+      sessionQueryBuilder.getMany.mockResolvedValue([]);
+      (subject as any).bookingDraftRepository = {
+        findBy: jest
+          .fn()
+          .mockResolvedValue([{ id: 'booking-terminal', status }]),
+      };
+
+      const result = await subject.listPreServiceConversations({
+        id: 'boss-1',
+        rol: 'jefe',
+      } as any);
+
+      expect(result).toEqual([]);
+      (subject as any).bookingDraftRepository = undefined;
+    },
+  );
+
+  it('usa fallback legacy solo con sesión activa y no con historial huérfano', async () => {
+    queryBuilder.getRawMany.mockResolvedValue([
+      { bookingSessionId: 'legacy-active', lastAt: new Date() },
+      { bookingSessionId: 'legacy-orphan', lastAt: new Date() },
+    ]);
+    conversations.find.mockResolvedValue([
+      {
+        id: 'message-active',
+        clienteId: 'client-1',
+        bookingSessionId: 'legacy-active',
+        servicioId: null,
+        emisor: 'cliente',
+        mensaje: 'Legacy activo',
+        iaActiva: true,
+        enviadoAt: new Date(),
+        cliente: { nombreTelegram: 'Carlos', telegramChatId: '999' },
+        intendedEmployee: {
+          id: 'employee-1',
+          nombreArtistico: 'Andrea',
+          jefeId: 'boss-1',
+        },
+      },
+      {
+        id: 'message-orphan',
+        clienteId: 'client-1',
+        bookingSessionId: 'legacy-orphan',
+        servicioId: null,
+        emisor: 'cliente',
+        mensaje: 'Historial huérfano',
+        iaActiva: true,
+        enviadoAt: new Date(),
+        cliente: { nombreTelegram: 'Carlos', telegramChatId: '999' },
+        intendedEmployee: {
+          id: 'employee-1',
+          nombreArtistico: 'Andrea',
+          jefeId: 'boss-1',
+        },
+      },
+    ]);
+    sessionQueryBuilder.getMany.mockResolvedValue([
+      {
+        updatedAt: new Date(),
+        data: {
+          bookingSessionId: 'legacy-active',
+          bookingStatus: 'COLLECTING',
+          step: 'AWAITING_LOCATION',
+        },
+      },
+      {
+        updatedAt: new Date(),
+        data: {
+          bookingSessionId: 'legacy-orphan',
+          bookingStatus: 'SERVICE_CREATED',
+          bookingServiceId: 'service-old',
+        },
+      },
+    ]);
+    (subject as any).bookingDraftRepository = {
+      findBy: jest.fn().mockResolvedValue([]),
+    };
+
+    const result = await subject.listPreServiceConversations({
+      id: 'boss-1',
+      rol: 'jefe',
+    } as any);
+
+    expect(result.map((item) => item.bookingSessionId)).toEqual([
+      'legacy-active',
+    ]);
+    (subject as any).bookingDraftRepository = undefined;
   });
 
   it('aplica takeover pre-servicio, sincroniza la sesión y emite solo al equipo', async () => {

@@ -113,9 +113,9 @@ describe('TelegramBookingUpdate.startHireSession al reentrar', () => {
     expect(ctx.session.empleadaId).toBe('emp-2');
     expect(ctx.session.bookingSessionId).toBe('draft-1');
     expect(ctx.session.duracionPactadaHoras).toBe(2);
-    // Debe haber enviado el teclado de bloqueo
+    // Debe conservar el flujo y ofrecer continuar desde el punto anterior.
     expect(ctx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('cambiamos'),
+      expect.stringMatching(/seguimos desde donde quedamos/i),
     );
   });
 

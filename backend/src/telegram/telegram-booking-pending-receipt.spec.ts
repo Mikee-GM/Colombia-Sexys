@@ -1,15 +1,11 @@
 import { TelegramBookingUpdate } from './telegram-booking.update';
 
 /**
- * La reserva por transferencia tiene que existir aunque el cliente no haya
- * pagado todavia.
+ * Completar la transferencia deja listo el borrador, pero la reserva operativa
+ * solo existe cuando el jefe la acepta en el panel.
  *
- * Antes `finalizeBooking` --el unico sitio que da de alta el servicio y avisa
- * al jefe-- se llamaba DESPUES de validar la foto del comprobante. Como el
- * cliente habitual contesta "cuando llegues transfiero", la reserva se quedaba
- * con los tres datos cerrados y sin existir: ni el jefe se enteraba, ni nadie
- * podia despacharla, ni quedaba constancia de que se hubiera perdido. El cobro
- * pasa a ser una condicion para DESPACHAR, no para existir.
+ * El cobro y la conversación se conservan en el draft; no se crea un servicio
+ * ni se reserva a la empleada antes de la aprobación explícita del jefe.
  */
 describe('TelegramBookingUpdate.cerrarReservaEsperandoComprobante', () => {
   let update: any;
@@ -37,17 +33,16 @@ describe('TelegramBookingUpdate.cerrarReservaEsperandoComprobante', () => {
     update.finalizeBooking = jest
       .fn()
       .mockResolvedValue({ id: 'srv-1' } as any);
+    update.markBookingReadyForBoss = jest.fn().mockResolvedValue(undefined);
     ctx = { from: { id: 55 }, session: sesionCompleta() };
   });
 
-  it('da de alta el servicio marcando que falta el comprobante', async () => {
+  it('marca el borrador listo sin crear servicio', async () => {
     await update.cerrarReservaEsperandoComprobante(ctx);
 
-    expect(update.finalizeBooking).toHaveBeenCalledTimes(1);
-    const args = update.finalizeBooking.mock.calls[0];
-    expect(args[4]).toBe('transferencia');
-    expect(args[args.length - 1]).toEqual({ esperaComprobante: true });
-    expect(ctx.session.servicioPendienteComprobanteId).toBe('srv-1');
+    expect(update.markBookingReadyForBoss).toHaveBeenCalledWith(ctx);
+    expect(update.finalizeBooking).not.toHaveBeenCalled();
+    expect(ctx.session.servicioPendienteComprobanteId).toBeUndefined();
   });
 
   /** Si no, cada mensaje del cliente abriria otro servicio para lo mismo. */
@@ -74,7 +69,8 @@ describe('TelegramBookingUpdate.cerrarReservaEsperandoComprobante', () => {
 
     await update.cerrarReservaEsperandoComprobante(ctx);
 
-    expect(update.finalizeBooking).toHaveBeenCalledTimes(1);
+    expect(update.markBookingReadyForBoss).toHaveBeenCalledWith(ctx);
+    expect(update.finalizeBooking).not.toHaveBeenCalled();
   });
 });
 

@@ -7,6 +7,9 @@ import { Servicios } from '../services/entities/service.entity';
 import { TelegramSession } from '../telegram/entities/telegram-session.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { TelegramModule } from '../telegram/telegram.module';
+import { CustomerBookingSession } from './entities/customer-booking-session.entity';
+import { Empleadas } from '../employees/entities/employee.entity';
+import { ServicesModule } from '../services/services.module';
 
 @Module({
   imports: [
@@ -15,8 +18,11 @@ import { TelegramModule } from '../telegram/telegram.module';
       Servicios,
       TelegramSession,
       Clientes,
+      CustomerBookingSession,
+      Empleadas,
     ]),
     forwardRef(() => TelegramModule),
+    forwardRef(() => ServicesModule),
   ],
   controllers: [TelegramConversationsController],
   providers: [TelegramConversationsService],

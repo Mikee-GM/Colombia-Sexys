@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Patch,
   Param,
   Post,
   Query,
@@ -19,6 +20,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
+import { UpdateBookingDraftDto } from './dto/update-booking-draft.dto';
 
 @Controller('telegram-conversations')
 @ApiControllerDocs('telegram-conversations', true)
@@ -158,6 +160,30 @@ export class TelegramConversationsController {
       bookingSessionId,
       req.user,
       dto.iaActiva,
+    );
+  }
+
+  @Patch('session/:bookingSessionId/draft')
+  updateBookingDraft(
+    @Param('bookingSessionId') bookingSessionId: string,
+    @Body() dto: UpdateBookingDraftDto,
+    @Req() req: any,
+  ) {
+    return this.conversationsService.updateBookingDraft(
+      bookingSessionId,
+      req.user,
+      dto,
+    );
+  }
+
+  @Post('session/:bookingSessionId/accept')
+  acceptBookingDraft(
+    @Param('bookingSessionId') bookingSessionId: string,
+    @Req() req: any,
+  ) {
+    return this.conversationsService.acceptBookingDraft(
+      bookingSessionId,
+      req.user,
     );
   }
 

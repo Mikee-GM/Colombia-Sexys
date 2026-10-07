@@ -190,6 +190,46 @@ export async function sendJefeConversationMessage(input: {
   }
 }
 
+export async function updateJefeBookingDraft(input: {
+  bookingSessionId: string;
+  patch: Record<string, unknown>;
+}) {
+  try {
+    await requireJefe();
+    const data = await apiFetch(
+      `/telegram-conversations/session/${input.bookingSessionId}/draft`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input.patch),
+      },
+    );
+    return { success: true as const, data };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "No se pudo guardar el borrador",
+    };
+  }
+}
+
+export async function acceptJefeBookingDraft(bookingSessionId: string) {
+  try {
+    await requireJefe();
+    const data = await apiFetch(
+      `/telegram-conversations/session/${bookingSessionId}/accept`,
+      { method: "POST" },
+    );
+    return { success: true as const, data };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "No se pudo aceptar la reserva",
+    };
+  }
+}
+
 export async function getJefeCashObligations(): Promise<CashObligationSummary> {
   await requireJefe();
   return apiFetch<CashObligationSummary>(

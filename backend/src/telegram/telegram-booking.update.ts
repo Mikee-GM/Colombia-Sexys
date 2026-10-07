@@ -77,6 +77,7 @@ import {
 import { clientMessages } from './client-messages';
 import { AiMessageService } from '../ai/ai-message.service';
 import { ConversacionesTelegram } from '../telegram-conversations/entities/telegram-conversation.entity';
+import { TelegramConversationsService } from '../telegram-conversations/telegram-conversations.service';
 import { EmployeeReportsService } from '../employee-reports/employee-reports.service';
 import { ReportCategory } from '../employee-reports/entities/employee-report.entity';
 import {
@@ -165,6 +166,7 @@ interface SessionData {
     };
   };
   empleadaId?: string;
+  clientId?: string;
   duracionPactadaHoras?: number;
   /** El cliente pactó un servicio de duración abierta: se cobra al finalizar. */
   duracionIndefinida?: boolean;
@@ -220,6 +222,7 @@ interface SessionData {
   bookingStaleSince?: string;
   bookingConfirmationPending?: boolean;
   bookingServiceId?: string;
+  bookingDraftVersion?: number;
   selectedEmployeeBusy?: boolean;
   waitingForBusyChoice?: boolean;
   /**
@@ -681,6 +684,30 @@ export function extractHirePaymentMethod(
   return undefined;
 }
 
+/** A historical service may be changed only by an explicit service-change request. */
+export function shouldChangeExistingServicePayment(
+  text: string,
+  session?: Pick<SessionData, 'bookingSessionId' | 'bookingStatus'>,
+): boolean {
+  const normalized = text.trim().toLowerCase();
+  const method = extractHirePaymentMethod(normalized);
+  if (!method || method === 'mixto') return false;
+  const explicit =
+    /\b(cambiar|cambio|modificar)\b.*\b(pago|m[eé]todo)\b.*\b(servicio|reserva|actual)\b/i.test(
+      normalized,
+    ) ||
+    /\b(pago|m[eé]todo)\b.*\b(servicio|reserva)\b.*\b(cambiar|efectivo|tarjeta|transferencia)\b/i.test(
+      normalized,
+    );
+  const activeBooking = Boolean(
+    session?.bookingSessionId &&
+    !['SERVICE_CREATED', 'CANCELLED', 'ABANDONED'].includes(
+      session.bookingStatus || '',
+    ),
+  );
+  return explicit && !activeBooking;
+}
+
 /**
  * Roles de oficina, que nunca deben entrar al flujo de cliente.
  *
@@ -959,6 +986,8 @@ export class TelegramBookingUpdate {
     private readonly telegramOnboardingService: TelegramOnboardingService,
     @Inject(forwardRef(() => EmployeeOnboardingService))
     private readonly employeeOnboardingService: EmployeeOnboardingService,
+    @Inject(forwardRef(() => TelegramConversationsService))
+    private readonly telegramConversationsService: TelegramConversationsService,
   ) {}
 
   private async createReceiptEvidence(
@@ -1213,44 +1242,21 @@ export class TelegramBookingUpdate {
     ) {
       return;
     }
+    await this.markBookingReadyForBoss(ctx);
+  }
 
-    const telegramId = ctx.from?.id?.toString();
-    if (!telegramId) return;
-
-    const [client, employee] = await Promise.all([
-      this.clientesRepository.findOne({
-        where: { telegramChatId: telegramId },
-      }),
-      this.empleadasRepository.findOne({
-        where: { id: session.empleadaId },
-        relations: { usuario: true, jefe: true },
-      }),
-    ]);
-    if (!client || !employee) return;
-
-    const servicio = await this.finalizeBooking(
-      ctx,
-      client,
-      employee,
-      session.duracionPactadaHoras ?? 1,
-      session.metodoPago,
-      session.locationLat,
-      session.locationLng,
-      session.locationNotas || null,
-      telegramId,
-      undefined,
-      undefined,
-      { esperaComprobante: true },
-    );
-
-    /*
-     * `finalizeBooking` ya deja el id en la sesion cuando quien cierra es el
-     * propio cliente. Se repite aqui por si el contexto no era el suyo: sin
-     * este id, la foto que llegue despues daria de alta un segundo servicio.
-     */
-    if (servicio && ctx.session) {
-      ctx.session.servicioPendienteComprobanteId = servicio.id;
-    }
+  /** Completes the customer draft without creating an operational service. */
+  private async markBookingReadyForBoss(ctx: BotContext): Promise<void> {
+    const session = ctx.session;
+    if (!session || session.bookingServiceId) return;
+    session.bookingStatus = 'READY';
+    session.bookingConfirmationPending = true;
+    session.step = undefined;
+    await this.persistSession(ctx);
+    const message =
+      'Listo mor, ya tengo los datos. El jefe revisa y confirma el servicio antes de ponerlo en marcha.';
+    await ctx.reply(message);
+    await this.registrarMensajeDelFlujo(ctx, message);
   }
 
   /**
@@ -1348,30 +1354,10 @@ export class TelegramBookingUpdate {
     // En servicios de duración abierta no se cobra por adelantado: el
     // comprobante se pide al finalizar, con el total real.
     if (session.duracionIndefinida && method === 'transferencia') {
-      const [client, employee] = await Promise.all([
-        this.clientesRepository.findOne({
-          where: { telegramChatId: ctx.from!.id.toString() },
-        }),
-        this.empleadasRepository.findOne({
-          where: { id: session.empleadaId },
-          relations: { usuario: true, jefe: true },
-        }),
-      ]);
-      if (!client || !employee) return false;
       await ctx.reply(
         'Perfecto mor. Como lo dejamos abierto, no me transfieras nada ahorita: al terminar te paso el total ya con las horas contadas y ahí me mandas el comprobante 😘',
       );
-      await this.finalizeBooking(
-        ctx,
-        client,
-        employee,
-        session.duracionPactadaHoras ?? 1,
-        method,
-        session.locationLat,
-        session.locationLng,
-        session.locationNotas || null,
-        ctx.from!.id.toString(),
-      );
+      await this.markBookingReadyForBoss(ctx);
       return true;
     }
     if (method === 'transferencia') {
@@ -1403,27 +1389,7 @@ export class TelegramBookingUpdate {
       await this.registrarMensajeDelFlujo(ctx, pedirMonto);
       return true;
     }
-    const [client, employee] = await Promise.all([
-      this.clientesRepository.findOne({
-        where: { telegramChatId: ctx.from!.id.toString() },
-      }),
-      this.empleadasRepository.findOne({
-        where: { id: session.empleadaId },
-        relations: { usuario: true, jefe: true },
-      }),
-    ]);
-    if (!client || !employee) return false;
-    await this.finalizeBooking(
-      ctx,
-      client,
-      employee,
-      session.duracionPactadaHoras ?? 1,
-      method,
-      session.locationLat,
-      session.locationLng,
-      session.locationNotas || null,
-      ctx.from!.id.toString(),
-    );
+    await this.markBookingReadyForBoss(ctx);
     return true;
   }
 
@@ -1858,28 +1824,10 @@ export class TelegramBookingUpdate {
 
   async sendDelayedReply(ctx: BotContext, text: string) {
     try {
-      // Calculate realistic reading + typing delay based on message length (3.5s to 7.5s)
-      const baseReadingMs = 1800 + Math.floor(Math.random() * 800);
-      const typingMs = Math.min(Math.max((text.length || 20) * 45, 1500), 5000);
-      const totalDelayMs = Math.min(
-        Math.max(baseReadingMs + typingMs, 3500),
-        7500,
-      );
-
       // Enviar la acción de "escribiendo" de inmediato
       await ctx.sendChatAction('typing').catch(() => {});
 
       // Si la espera es mayor a 4s, refrescar la acción 'typing' a la mitad para mantenerla activa en Telegram
-      if (totalDelayMs > 4000) {
-        const halfMs = Math.floor(totalDelayMs / 2);
-        await new Promise((resolve) => setTimeout(resolve, halfMs));
-        await ctx.sendChatAction('typing').catch(() => {});
-        await new Promise((resolve) =>
-          setTimeout(resolve, totalDelayMs - halfMs),
-        );
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, totalDelayMs));
-      }
 
       // Texto plano a proposito: por aqui sale lo que redacta la IA y con
       // Markdown un `[texto](url)` generado por el modelo se convertiria en un
@@ -2784,9 +2732,6 @@ export class TelegramBookingUpdate {
       sesionPrevia.empleadaId !== empleadaId
     ) {
       const humanTakeover = isPreServiceHumanTakeover(sesionPrevia);
-      const previousEmployee = await this.empleadasRepository.findOne({
-        where: { id: sesionPrevia.empleadaId },
-      });
       sesionPrevia.empleadaId = empleadaId;
       sesionPrevia.bookingStatus = 'COLLECTING';
       sesionPrevia.bookingLastIntent = 'CHANGE_EMPLOYEE';
@@ -2799,7 +2744,7 @@ export class TelegramBookingUpdate {
       sesionPrevia.trioStatus = undefined;
       sesionPrevia.step = 'CHAT_CON_EMPLEADA';
       mismaContratacion = true;
-      const changeMessage = `Listo, cambiamos de ${previousEmployee?.nombreArtistico || 'la chica anterior'} a ${empleada.nombreArtistico}. Conservé lo que ya estaba válido y revisamos lo que dependa de ella.`;
+      const changeMessage = `Claro amor, con ${empleada.nombreArtistico} entonces. ¿Seguimos desde donde quedamos?`;
       if (humanTakeover) {
         await this.recordDraftConversation(ctx, 'sistema', changeMessage);
         await this.persistSession(ctx);
@@ -3326,27 +3271,8 @@ export class TelegramBookingUpdate {
       return;
     }
 
-    // Efectivo / Tarjeta proceden directo
-    const client = await this.clientesRepository.findOne({
-      where: { telegramChatId: ctx.from!.id.toString() },
-    });
-    const empleada = await this.empleadasRepository.findOne({
-      where: { id: empleadaId },
-      relations: { usuario: true, jefe: true },
-    });
-    if (!client || !empleada) return;
-
-    await this.finalizeBooking(
-      ctx,
-      client,
-      empleada,
-      duracionPactadaHoras ?? 1,
-      metodo,
-      locationLat,
-      locationLng,
-      locationNotas || null,
-      ctx.from!.id.toString(),
-    );
+    // Efectivo / tarjeta completan el borrador; el jefe crea el servicio.
+    await this.markBookingReadyForBoss(ctx);
   }
 
   @Action(/^service_location:(external|[0-9a-f-]{36})$/)
@@ -3625,8 +3551,6 @@ export class TelegramBookingUpdate {
     }
 
     await ctx.sendChatAction('typing').catch(() => {});
-    const delayMs = 2500 + Math.floor(Math.random() * 1500);
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
 
     /*
      * El listado de moteles se ofrece una vez por conversacion.
@@ -5369,18 +5293,8 @@ export class TelegramBookingUpdate {
         return;
       }
 
-      await this.finalizeBooking(
-        ctx,
-        client,
-        empleada,
-        duracionPactadaHoras,
-        metodoPago,
-        locationLat,
-        locationLng,
-        locationNotas || null,
-        telegramId,
-        validation.id,
-      );
+      if (ctx.session) ctx.session.comprobanteValidationId = validation.id;
+      await this.markBookingReadyForBoss(ctx);
     } catch (err) {
       await this.markReceiptValidationError(validation, err);
       if (ctx.session) {
@@ -5631,7 +5545,7 @@ export class TelegramBookingUpdate {
 
           if (empleada) {
             const fakeMessage = `[El cliente envió una foto: ${visionResult.descripcion}]`;
-            const DEBOUNCE_WAIT_MS = 4000;
+            const DEBOUNCE_WAIT_MS = 800;
             const bufferKey = this.messageBufferKey(telegramId, empleadaId);
             const existingBuffer = this.clientMessageBuffers.get(bufferKey);
 
@@ -7356,6 +7270,22 @@ export class TelegramBookingUpdate {
       return;
     }
 
+    if (draft.reserva?.bookingSessionId) {
+      await this.telegramConversationsService.markBookingDraftReady(
+        draft.reserva.bookingSessionId,
+        validation.id,
+      );
+      if (validation.chatId) {
+        await ctx.telegram
+          .sendMessage(
+            validation.chatId,
+            'Comprobante recibido. El jefe ya puede revisar y aceptar la reserva.',
+          )
+          .catch(() => undefined);
+      }
+      return;
+    }
+
     await this.finalizeBooking(
       ctx,
       client,
@@ -8064,7 +7994,12 @@ export class TelegramBookingUpdate {
         return;
     }
 
-    if (asksToChangePayment && ctx.chat?.type === 'private' && ctx.from?.id) {
+    if (
+      asksToChangePayment &&
+      shouldChangeExistingServicePayment(cleanText, ctx.session) &&
+      ctx.chat?.type === 'private' &&
+      ctx.from?.id
+    ) {
       const client = await this.clientesRepository.findOne({
         where: { telegramChatId: ctx.from.id.toString() },
       });
@@ -8811,7 +8746,7 @@ export class TelegramBookingUpdate {
       if (!userMessage.trim()) return;
 
       // Debounce / Buffer de mensajes seguidos del cliente para evitar que la IA responda por partes
-      const DEBOUNCE_WAIT_MS = 4000;
+      const DEBOUNCE_WAIT_MS = 800;
       // La clave lleva la empleada ademas del cliente, igual que hace
       // `getSessionKey` en telegram.module.ts. Con solo el id de Telegram, un
       // cliente que escribia a dos modelos dentro de la ventana de agrupacion
@@ -9556,6 +9491,21 @@ export class TelegramBookingUpdate {
     const sessionKey = buildSessionKey(ctx);
     if (!sessionKey || !ctx.session) return;
     try {
+      const telegramId = ctx.from?.id?.toString();
+      let clientId = ctx.session.clientId;
+      if (!clientId && telegramId) {
+        clientId = (
+          await this.clientesRepository.findOne({
+            where: { telegramChatId: telegramId },
+            select: { id: true },
+          })
+        )?.id;
+      }
+      await this.telegramConversationsService.upsertBookingDraftFromSession(
+        ctx.session.bookingSessionId,
+        clientId,
+        ctx.session as unknown as Record<string, unknown>,
+      );
       await this.telegramSessionRepository.save({
         key: sessionKey,
         data: ctx.session,
@@ -9590,6 +9540,21 @@ export class TelegramBookingUpdate {
         if (!(field in stored)) delete live[field];
       }
       Object.assign(live, stored);
+      const bookingSessionId =
+        typeof live.bookingSessionId === 'string'
+          ? live.bookingSessionId
+          : undefined;
+      if (bookingSessionId) {
+        const draft = await this.telegramConversationsService
+          .getBookingDraft(bookingSessionId)
+          .catch(() => null);
+        if (draft) {
+          this.telegramConversationsService.hydrateSessionFromBookingDraft(
+            live,
+            draft,
+          );
+        }
+      }
     } catch (err) {
       this.logger.warn('No se pudo releer la sesión del cliente:', err);
     }
@@ -9938,6 +9903,11 @@ export class TelegramBookingUpdate {
     // que el backend acabe ejecutando la accion— y se recorta a un tamano sano.
     const userMessage = capClientMessage(stripControlMarkers(rawUserMessage));
     if (!userMessage) return;
+    const updateReceivedAt = Date.now();
+    let routingMs = 0;
+    let extractionMs = 0;
+    let aiMs = 0;
+    let replySentAt = updateReceivedAt;
 
     const executeBuffer = async () => {
       // En el registro del jefe queda el mensaje original, sin limpiar.
@@ -9968,7 +9938,16 @@ export class TelegramBookingUpdate {
         userMessage,
         empleada,
       );
+      routingMs = Date.now() - updateReceivedAt;
       if (handledGlobalIntent) return;
+
+      if (session.bookingStatus === 'READY') {
+        const waitingForBoss =
+          'Ya tengo tu solicitud completa. El jefe la revisa y te confirmo apenas la acepte.';
+        await ctx.reply(waitingForBoss);
+        await this.registrarMensajeDelFlujo(ctx, waitingForBoss);
+        return;
+      }
 
       /*
        * "¿En cuánto llegas?" no tiene respuesta que el personaje pueda dar: el
@@ -10063,6 +10042,7 @@ export class TelegramBookingUpdate {
       }
 
       // Actualizar duración o método de pago si el cliente lo mencionó o cambió
+      const extractionStartedAt = Date.now();
       const extractedPayment = extractHirePaymentMethod(userMessage);
 
       if (detectOpenEndedDuration(userMessage)) {
@@ -10078,6 +10058,7 @@ export class TelegramBookingUpdate {
       if (extractedPayment) {
         session.metodoPago = extractedPayment;
       }
+      extractionMs = Date.now() - extractionStartedAt;
 
       // Ventana deslizante: sin tope la conversacion crece sin limite y se
       // manda entera en cada turno, asi que el coste sube de forma cuadratica.
@@ -10305,11 +10286,13 @@ export class TelegramBookingUpdate {
 
       try {
         await ctx.sendChatAction('typing');
+        const aiStartedAt = Date.now();
         const responseText = await this.getGroqResponse(
           systemPrompt,
           history,
           telegramId,
         );
+        aiMs = Date.now() - aiStartedAt;
         // La IA volvio a contestar: la racha de fallos se cierra aqui.
         session.fallosIaSeguidos = 0;
 
@@ -10817,7 +10800,21 @@ export class TelegramBookingUpdate {
         ),
       );
     } finally {
+      const persistenceStartedAt = Date.now();
       await this.persistSession(ctx);
+      replySentAt = Date.now();
+      this.logger.log(
+        JSON.stringify({
+          event: 'booking_latency',
+          updateReceivedAt: new Date(updateReceivedAt).toISOString(),
+          routingMs,
+          extractionMs,
+          aiMs,
+          persistenceMs: Date.now() - persistenceStartedAt,
+          replySentAt: new Date(replySentAt).toISOString(),
+          totalMs: replySentAt - updateReceivedAt,
+        }),
+      );
     }
   }
 

@@ -3,10 +3,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectBot } from 'nestjs-telegraf';
-import { In, IsNull, LessThan, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
 import { Context, Telegraf } from 'telegraf';
 import { ConversacionesTelegram } from './entities/telegram-conversation.entity';
 import { Servicios } from '../services/entities/service.entity';
@@ -16,6 +19,9 @@ import { TelegramSession } from '../telegram/entities/telegram-session.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { parseSessionKey } from '../telegram/telegram-session.key';
 import { Empleadas } from '../employees/entities/employee.entity';
+import { CustomerBookingSession } from './entities/customer-booking-session.entity';
+import { ServicesService } from '../services/services.service';
+import type { UpdateBookingDraftDto } from './dto/update-booking-draft.dto';
 
 type PreServiceBookingData = {
   durationHours: number | null;
@@ -24,7 +30,23 @@ type PreServiceBookingData = {
   locationName: string | null;
   locationAddress: string | null;
   locationNotes: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
+  placeType: string | null;
+  room: string | null;
+  scheduleType: string | null;
+  scheduledAt: string | null;
+  currentRequirement: string | null;
+  status: string;
+  version: number;
 };
+
+const ACTIVE_BOOKING_DRAFT_STATUSES = new Set([
+  'COLLECTING',
+  'READY',
+  'HUMAN_ACTIVE',
+  'ACCEPTING',
+]);
 
 @Injectable()
 export class TelegramConversationsService {
@@ -37,9 +59,510 @@ export class TelegramConversationsService {
     private readonly telegramSessionRepository: Repository<TelegramSession>,
     @InjectRepository(Clientes)
     private readonly clientesRepository: Repository<Clientes>,
+    @InjectRepository(CustomerBookingSession)
+    private readonly bookingDraftRepository: Repository<CustomerBookingSession>,
+    @InjectRepository(Empleadas)
+    private readonly empleadasRepository: Repository<Empleadas>,
     @InjectBot() private readonly bot: Telegraf<Context>,
     private readonly realtimeEvents: RealtimeEventsService,
+    @Inject(forwardRef(() => ServicesService))
+    private readonly servicesService: ServicesService,
   ) {}
+
+  /**
+   * Synchronizes the transport session into the durable booking draft.
+   *
+   * The version predicate is important: an AI update that started before a
+   * boss edit is rejected instead of overwriting the boss' newer values.
+   */
+  async upsertBookingDraftFromSession(
+    bookingSessionId: string | undefined,
+    clientId: string | undefined,
+    session: Record<string, unknown>,
+  ): Promise<CustomerBookingSession | null> {
+    if (!bookingSessionId || !clientId) return null;
+    let draft = await this.bookingDraftRepository.findOne({
+      where: { id: bookingSessionId },
+    });
+    if (!draft) {
+      draft = this.bookingDraftRepository.create({
+        id: bookingSessionId,
+        clientId,
+        intendedEmployeeId: this.stringValue(session.empleadaId),
+        ownerBossId: null,
+        status: this.draftStatus(session),
+        durationHours: this.numberValue(session.duracionPactadaHoras),
+        openEndedDuration: session.duracionIndefinida === true,
+        placeType: session.presetLocationId ? 'preset' : 'external',
+        presetLocationId: this.stringValue(session.presetLocationId),
+        locationName: this.stringValue(session.locationNameSnapshot),
+        locationAddress: this.stringValue(session.locationAddressSnapshot),
+        locationNotes: this.stringValue(session.locationNotas),
+        locationLat: this.finiteNumberValue(session.locationLat),
+        locationLng: this.finiteNumberValue(session.locationLng),
+        room: null,
+        paymentMethod: this.paymentValue(session.metodoPago),
+        scheduleType:
+          session.tipoAgenda === 'programado' ? 'programado' : 'inmediato',
+        scheduledAt: this.dateValue(session.fechaProgramada),
+        currentRequirement: this.stringValue(session.step),
+        mode:
+          session.iaActiva === false || session.humanTakeover
+            ? 'HUMAN_ACTIVE'
+            : 'AI_ACTIVE',
+        serviceId: this.stringValue(session.bookingServiceId),
+        version: 1,
+        metadata: {},
+        lastInteractionAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      if (draft.intendedEmployeeId) {
+        const employee = await this.empleadasRepository.findOne({
+          where: { id: draft.intendedEmployeeId },
+        });
+        draft.ownerBossId = employee?.jefeId ?? null;
+      }
+      const saved = await this.bookingDraftRepository.save(draft);
+      session.bookingDraftVersion = saved.version;
+      return saved;
+    }
+
+    const expectedVersion = this.numberValue(session.bookingDraftVersion);
+    if (expectedVersion !== null && expectedVersion !== draft.version) {
+      session.bookingDraftVersion = draft.version;
+      return draft;
+    }
+    if (draft.mode === 'HUMAN_ACTIVE' && session.iaActiva === false) {
+      session.bookingDraftVersion = draft.version;
+      return draft;
+    }
+
+    const employeeId = this.stringValue(session.empleadaId);
+    const employee = employeeId
+      ? await this.empleadasRepository.findOne({ where: { id: employeeId } })
+      : null;
+    const nextVersion = draft.version + 1;
+    const result = await this.bookingDraftRepository
+      .createQueryBuilder()
+      .update(CustomerBookingSession)
+      .set({
+        clientId,
+        intendedEmployeeId: employeeId,
+        ownerBossId: employee?.jefeId ?? draft.ownerBossId,
+        status: this.draftStatus(session),
+        durationHours: this.numberValue(session.duracionPactadaHoras),
+        openEndedDuration: session.duracionIndefinida === true,
+        placeType: session.presetLocationId ? 'preset' : 'external',
+        presetLocationId: this.stringValue(session.presetLocationId),
+        locationName: this.stringValue(session.locationNameSnapshot),
+        locationAddress: this.stringValue(session.locationAddressSnapshot),
+        locationNotes: this.stringValue(session.locationNotas),
+        locationLat: this.finiteNumberValue(session.locationLat),
+        locationLng: this.finiteNumberValue(session.locationLng),
+        paymentMethod: this.paymentValue(session.metodoPago),
+        scheduleType:
+          session.tipoAgenda === 'programado' ? 'programado' : 'inmediato',
+        scheduledAt: this.dateValue(session.fechaProgramada),
+        currentRequirement: this.stringValue(session.step),
+        mode:
+          session.iaActiva === false || session.humanTakeover
+            ? 'HUMAN_ACTIVE'
+            : 'AI_ACTIVE',
+        serviceId: this.stringValue(session.bookingServiceId),
+        version: nextVersion,
+        lastInteractionAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where('id = :id AND version = :version', {
+        id: draft.id,
+        version: draft.version,
+      })
+      .execute();
+    if (!result.affected) {
+      const current = await this.bookingDraftRepository.findOneBy({
+        id: draft.id,
+      });
+      if (current) session.bookingDraftVersion = current.version;
+      return current;
+    }
+    const saved = await this.bookingDraftRepository.findOneBy({ id: draft.id });
+    if (saved) session.bookingDraftVersion = saved.version;
+    return saved;
+  }
+
+  async getBookingDraft(
+    bookingSessionId: string,
+  ): Promise<CustomerBookingSession> {
+    const draft = await this.bookingDraftRepository.findOne({
+      where: { id: bookingSessionId },
+    });
+    if (!draft)
+      throw new NotFoundException('Borrador de reserva no encontrado');
+    return draft;
+  }
+
+  /**
+   * Returns the latest still-open booking for a client. A service already
+   * created is deliberately excluded: a new /start must never hydrate a
+   * historical service as if it were the current booking form.
+   */
+  async findActiveBookingDraftForClient(
+    clientId: string,
+  ): Promise<CustomerBookingSession | null> {
+    return this.bookingDraftRepository.findOne({
+      where: {
+        clientId,
+        status: Not(In(['SERVICE_CREATED', 'CANCELLED', 'ABANDONED'])),
+      },
+      order: { updatedAt: 'DESC' },
+    });
+  }
+
+  async markBookingDraftReady(
+    bookingSessionId: string,
+    receiptValidationId?: string,
+  ) {
+    const draft = await this.getBookingDraft(bookingSessionId);
+    if (draft.serviceId) return this.serializeDraft(draft);
+    draft.status = 'READY';
+    draft.currentRequirement = null;
+    draft.version += 1;
+    draft.metadata = {
+      ...draft.metadata,
+      ...(receiptValidationId ? { receiptValidationId } : {}),
+    };
+    draft.updatedAt = new Date();
+    const saved = await this.bookingDraftRepository.save(draft);
+    await this.syncDraftToTelegramSessions(saved);
+    return this.serializeDraft(saved);
+  }
+
+  /** Applies boss-edited persisted fields before the bot handles a new update. */
+  hydrateSessionFromBookingDraft(
+    session: Record<string, unknown>,
+    draft: CustomerBookingSession,
+  ): void {
+    session.bookingDraftVersion = draft.version;
+    session.empleadaId = draft.intendedEmployeeId ?? undefined;
+    session.duracionPactadaHoras = draft.durationHours ?? undefined;
+    session.duracionIndefinida = draft.openEndedDuration;
+    session.presetLocationId = draft.presetLocationId ?? undefined;
+    session.locationNameSnapshot = draft.locationName ?? undefined;
+    session.locationAddressSnapshot = draft.locationAddress ?? undefined;
+    session.locationNotas = draft.locationNotes;
+    session.locationLat = draft.locationLat?.toString();
+    session.locationLng = draft.locationLng?.toString();
+    session.metodoPago = draft.paymentMethod ?? undefined;
+    session.tipoAgenda = draft.scheduleType;
+    session.fechaProgramada = draft.scheduledAt?.toISOString();
+    session.step = draft.currentRequirement ?? undefined;
+    session.bookingStatus =
+      draft.status === 'SERVICE_CREATED'
+        ? 'SERVICE_CREATED'
+        : draft.status === 'READY'
+          ? 'READY'
+          : 'COLLECTING';
+    session.bookingServiceId = draft.serviceId ?? undefined;
+    session.iaActiva = draft.mode === 'AI_ACTIVE';
+    session.humanTakeover = draft.mode === 'HUMAN_ACTIVE';
+  }
+
+  async updateBookingDraft(
+    bookingSessionId: string,
+    actor: Usuarios,
+    patch: UpdateBookingDraftDto,
+  ) {
+    const conversation = await this.getAuthorizedPreServiceConversation(
+      bookingSessionId,
+      actor,
+    );
+    const draft = await this.getBookingDraft(bookingSessionId);
+    if (patch.intendedEmployeeId) {
+      const employee = await this.empleadasRepository.findOne({
+        where: { id: patch.intendedEmployeeId },
+      });
+      if (!employee) throw new NotFoundException('Empleada no encontrada');
+      if (
+        actor.rol === 'jefe' &&
+        employee.jefeId !== actor.id &&
+        employee.jefeSecundarioId !== actor.id
+      ) {
+        throw new ForbiddenException('No puedes asignar esa empleada');
+      }
+      draft.ownerBossId = employee.jefeId;
+      draft.intendedEmployeeId = employee.id;
+    }
+    Object.assign(draft, {
+      ...(patch.durationHours !== undefined && {
+        durationHours: patch.durationHours,
+      }),
+      ...(patch.openEndedDuration !== undefined && {
+        openEndedDuration: patch.openEndedDuration,
+      }),
+      ...(patch.placeType !== undefined && { placeType: patch.placeType }),
+      ...(patch.presetLocationId !== undefined && {
+        presetLocationId: patch.presetLocationId,
+      }),
+      ...(patch.locationName !== undefined && {
+        locationName: patch.locationName,
+      }),
+      ...(patch.locationAddress !== undefined && {
+        locationAddress: patch.locationAddress,
+      }),
+      ...(patch.locationNotes !== undefined && {
+        locationNotes: patch.locationNotes,
+      }),
+      ...(patch.locationLat !== undefined && {
+        locationLat: patch.locationLat,
+      }),
+      ...(patch.locationLng !== undefined && {
+        locationLng: patch.locationLng,
+      }),
+      ...(patch.room !== undefined && { room: patch.room }),
+      ...(patch.paymentMethod !== undefined && {
+        paymentMethod: patch.paymentMethod,
+      }),
+      ...(patch.scheduleType !== undefined && {
+        scheduleType: patch.scheduleType,
+      }),
+      ...(patch.scheduledAt !== undefined && {
+        scheduledAt: new Date(patch.scheduledAt),
+      }),
+      status:
+        draft.intendedEmployeeId &&
+        (draft.durationHours || draft.openEndedDuration) &&
+        draft.paymentMethod &&
+        draft.locationLat != null &&
+        draft.locationLng != null
+          ? 'READY'
+          : 'COLLECTING',
+      currentRequirement: !draft.intendedEmployeeId
+        ? 'employee'
+        : !(draft.durationHours || draft.openEndedDuration)
+          ? 'AWAITING_DURATION'
+          : draft.locationLat == null || draft.locationLng == null
+            ? 'AWAITING_LOCATION'
+            : !draft.paymentMethod
+              ? 'AWAITING_PAYMENT_METHOD'
+              : null,
+      mode: 'HUMAN_ACTIVE',
+      version: draft.version + 1,
+      updatedAt: new Date(),
+      lastInteractionAt: new Date(),
+    });
+    const saved = await this.bookingDraftRepository.save(draft);
+    if (patch.intendedEmployeeId) {
+      await this.conversationsRepository.update(
+        { bookingSessionId, servicioId: IsNull() },
+        { intendedEmployeeId: patch.intendedEmployeeId },
+      );
+    }
+    await this.syncDraftToTelegramSessions(saved);
+    const employeeForEvent = patch.intendedEmployeeId
+      ? await this.empleadasRepository.findOne({
+          where: { id: patch.intendedEmployeeId },
+        })
+      : conversation.intendedEmployee;
+    this.emitPreServiceEvent(employeeForEvent, {
+      type: 'booking_draft_updated',
+      data: this.serializeDraft(saved),
+    });
+    return this.serializeDraft(saved);
+  }
+
+  async acceptBookingDraft(bookingSessionId: string, actor: Usuarios) {
+    const draft = await this.getBookingDraft(bookingSessionId);
+    const employee = draft.intendedEmployeeId
+      ? await this.empleadasRepository.findOne({
+          where: { id: draft.intendedEmployeeId },
+        })
+      : null;
+    if (!employee) throw new NotFoundException('Empleada no encontrada');
+    if (
+      actor.rol === 'jefe' &&
+      employee.jefeId !== actor.id &&
+      employee.jefeSecundarioId !== actor.id
+    ) {
+      throw new ForbiddenException('No puedes aceptar esta reserva');
+    }
+    if (draft.serviceId)
+      return { draft: this.serializeDraft(draft), idempotent: true };
+    const conversation = await this.getAuthorizedPreServiceConversation(
+      bookingSessionId,
+      actor,
+    );
+    if (
+      !draft.intendedEmployeeId ||
+      (!draft.durationHours && !draft.openEndedDuration) ||
+      !draft.paymentMethod ||
+      draft.locationLat == null ||
+      draft.locationLng == null
+    ) {
+      throw new BadRequestException('El borrador todavía está incompleto');
+    }
+    const claimed = await this.bookingDraftRepository
+      .createQueryBuilder()
+      .update(CustomerBookingSession)
+      .set({
+        status: 'ACCEPTING',
+        version: draft.version + 1,
+        updatedAt: new Date(),
+      })
+      .where('id = :id AND service_id IS NULL AND version = :version', {
+        id: draft.id,
+        version: draft.version,
+      })
+      .execute();
+    if (!claimed.affected) {
+      const current = await this.getBookingDraft(bookingSessionId);
+      if (current.serviceId)
+        return { draft: this.serializeDraft(current), idempotent: true };
+      throw new ConflictException(
+        'La reserva está siendo aceptada por otra persona',
+      );
+    }
+    try {
+      const preexistingService = await this.servicesRepository.findOne({
+        where: { bookingSessionId: draft.id },
+      });
+      if (preexistingService) {
+        const recovered = await this.bookingDraftRepository.save({
+          ...draft,
+          serviceId: preexistingService.id,
+          status: 'SERVICE_CREATED',
+          version: draft.version + 2,
+          updatedAt: new Date(),
+        });
+        await this.conversationsRepository.update(
+          { bookingSessionId: draft.id, servicioId: IsNull() },
+          { servicioId: preexistingService.id },
+        );
+        return {
+          draft: this.serializeDraft(recovered),
+          service: preexistingService,
+          idempotent: true,
+        };
+      }
+      const service = await this.servicesService.reserveNext({
+        clienteId: draft.clientId,
+        bookingSessionId: draft.id,
+        empleadaId: employee.id,
+        jefeId: employee.jefeId ?? actor.id,
+        duracionPactadaHoras: draft.openEndedDuration
+          ? 1
+          : draft.durationHours!,
+        duracionIndefinida: draft.openEndedDuration,
+        metodoPago: draft.paymentMethod,
+        ubicacionClienteLat: draft.locationLat,
+        ubicacionClienteLng: draft.locationLng,
+        precioBaseHoraPactado: Number(employee.precioBaseHora) || 1200,
+        estado: 'pendiente',
+        notas: draft.locationNotes || null,
+        habitacion: draft.room,
+        clienteTelegramId: conversation.cliente?.telegramChatId ?? null,
+        comprobantePendiente: draft.paymentMethod === 'transferencia',
+        iaActiva: false,
+        presetLocationId: draft.presetLocationId,
+        locationNameSnapshot: draft.locationName,
+        locationAddressSnapshot: draft.locationAddress,
+        tipoAgenda: draft.scheduleType,
+        fechaProgramada: draft.scheduledAt,
+      });
+      // Boss acceptance opens the employee acceptance window. The transport
+      // remains null and is only activated after the employee accepts.
+      await this.servicesService.ofrecerAEmpleada(
+        service.id,
+        actor.id,
+        'chofer',
+        undefined,
+        draft.room ?? undefined,
+      );
+      const updated = await this.bookingDraftRepository.save({
+        ...draft,
+        serviceId: service.id,
+        status: 'SERVICE_CREATED',
+        version: draft.version + 2,
+        updatedAt: new Date(),
+      });
+      await this.conversationsRepository.update(
+        { bookingSessionId: draft.id, servicioId: IsNull() },
+        { servicioId: service.id },
+      );
+      this.emitPreServiceEvent(conversation.intendedEmployee, {
+        type: 'booking_service_created',
+        data: { bookingSessionId: draft.id, serviceId: service.id },
+      });
+      return {
+        draft: this.serializeDraft(updated),
+        service,
+        idempotent: false,
+      };
+    } catch (error) {
+      const existingService = await this.servicesRepository.findOne({
+        where: { bookingSessionId: draft.id },
+      });
+      if (existingService) {
+        const recovered = await this.bookingDraftRepository.save({
+          ...draft,
+          serviceId: existingService.id,
+          status: 'SERVICE_CREATED',
+          version: draft.version + 2,
+          updatedAt: new Date(),
+        });
+        await this.conversationsRepository.update(
+          { bookingSessionId: draft.id, servicioId: IsNull() },
+          { servicioId: existingService.id },
+        );
+        return {
+          draft: this.serializeDraft(recovered),
+          service: existingService,
+          idempotent: true,
+        };
+      }
+      await this.bookingDraftRepository.update(
+        { id: draft.id, serviceId: IsNull() },
+        { status: 'READY', version: draft.version + 1, updatedAt: new Date() },
+      );
+      throw error;
+    }
+  }
+
+  private async syncDraftToTelegramSessions(draft: CustomerBookingSession) {
+    const payload = {
+      bookingDraftVersion: draft.version,
+      empleadaId: draft.intendedEmployeeId,
+      duracionPactadaHoras: draft.durationHours,
+      duracionIndefinida: draft.openEndedDuration,
+      presetLocationId: draft.presetLocationId,
+      locationNameSnapshot: draft.locationName,
+      locationAddressSnapshot: draft.locationAddress,
+      locationNotas: draft.locationNotes,
+      locationLat: draft.locationLat?.toString(),
+      locationLng: draft.locationLng?.toString(),
+      room: draft.room,
+      metodoPago: draft.paymentMethod,
+      tipoAgenda: draft.scheduleType,
+      fechaProgramada: draft.scheduledAt?.toISOString(),
+      bookingStatus:
+        draft.status === 'SERVICE_CREATED'
+          ? 'SERVICE_CREATED'
+          : draft.status === 'READY'
+            ? 'READY'
+            : 'COLLECTING',
+      bookingServiceId: draft.serviceId,
+      iaActiva: draft.mode === 'AI_ACTIVE',
+      humanTakeover: draft.mode === 'HUMAN_ACTIVE',
+    };
+    await this.telegramSessionRepository.query(
+      `UPDATE telegram_sessions
+          SET data = COALESCE(data, '{}'::jsonb) || $2::jsonb,
+              version = version + 1,
+              updated_at = now()
+        WHERE data->>'bookingSessionId' = $1`,
+      [draft.id, JSON.stringify(payload)],
+    );
+  }
 
   /**
    * Conversaciones todavia sin servicio, limitadas por la empleada que el
@@ -55,10 +578,38 @@ export class TelegramConversationsService {
     const sessionsQuery = this.conversationsRepository
       .createQueryBuilder('conversation')
       .leftJoin('conversation.intendedEmployee', 'employee')
+      .leftJoin(
+        CustomerBookingSession,
+        'bookingDraft',
+        'bookingDraft.id = conversation.bookingSessionId',
+      )
+      .leftJoin(
+        TelegramSession,
+        'telegram_session',
+        "telegram_session.data->>'bookingSessionId' = CAST(conversation.bookingSessionId AS text)",
+      )
       .select('conversation.bookingSessionId', 'bookingSessionId')
       .addSelect('MAX(conversation.enviadoAt)', 'lastAt')
       .where('conversation.bookingSessionId IS NOT NULL')
-      .andWhere('conversation.servicioId IS NULL');
+      .andWhere('conversation.servicioId IS NULL')
+      .andWhere(
+        `(
+          (bookingDraft.id IS NOT NULL AND bookingDraft.status IN (:...activeDraftStatuses))
+          OR
+          (bookingDraft.id IS NULL AND telegram_session.key IS NOT NULL AND
+            COALESCE(telegram_session.data->>'bookingServiceId', '') = '' AND
+            COALESCE(telegram_session.data->>'bookingStaleSince', '') = '' AND
+            (
+              telegram_session.data->>'bookingStatus' IN (:...activeDraftStatuses)
+              OR (
+                telegram_session.data->>'bookingStatus' IS NULL AND
+                telegram_session.data ? 'step'
+              )
+            )
+          )
+        )`,
+        { activeDraftStatuses: [...ACTIVE_BOOKING_DRAFT_STATUSES] },
+      );
 
     if (actor.rol === 'jefe') {
       sessionsQuery
@@ -100,6 +651,12 @@ export class TelegramConversationsService {
         sessionDataByBooking.set(bookingSessionId, data);
       }
     }
+    const drafts = this.bookingDraftRepository
+      ? await this.bookingDraftRepository.findBy({
+          id: In(bookingSessionIds),
+        })
+      : [];
+    const draftByBooking = new Map(drafts.map((draft) => [draft.id, draft]));
 
     const messagesByBooking = new Map<string, ConversacionesTelegram[]>();
     for (const message of messages) {
@@ -109,7 +666,24 @@ export class TelegramConversationsService {
       messagesByBooking.set(message.bookingSessionId, current);
     }
 
-    return bookingSessionIds.flatMap((bookingSessionId) => {
+    const activeBookingSessionIds = bookingSessionIds.filter(
+      (bookingSessionId) => {
+        const draft = draftByBooking.get(bookingSessionId);
+        if (draft) return ACTIVE_BOOKING_DRAFT_STATUSES.has(draft.status);
+
+        const data = sessionDataByBooking.get(bookingSessionId);
+        if (!data || data.bookingSessionId !== bookingSessionId) return false;
+        if (this.stringValue(data.bookingServiceId)) return false;
+        if (this.stringValue(data.bookingStaleSince)) return false;
+
+        const status = this.stringValue(data.bookingStatus);
+        return status
+          ? ACTIVE_BOOKING_DRAFT_STATUSES.has(status)
+          : Boolean(this.stringValue(data.step));
+      },
+    );
+
+    return activeBookingSessionIds.flatMap((bookingSessionId) => {
       const history = messagesByBooking.get(bookingSessionId) ?? [];
       const first = history[0];
       const latest = history.at(-1);
@@ -118,6 +692,7 @@ export class TelegramConversationsService {
         (message) => message.intendedEmployee,
       )?.intendedEmployee;
       const data = sessionDataByBooking.get(bookingSessionId) ?? {};
+      const draft = draftByBooking.get(bookingSessionId);
       return [
         {
           conversationId: bookingSessionId,
@@ -137,7 +712,10 @@ export class TelegramConversationsService {
           lastAt: latest.enviadoAt,
           needsReply: latest.emisor === 'cliente',
           createdAt: first.enviadoAt,
-          bookingData: this.bookingData(data),
+          bookingData: draft
+            ? this.bookingDataFromDraft(draft)
+            : this.bookingData(data),
+          bookingDraft: draft ? this.serializeDraft(draft) : null,
         },
       ];
     });
@@ -447,6 +1025,20 @@ export class TelegramConversationsService {
       );
     }
 
+    const draft = this.bookingDraftRepository
+      ? await this.bookingDraftRepository.findOneBy({ id: bookingSessionId })
+      : null;
+    if (draft) {
+      draft.mode = iaActiva ? 'AI_ACTIVE' : 'HUMAN_ACTIVE';
+      if (!iaActiva) draft.status = 'HUMAN_ACTIVE';
+      if (iaActiva && draft.status === 'HUMAN_ACTIVE') {
+        draft.status = draft.currentRequirement ? 'COLLECTING' : 'READY';
+      }
+      draft.version += 1;
+      draft.updatedAt = new Date();
+      await this.bookingDraftRepository.save(draft);
+    }
+
     await this.conversationsRepository.update(
       { bookingSessionId },
       { iaActiva },
@@ -611,7 +1203,68 @@ export class TelegramConversationsService {
       locationName: this.stringValue(data.locationNameSnapshot),
       locationAddress: this.stringValue(data.locationAddressSnapshot),
       locationNotes: this.stringValue(data.locationNotas),
+      locationLat: this.finiteNumberValue(data.locationLat),
+      locationLng: this.finiteNumberValue(data.locationLng),
+      placeType: data.presetLocationId ? 'preset' : 'external',
+      room: this.stringValue(data.room),
+      scheduleType: this.stringValue(data.tipoAgenda),
+      scheduledAt: this.stringValue(data.fechaProgramada),
+      currentRequirement: this.stringValue(data.step),
+      status: this.stringValue(data.bookingStatus) ?? 'COLLECTING',
+      version: this.numberValue(data.bookingDraftVersion) ?? 0,
     };
+  }
+
+  private bookingDataFromDraft(
+    draft: CustomerBookingSession,
+  ): PreServiceBookingData {
+    return {
+      durationHours: draft.durationHours,
+      openEndedDuration: draft.openEndedDuration,
+      paymentMethod: draft.paymentMethod,
+      locationName: draft.locationName,
+      locationAddress: draft.locationAddress,
+      locationNotes: draft.locationNotes,
+      locationLat: draft.locationLat,
+      locationLng: draft.locationLng,
+      placeType: draft.placeType,
+      room: draft.room,
+      scheduleType: draft.scheduleType,
+      scheduledAt: draft.scheduledAt?.toISOString() ?? null,
+      currentRequirement: draft.currentRequirement,
+      status: draft.status,
+      version: draft.version,
+    };
+  }
+
+  private serializeDraft(draft: CustomerBookingSession) {
+    return {
+      id: draft.id,
+      clientId: draft.clientId,
+      intendedEmployeeId: draft.intendedEmployeeId,
+      ownerBossId: draft.ownerBossId,
+      status: draft.status,
+      mode: draft.mode,
+      serviceId: draft.serviceId,
+      version: draft.version,
+      bookingData: this.bookingDataFromDraft(draft),
+      room: draft.room,
+      metadata: draft.metadata,
+      updatedAt: draft.updatedAt,
+    };
+  }
+
+  private draftStatus(
+    session: Record<string, unknown>,
+  ): CustomerBookingSession['status'] {
+    if (
+      session.bookingStatus === 'SERVICE_CREATED' ||
+      session.bookingServiceId
+    ) {
+      return 'SERVICE_CREATED';
+    }
+    if (session.bookingStatus === 'READY') return 'READY';
+    return 'COLLECTING';
   }
 
   private stringValue(value: unknown): string | null {
@@ -621,6 +1274,28 @@ export class TelegramConversationsService {
   private numberValue(value: unknown): number | null {
     const number = typeof value === 'number' ? value : Number(value);
     return Number.isFinite(number) && number > 0 ? number : null;
+  }
+
+  private finiteNumberValue(value: unknown): number | null {
+    const number = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  private paymentValue(
+    value: unknown,
+  ): CustomerBookingSession['paymentMethod'] {
+    return value === 'efectivo' ||
+      value === 'tarjeta' ||
+      value === 'transferencia' ||
+      value === 'mixto'
+      ? value
+      : null;
+  }
+
+  private dateValue(value: unknown): Date | null {
+    if (typeof value !== 'string' || !value.trim()) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
   }
 
   async sendAdminMessageByClient(
