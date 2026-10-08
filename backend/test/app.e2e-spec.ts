@@ -236,9 +236,11 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     await dataSource.query(
       `INSERT INTO "choferes"
         (id, usuario_id, nombre, telefono, disponible, ubicacion_lat,
-         ubicacion_lng, ultima_ubicacion_at, modo_bot)
+         ubicacion_lng, ultima_ubicacion_at, modo_bot, vehiculo_marca,
+         vehiculo_modelo, vehiculo_color, vehiculo_placa)
        VALUES ($1, $2, 'Chofer E2E', '3000000000', true, 4.7110000,
-               -74.0720000, now(), true)`,
+               -74.0720000, now(), true, 'Nissan', 'Versa', 'Negro',
+               'E2E-123')`,
       [IDS.driver, IDS.driverUser],
     );
     await insertService(IDS.service, 'preparacion');
@@ -388,6 +390,19 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       IDS.driver,
     );
     expect(acceptedTrip.aceptado).toBe(true);
+    const boss = await dataSource
+      .getRepository(Usuarios)
+      .findOneByOrFail({ id: IDS.boss });
+    const listedService = (await services.findAll(boss)).find(
+      (item) => item.id === IDS.service,
+    );
+    expect(listedService?.viajes[0]?.chofer).toMatchObject({
+      nombre: 'Chofer E2E',
+      vehiculoMarca: 'Nissan',
+      vehiculoModelo: 'Versa',
+      vehiculoColor: 'Negro',
+      vehiculoPlaca: 'E2E-123',
+    });
     persisted = await service();
     expect(persisted.operationalState).toBe('transporte_ida_asignado');
     expect(employeeOperationActions(persisted.operationalState)).toEqual([
@@ -550,6 +565,48 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       ...SERVICE_OPERATION_ACTIONS,
     ].join(' ');
     expect(vocabulary).not.toMatch(/cobro[ _-]?verificado/i);
+  });
+
+  it('crea un viaje externo de ida sin viaje previo', async () => {
+    await dataSource.query(
+      `UPDATE "servicios" SET estado_operativo = 'esperando_transporte_ida'
+        WHERE id = $1`,
+      [IDS.service],
+    );
+    const [before] = await dataSource.query(
+      `SELECT id FROM viajes WHERE servicio_id = $1 AND tipo = 'ida'`,
+      [IDS.service],
+    );
+    expect(before).toBeUndefined();
+
+    const trip = await services.assignExternalTransport(IDS.service, IDS.boss, {
+      platform: 'Uber',
+      sharedLink: 'https://example.com/viaje-ida-e2e',
+      amount: 150,
+    });
+
+    const [persistedTrip] = await dataSource.query(
+      `SELECT tipo, proveedor_transporte, external_platform,
+              external_shared_link, tarifa
+         FROM viajes WHERE id = $1`,
+      [trip.id],
+    );
+    expect(persistedTrip).toMatchObject({
+      tipo: 'ida',
+      proveedor_transporte: 'uber',
+      external_platform: 'Uber',
+      external_shared_link: 'https://example.com/viaje-ida-e2e',
+    });
+    expect(Number(persistedTrip.tarifa)).toBe(150);
+    expect((await service()).operationalState).toBe('transporte_ida_asignado');
+    expect(realtime.emitToBoss).toHaveBeenCalledWith(
+      IDS.boss,
+      expect.objectContaining({ type: 'external_transport_assigned' }),
+    );
+    expect(realtime.emitToEmployee).toHaveBeenCalledWith(
+      IDS.employee,
+      expect.objectContaining({ type: 'external_transport_assigned' }),
+    );
   });
 
   it('procesa 15 + 6 minutos y SERVICE_ENDING_SOON de forma determinista', async () => {

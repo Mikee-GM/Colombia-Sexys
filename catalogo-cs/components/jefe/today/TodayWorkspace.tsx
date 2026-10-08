@@ -27,6 +27,7 @@ import {
   conversationsForEmployee,
   markConversationRead,
   mergeRealtimeMessage,
+  shouldRefreshTodayWorkspace,
   updateConversationMode,
   type EmployeeTabId,
   type JefeConversation,
@@ -209,7 +210,7 @@ export default function TodayWorkspace({
         return;
       }
 
-      if (event.type !== "heartbeat") scheduleRefresh();
+      if (shouldRefreshTodayWorkspace(event.type)) scheduleRefresh();
     },
     [scheduleRefresh, selectedId],
   );

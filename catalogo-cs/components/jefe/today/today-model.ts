@@ -591,6 +591,10 @@ export function canAssignTransport(service: Service): boolean {
   return state === "esperando_transporte_ida" || state === "preparando_regreso";
 }
 
+export function shouldRefreshTodayWorkspace(eventType?: string): boolean {
+  return Boolean(eventType && eventType !== "heartbeat");
+}
+
 export function presentServiceState(
   service: Service,
 ): ServiceStatePresentation {

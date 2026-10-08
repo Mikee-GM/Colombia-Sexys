@@ -1048,6 +1048,7 @@ export default function ServiceDetailDialog({
         {externalReturnOpen && (
           <ExternalTransportSheet
             serviceId={service.id}
+            tripType="regreso"
             onClose={() => setExternalReturnOpen(false)}
             onSaved={async () => {
               setExternalReturnOpen(false);
