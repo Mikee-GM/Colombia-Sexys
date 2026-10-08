@@ -1254,7 +1254,7 @@ export class TelegramBookingUpdate {
     session.step = undefined;
     await this.persistSession(ctx);
     const message =
-      'Listo mor, ya tengo los datos. El jefe revisa y confirma el servicio antes de ponerlo en marcha.';
+      'Listo amor, ya tengo todo. Dame un momentico y te confirmo por aquí.';
     await ctx.reply(message);
     await this.registrarMensajeDelFlujo(ctx, message);
   }

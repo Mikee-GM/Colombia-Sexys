@@ -72,6 +72,21 @@ describe('TelegramBookingUpdate.cerrarReservaEsperandoComprobante', () => {
     expect(update.markBookingReadyForBoss).toHaveBeenCalledWith(ctx);
     expect(update.finalizeBooking).not.toHaveBeenCalled();
   });
+
+  it('informa al cliente sin revelar la aprobacion interna', async () => {
+    update.markBookingReadyForBoss = (
+      TelegramBookingUpdate.prototype as any
+    ).markBookingReadyForBoss;
+    update.persistSession = jest.fn().mockResolvedValue(undefined);
+    update.registrarMensajeDelFlujo = jest.fn().mockResolvedValue(undefined);
+    ctx.reply = jest.fn().mockResolvedValue(undefined);
+
+    await update.markBookingReadyForBoss(ctx);
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.not.stringMatching(/jefe|aprueba|confirma el servicio/i),
+    );
+  });
 });
 
 /**
