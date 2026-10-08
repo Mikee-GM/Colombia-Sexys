@@ -221,7 +221,10 @@ export default function ServiceInspector({
 
     return (
       <aside className="flex h-full min-h-0 flex-col bg-black">
-        <header className="sticky top-0 z-10 flex min-h-16 items-center gap-3 border-b border-zinc-800 bg-black px-3 py-2.5">
+        <header
+          className="sticky top-0 z-10 flex min-h-16 items-center gap-3 border-b border-zinc-800 bg-black px-3 py-2.5"
+          style={{ paddingTop: "env(safe-area-inset-top)" }}
+        >
           {onClose && (
             <button
               type="button"
@@ -241,7 +244,7 @@ export default function ServiceInspector({
             </h2>
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
+        <div className="min-h-0 flex-1 overflow-y-auto scroll-pb-32 p-3.5">
           <section className="rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3">
             <p className="text-xs font-semibold text-[#E8D5A3]">
               Servicio todavía no creado
@@ -267,7 +270,7 @@ export default function ServiceInspector({
               </button>
             </section>
           )}
-          <dl className="mt-4 divide-y divide-zinc-900 border-y border-zinc-900">
+          <dl className="mt-4 hidden divide-y divide-zinc-900 border-y border-zinc-900 md:block">
             <div className="grid grid-cols-[88px_1fr] gap-3 py-3 text-xs">
               <dt className="flex items-center gap-1.5 text-zinc-600">
                 <UserRound size={13} /> Cliente
@@ -312,8 +315,27 @@ export default function ServiceInspector({
             )}
           </dl>
           <section className="mt-4 space-y-3 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
-              Datos de la reserva
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                Datos de la reserva
+              </p>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#C5A55A]">
+                {[
+                  draftForm.employeeId,
+                  draftForm.durationHours,
+                  draftForm.locationName || draftForm.locationAddress,
+                  draftForm.locationLat && draftForm.locationLng,
+                  draftForm.paymentMethod,
+                ].filter(Boolean).length}/5 completos
+              </span>
+            </div>
+            {editable && (
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                CONTROL MANUAL
+              </p>
+            )}
+            <p className="rounded border border-zinc-800 bg-black/60 px-2.5 py-2 text-xs text-zinc-400">
+              Ubicación {draftForm.locationLat && draftForm.locationLng ? "✓ Recibida" : "• Falta"}
             </p>
             <label className="block text-xs text-zinc-500">
               Empleada
@@ -321,7 +343,7 @@ export default function ServiceInspector({
                 value={draftForm.employeeId}
                 onChange={(event) => updateDraftField("employeeId", event.target.value)}
                 disabled={!editable}
-                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+                className="mt-1 h-12 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
               >
                 <option value="">Selecciona una empleada</option>
                 {employees.map((employee) => (
@@ -340,7 +362,7 @@ export default function ServiceInspector({
                 value={draftForm.durationHours}
                 onChange={(event) => updateDraftField("durationHours", event.target.value)}
                 disabled={!editable}
-                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+                className="mt-1 h-12 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
               />
             </label>
             <label className="block text-xs text-zinc-500">
@@ -349,7 +371,7 @@ export default function ServiceInspector({
                 value={draftForm.locationName}
                 onChange={(event) => updateDraftField("locationName", event.target.value)}
                 disabled={!editable}
-                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+                className="mt-1 h-12 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
               />
             </label>
             <label className="block text-xs text-zinc-500">
@@ -358,7 +380,7 @@ export default function ServiceInspector({
                 value={draftForm.locationAddress}
                 onChange={(event) => updateDraftField("locationAddress", event.target.value)}
                 disabled={!editable}
-                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+                className="mt-1 h-12 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
               />
             </label>
             <label className="block text-xs text-zinc-500">
@@ -367,7 +389,7 @@ export default function ServiceInspector({
                 value={draftForm.paymentMethod}
                 onChange={(event) => updateDraftField("paymentMethod", event.target.value)}
                 disabled={!editable}
-                className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm capitalize text-white"
+                className="mt-1 h-12 w-full rounded border border-zinc-700 bg-black px-2 text-sm capitalize text-white"
               >
                 <option value="">Selecciona un método</option>
                 <option value="efectivo">Efectivo</option>
@@ -399,7 +421,7 @@ export default function ServiceInspector({
                   value={draftForm.locationLat}
                   onChange={(event) => updateDraftField("locationLat", event.target.value)}
                   disabled={!editable}
-                  className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+                  className="mt-1 h-12 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
                 />
               </label>
               <label className="block text-xs text-zinc-500">
@@ -410,17 +432,20 @@ export default function ServiceInspector({
                   value={draftForm.locationLng}
                   onChange={(event) => updateDraftField("locationLng", event.target.value)}
                   disabled={!editable}
-                  className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
+                  className="mt-1 h-12 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
                 />
               </label>
             </div>
             </details>
-            <div className="sticky bottom-0 flex gap-2 border-t border-zinc-800 bg-zinc-950 py-3">
+            <div
+              className="sticky bottom-0 flex gap-2 border-t border-zinc-800 bg-zinc-950 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+              style={{ scrollPaddingBottom: "calc(5rem + env(safe-area-inset-bottom))" }}
+            >
               <button
                 type="button"
                 onClick={saveDraft}
                 disabled={pending || !editable}
-                className="h-10 flex-1 rounded border border-zinc-700 px-3 text-xs font-semibold text-zinc-200 disabled:opacity-50"
+                className="h-12 flex-1 rounded border border-zinc-700 px-3 text-xs font-semibold text-zinc-200 disabled:opacity-50"
               >
                 Guardar cambios
               </button>
@@ -428,7 +453,7 @@ export default function ServiceInspector({
                 type="button"
                 onClick={acceptDraft}
                 disabled={pending || !editable || !draftReady || !formComplete}
-                className="h-10 flex-1 rounded bg-[#C5A55A] px-3 text-xs font-bold text-black disabled:opacity-50"
+                className="h-12 flex-1 rounded bg-[#C5A55A] px-3 text-xs font-bold text-black disabled:opacity-50"
               >
                 CONFIRMAR Y ENVIAR A EMPLEADA
               </button>
