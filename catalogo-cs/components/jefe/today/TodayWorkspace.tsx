@@ -309,7 +309,7 @@ export default function TodayWorkspace({
         workShift={workShift}
         onCreateService={() => setCreatingService(true)}
       />
-      <div className="relative flex h-[calc(100dvh-11.5rem)] min-h-[520px] flex-col overflow-hidden rounded-xl border border-zinc-800 bg-black md:h-[calc(100dvh-5rem)] md:min-h-[620px]">
+      <div className="relative flex h-[calc(100dvh-11.5rem)] min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-black md:h-[calc(100dvh-5rem)] md:min-h-[620px]">
         <EmployeeTabStrip
           items={employeeNavigation}
           selectedId={selectedEmployeeId}
@@ -352,7 +352,7 @@ export default function TodayWorkspace({
           </div>
 
           <div
-            className={`${view === "service" ? "absolute inset-0 z-30 block" : "hidden"} h-full min-h-0 border-l border-zinc-800 bg-black md:left-auto md:w-[380px] md:shadow-2xl xl:static xl:block xl:w-auto xl:shadow-none`}
+            className={`${view === "service" ? "fixed inset-0 z-30 block h-[100dvh]" : "hidden"} min-h-0 border-l border-zinc-800 bg-black md:absolute md:inset-y-0 md:left-auto md:h-full md:w-[380px] md:shadow-2xl xl:static xl:block xl:h-full xl:w-auto xl:shadow-none`}
           >
             <ServiceInspector
               key={selected?.id ?? "empty"}
@@ -360,6 +360,9 @@ export default function TodayWorkspace({
               employees={employees}
               onClose={() => setView("chat")}
               onRefresh={refresh}
+              onTakeover={async () => {
+                await toggleMode();
+              }}
             />
           </div>
         </div>

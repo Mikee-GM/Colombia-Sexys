@@ -47,6 +47,12 @@ export class UpdateBookingDraftDto {
   @MaxLength(2000)
   locationNotes?: string;
 
+  /** Nota operativa del jefe, separada de las indicaciones del cliente. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  bossNotes?: string;
+
   @IsOptional()
   @IsNumber()
   locationLat?: number;

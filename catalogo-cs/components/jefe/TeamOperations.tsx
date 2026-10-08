@@ -95,6 +95,11 @@ import {
 } from "@/lib/actions/team-channel";
 import type { GroupServiceRequest } from "@/lib/types";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import {
+  canAssignTransport,
+  canBossAuthorizeService,
+  operationStateForService,
+} from "@/components/jefe/today/today-model";
 
 export default function TeamOperations({
   initialEmployees,
@@ -214,8 +219,8 @@ export default function TeamOperations({
    * lo segundo solo hay que vigilarlo. Mezclados en una sola lista, una
    * solicitud nueva aparecia entre servicios en marcha sin destacar.
    */
-  const pendientes = active.filter((service) => service.estado === "pendiente");
-  const enCurso = active.filter((service) => service.estado !== "pendiente");
+  const pendientes = active.filter(canBossAuthorizeService);
+  const enCurso = active.filter((service) => !canBossAuthorizeService(service));
   const history = services.filter((service) =>
     ["finalizado", "cancelado"].includes(service.estado),
   );
@@ -797,7 +802,7 @@ export default function TeamOperations({
           onClose={() => setChatService(null)}
         />
       )}
-      {acceptingService && (
+      {acceptingService && canBossAuthorizeService(acceptingService) && (
         <AcceptServiceDialog
           service={acceptingService}
           previousService={services.find(
@@ -1336,7 +1341,8 @@ function ServiceCard({
   onRefresh: () => Promise<void>;
 }) {
   const programado = service.tipoAgenda === "programado";
-  const pendiente = service.estado === "pendiente";
+  const operationalState = operationStateForService(service);
+  const pendiente = canBossAuthorizeService(service);
   /*
    * Mientras no ha empezado todavia se puede mover de hora y de sitio. En curso
    * ya no: la modelo va camino del lugar o esta alli, y cambiarle el destino
@@ -1433,8 +1439,20 @@ function ServiceCard({
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#C5A55A] py-3.5 text-xs font-bold uppercase tracking-wider text-black transition-colors hover:bg-[#d8b769] disabled:opacity-50"
         >
           <Check size={16} />
-          Aceptar servicio
+          Confirmar y enviar a empleada
         </button>
+      )}
+
+      {operationalState === "esperando_aceptacion_empleada" && (
+        <p className="mt-4 rounded-xl border border-[#C5A55A]/35 bg-[#C5A55A]/10 px-3 py-2.5 text-xs font-semibold text-[#E8D5A3]">
+          Esperando respuesta de la empleada. No hay que autorizarlo de nuevo.
+        </p>
+      )}
+
+      {canAssignTransport(service) && (
+        <p className="mt-4 rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2.5 text-xs font-semibold text-sky-200">
+          El siguiente paso es ASIGNAR TRANSPORTE.
+        </p>
       )}
 
       {/*

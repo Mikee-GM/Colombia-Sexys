@@ -313,6 +313,12 @@ export class TelegramConversationsService {
       ...(patch.locationNotes !== undefined && {
         locationNotes: patch.locationNotes,
       }),
+      ...(patch.bossNotes !== undefined && {
+        metadata: {
+          ...draft.metadata,
+          bossNotes: patch.bossNotes.trim() || null,
+        },
+      }),
       ...(patch.locationLat !== undefined && {
         locationLat: patch.locationLat,
       }),
@@ -475,7 +481,9 @@ export class TelegramConversationsService {
         service.id,
         actor.id,
         'chofer',
-        undefined,
+        typeof draft.metadata?.['bossNotes'] === 'string'
+          ? draft.metadata['bossNotes']
+          : undefined,
         draft.room ?? undefined,
       );
       const updated = await this.bookingDraftRepository.save({
@@ -1248,6 +1256,10 @@ export class TelegramConversationsService {
       serviceId: draft.serviceId,
       version: draft.version,
       bookingData: this.bookingDataFromDraft(draft),
+      bossNotes:
+        typeof draft.metadata?.['bossNotes'] === 'string'
+          ? draft.metadata['bossNotes']
+          : null,
       room: draft.room,
       metadata: draft.metadata,
       updatedAt: draft.updatedAt,

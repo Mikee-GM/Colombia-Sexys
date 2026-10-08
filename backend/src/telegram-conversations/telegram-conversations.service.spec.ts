@@ -129,6 +129,92 @@ describe('TelegramConversationsService', () => {
     mutableSubject.servicesService = undefined;
   });
 
+  it('creates one service and carries the boss note into the employee offer', async () => {
+    const mutableSubject = subject as any;
+    const draft = {
+      id: 'booking-new',
+      clientId: 'client-1',
+      intendedEmployeeId: 'employee-1',
+      ownerBossId: 'boss-1',
+      status: 'READY',
+      mode: 'HUMAN_ACTIVE',
+      serviceId: null,
+      version: 2,
+      metadata: { bossNotes: 'Llegar por recepción' },
+      updatedAt: new Date(),
+      durationHours: 2,
+      openEndedDuration: false,
+      placeType: 'external',
+      presetLocationId: null,
+      locationName: 'Hotel',
+      locationAddress: 'Calle 1',
+      locationNotes: null,
+      locationLat: 20.5,
+      locationLng: -100.4,
+      room: '302',
+      paymentMethod: 'efectivo',
+      scheduleType: 'inmediato',
+      scheduledAt: null,
+      currentRequirement: null,
+      lastInteractionAt: new Date(),
+      createdAt: new Date(),
+    } as any;
+    const savedDraft = {
+      ...draft,
+      serviceId: 'service-new',
+      status: 'SERVICE_CREATED',
+    };
+    const offer = jest.fn().mockResolvedValue({ id: 'service-new' });
+    const service = { id: 'service-new', bookingSessionId: 'booking-new' };
+    mutableSubject.bookingDraftRepository = {
+      findOne: jest.fn().mockResolvedValue(draft),
+      createQueryBuilder: jest.fn(() => ({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      })),
+      save: jest.fn().mockResolvedValue(savedDraft),
+      update: jest.fn(),
+    } as any;
+    mutableSubject.empleadasRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'employee-1',
+        jefeId: 'boss-1',
+        jefeSecundarioId: null,
+        precioBaseHora: 1200,
+      }),
+    } as any;
+    services.findOne.mockResolvedValue(null);
+    conversations.findOne.mockResolvedValue({
+      bookingSessionId: 'booking-new',
+      servicioId: null,
+      cliente: { telegramChatId: '123' },
+      intendedEmployee: { jefeId: 'boss-1' },
+    });
+    mutableSubject.servicesService = {
+      reserveNext: jest.fn().mockResolvedValue(service),
+      ofrecerAEmpleada: offer,
+    } as any;
+
+    const result = await subject.acceptBookingDraft('booking-new', {
+      id: 'boss-1',
+      rol: 'jefe',
+    } as any);
+
+    expect(mutableSubject.servicesService.reserveNext).toHaveBeenCalledTimes(1);
+    expect(offer).toHaveBeenCalledWith(
+      'service-new',
+      'boss-1',
+      'chofer',
+      'Llegar por recepción',
+      '302',
+    );
+    expect(result).toEqual(
+      expect.objectContaining({ idempotent: false, service }),
+    );
+  });
+
   it('resolves /start to the latest open draft, never to a created service', async () => {
     const mutableSubject = subject as any;
     const findOne = jest.fn().mockResolvedValue({

@@ -66,6 +66,11 @@ const ATTENTION_OPERATION_STATES = new Set<ServiceOperationState>([
   "esperando_transporte_ida",
   "preparando_regreso",
 ]);
+const BOSS_AUTHORIZATION_STATES = new Set<ServiceOperationState>([
+  "preparacion",
+  "preparado",
+  "asignado",
+]);
 
 function servicePriority(service: Service): number {
   return ACTIVE_STATES.has(service.estado) ? 1 : 0;
@@ -569,10 +574,25 @@ export function legacyOperationState(service: Service): ServiceOperationState {
   return "preparacion";
 }
 
+/** Estado único que deben consumir las acciones del panel, incluso para
+ * servicios antiguos cuyo estado persistido todavía es `pendiente`. */
+export function operationStateForService(service: Service): ServiceOperationState {
+  return service.operationalState ?? legacyOperationState(service);
+}
+
+/** El jefe solo autoriza servicios que aún no fueron enviados a la empleada. */
+export function canBossAuthorizeService(service: Service): boolean {
+  return BOSS_AUTHORIZATION_STATES.has(operationStateForService(service));
+}
+
+/** Transporte de ida o regreso que ya puede asignarse desde el panel. */
+export function canAssignTransport(service: Service): boolean {
+  const state = operationStateForService(service);
+  return state === "esperando_transporte_ida" || state === "preparando_regreso";
+}
+
 export function presentServiceState(
   service: Service,
 ): ServiceStatePresentation {
-  return OPERATION_PRESENTATION[
-    service.operationalState ?? legacyOperationState(service)
-  ];
+  return OPERATION_PRESENTATION[operationStateForService(service)];
 }

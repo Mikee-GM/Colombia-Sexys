@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   ArrowLeft,
   CalendarClock,
@@ -35,7 +35,11 @@ import {
 import type { CancellationReason } from "@/lib/cancellation-reasons";
 import type { Employee, Service } from "@/lib/types";
 import type { JefeConversation } from "./today-model";
-import { legacyOperationState } from "./today-model";
+import {
+  canAssignTransport,
+  canBossAuthorizeService,
+  operationStateForService,
+} from "./today-model";
 import ServiceStateSummary from "./ServiceStateSummary";
 
 function paymentLabel(value: Service["metodoPago"]) {
@@ -58,11 +62,13 @@ export default function ServiceInspector({
   employees,
   onClose,
   onRefresh,
+  onTakeover,
 }: {
   conversation: JefeConversation | null;
   employees: Employee[];
   onClose?: () => void;
   onRefresh: () => Promise<void>;
+  onTakeover?: () => Promise<void> | void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [accepting, setAccepting] = useState(false);
@@ -71,6 +77,8 @@ export default function ServiceInspector({
   const [relocating, setRelocating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [pending, startTransition] = useTransition();
+  const draftDirtyRef = useRef(false);
+  const draftSessionRef = useRef<string | null>(null);
   const draft = conversation?.bookingDraft;
   const [draftForm, setDraftForm] = useState({
     employeeId: "",
@@ -81,11 +89,20 @@ export default function ServiceInspector({
     locationLat: "",
     locationLng: "",
     paymentMethod: "",
+    bossNotes: "",
   });
 
   useEffect(() => {
     if (!conversation || conversation.service) return;
+    if (
+      draftDirtyRef.current &&
+      draftSessionRef.current === conversation.bookingSessionId
+    ) {
+      return;
+    }
     const booking = conversation.bookingData;
+    draftSessionRef.current = conversation.bookingSessionId;
+    draftDirtyRef.current = false;
     setDraftForm({
       employeeId: conversation.employeeId,
       durationHours:
@@ -98,8 +115,16 @@ export default function ServiceInspector({
       locationLng:
         booking?.locationLng != null ? String(booking.locationLng) : "",
       paymentMethod: booking?.paymentMethod ?? "",
+      bossNotes: conversation.bookingDraft?.bossNotes ?? "",
     });
-  }, [conversation, conversation?.bookingData, conversation?.employeeId]);
+  }, [
+    conversation,
+    conversation?.id,
+    conversation?.bookingSessionId,
+    conversation?.bookingData,
+    conversation?.bookingDraft?.bossNotes,
+    conversation?.employeeId,
+  ]);
 
   if (!conversation) {
     return (
@@ -117,32 +142,53 @@ export default function ServiceInspector({
       booking?.locationAddress ??
       booking?.locationNotes ??
       null;
+    const editable = conversation.mode === "HUMAN_ACTIVE";
+    const draftReady =
+      draft?.status === "READY" || booking?.status === "READY";
+    const formComplete = Boolean(
+      draftForm.employeeId &&
+        draftForm.durationHours &&
+        draftForm.locationLat &&
+        draftForm.locationLng &&
+        draftForm.paymentMethod,
+    );
+    const updateDraftField = <K extends keyof typeof draftForm>(
+      field: K,
+      value: (typeof draftForm)[K],
+    ) => {
+      draftDirtyRef.current = true;
+      setDraftForm((current) => ({ ...current, [field]: value }));
+    };
+    const draftPatch = () => ({
+      intendedEmployeeId: draftForm.employeeId || undefined,
+      durationHours: draftForm.durationHours
+        ? Number(draftForm.durationHours)
+        : undefined,
+      locationName: draftForm.locationName || undefined,
+      locationAddress: draftForm.locationAddress || undefined,
+      locationNotes: draftForm.locationNotes || undefined,
+      bossNotes: draftForm.bossNotes || undefined,
+      locationLat: draftForm.locationLat
+        ? Number(draftForm.locationLat)
+        : undefined,
+      locationLng: draftForm.locationLng
+        ? Number(draftForm.locationLng)
+        : undefined,
+      paymentMethod: draftForm.paymentMethod || undefined,
+    });
     const saveDraft = () => {
       if (!conversation.bookingSessionId) return;
+      if (!editable) return;
       startTransition(async () => {
         const result = await updateJefeBookingDraft({
           bookingSessionId: conversation.bookingSessionId!,
-          patch: {
-            intendedEmployeeId: draftForm.employeeId || undefined,
-            durationHours: draftForm.durationHours
-              ? Number(draftForm.durationHours)
-              : undefined,
-            locationName: draftForm.locationName || undefined,
-            locationAddress: draftForm.locationAddress || undefined,
-            locationNotes: draftForm.locationNotes || undefined,
-            locationLat: draftForm.locationLat
-              ? Number(draftForm.locationLat)
-              : undefined,
-            locationLng: draftForm.locationLng
-              ? Number(draftForm.locationLng)
-              : undefined,
-            paymentMethod: draftForm.paymentMethod || undefined,
-          },
+          patch: draftPatch(),
         });
         if (!result.success) {
           toast.error(result.error);
           return;
         }
+        draftDirtyRef.current = false;
         toast.success("Borrador actualizado");
         await onRefresh();
       });
@@ -150,30 +196,17 @@ export default function ServiceInspector({
 
     const acceptDraft = () => {
       if (!conversation.bookingSessionId) return;
+      if (!editable || !formComplete) return;
       startTransition(async () => {
         const saved = await updateJefeBookingDraft({
           bookingSessionId: conversation.bookingSessionId!,
-          patch: {
-            intendedEmployeeId: draftForm.employeeId || undefined,
-            durationHours: draftForm.durationHours
-              ? Number(draftForm.durationHours)
-              : undefined,
-            locationName: draftForm.locationName || undefined,
-            locationAddress: draftForm.locationAddress || undefined,
-            locationNotes: draftForm.locationNotes || undefined,
-            locationLat: draftForm.locationLat
-              ? Number(draftForm.locationLat)
-              : undefined,
-            locationLng: draftForm.locationLng
-              ? Number(draftForm.locationLng)
-              : undefined,
-            paymentMethod: draftForm.paymentMethod || undefined,
-          },
+          patch: draftPatch(),
         });
         if (!saved.success) {
           toast.error(saved.error);
           return;
         }
+        draftDirtyRef.current = false;
         const result = await acceptJefeBookingDraft(
           conversation.bookingSessionId!,
         );
@@ -181,14 +214,14 @@ export default function ServiceInspector({
           toast.error(result.error);
           return;
         }
-        toast.success("Servicio aceptado y enviado a la empleada");
+        toast.success("Servicio confirmado y enviado a la empleada");
         await onRefresh();
       });
     };
 
     return (
       <aside className="flex h-full min-h-0 flex-col bg-black">
-        <header className="flex min-h-16 items-center gap-3 border-b border-zinc-800 px-3 py-2.5">
+        <header className="sticky top-0 z-10 flex min-h-16 items-center gap-3 border-b border-zinc-800 bg-black px-3 py-2.5">
           {onClose && (
             <button
               type="button"
@@ -218,6 +251,22 @@ export default function ServiceInspector({
               aquí conforme el cliente avanza en la reserva.
             </p>
           </section>
+          {!editable && (
+            <section className="mt-4 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
+              <p className="text-xs font-semibold text-sky-200">Control IA activo</p>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                Toma la conversación para editar la reserva y confirmarla.
+              </p>
+              <button
+                type="button"
+                onClick={() => void onTakeover?.()}
+                disabled={!onTakeover || pending}
+                className="mt-3 flex min-h-11 w-full items-center justify-center rounded-lg border border-sky-400/50 px-3 text-xs font-bold uppercase tracking-wider text-sky-200 disabled:opacity-50"
+              >
+                TOMAR CONVERSACIÓN
+              </button>
+            </section>
+          )}
           <dl className="mt-4 divide-y divide-zinc-900 border-y border-zinc-900">
             <div className="grid grid-cols-[88px_1fr] gap-3 py-3 text-xs">
               <dt className="flex items-center gap-1.5 text-zinc-600">
@@ -270,12 +319,8 @@ export default function ServiceInspector({
               Empleada
               <select
                 value={draftForm.employeeId}
-                onChange={(event) =>
-                  setDraftForm((current) => ({
-                    ...current,
-                    employeeId: event.target.value,
-                  }))
-                }
+                onChange={(event) => updateDraftField("employeeId", event.target.value)}
+                disabled={!editable}
                 className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
               >
                 <option value="">Selecciona una empleada</option>
@@ -293,12 +338,8 @@ export default function ServiceInspector({
                 min="0.25"
                 step="0.25"
                 value={draftForm.durationHours}
-                onChange={(event) =>
-                  setDraftForm((current) => ({
-                    ...current,
-                    durationHours: event.target.value,
-                  }))
-                }
+                onChange={(event) => updateDraftField("durationHours", event.target.value)}
+                disabled={!editable}
                 className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
               />
             </label>
@@ -306,12 +347,8 @@ export default function ServiceInspector({
               Lugar / nombre
               <input
                 value={draftForm.locationName}
-                onChange={(event) =>
-                  setDraftForm((current) => ({
-                    ...current,
-                    locationName: event.target.value,
-                  }))
-                }
+                onChange={(event) => updateDraftField("locationName", event.target.value)}
+                disabled={!editable}
                 className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
               />
             </label>
@@ -319,12 +356,8 @@ export default function ServiceInspector({
               Dirección
               <input
                 value={draftForm.locationAddress}
-                onChange={(event) =>
-                  setDraftForm((current) => ({
-                    ...current,
-                    locationAddress: event.target.value,
-                  }))
-                }
+                onChange={(event) => updateDraftField("locationAddress", event.target.value)}
+                disabled={!editable}
                 className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
               />
             </label>
@@ -332,12 +365,8 @@ export default function ServiceInspector({
               Pago
               <select
                 value={draftForm.paymentMethod}
-                onChange={(event) =>
-                  setDraftForm((current) => ({
-                    ...current,
-                    paymentMethod: event.target.value,
-                  }))
-                }
+                onChange={(event) => updateDraftField("paymentMethod", event.target.value)}
+                disabled={!editable}
                 className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm capitalize text-white"
               >
                 <option value="">Selecciona un método</option>
@@ -347,19 +376,29 @@ export default function ServiceInspector({
                 <option value="mixto">Mixto</option>
               </select>
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <label className="block text-xs text-zinc-500">
+              Notas para la empleada (opcionales)
+              <textarea
+                value={draftForm.bossNotes}
+                onChange={(event) => updateDraftField("bossNotes", event.target.value)}
+                maxLength={2000}
+                rows={3}
+                disabled={!editable}
+                placeholder="Indicaciones operativas para la empleada"
+                className="mt-1 min-h-20 w-full resize-none rounded border border-zinc-700 bg-black px-2 py-2 text-sm text-white disabled:opacity-60"
+              />
+            </label>
+            <details className="rounded border border-zinc-800 px-2 py-1">
+              <summary className="cursor-pointer py-1 text-xs text-zinc-500">Coordenadas avanzadas</summary>
+            <div className="grid grid-cols-2 gap-2 pb-2 pt-2">
               <label className="block text-xs text-zinc-500">
                 Latitud
                 <input
                   type="number"
                   step="any"
                   value={draftForm.locationLat}
-                  onChange={(event) =>
-                    setDraftForm((current) => ({
-                      ...current,
-                      locationLat: event.target.value,
-                    }))
-                  }
+                  onChange={(event) => updateDraftField("locationLat", event.target.value)}
+                  disabled={!editable}
                   className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
                 />
               </label>
@@ -369,21 +408,18 @@ export default function ServiceInspector({
                   type="number"
                   step="any"
                   value={draftForm.locationLng}
-                  onChange={(event) =>
-                    setDraftForm((current) => ({
-                      ...current,
-                      locationLng: event.target.value,
-                    }))
-                  }
+                  onChange={(event) => updateDraftField("locationLng", event.target.value)}
+                  disabled={!editable}
                   className="mt-1 h-10 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
                 />
               </label>
             </div>
-            <div className="flex gap-2">
+            </details>
+            <div className="sticky bottom-0 flex gap-2 border-t border-zinc-800 bg-zinc-950 py-3">
               <button
                 type="button"
                 onClick={saveDraft}
-                disabled={pending}
+                disabled={pending || !editable}
                 className="h-10 flex-1 rounded border border-zinc-700 px-3 text-xs font-semibold text-zinc-200 disabled:opacity-50"
               >
                 Guardar cambios
@@ -391,10 +427,10 @@ export default function ServiceInspector({
               <button
                 type="button"
                 onClick={acceptDraft}
-                disabled={pending || !draft}
+                disabled={pending || !editable || !draftReady || !formComplete}
                 className="h-10 flex-1 rounded bg-[#C5A55A] px-3 text-xs font-bold text-black disabled:opacity-50"
               >
-                ACEPTAR SERVICIO
+                CONFIRMAR Y ENVIAR A EMPLEADA
               </button>
             </div>
           </section>
@@ -403,7 +439,7 @@ export default function ServiceInspector({
     );
   }
   const serviceId = service.id;
-  const state = service.operationalState ?? legacyOperationState(service);
+  const state = operationStateForService(service);
   const previousService = conversation.relatedServices.find(
     (item) => item.id === service.servicioPrevioId,
   );
@@ -450,7 +486,7 @@ export default function ServiceInspector({
 
   return (
     <aside className="flex h-full min-h-0 flex-col bg-black">
-      <header className="flex min-h-16 items-center gap-3 border-b border-zinc-800 px-3 py-2.5">
+      <header className="sticky top-0 z-10 flex min-h-16 items-center gap-3 border-b border-zinc-800 bg-black px-3 py-2.5">
         {onClose && (
           <button
             type="button"
@@ -530,21 +566,21 @@ export default function ServiceInspector({
           <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#C5A55A]">
             Siguiente acción
           </p>
-          {service.estado === "pendiente" ? (
+          {canBossAuthorizeService(service) ? (
             <button
               type="button"
               onClick={() => setAccepting(true)}
               className="mt-2 flex h-11 w-full items-center justify-center rounded-lg bg-[#C5A55A] px-3 text-[10px] font-bold uppercase tracking-[0.1em] text-black"
             >
-              Revisar y autorizar
+              CONFIRMAR Y ENVIAR A EMPLEADA
             </button>
-          ) : canManageTransport ? (
+          ) : canAssignTransport(service) ? (
             <button
               type="button"
               onClick={() => setMoreOpen(true)}
               className="mt-2 flex h-11 w-full items-center justify-center rounded-lg border border-[#C5A55A] px-3 text-[10px] font-bold uppercase tracking-[0.1em] text-[#C5A55A]"
             >
-              Gestionar transporte
+              ASIGNAR TRANSPORTE
             </button>
           ) : state === "esperando_aceptacion_empleada" ? (
             <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">
@@ -572,7 +608,7 @@ export default function ServiceInspector({
         {moreOpen && (
           <div className="space-y-4 pt-4">
             <div className="grid grid-cols-2 gap-2">
-              {service.estado === "pendiente" && (
+              {canBossAuthorizeService(service) && (
                 <button
                   type="button"
                   onClick={() => setEditing(true)}
@@ -627,7 +663,8 @@ export default function ServiceInspector({
               />
             )}
 
-            {(service.viajes?.length ||
+            {(canManageTransport ||
+              service.viajes?.length ||
               service.estadoLiquidacion === "transporte_pendiente") && (
               <TransportPanel service={service} onRefresh={onRefresh} />
             )}
@@ -635,7 +672,7 @@ export default function ServiceInspector({
         )}
       </div>
 
-      {accepting && (
+      {accepting && canBossAuthorizeService(service) && (
         <AcceptServiceDialog
           service={service}
           previousService={previousService}

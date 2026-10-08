@@ -9997,7 +9997,7 @@ export class TelegramBookingUpdate {
 
       if (session.bookingStatus === 'READY') {
         const waitingForBoss =
-          'Ya tengo tu solicitud completa. El jefe la revisa y te confirmo apenas la acepte.';
+          'Tu solicitud está completa. Te confirmaré en cuanto quede coordinada.';
         await ctx.reply(waitingForBoss);
         await this.registrarMensajeDelFlujo(ctx, waitingForBoss);
         return;
