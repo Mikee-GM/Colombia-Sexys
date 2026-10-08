@@ -8336,7 +8336,7 @@ export class TelegramBookingUpdate {
                   : '🔄'
                 : '';
               const msgText =
-                `${emoji} ${takeoverMark}*${clientName}* ${srvMark}\n` +
+                `${emoji} ${takeoverMark}${clientName} ${srvMark}\n` +
                 `📍 Paso: ${step}\n\n` +
                 `${rawText.slice(0, 3000)}`;
 
@@ -8375,7 +8375,6 @@ export class TelegramBookingUpdate {
 
               await this.bot.telegram.sendMessage(groupId, msgText, {
                 message_thread_id: topicId,
-                parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard(keyboardRows),
               });
 
@@ -8394,47 +8393,63 @@ export class TelegramBookingUpdate {
           // ── Modo Chat Privado (legacy o complementario) ──
           if (spyChatId && spyChatId.trim()) {
             const spyMsg =
-              `👁 ${takeoverMark}*${clientName}* · \`${telegramId}\`\n` +
+              `👁 ${takeoverMark}${clientName} · ${telegramId}\n` +
               `📍 Paso: ${step}\n` +
               `"${rawText.slice(0, 300)}"`;
 
-            void this.bot.telegram.sendMessage(spyChatId.trim(), spyMsg, {
-              parse_mode: 'Markdown',
-              disable_notification: true,
-              ...Markup.inlineKeyboard([
-                [
-                  Markup.button.callback(
-                    '💬 Responder',
-                    `spy_reply:${telegramId}`,
-                  ),
-                  Markup.button.callback(
-                    isHuman ? '▶️ Reanudar IA' : '⏸ Pausar IA',
-                    isHuman
-                      ? `spy_resume:${telegramId}`
-                      : `spy_pause:${telegramId}`,
-                  ),
-                ],
-                [
-                  Markup.button.callback(
-                    '📜 Historial',
-                    `spy_history:${telegramId}`,
-                  ),
-                ],
-              ]),
-            });
+            void this.bot.telegram
+              .sendMessage(spyChatId.trim(), spyMsg, {
+                disable_notification: true,
+                ...Markup.inlineKeyboard([
+                  [
+                    Markup.button.callback(
+                      '💬 Responder',
+                      `spy_reply:${telegramId}`,
+                    ),
+                    Markup.button.callback(
+                      isHuman ? '▶️ Reanudar IA' : '⏸ Pausar IA',
+                      isHuman
+                        ? `spy_resume:${telegramId}`
+                        : `spy_pause:${telegramId}`,
+                    ),
+                  ],
+                  [
+                    Markup.button.callback(
+                      '📜 Historial',
+                      `spy_history:${telegramId}`,
+                    ),
+                  ],
+                ]),
+              })
+              .catch((error) => {
+                this.logger.warn(
+                  'No se pudo enviar el mensaje del spy administrativo privado.',
+                  error,
+                );
+              });
 
             // Fotos al chat privado
             const photo = (ctx.message as any)?.photo;
             if (photo && photo.length > 0) {
               const fileId = photo[photo.length - 1].file_id;
-              void this.bot.telegram.sendPhoto(spyChatId.trim(), fileId, {
-                caption: `📷 Foto de *${clientName}* · \`${telegramId}\``,
-                parse_mode: 'Markdown',
-              });
+              void this.bot.telegram
+                .sendPhoto(spyChatId.trim(), fileId, {
+                  caption: `📷 Foto de ${clientName} · ${telegramId}`,
+                })
+                .catch((error) => {
+                  this.logger.warn(
+                    'No se pudo enviar la foto del spy administrativo privado.',
+                    error,
+                  );
+                });
             }
           }
-        } catch {
+        } catch (error) {
           // El spy es best-effort: nunca debe romper el flujo normal del cliente
+          this.logger.warn(
+            'No se pudo completar el spy administrativo.',
+            error,
+          );
         }
       }
       // ── FIN SPY ADMIN ─────────────────────────────────────────────────────
