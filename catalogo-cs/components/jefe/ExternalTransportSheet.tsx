@@ -10,6 +10,7 @@ import type { Trip } from "@/lib/types";
 type ExternalTransportSheetProps = {
   serviceId: string;
   trip?: Trip;
+  tripType: Trip["tipo"];
   onClose: () => void;
   onSaved: () => Promise<void>;
 };
@@ -19,6 +20,7 @@ const PLATFORMS = ["Uber", "DiDi", "Otro"] as const;
 export default function ExternalTransportSheet({
   serviceId,
   trip,
+  tripType,
   onClose,
   onSaved,
 }: ExternalTransportSheetProps) {
@@ -90,7 +92,7 @@ export default function ExternalTransportSheet({
         <header className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
-              Viaje de {trip?.tipo ?? "regreso"}
+              Viaje de {tripType}
             </p>
             <h2
               id="external-transport-title"

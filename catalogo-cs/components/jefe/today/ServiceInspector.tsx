@@ -71,6 +71,9 @@ export default function ServiceInspector({
   onTakeover?: () => Promise<void> | void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [transportChoiceServiceId, setTransportChoiceServiceId] = useState<
+    string | null
+  >(null);
   const [accepting, setAccepting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
@@ -635,7 +638,7 @@ export default function ServiceInspector({
           ) : canAssignTransport(service) ? (
             <button
               type="button"
-              onClick={() => setMoreOpen(true)}
+              onClick={() => setTransportChoiceServiceId(service.id)}
               className="mt-2 flex h-11 w-full items-center justify-center rounded-lg border border-[#C5A55A] px-3 text-[10px] font-bold uppercase tracking-[0.1em] text-[#C5A55A]"
             >
               ASIGNAR TRANSPORTE
@@ -652,6 +655,19 @@ export default function ServiceInspector({
             </p>
           )}
         </section>
+
+        {(canManageTransport ||
+          service.viajes?.length ||
+          service.estadoLiquidacion === "transporte_pendiente") && (
+          <TransportPanel
+            service={service}
+            onRefresh={onRefresh}
+            transportChoiceOpen={transportChoiceServiceId === service.id}
+            onTransportChoiceOpenChange={(open) =>
+              setTransportChoiceServiceId(open ? service.id : null)
+            }
+          />
+        )}
 
         <button
           type="button"
@@ -719,12 +735,6 @@ export default function ServiceInspector({
                 servicioId={service.id}
                 cerrar={cerrarServicioPorOficina}
               />
-            )}
-
-            {(canManageTransport ||
-              service.viajes?.length ||
-              service.estadoLiquidacion === "transporte_pendiente") && (
-              <TransportPanel service={service} onRefresh={onRefresh} />
             )}
           </div>
         )}

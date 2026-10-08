@@ -221,6 +221,14 @@ export type Trip = {
   servicioId: string;
   unitNumber?: number;
   choferId: string | null;
+  chofer?: {
+    id: string;
+    nombre: string;
+    vehiculoMarca: string | null;
+    vehiculoModelo: string | null;
+    vehiculoColor: string | null;
+    vehiculoPlaca: string | null;
+  } | null;
   tipo: "ida" | "regreso";
   estado:
     | "notificado"

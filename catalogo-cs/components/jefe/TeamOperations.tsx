@@ -100,6 +100,10 @@ import {
   canBossAuthorizeService,
   operationStateForService,
 } from "@/components/jefe/today/today-model";
+import {
+  transportAssignmentContext,
+  transportChoicePrompt,
+} from "@/components/jefe/today/transport-assignment-model";
 
 export default function TeamOperations({
   initialEmployees,
@@ -2332,20 +2336,29 @@ function ServiceRating({ service }: { service: Service }) {
 export function TransportPanel({
   service,
   onRefresh,
+  transportChoiceOpen,
+  onTransportChoiceOpenChange,
 }: {
   service: Service;
   onRefresh: () => Promise<void>;
+  transportChoiceOpen?: boolean;
+  onTransportChoiceOpenChange?: (open: boolean) => void;
 }) {
   const trips = service.viajes || [];
   const [externalTrip, setExternalTrip] = useState<Trip | null | undefined>();
-  const [showTransportChoice, setShowTransportChoice] = useState(false);
-  const returnPending =
-    service.operationalState === "preparando_regreso" ||
-    (service.estadoLiquidacion === "transporte_pendiente" &&
-      !trips.some((trip) => trip.tipo === "regreso"));
-  const selectedTrip = returnPending
-    ? trips.find((trip) => trip.tipo === "regreso")
-    : trips.find((trip) => trip.tipo === "ida");
+  const [localTransportChoiceOpen, setLocalTransportChoiceOpen] =
+    useState(false);
+  const assignment = transportAssignmentContext(service);
+  const selectedTrip = assignment?.trip;
+  const selectedTripType = assignment?.tripType ?? "ida";
+  const showTransportChoice = transportChoiceOpen ?? localTransportChoiceOpen;
+  const setShowTransportChoice = (open: boolean) => {
+    if (onTransportChoiceOpenChange) {
+      onTransportChoiceOpenChange(open);
+      return;
+    }
+    setLocalTransportChoiceOpen(open);
+  };
   async function run(
     action: () => Promise<{ success: boolean; error?: string }>,
     success: string,
@@ -2379,31 +2392,28 @@ export function TransportPanel({
           />
         ))}
       </div>
-      {service.estadoLiquidacion === "transporte_pendiente" &&
-        !trips.some((trip) => trip.tipo === "regreso") && (
-          <div className="rounded-xl border border-[#C5A55A]/35 bg-[#C5A55A]/5 p-4">
-            <p className="text-sm font-semibold text-[#E8D5A3]">
-              Transporte de regreso pendiente
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Selecciona cómo regresará la empleada al finalizar el servicio.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <ActionButton
-                onClick={() => setShowTransportChoice(true)}
-              >
-                Asignar transporte
-              </ActionButton>
-            </div>
+      {assignment?.needsAssignment && (
+        <div className="rounded-xl border border-[#C5A55A]/35 bg-[#C5A55A]/5 p-4">
+          <p className="text-sm font-semibold text-[#E8D5A3]">
+            Transporte de {assignment.tripType} pendiente
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            {transportChoicePrompt(assignment.tripType)}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <ActionButton onClick={() => setShowTransportChoice(true)}>
+              Asignar transporte
+            </ActionButton>
           </div>
-        )}
+        </div>
+      )}
       {showTransportChoice && (
         <TransportChoiceSheet
+          tripType={selectedTripType}
           onClose={() => setShowTransportChoice(false)}
           onInternal={async () => {
             setShowTransportChoice(false);
-            const targetTrip =
-              selectedTrip;
+            const targetTrip = selectedTrip;
             if (targetTrip?.proveedorTransporte === "interno") {
               toast.success("Chofer interno ya seleccionado");
               return;
@@ -2415,11 +2425,8 @@ export function TransportPanel({
           }}
           onExternal={() => {
             setShowTransportChoice(false);
-            const targetTrip =
-              selectedTrip;
-            setExternalTrip(
-              targetTrip ?? null,
-            );
+            const targetTrip = selectedTrip;
+            setExternalTrip(targetTrip ?? null);
           }}
         />
       )}
@@ -2427,6 +2434,7 @@ export function TransportPanel({
         <ExternalTransportSheet
           serviceId={service.id}
           trip={externalTrip ?? undefined}
+          tripType={externalTrip?.tipo ?? selectedTripType}
           onClose={() => setExternalTrip(undefined)}
           onSaved={onRefresh}
         />
@@ -2435,11 +2443,13 @@ export function TransportPanel({
   );
 }
 
-function TransportChoiceSheet({
+export function TransportChoiceSheet({
+  tripType,
   onClose,
   onInternal,
   onExternal,
 }: {
+  tripType: Trip["tipo"];
   onClose: () => void;
   onInternal: () => Promise<void>;
   onExternal: () => void;
@@ -2464,6 +2474,9 @@ function TransportChoiceSheet({
             <h2 className="mt-1 font-heading text-2xl text-white">
               Asignar transporte
             </h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              {transportChoicePrompt(tripType)}
+            </p>
           </div>
           <button
             type="button"
@@ -2489,7 +2502,7 @@ function TransportChoiceSheet({
             onClick={onExternal}
             className="min-h-14 rounded-xl border border-[#C5A55A] px-4 text-sm font-bold uppercase tracking-wider text-[#E8D5A3] disabled:opacity-50"
           >
-            Transporte externo
+            Uber / DiDi
           </button>
         </div>
       </section>
@@ -2542,6 +2555,20 @@ function TripCard({
   const externalAssigned = Boolean(
     trip.externalPlatform && trip.externalSharedLink && Number(trip.tarifa) > 0,
   );
+  const internalSearching =
+    trip.proveedorTransporte === "interno" &&
+    trip.estado === "notificado";
+  const internalAssigned =
+    trip.proveedorTransporte === "interno" &&
+    trip.estado !== "notificado" &&
+    Boolean(trip.choferId);
+  const vehicle = [
+    trip.chofer?.vehiculoMarca,
+    trip.chofer?.vehiculoModelo,
+    trip.chofer?.vehiculoColor,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <article className="overflow-hidden rounded-xl border border-zinc-800 bg-black">
@@ -2562,7 +2589,31 @@ function TripCard({
         </span>
       </header>
       <div className="space-y-4 p-4">
-        {externalAssigned ? (
+        {internalAssigned ? (
+          <div className="rounded-xl border border-emerald-500/35 bg-emerald-500/5 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+              Chofer asignado
+            </p>
+            <p className="mt-1 text-lg font-semibold text-white">
+              {trip.chofer?.nombre ?? "Chofer interno"}
+            </p>
+            {vehicle && <p className="mt-1 text-sm text-zinc-300">{vehicle}</p>}
+            {trip.chofer?.vehiculoPlaca && (
+              <p className="mt-1 text-xs uppercase tracking-wider text-zinc-500">
+                Placas {trip.chofer.vehiculoPlaca}
+              </p>
+            )}
+          </div>
+        ) : internalSearching ? (
+          <div className="rounded-xl border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-4">
+            <p className="text-sm font-semibold text-[#E8D5A3]">
+              Buscando chofer...
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              Viaje enviado a los choferes disponibles.
+            </p>
+          </div>
+        ) : externalAssigned ? (
           <div className="rounded-xl border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-4">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#C5A55A]">
               Transporte de {trip.tipo}

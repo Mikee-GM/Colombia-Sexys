@@ -288,6 +288,69 @@ describe('ServicesService transport settlement', () => {
     expect(viajesRepository.update).not.toHaveBeenCalled();
   });
 
+  it('crea y despacha un viaje interno de ida cuando todavía no existe', async () => {
+    const serviceRow = {
+      id: 'service',
+      jefeId: 'boss',
+      empleadaId: 'employee',
+      operationalState: 'esperando_transporte_ida',
+      customerTransportCharge: 200,
+    };
+    const serviceRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        setLock: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(serviceRow),
+      })),
+    };
+    const manager = {
+      getRepository: jest.fn(() => serviceRepository),
+      findOneBy: jest
+        .fn()
+        .mockResolvedValueOnce({ id: 'boss', rol: 'jefe' })
+        .mockResolvedValueOnce({
+          id: 'employee',
+          jefeId: 'boss',
+          jefeSecundarioId: null,
+        }),
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((_entity, value) => ({
+        ...value,
+        id: 'internal-trip',
+      })),
+      save: jest.fn((_entity, value) => value),
+    };
+    (serviciosRepository as any).manager = {
+      transaction: jest.fn((callback) => callback(manager)),
+    };
+    const dispatch = jest
+      .spyOn(service as any, 'dispatchViaje')
+      .mockResolvedValue(undefined);
+
+    const result = await service.assignInternalTransport('service', 'boss');
+
+    expect(result.id).toBe('internal-trip');
+    expect(manager.save).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tipo: 'ida',
+        proveedorTransporte: 'interno',
+        estado: 'notificado',
+        choferId: null,
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledWith('internal-trip');
+    expect(realtime.emitToBoss).toHaveBeenCalledWith(
+      'boss',
+      expect.objectContaining({ type: 'internal_transport_selected' }),
+    );
+    expect(realtime.emitToEmployee).toHaveBeenCalledWith(
+      'employee',
+      expect.objectContaining({ type: 'internal_transport_selected' }),
+    );
+    dispatch.mockRestore();
+  });
+
   it('registra plataforma, enlace y costo externo sin finalizar el viaje', async () => {
     const serviceRow = {
       id: 'service',

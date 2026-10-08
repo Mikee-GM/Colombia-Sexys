@@ -392,7 +392,7 @@ describe('DriverTripsService.finalizarViaje', () => {
 
 describe('DriverTripsService.aceptarOferta', () => {
   it('toma la oferta y deja al chofer ocupado', async () => {
-    const { service, managerUpdate, markTransportAssigned } = montar(
+    const { service, managerUpdate, markTransportAssigned, realtime } = montar(
       viaje({ estado: 'notificado' }),
       1,
     );
@@ -410,6 +410,14 @@ describe('DriverTripsService.aceptarOferta', () => {
       'servicio-1',
       undefined,
       'chofer',
+    );
+    expect(realtime.emitToBoss).toHaveBeenCalledWith(
+      'jefe-1',
+      expect.objectContaining({ type: 'trip_accepted' }),
+    );
+    expect(realtime.emitToEmployee).toHaveBeenCalledWith(
+      'empleada-1',
+      expect.objectContaining({ type: 'trip_accepted' }),
     );
   });
 
