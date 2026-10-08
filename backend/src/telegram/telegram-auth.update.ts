@@ -149,7 +149,7 @@ export class TelegramAuthUpdate {
         if (employee) {
           const continuation =
             activeDraft.status === 'READY'
-              ? `Ya tengo tu solicitud completa con ${employee.nombreArtistico}. El jefe la está revisando y te confirmo apenas la acepte.`
+              ? `Tu solicitud con ${employee.nombreArtistico} está completa. Te confirmaré en cuanto quede coordinada.`
               : `Claro, seguimos con ${employee.nombreArtistico}. Continuemos desde donde quedamos.`;
           await ctx.reply(continuation);
           return;

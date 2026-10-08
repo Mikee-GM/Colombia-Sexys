@@ -10,6 +10,8 @@ import {
   conversationsForEmployee,
   filterConversations,
   groupConversationsByEmployee,
+  canAssignTransport,
+  canBossAuthorizeService,
   markConversationRead,
   mergeRealtimeMessage,
   presentServiceState,
@@ -381,5 +383,33 @@ describe("modelo puro de Hoy", () => {
 
     expect(human[0].mode).toBe("HUMAN_ACTIVE");
     expect(human[0].service).toBeNull();
+  });
+
+  it("no muestra autorización para un servicio que espera a la empleada", () => {
+    const waiting = service({
+      estado: "pendiente",
+      operationalState: "esperando_aceptacion_empleada",
+    });
+
+    expect(canBossAuthorizeService(waiting)).toBe(false);
+    expect(canAssignTransport(waiting)).toBe(false);
+  });
+
+  it("expone asignar transporte cuando la empleada ya aceptó", () => {
+    const waiting = service({
+      estado: "pendiente",
+      operationalState: "esperando_transporte_ida",
+    });
+
+    expect(canBossAuthorizeService(waiting)).toBe(false);
+    expect(canAssignTransport(waiting)).toBe(true);
+  });
+
+  it("mantiene autorización para estados previos al envío", () => {
+    expect(
+      canBossAuthorizeService(
+        service({ operationalState: "preparado", estado: "pendiente" }),
+      ),
+    ).toBe(true);
   });
 });

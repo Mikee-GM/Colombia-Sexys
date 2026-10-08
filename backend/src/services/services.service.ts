@@ -1892,6 +1892,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     tipoTransporte: 'chofer' | 'uber' = 'chofer',
     bossNotes?: string,
     habitacion?: string,
+    rejectAlreadyOffered = false,
   ): Promise<
     Servicios & {
       uberLink?: string;
@@ -1936,7 +1937,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
 
     const current = this.serviceOperations.currentState(servicio);
-    if (current === 'esperando_aceptacion_empleada') return servicio;
+    if (current === 'esperando_aceptacion_empleada') {
+      if (rejectAlreadyOffered) {
+        throw new ConflictException(
+          'El servicio ya fue enviado a la empleada y espera su respuesta',
+        );
+      }
+      return servicio;
+    }
 
     const actionsByState: Partial<
       Record<typeof current, ServiceOperationAction[]>

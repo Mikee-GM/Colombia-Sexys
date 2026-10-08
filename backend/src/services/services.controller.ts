@@ -341,6 +341,8 @@ export class ServicesController {
       jefeId,
       dto.transportType,
       dto.bossNotes,
+      undefined,
+      true,
     );
   }
 

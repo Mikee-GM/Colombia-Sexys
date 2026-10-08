@@ -126,6 +126,24 @@ describe('flujo de aceptación de la empleada', () => {
     expect(transitionMany).not.toHaveBeenCalled();
   });
 
+  it('rechaza el endpoint legado de autorización cuando ya fue enviado', async () => {
+    const row = pendingService({
+      operationalState: 'esperando_aceptacion_empleada',
+    });
+    const { service } = setup(row);
+
+    await expect(
+      service.ofrecerAEmpleada(
+        'service-1',
+        'boss-1',
+        'chofer',
+        undefined,
+        undefined,
+        true,
+      ),
+    ).rejects.toThrow(/ya fue enviado a la empleada/);
+  });
+
   it('acepta desde el portal y solo entonces activa el flujo heredado', async () => {
     const row = pendingService({
       operationalState: 'esperando_aceptacion_empleada',

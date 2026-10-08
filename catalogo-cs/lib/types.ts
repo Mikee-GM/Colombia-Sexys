@@ -424,6 +424,7 @@ export type PreServiceConversation = {
     serviceId: string | null;
     version: number;
     bookingData: PreServiceConversation["bookingData"];
+    bossNotes?: string | null;
     room: string | null;
     metadata: Record<string, unknown>;
     updatedAt: string;
