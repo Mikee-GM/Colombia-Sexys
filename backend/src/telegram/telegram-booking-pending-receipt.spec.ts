@@ -222,6 +222,62 @@ describe('TelegramBookingUpdate.applyDraftPaymentMethod con reserva ya cerrada',
   });
 });
 
+describe('TelegramBookingUpdate.onReceiptAutorizar para borradores READY', () => {
+  it('confirma el comprobante al cliente sin revelar aprobacion interna', async () => {
+    const update: any = Object.create(TelegramBookingUpdate.prototype);
+    update.onReceiptAutorizar = (
+      TelegramBookingUpdate.prototype as any
+    ).onReceiptAutorizar;
+    update.callbackGuard = { esRepetido: jest.fn().mockResolvedValue(false) };
+    update.usuariosRepository = {
+      findOne: jest.fn().mockResolvedValue({ id: 'boss-1', rol: 'jefe' }),
+    };
+    update.paymentReceiptValidationsRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'receipt-1',
+        estado: 'PENDIENTE_REVISION',
+        chatId: 'customer-1',
+        draftPayload: {
+          clientId: 'client-1',
+          empleadaId: 'employee-1',
+          duracionPactadaHoras: 1,
+          metodoPago: 'transferencia',
+          locationLat: '20.5',
+          locationLng: '-100.4',
+          locationNotas: 'Lugar',
+          telegramId: 'customer-1',
+          reserva: { bookingSessionId: 'draft-1' },
+        },
+      }),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    update.clientesRepository = {
+      findOne: jest.fn().mockResolvedValue({ id: 'client-1' }),
+    };
+    update.empleadasRepository = {
+      findOne: jest.fn().mockResolvedValue({ id: 'employee-1' }),
+    };
+    update.telegramConversationsService = {
+      markBookingDraftReady: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const ctx: any = {
+      from: { id: 99 },
+      match: ['receipt_autorizar:receipt-1:1', 'receipt-1', '1'],
+      answerCbQuery: jest.fn().mockResolvedValue(undefined),
+      editMessageReplyMarkup: jest.fn().mockResolvedValue(undefined),
+      telegram: { sendMessage: jest.fn().mockResolvedValue(undefined) },
+    };
+
+    await update.onReceiptAutorizar(ctx);
+
+    expect(ctx.telegram.sendMessage).toHaveBeenCalledWith(
+      'customer-1',
+      expect.not.stringMatching(/jefe|aprueba|aceptar la reserva/i),
+    );
+  });
+});
+
 /**
  * Cuando la foto llega, se engancha al servicio que ya existe. Crear otro
  * dejaria al cliente con dos reservas y a la empleada doblemente apartada.

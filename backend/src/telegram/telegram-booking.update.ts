@@ -7279,7 +7279,7 @@ export class TelegramBookingUpdate {
         await ctx.telegram
           .sendMessage(
             validation.chatId,
-            'Comprobante recibido. El jefe ya puede revisar y aceptar la reserva.',
+            'Comprobante recibido. Ya tengo todo para coordinar tu solicitud; te confirmaré por aquí.',
           )
           .catch(() => undefined);
       }
