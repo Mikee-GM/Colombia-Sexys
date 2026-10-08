@@ -32,6 +32,8 @@ type PreServiceBookingData = {
   locationNotes: string | null;
   locationLat: number | null;
   locationLng: number | null;
+  manualLocationConfirmed: boolean;
+  presetLocationId: string | null;
   placeType: string | null;
   room: string | null;
   scheduleType: string | null;
@@ -93,6 +95,7 @@ export class TelegramConversationsService {
         status: this.draftStatus(session),
         durationHours: this.numberValue(session.duracionPactadaHoras),
         openEndedDuration: session.duracionIndefinida === true,
+        manualLocationConfirmed: session.manualLocationConfirmed === true,
         placeType: session.presetLocationId ? 'preset' : 'external',
         presetLocationId: this.stringValue(session.presetLocationId),
         locationName: this.stringValue(session.locationNameSnapshot),
@@ -153,6 +156,7 @@ export class TelegramConversationsService {
         status: this.draftStatus(session),
         durationHours: this.numberValue(session.duracionPactadaHoras),
         openEndedDuration: session.duracionIndefinida === true,
+        manualLocationConfirmed: session.manualLocationConfirmed === true,
         placeType: session.presetLocationId ? 'preset' : 'external',
         presetLocationId: this.stringValue(session.presetLocationId),
         locationName: this.stringValue(session.locationNameSnapshot),
@@ -225,6 +229,9 @@ export class TelegramConversationsService {
   ) {
     const draft = await this.getBookingDraft(bookingSessionId);
     if (draft.serviceId) return this.serializeDraft(draft);
+    if (!this.isValidDraftLocation(draft)) {
+      throw new BadRequestException('Falta una ubicaciÃ³n vÃ¡lida');
+    }
     draft.status = 'READY';
     draft.currentRequirement = null;
     draft.version += 1;
@@ -253,6 +260,7 @@ export class TelegramConversationsService {
     session.locationNotas = draft.locationNotes;
     session.locationLat = draft.locationLat?.toString();
     session.locationLng = draft.locationLng?.toString();
+    session.manualLocationConfirmed = draft.manualLocationConfirmed;
     session.metodoPago = draft.paymentMethod ?? undefined;
     session.tipoAgenda = draft.scheduleType;
     session.fechaProgramada = draft.scheduledAt?.toISOString();
@@ -325,6 +333,9 @@ export class TelegramConversationsService {
       ...(patch.locationLng !== undefined && {
         locationLng: patch.locationLng,
       }),
+      ...(patch.manualLocationConfirmed !== undefined && {
+        manualLocationConfirmed: patch.manualLocationConfirmed,
+      }),
       ...(patch.room !== undefined && { room: patch.room }),
       ...(patch.paymentMethod !== undefined && {
         paymentMethod: patch.paymentMethod,
@@ -335,27 +346,34 @@ export class TelegramConversationsService {
       ...(patch.scheduledAt !== undefined && {
         scheduledAt: new Date(patch.scheduledAt),
       }),
+      mode: 'HUMAN_ACTIVE',
+      version: draft.version + 1,
+      updatedAt: new Date(),
+      lastInteractionAt: new Date(),
+    });
+    if (draft.manualLocationConfirmed && !this.hasManualLocationText(draft)) {
+      throw new BadRequestException(
+        'Confirma una direcciÃ³n o lugar antes de usarlo sin pin',
+      );
+    }
+    const locationReady = this.isValidDraftLocation(draft);
+    Object.assign(draft, {
       status:
         draft.intendedEmployeeId &&
         (draft.durationHours || draft.openEndedDuration) &&
         draft.paymentMethod &&
-        draft.locationLat != null &&
-        draft.locationLng != null
+        locationReady
           ? 'READY'
           : 'COLLECTING',
       currentRequirement: !draft.intendedEmployeeId
         ? 'employee'
         : !(draft.durationHours || draft.openEndedDuration)
           ? 'AWAITING_DURATION'
-          : draft.locationLat == null || draft.locationLng == null
+          : !locationReady
             ? 'AWAITING_LOCATION'
             : !draft.paymentMethod
               ? 'AWAITING_PAYMENT_METHOD'
               : null,
-      mode: 'HUMAN_ACTIVE',
-      version: draft.version + 1,
-      updatedAt: new Date(),
-      lastInteractionAt: new Date(),
     });
     const saved = await this.bookingDraftRepository.save(draft);
     if (patch.intendedEmployeeId) {
@@ -402,8 +420,7 @@ export class TelegramConversationsService {
       !draft.intendedEmployeeId ||
       (!draft.durationHours && !draft.openEndedDuration) ||
       !draft.paymentMethod ||
-      draft.locationLat == null ||
-      draft.locationLng == null
+      !this.isValidDraftLocation(draft)
     ) {
       throw new BadRequestException('El borrador todavía está incompleto');
     }
@@ -548,6 +565,7 @@ export class TelegramConversationsService {
       locationNotas: draft.locationNotes,
       locationLat: draft.locationLat?.toString(),
       locationLng: draft.locationLng?.toString(),
+      manualLocationConfirmed: draft.manualLocationConfirmed,
       room: draft.room,
       metodoPago: draft.paymentMethod,
       tipoAgenda: draft.scheduleType,
@@ -1213,6 +1231,8 @@ export class TelegramConversationsService {
       locationNotes: this.stringValue(data.locationNotas),
       locationLat: this.finiteNumberValue(data.locationLat),
       locationLng: this.finiteNumberValue(data.locationLng),
+      manualLocationConfirmed: data.manualLocationConfirmed === true,
+      presetLocationId: this.stringValue(data.presetLocationId),
       placeType: data.presetLocationId ? 'preset' : 'external',
       room: this.stringValue(data.room),
       scheduleType: this.stringValue(data.tipoAgenda),
@@ -1235,6 +1255,8 @@ export class TelegramConversationsService {
       locationNotes: draft.locationNotes,
       locationLat: draft.locationLat,
       locationLng: draft.locationLng,
+      manualLocationConfirmed: draft.manualLocationConfirmed,
+      presetLocationId: draft.presetLocationId,
       placeType: draft.placeType,
       room: draft.room,
       scheduleType: draft.scheduleType,
@@ -1275,8 +1297,52 @@ export class TelegramConversationsService {
     ) {
       return 'SERVICE_CREATED';
     }
-    if (session.bookingStatus === 'READY') return 'READY';
+    if (
+      session.bookingStatus === 'READY' &&
+      this.isValidSessionLocation(session)
+    ) {
+      return 'READY';
+    }
     return 'COLLECTING';
+  }
+
+  private hasManualLocationText(
+    draft: Pick<
+      CustomerBookingSession,
+      'presetLocationId' | 'locationName' | 'locationAddress'
+    >,
+  ): boolean {
+    return Boolean(
+      draft.presetLocationId ||
+      draft.locationName?.trim() ||
+      draft.locationAddress?.trim(),
+    );
+  }
+
+  private isValidDraftLocation(draft: CustomerBookingSession): boolean {
+    const hasGps = draft.locationLat != null && draft.locationLng != null;
+    const hasManualLocation =
+      draft.mode === 'HUMAN_ACTIVE' &&
+      draft.manualLocationConfirmed &&
+      this.hasManualLocationText(draft);
+    return hasGps || hasManualLocation;
+  }
+
+  private isValidSessionLocation(session: Record<string, unknown>): boolean {
+    const hasGps =
+      this.finiteNumberValue(session.locationLat) != null &&
+      this.finiteNumberValue(session.locationLng) != null;
+    const hasManualText = Boolean(
+      this.stringValue(session.presetLocationId) ||
+      this.stringValue(session.locationNameSnapshot)?.trim() ||
+      this.stringValue(session.locationAddressSnapshot)?.trim(),
+    );
+    const isHuman =
+      session.iaActiva === false || session.humanTakeover === true;
+    return (
+      hasGps ||
+      (isHuman && session.manualLocationConfirmed === true && hasManualText)
+    );
   }
 
   private stringValue(value: unknown): string | null {
@@ -1289,6 +1355,7 @@ export class TelegramConversationsService {
   }
 
   private finiteNumberValue(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null;
     const number = typeof value === 'number' ? value : Number(value);
     return Number.isFinite(number) ? number : null;
   }

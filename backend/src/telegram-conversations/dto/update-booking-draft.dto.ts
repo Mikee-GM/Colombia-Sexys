@@ -55,11 +55,15 @@ export class UpdateBookingDraftDto {
 
   @IsOptional()
   @IsNumber()
-  locationLat?: number;
+  locationLat?: number | null;
 
   @IsOptional()
   @IsNumber()
-  locationLng?: number;
+  locationLng?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  manualLocationConfirmed?: boolean;
 
   @IsOptional()
   @IsString()

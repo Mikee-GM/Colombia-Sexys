@@ -236,8 +236,16 @@ export default function ChatMonitorServiceForm({
         <ServiceLocationDialog
           serviceId={service.id}
           ubicacionActual={ubicacionTexto}
-          latitudActual={Number(service.ubicacionClienteLat)}
-          longitudActual={Number(service.ubicacionClienteLng)}
+          latitudActual={
+            service.ubicacionClienteLat != null
+              ? Number(service.ubicacionClienteLat)
+              : null
+          }
+          longitudActual={
+            service.ubicacionClienteLng != null
+              ? Number(service.ubicacionClienteLng)
+              : null
+          }
           presetLocationIdActual={service.presetLocationId ?? null}
           onClose={() => setIsLocationOpen(false)}
           onChanged={() => {

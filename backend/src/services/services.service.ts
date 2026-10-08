@@ -380,6 +380,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   }
 
   private travelMinutes(from: Servicios, to: Servicios): number {
+    if (
+      from.ubicacionClienteLat == null ||
+      from.ubicacionClienteLng == null ||
+      to.ubicacionClienteLat == null ||
+      to.ubicacionClienteLng == null
+    ) {
+      // A manually confirmed textual address has no routeable point yet. Do
+      // not turn NULL into 0,0 or invent a distance; scheduling can continue
+      // and transport can be completed once a pin is available.
+      return 0;
+    }
     const speed = Math.max(
       1,
       this.configService.get<number>('SCHEDULE_TRAVEL_SPEED_KMH') ?? 25,
@@ -4037,8 +4048,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       searchLng = employeeLng;
     } else {
       if (
-        !viaje.servicio?.ubicacionClienteLat ||
-        !viaje.servicio?.ubicacionClienteLng
+        viaje.servicio?.ubicacionClienteLat == null ||
+        viaje.servicio?.ubicacionClienteLng == null
       ) {
         this.logger.error(
           `[dispatchViaje] Ubicación de cliente faltante para viaje de regreso ${viajeId}.`,
@@ -6069,8 +6080,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   private buildUberLink(servicio: Servicios): string {
     let link = `https://m.uber.com/ul/?action=setPickup`;
     const employee = servicio.empleada;
-    link += `&dropoff[latitude]=${employee?.ubicacionLat}&dropoff[longitude]=${employee?.ubicacionLng}&dropoff[nickname]=Casa`;
-    link += `&pickup[latitude]=${servicio.ubicacionClienteLat}&pickup[longitude]=${servicio.ubicacionClienteLng}&pickup[nickname]=Recoger%20Empleada`;
+    if (employee?.ubicacionLat != null && employee.ubicacionLng != null) {
+      link += `&dropoff[latitude]=${employee.ubicacionLat}&dropoff[longitude]=${employee.ubicacionLng}&dropoff[nickname]=Casa`;
+    }
+    if (
+      servicio.ubicacionClienteLat != null &&
+      servicio.ubicacionClienteLng != null
+    ) {
+      link += `&pickup[latitude]=${servicio.ubicacionClienteLat}&pickup[longitude]=${servicio.ubicacionClienteLng}&pickup[nickname]=Recoger%20Empleada`;
+    } else {
+      link += '&pickup=my_location';
+    }
     return link;
   }
 
@@ -6201,12 +6221,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       : servicio.empleada?.ubicacionLng;
 
     let url = 'https://m.uber.com/ul/?action=setPickup';
-    if (pickupLat && pickupLng) {
+    if (pickupLat != null && pickupLng != null) {
       url += `&pickup[latitude]=${pickupLat}&pickup[longitude]=${pickupLng}`;
     } else {
       url += '&pickup=my_location';
     }
-    if (dropoffLat && dropoffLng) {
+    if (dropoffLat != null && dropoffLng != null) {
       url += `&dropoff[latitude]=${dropoffLat}&dropoff[longitude]=${dropoffLng}`;
     }
     return url;

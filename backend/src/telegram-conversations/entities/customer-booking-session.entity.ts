@@ -44,6 +44,12 @@ export class CustomerBookingSession {
   @Column('boolean', { name: 'open_ended_duration', default: false })
   openEndedDuration: boolean;
 
+  @Column('boolean', {
+    name: 'manual_location_confirmed',
+    default: false,
+  })
+  manualLocationConfirmed: boolean;
+
   @Column('varchar', { name: 'place_type', length: 24, nullable: true })
   placeType: 'preset' | 'external' | null;
 

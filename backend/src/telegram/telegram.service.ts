@@ -212,7 +212,7 @@ export class TelegramService implements OnModuleInit {
       : `${servicio.duracionPactadaHoras} hora(s)`;
     const lugar =
       servicio.locationNameSnapshot ||
-      (servicio.ubicacionClienteLat
+      (servicio.ubicacionClienteLat != null
         ? 'Ubicacion enviada por el cliente'
         : 'Sin definir');
     const cita = servicio.fechaProgramada

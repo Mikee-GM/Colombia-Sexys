@@ -837,7 +837,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     let clientLocationText = 'No registrada';
     const inlineButtons: any[][] = [];
 
-    if (clientLat && clientLng) {
+    if (clientLat != null && clientLng != null) {
       clientLocationText = `[Ver en Google Maps](https://www.google.com/maps/search/?api=1&query=${clientLat},${clientLng})`;
       inlineButtons.push([
         Markup.button.url(
@@ -1196,7 +1196,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     const clientLng = trip.servicio.ubicacionClienteLng;
     const inlineButtons: any[][] = [];
 
-    if (clientLat && clientLng) {
+    if (clientLat != null && clientLng != null) {
       inlineButtons.push([
         Markup.button.url(
           '🗺️ Google Maps',

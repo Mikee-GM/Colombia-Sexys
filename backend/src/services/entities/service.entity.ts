@@ -146,7 +146,7 @@ export class Servicios {
     transformer: new ColumnNumericTransformer(),
   })
   @ApiProperty({ description: 'Ubicacion Cliente Lat', example: 19.432608 })
-  ubicacionClienteLat: number;
+  ubicacionClienteLat: number | null;
 
   @Column('numeric', {
     name: 'ubicacion_cliente_lng',
@@ -155,7 +155,7 @@ export class Servicios {
     transformer: new ColumnNumericTransformer(),
   })
   @ApiProperty({ description: 'Ubicacion Cliente Lng', example: -99.133209 })
-  ubicacionClienteLng: number;
+  ubicacionClienteLng: number | null;
 
   @Column('numeric', {
     name: 'precio_base_hora_pactado',

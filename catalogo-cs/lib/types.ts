@@ -151,8 +151,8 @@ export type Service = {
   comprobantePendiente?: boolean;
   duracionPactadaHoras: string;
   duracionFinalHoras: string | null;
-  ubicacionClienteLat: string;
-  ubicacionClienteLng: string;
+  ubicacionClienteLat: string | null;
+  ubicacionClienteLng: string | null;
   precioBaseHoraPactado: string;
   totalBase: string;
   totalExtras: string;
@@ -404,8 +404,10 @@ export type PreServiceConversation = {
     locationName: string | null;
     locationAddress: string | null;
     locationNotes: string | null;
+    presetLocationId?: string | null;
     locationLat?: number | null;
     locationLng?: number | null;
+    manualLocationConfirmed?: boolean;
     placeType?: string | null;
     room?: string | null;
     scheduleType?: string | null;

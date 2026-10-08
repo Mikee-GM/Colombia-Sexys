@@ -62,15 +62,15 @@ export class CreateServiceDto {
   @IsBoolean()
   duracionIndefinida?: boolean;
 
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
   @IsNumber()
-  ubicacionClienteLat: number;
+  ubicacionClienteLat?: number | null;
 
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
   @IsNumber()
-  ubicacionClienteLng: number;
+  ubicacionClienteLng?: number | null;
 
   @ApiProperty()
   @IsNotEmpty()

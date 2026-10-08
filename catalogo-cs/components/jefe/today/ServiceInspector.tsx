@@ -79,15 +79,16 @@ export default function ServiceInspector({
   const [pending, startTransition] = useTransition();
   const draftDirtyRef = useRef(false);
   const draftSessionRef = useRef<string | null>(null);
-  const draft = conversation?.bookingDraft;
   const [draftForm, setDraftForm] = useState({
     employeeId: "",
     durationHours: "",
     locationName: "",
     locationAddress: "",
     locationNotes: "",
+    presetLocationId: "",
     locationLat: "",
     locationLng: "",
+    manualLocationConfirmed: false,
     paymentMethod: "",
     bossNotes: "",
   });
@@ -110,10 +111,12 @@ export default function ServiceInspector({
       locationName: booking?.locationName ?? "",
       locationAddress: booking?.locationAddress ?? "",
       locationNotes: booking?.locationNotes ?? "",
+      presetLocationId: booking?.presetLocationId ?? "",
       locationLat:
         booking?.locationLat != null ? String(booking.locationLat) : "",
       locationLng:
         booking?.locationLng != null ? String(booking.locationLng) : "",
+      manualLocationConfirmed: booking?.manualLocationConfirmed === true,
       paymentMethod: booking?.paymentMethod ?? "",
       bossNotes: conversation.bookingDraft?.bossNotes ?? "",
     });
@@ -143,13 +146,19 @@ export default function ServiceInspector({
       booking?.locationNotes ??
       null;
     const editable = conversation.mode === "HUMAN_ACTIVE";
-    const draftReady =
-      draft?.status === "READY" || booking?.status === "READY";
+    const hasManualLocationText = Boolean(
+      draftForm.presetLocationId.trim() ||
+        draftForm.locationName.trim() ||
+        draftForm.locationAddress.trim(),
+    );
+    const hasValidLocation = Boolean(
+      (draftForm.locationLat.trim() && draftForm.locationLng.trim()) ||
+        (draftForm.manualLocationConfirmed && hasManualLocationText),
+    );
     const formComplete = Boolean(
       draftForm.employeeId &&
         draftForm.durationHours &&
-        draftForm.locationLat &&
-        draftForm.locationLng &&
+        hasValidLocation &&
         draftForm.paymentMethod,
     );
     const updateDraftField = <K extends keyof typeof draftForm>(
@@ -164,16 +173,18 @@ export default function ServiceInspector({
       durationHours: draftForm.durationHours
         ? Number(draftForm.durationHours)
         : undefined,
-      locationName: draftForm.locationName || undefined,
-      locationAddress: draftForm.locationAddress || undefined,
-      locationNotes: draftForm.locationNotes || undefined,
+      presetLocationId: draftForm.presetLocationId || null,
+      locationName: draftForm.locationName || null,
+      locationAddress: draftForm.locationAddress || null,
+      locationNotes: draftForm.locationNotes || null,
       bossNotes: draftForm.bossNotes || undefined,
       locationLat: draftForm.locationLat
         ? Number(draftForm.locationLat)
-        : undefined,
+        : null,
       locationLng: draftForm.locationLng
         ? Number(draftForm.locationLng)
-        : undefined,
+        : null,
+      manualLocationConfirmed: draftForm.manualLocationConfirmed,
       paymentMethod: draftForm.paymentMethod || undefined,
     });
     const saveDraft = () => {
@@ -323,10 +334,9 @@ export default function ServiceInspector({
                 {[
                   draftForm.employeeId,
                   draftForm.durationHours,
-                  draftForm.locationName || draftForm.locationAddress,
-                  draftForm.locationLat && draftForm.locationLng,
+                  hasValidLocation,
                   draftForm.paymentMethod,
-                ].filter(Boolean).length}/5 completos
+                ].filter(Boolean).length}/4 completos
               </span>
             </div>
             {editable && (
@@ -335,7 +345,11 @@ export default function ServiceInspector({
               </p>
             )}
             <p className="rounded border border-zinc-800 bg-black/60 px-2.5 py-2 text-xs text-zinc-400">
-              Ubicación {draftForm.locationLat && draftForm.locationLng ? "✓ Recibida" : "• Falta"}
+              Ubicación {draftForm.locationLat && draftForm.locationLng
+                ? "✓ Recibida"
+                : draftForm.manualLocationConfirmed && hasManualLocationText
+                  ? "✓ Dirección confirmada manualmente"
+                  : "• Falta"}
             </p>
             <label className="block text-xs text-zinc-500">
               Empleada
@@ -382,6 +396,25 @@ export default function ServiceInspector({
                 disabled={!editable}
                 className="mt-1 h-12 w-full rounded border border-zinc-700 bg-black px-2 text-sm text-white"
               />
+            </label>
+            <label className="flex cursor-pointer items-start gap-2 rounded border border-zinc-800 bg-black/40 px-2.5 py-2 text-xs text-zinc-300">
+              <input
+                type="checkbox"
+                checked={draftForm.manualLocationConfirmed}
+                onChange={(event) =>
+                  updateDraftField("manualLocationConfirmed", event.target.checked)
+                }
+                disabled={!editable || !hasManualLocationText}
+                className="mt-0.5 h-4 w-4 accent-[#C5A55A]"
+              />
+              <span>
+                Confirmar esta dirección sin pin
+                {!hasManualLocationText && (
+                  <span className="mt-1 block text-[10px] text-zinc-600">
+                    Escribe un lugar o dirección antes de confirmarla.
+                  </span>
+                )}
+              </span>
             </label>
             <label className="block text-xs text-zinc-500">
               Pago
@@ -452,7 +485,7 @@ export default function ServiceInspector({
               <button
                 type="button"
                 onClick={acceptDraft}
-                disabled={pending || !editable || !draftReady || !formComplete}
+                disabled={pending || !editable || !formComplete}
                 className="h-12 flex-1 rounded bg-[#C5A55A] px-3 text-xs font-bold text-black disabled:opacity-50"
               >
                 CONFIRMAR Y ENVIAR A EMPLEADA

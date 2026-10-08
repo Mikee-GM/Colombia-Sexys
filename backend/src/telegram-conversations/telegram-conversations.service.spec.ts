@@ -72,6 +72,68 @@ describe('TelegramConversationsService', () => {
     sessions.query.mockResolvedValue([]);
   });
 
+  it.each([
+    ['AI_ACTIVE without GPS is invalid', 'AI_ACTIVE', false, 'Hotel', false],
+    [
+      'manual text without confirmation is invalid',
+      'HUMAN_ACTIVE',
+      false,
+      'Hotel',
+      false,
+    ],
+    [
+      'manual text with confirmation is valid',
+      'HUMAN_ACTIVE',
+      true,
+      'Hotel',
+      true,
+    ],
+    [
+      'manual confirmation without text is invalid',
+      'HUMAN_ACTIVE',
+      true,
+      '',
+      false,
+    ],
+  ])('%s', (_label, mode, confirmed, locationName, expected) => {
+    expect(
+      (subject as any).isValidDraftLocation({
+        mode,
+        manualLocationConfirmed: confirmed,
+        presetLocationId: null,
+        locationName: locationName || null,
+        locationAddress: null,
+        locationLat: null,
+        locationLng: null,
+      }),
+    ).toBe(expected);
+  });
+
+  it('keeps the GPS path valid for a normal booking', () => {
+    expect(
+      (subject as any).isValidDraftLocation({
+        mode: 'AI_ACTIVE',
+        manualLocationConfirmed: false,
+        presetLocationId: null,
+        locationName: null,
+        locationAddress: null,
+        locationLat: 20.5,
+        locationLng: -100.4,
+      }),
+    ).toBe(true);
+  });
+
+  it('does not mark an AI booking READY without GPS', () => {
+    expect(
+      (subject as any).draftStatus({
+        bookingStatus: 'READY',
+        iaActiva: true,
+        locationLat: null,
+        locationLng: null,
+      }),
+    ).toBe('COLLECTING');
+  });
+
   it('makes accepting an already-created draft idempotent', async () => {
     const mutableSubject = subject as any;
     const draft = {
@@ -212,6 +274,87 @@ describe('TelegramConversationsService', () => {
     );
     expect(result).toEqual(
       expect.objectContaining({ idempotent: false, service }),
+    );
+  });
+
+  it('accepts a manually confirmed textual location and persists NULL coordinates', async () => {
+    const mutableSubject = subject as any;
+    const draft = {
+      id: 'booking-manual',
+      clientId: 'client-1',
+      intendedEmployeeId: 'employee-1',
+      ownerBossId: 'boss-1',
+      status: 'READY',
+      mode: 'HUMAN_ACTIVE',
+      manualLocationConfirmed: true,
+      serviceId: null,
+      version: 1,
+      metadata: {},
+      updatedAt: new Date(),
+      durationHours: 1,
+      openEndedDuration: false,
+      placeType: 'external',
+      presetLocationId: null,
+      locationName: 'Hotel Centro',
+      locationAddress: 'Calle 1 #2-3',
+      locationNotes: null,
+      locationLat: null,
+      locationLng: null,
+      room: null,
+      paymentMethod: 'efectivo',
+      scheduleType: 'inmediato',
+      scheduledAt: null,
+      currentRequirement: null,
+      lastInteractionAt: new Date(),
+      createdAt: new Date(),
+    } as any;
+    const service = {
+      id: 'service-manual',
+      bookingSessionId: 'booking-manual',
+    };
+    mutableSubject.bookingDraftRepository = {
+      findOne: jest.fn().mockResolvedValue(draft),
+      createQueryBuilder: jest.fn(() => ({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      })),
+      save: jest.fn().mockResolvedValue({ ...draft, serviceId: service.id }),
+      update: jest.fn(),
+    } as any;
+    mutableSubject.empleadasRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'employee-1',
+        jefeId: 'boss-1',
+        jefeSecundarioId: null,
+        precioBaseHora: 1200,
+      }),
+    } as any;
+    services.findOne.mockResolvedValue(null);
+    conversations.findOne.mockResolvedValue({
+      bookingSessionId: draft.id,
+      servicioId: null,
+      cliente: { telegramChatId: '123' },
+      intendedEmployee: { jefeId: 'boss-1' },
+    });
+    mutableSubject.servicesService = {
+      reserveNext: jest.fn().mockResolvedValue(service),
+      ofrecerAEmpleada: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await subject.acceptBookingDraft(draft.id, {
+      id: 'boss-1',
+      rol: 'jefe',
+    } as any);
+
+    expect(mutableSubject.servicesService.reserveNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ubicacionClienteLat: null,
+        ubicacionClienteLng: null,
+        locationNameSnapshot: 'Hotel Centro',
+        locationAddressSnapshot: 'Calle 1 #2-3',
+      }),
     );
   });
 
