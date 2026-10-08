@@ -96,6 +96,25 @@ describe('ServicesService transport settlement', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
+  it('does not calculate a route or coerce NULL coordinates to 0,0', () => {
+    expect(
+      (service as any).travelMinutes(
+        { ubicacionClienteLat: null, ubicacionClienteLng: null },
+        { ubicacionClienteLat: 20, ubicacionClienteLng: -100 },
+      ),
+    ).toBe(0);
+    const link = (service as any).buildUberLinkForTrip(
+      {
+        ubicacionClienteLat: null,
+        ubicacionClienteLng: null,
+        empleada: { ubicacionLat: 20, ubicacionLng: -100 },
+      },
+      'regreso',
+    );
+    expect(link).not.toContain('latitude]=null');
+    expect(link).not.toContain('longitude]=null');
+  });
+
   it('rechaza una tarifa inválida sin modificar el viaje', async () => {
     await expect(
       service.confirmUberFare('trip', 'boss', 0),
