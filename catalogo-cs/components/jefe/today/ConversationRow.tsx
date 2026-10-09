@@ -34,6 +34,9 @@ function scheduledTime(value: string | null | undefined) {
 }
 
 function operationSummary(conversation: JefeConversation) {
+  if (conversation.chatState === "FINALIZED_RECENT") {
+    return "Finalizado recientemente";
+  }
   const service = conversation.service;
   if (!service) return "Servicio todavía no creado";
   if (service.estado === "en_curso") {

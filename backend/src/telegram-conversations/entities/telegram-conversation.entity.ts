@@ -5,11 +5,21 @@ import { Servicios } from '../../services/entities/service.entity';
 import { GroupServiceRequest } from '../../group-services/entities/group-service-request.entity';
 import { Empleadas } from '../../employees/entities/employee.entity';
 
+export const TELEGRAM_DELETE_STATUSES = [
+  'PENDING',
+  'DELETED',
+  'FAILED_RETRYABLE',
+  'EXPIRED',
+  'NOT_DELETABLE',
+] as const;
+export type TelegramDeleteStatus = (typeof TELEGRAM_DELETE_STATUSES)[number];
+
 @Index('idx_conversaciones_cliente', ['clienteId'], {})
 @Index('idx_conversaciones_enviado_at', ['enviadoAt'], {})
 @Index('conversaciones_telegram_pkey', ['id'], { unique: true })
 @Index('idx_conversaciones_servicio', ['servicioId'], {})
 @Index('idx_conversaciones_intended_employee', ['intendedEmployeeId'], {})
+@Index('idx_conversaciones_telegram_delete_due', ['deleteStatus', 'deleteAt'])
 @Entity('conversaciones_telegram', { schema: 'public' })
 export class ConversacionesTelegram {
   @Column('uuid', {
@@ -39,6 +49,38 @@ export class ConversacionesTelegram {
 
   @Column('uuid', { name: 'booking_session_id', nullable: true })
   bookingSessionId: string | null;
+
+  @Column('bigint', { name: 'telegram_message_id', nullable: true })
+  telegramMessageId: string | null;
+
+  @Column('varchar', {
+    name: 'telegram_chat_id',
+    length: 64,
+    nullable: true,
+  })
+  telegramChatId: string | null;
+
+  @Column('timestamp with time zone', { name: 'delete_at', nullable: true })
+  deleteAt: Date | null;
+
+  @Column('varchar', {
+    name: 'delete_status',
+    length: 24,
+    nullable: true,
+  })
+  deleteStatus: TelegramDeleteStatus | null;
+
+  @Column('integer', { name: 'delete_attempts', default: 0 })
+  deleteAttempts: number;
+
+  @Column('text', { name: 'last_delete_error', nullable: true })
+  lastDeleteError: string | null;
+
+  @Column('timestamp with time zone', {
+    name: 'deleted_from_telegram_at',
+    nullable: true,
+  })
+  deletedFromTelegramAt: Date | null;
 
   @Column('uuid', { name: 'group_request_id', nullable: true })
   groupRequestId: string | null;

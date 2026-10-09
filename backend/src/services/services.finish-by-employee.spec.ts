@@ -161,6 +161,9 @@ describe('ServicesService.finishByEmployee', () => {
   it('cierra el servicio, libera a la modelo y pide el regreso', async () => {
     const servicio = enCurso();
     serviciosRepository.findOne.mockResolvedValue(servicio);
+    const sendPostServiceSurvey = jest
+      .spyOn(service as any, 'sendPostServiceSurvey')
+      .mockResolvedValue(undefined);
 
     const resultado = await service.finishByEmployee('srv-1', USUARIO);
 
@@ -175,6 +178,8 @@ describe('ServicesService.finishByEmployee', () => {
     );
     expect(resultado.horasFacturadas).toBeNull();
     expect(resultado.duracionFormatted).toContain('hora');
+    expect(sendPostServiceSurvey).toHaveBeenCalledTimes(1);
+    expect(sendPostServiceSurvey).toHaveBeenCalledWith('srv-1');
   });
 
   it('deja el corte abierto a la espera del transporte de regreso', async () => {

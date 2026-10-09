@@ -125,7 +125,7 @@ function preService(
 }
 
 describe("modelo puro de Hoy", () => {
-  it("separa cada servicio autorizado aunque pertenezca al mismo cliente", () => {
+  it("archiva en Hoy un servicio finalizado hace más de dos horas", () => {
     const older = service({ id: "service-older", estado: "finalizado" });
     const current = service({ id: "service-current", estado: "en_curso" });
     const conversations = buildJefeConversations([older, current], {
@@ -143,11 +143,37 @@ describe("modelo puro de Hoy", () => {
       ],
     });
 
-    expect(conversations).toHaveLength(2);
+    expect(conversations).toHaveLength(1);
     expect(conversations[0].service?.id).toBe("service-current");
     expect(conversations[0].messages.map((item) => item.id)).toEqual(["new"]);
-    expect(conversations[1].service?.id).toBe("service-older");
-    expect(conversations[1].messages.map((item) => item.id)).toEqual(["old"]);
+    expect(conversations[0].relatedServices.map((item) => item.id)).toContain(
+      "service-older",
+    );
+  });
+
+  it("mantiene un servicio finalizado en Hoy durante dos horas", () => {
+    const finishedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const recent = service({
+      id: "service-recent",
+      estado: "finalizado",
+      horaFinServicio: finishedAt,
+      updatedAt: finishedAt,
+    });
+    const conversations = buildJefeConversations(
+      [recent],
+      {
+        "service-recent": [
+          {
+            ...message("recent", "sistema", finishedAt),
+            servicioId: "service-recent",
+          },
+        ],
+      },
+      [],
+    );
+
+    expect(conversations).toHaveLength(1);
+    expect(conversations[0].chatState).toBe("FINALIZED_RECENT");
   });
 
   it("filtra por atencion y agrupa por empleada", () => {
@@ -183,7 +209,15 @@ describe("modelo puro de Hoy", () => {
 
   it("aplica un evento SSE solo a la operacion indicada", () => {
     const first = service({ id: "service-1", estado: "en_curso" });
-    const second = service({ id: "service-2", estado: "finalizado" });
+    const recentlyFinished = new Date(
+      Date.now() - 30 * 60 * 1000,
+    ).toISOString();
+    const second = service({
+      id: "service-2",
+      estado: "finalizado",
+      horaFinServicio: recentlyFinished,
+      updatedAt: recentlyFinished,
+    });
     const initial = buildJefeConversations([first, second], {
       "service-1": [message("m1", "ia", "2026-10-05T11:00:00.000Z")],
       "service-2": [

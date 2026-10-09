@@ -7,6 +7,7 @@ import type {
 } from "@/lib/types";
 
 export type TodayFilter = "all" | "unanswered" | "service" | "in_progress";
+export type ChatDisplayState = "ACTIVE" | "FINALIZED_RECENT" | "ARCHIVED";
 
 export type JefeConversation = {
   id: string;
@@ -26,6 +27,7 @@ export type JefeConversation = {
   mode: "AI_ACTIVE" | "HUMAN_ACTIVE";
   needsReply: boolean;
   unreadCount: number;
+  chatState: ChatDisplayState;
 };
 
 export type EmployeeTabId = string;
@@ -60,6 +62,7 @@ export type EmployeeConversationGroup = {
 };
 
 const ACTIVE_STATES = new Set(["pendiente", "agendado", "en_curso"]);
+const FINALIZED_RECENT_MS = 2 * 60 * 60 * 1000;
 const ATTENTION_OPERATION_STATES = new Set<ServiceOperationState>([
   "preparado",
   "esperando_aceptacion_empleada",
@@ -74,6 +77,20 @@ const BOSS_AUTHORIZATION_STATES = new Set<ServiceOperationState>([
 
 function servicePriority(service: Service): number {
   return ACTIVE_STATES.has(service.estado) ? 1 : 0;
+}
+
+export function chatDisplayState(
+  service: Service,
+  now = Date.now(),
+): ChatDisplayState {
+  if (ACTIVE_STATES.has(service.estado)) return "ACTIVE";
+  if (service.estado !== "finalizado") return "ARCHIVED";
+  const finishedAt = new Date(
+    service.horaFinServicio ?? service.updatedAt,
+  ).getTime();
+  return Number.isFinite(finishedAt) && now - finishedAt <= FINALIZED_RECENT_MS
+    ? "FINALIZED_RECENT"
+    : "ARCHIVED";
 }
 
 function compareServices(left: Service, right: Service): number {
@@ -115,6 +132,7 @@ export function buildJefeConversations(
   const serviceConversations = services
     .filter((service) => {
       if (!service.clienteId) return false;
+      if (chatDisplayState(service) === "ARCHIVED") return false;
       return (
         (messagesByService[service.id] ?? []).length > 0 ||
         ACTIVE_STATES.has(service.estado)
@@ -150,6 +168,7 @@ export function buildJefeConversations(
         mode: service.iaActiva ? "AI_ACTIVE" : "HUMAN_ACTIVE",
         needsReply: latest?.emisor === "cliente",
         unreadCount: 0,
+        chatState: chatDisplayState(service),
       } satisfies JefeConversation;
     });
 
@@ -186,6 +205,7 @@ export function buildJefeConversations(
           mode: conversation.mode,
           needsReply: conversation.needsReply,
           unreadCount: 0,
+          chatState: "ACTIVE",
         }) satisfies JefeConversation,
     );
 

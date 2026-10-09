@@ -10,6 +10,7 @@ import { TelegramModule } from '../telegram/telegram.module';
 import { CustomerBookingSession } from './entities/customer-booking-session.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { ServicesModule } from '../services/services.module';
+import { TelegramMessageDeletionScheduler } from './telegram-message-deletion.scheduler';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { ServicesModule } from '../services/services.module';
     forwardRef(() => ServicesModule),
   ],
   controllers: [TelegramConversationsController],
-  providers: [TelegramConversationsService],
+  providers: [TelegramConversationsService, TelegramMessageDeletionScheduler],
   exports: [TelegramConversationsService],
 })
 export class TelegramConversationsModule {}

@@ -719,6 +719,16 @@ export function esCuentaDeOficina(rol?: string | null): boolean {
   return rol === 'jefe' || rol === 'admin';
 }
 
+export function shouldResetClosedBookingOnMessage(
+  chatType: string | undefined,
+  bookingStatus: string | undefined,
+): boolean {
+  return (
+    chatType === 'private' &&
+    ['SERVICE_CREATED', 'CANCELLED', 'ABANDONED'].includes(bookingStatus ?? '')
+  );
+}
+
 export function detectGroupServiceIntent(
   text: string,
 ): 'grupal' | 'incierta' | 'individual' {
@@ -858,6 +868,10 @@ export function splitForTelegram(
 @Update()
 export class TelegramBookingUpdate {
   private readonly logger = new Logger(TelegramBookingUpdate.name);
+  private latestReplyMessage?: WeakMap<
+    object,
+    { messageId: number; chatId: string }
+  >;
   /**
    * Fallos seguidos de la IA antes de pasarle el chat al jefe.
    *
@@ -1255,7 +1269,7 @@ export class TelegramBookingUpdate {
     await this.persistSession(ctx);
     const message =
       'Listo amor, ya tengo todo. Dame un momentico y te confirmo por aquí.';
-    await ctx.reply(message);
+    await this.replyAndRemember(ctx, message);
     await this.registrarMensajeDelFlujo(ctx, message);
   }
 
@@ -1298,7 +1312,7 @@ export class TelegramBookingUpdate {
       if (session) session.step = 'AWAITING_PAYMENT_RECEIPT';
       const bankDetails = await this.servicesService.bankTransferDetails();
       const aviso = `*Cuentas disponibles para transferencia*\n\n${bankDetails}\n\nMándame una *FOTO* del comprobante cuando lo tengas.`;
-      await ctx.reply(aviso, { parse_mode: 'Markdown' });
+      await this.replyAndRemember(ctx, aviso, { parse_mode: 'Markdown' });
       await this.registrarMensajeDelFlujo(ctx, aviso);
       return true;
     }
@@ -1320,7 +1334,7 @@ export class TelegramBookingUpdate {
       session.servicioPendienteComprobanteId = undefined;
     }
     const aviso = `Listo mor, entonces quedamos en ${method}. Ya no me mandes comprobante.`;
-    await ctx.reply(aviso);
+    await this.replyAndRemember(ctx, aviso);
     await this.registrarMensajeDelFlujo(ctx, aviso);
     return true;
   }
@@ -1354,9 +1368,10 @@ export class TelegramBookingUpdate {
     // En servicios de duración abierta no se cobra por adelantado: el
     // comprobante se pide al finalizar, con el total real.
     if (session.duracionIndefinida && method === 'transferencia') {
-      await ctx.reply(
-        'Perfecto mor. Como lo dejamos abierto, no me transfieras nada ahorita: al terminar te paso el total ya con las horas contadas y ahí me mandas el comprobante 😘',
-      );
+      const aviso =
+        'Perfecto mor. Como lo dejamos abierto, no me transfieras nada ahorita: al terminar te paso el total ya con las horas contadas y ahí me mandas el comprobante 😘';
+      await this.replyAndRemember(ctx, aviso);
+      await this.registrarMensajeDelFlujo(ctx, aviso);
       await this.markBookingReadyForBoss(ctx);
       return true;
     }
@@ -1368,7 +1383,7 @@ export class TelegramBookingUpdate {
       await this.cerrarReservaEsperandoComprobante(ctx);
       const bankDetails = await this.servicesService.bankTransferDetails();
       const pedirComprobante = `*Cuentas disponibles para transferencia*\n\n${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante para verificar el pago.`;
-      await ctx.reply(pedirComprobante, {
+      await this.replyAndRemember(ctx, pedirComprobante, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
@@ -1385,7 +1400,7 @@ export class TelegramBookingUpdate {
       await this.cerrarReservaEsperandoComprobante(ctx);
       const pedirMonto =
         '¿Cuánto deseas pagar por transferencia bancaria? Ingresa el monto (solo números). El resto, junto con el transporte, se pagará en efectivo.';
-      await ctx.reply(pedirMonto);
+      await this.replyAndRemember(ctx, pedirMonto);
       await this.registrarMensajeDelFlujo(ctx, pedirMonto);
       return true;
     }
@@ -1837,18 +1852,49 @@ export class TelegramBookingUpdate {
       // retira con este mismo mensaje en vez de con uno inventado para ello.
       if (ctx.session?.quitarTecladoPendiente) {
         ctx.session.quitarTecladoPendiente = false;
-        await ctx.reply(text, Markup.removeKeyboard());
+        const sent = await ctx.reply(text, Markup.removeKeyboard());
+        this.rememberReplyMessage(ctx, sent);
       } else {
-        await ctx.reply(text);
+        const sent = await ctx.reply(text);
+        this.rememberReplyMessage(ctx, sent);
       }
     } catch (err) {
       this.logger.error('Error in sendDelayedReply:', err);
       try {
-        await ctx.reply(text);
+        const sent = await ctx.reply(text);
+        this.rememberReplyMessage(ctx, sent);
       } catch (finalErr) {
         this.logger.error('Error final en sendDelayedReply:', finalErr);
       }
     }
+  }
+
+  /**
+   * Conserva el id físico de las respuestas que ya se guardan en el historial.
+   * Se instala una vez por update y no cambia qué ni cuándo se responde.
+   */
+  private rememberReplyMessage(
+    ctx: BotContext,
+    sent?: { message_id?: number; chat?: { id?: number } },
+  ): void {
+    this.latestReplyMessage ??= new WeakMap<
+      object,
+      { messageId: number; chatId: string }
+    >();
+    if (sent?.message_id === undefined) return;
+    this.latestReplyMessage.set(ctx, {
+      messageId: sent.message_id,
+      chatId: String(sent.chat?.id ?? ctx.chat?.id ?? ''),
+    });
+  }
+
+  private async replyAndRemember(
+    ctx: BotContext,
+    text: string,
+    extra?: Parameters<BotContext['reply']>[1],
+  ): Promise<void> {
+    const sent = extra ? await ctx.reply(text, extra) : await ctx.reply(text);
+    this.rememberReplyMessage(ctx, sent);
   }
 
   @Hears('/reputacion')
@@ -2123,7 +2169,7 @@ export class TelegramBookingUpdate {
       where: { id: empleadaId },
     });
     const message = `Listo mi amor, te aparto el lugar. En cuanto ${empleada?.nombreArtistico || 'ella'} quede libre te escribo aquí mismo para seguir 😘`;
-    await ctx.reply(message, Markup.removeKeyboard());
+    await this.replyAndRemember(ctx, message, Markup.removeKeyboard());
     await this.recordDraftConversation(ctx, 'ia', message);
     await this.persistSession(ctx);
   }
@@ -2155,7 +2201,7 @@ export class TelegramBookingUpdate {
       (extras.length
         ? `\n\n*Extras:*\n${extras.map((e) => `• ${e.nombre}: $${e.precio}`).join('\n')}`
         : '');
-    await ctx.reply(detalle, {
+    await this.replyAndRemember(ctx, detalle, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [
@@ -2414,15 +2460,20 @@ export class TelegramBookingUpdate {
       ]);
       const photoUrl = this.getEmployeePhotoUrl(employee);
       try {
+        let sent: { message_id?: number; chat?: { id?: number } };
         if (photoUrl) {
-          await ctx.replyWithPhoto(photoUrl, {
+          sent = await ctx.replyWithPhoto(photoUrl, {
             caption,
             parse_mode: 'Markdown',
             ...keyboard,
           });
         } else {
-          await ctx.reply(caption, { parse_mode: 'Markdown', ...keyboard });
+          sent = await ctx.reply(caption, {
+            parse_mode: 'Markdown',
+            ...keyboard,
+          });
         }
+        this.rememberReplyMessage(ctx, sent);
         anySent = true;
         await this.recordDraftConversation(
           ctx,
@@ -2444,12 +2495,12 @@ export class TelegramBookingUpdate {
     if (!employees.length) {
       const empty =
         'Ay mor, ahorita mis compañeras andan ocupadas. Si quieres me esperas a mí y la pasamos delicioso.';
-      await ctx.reply(empty);
+      await this.replyAndRemember(ctx, empty);
       await this.recordDraftConversation(ctx, 'ia', empty);
       return;
     }
     const message = 'Mira, estas chicas están libres ahorita mismo 🔥';
-    await ctx.reply(message, Markup.removeKeyboard());
+    await this.replyAndRemember(ctx, message, Markup.removeKeyboard());
     await this.recordDraftConversation(ctx, 'ia', message);
 
     for (const employee of employees) {
@@ -2750,7 +2801,8 @@ export class TelegramBookingUpdate {
         await this.persistSession(ctx);
         return;
       }
-      await ctx.reply(changeMessage);
+      const sent = await ctx.reply(changeMessage);
+      this.rememberReplyMessage(ctx, sent);
       await this.recordDraftConversation(ctx, 'ia', changeMessage);
       await this.persistSession(ctx);
       return;
@@ -2836,7 +2888,7 @@ export class TelegramBookingUpdate {
     ) {
       const enCurso =
         'Ya tenemos apartado lo tuyo mi amor, seguimos con eso mismo.';
-      await ctx.reply(enCurso);
+      await this.replyAndRemember(ctx, enCurso);
       await this.registrarMensajeDelFlujo(ctx, enCurso);
       return;
     }
@@ -2855,7 +2907,8 @@ export class TelegramBookingUpdate {
       }
 
       const retomar = 'Aquí sigo, mi amor, seguimos donde quedamos.';
-      await ctx.reply(retomar);
+      const sent = await ctx.reply(retomar);
+      this.rememberReplyMessage(ctx, sent);
       await this.recordDraftConversation(ctx, 'ia', retomar);
       const historial = trimChatHistory(sesionPrevia.chatHistory || []);
       historial.push({ role: 'model', parts: [{ text: retomar }] });
@@ -2899,7 +2952,7 @@ export class TelegramBookingUpdate {
       const busyMessage = queuedService
         ? `Ay mor, ${empleada.nombreArtistico} está ocupada ahorita y ya tiene apartado su siguiente turno.`
         : `Ay mor, ${empleada.nombreArtistico} está ocupada ahorita. Queda libre como a las ${eta}. ¿La esperas o prefieres ver a las chicas que sí están libres?`;
-      await ctx.reply(busyMessage, {
+      const sent = await ctx.reply(busyMessage, {
         ...Markup.inlineKeyboard([
           ...(queuedService
             ? []
@@ -2914,6 +2967,7 @@ export class TelegramBookingUpdate {
           [Markup.button.callback('Ver chicas disponibles', 'ver_disponibles')],
         ]),
       });
+      this.rememberReplyMessage(ctx, sent);
       await this.recordDraftConversation(ctx, 'ia', busyMessage);
       // Con la empleada ocupada esperamos la decisión del cliente antes de
       // arrancar la conversación.
@@ -3248,7 +3302,7 @@ export class TelegramBookingUpdate {
       // La reserva se cierra ya, con el comprobante marcado como pendiente.
       await this.cerrarReservaEsperandoComprobante(ctx);
       const pedirComprobante = `${bankDetails}\n\nPor favor, envíame una *FOTO* del comprobante de transferencia para verificar el pago.`;
-      await ctx.reply(pedirComprobante, {
+      await this.replyAndRemember(ctx, pedirComprobante, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
@@ -3266,7 +3320,7 @@ export class TelegramBookingUpdate {
       await this.cerrarReservaEsperandoComprobante(ctx);
       const pedirMonto =
         '¿Cuánto deseas pagar por transferencia bancaria? Ingresa el monto (solo números). El resto, junto con el transporte, se pagará en efectivo.';
-      await ctx.reply(pedirMonto);
+      await this.replyAndRemember(ctx, pedirMonto);
       await this.registrarMensajeDelFlujo(ctx, pedirMonto);
       return;
     }
@@ -3576,7 +3630,7 @@ export class TelegramBookingUpdate {
       introduction?.trim() ||
       '¡De una mi amor! Compárteme tu ubicación en pin con el botón de abajo para poder llegar directo.';
 
-    await ctx.reply(`${base}${listado}`, {
+    await this.replyAndRemember(ctx, `${base}${listado}`, {
       ...Markup.keyboard([
         [Markup.button.locationRequest('📍 Compartir mi Ubicación')],
       ])
@@ -5217,7 +5271,7 @@ export class TelegramBookingUpdate {
       if (receipt.needsManualReview) {
         const enRevision =
           'Ya me llegó tu comprobante mi amor, lo estoy revisando y te confirmo en un ratico.';
-        await ctx.reply(enRevision);
+        await this.replyAndRemember(ctx, enRevision);
         await this.registrarMensajeDelFlujo(ctx, enRevision);
         if (jefe) {
           const caption =
@@ -5261,12 +5315,15 @@ export class TelegramBookingUpdate {
           ctx.session.comprobanteValidationId = undefined;
         }
         const problema = `⚠️ Problema con el comprobante:\n\n${receipt.reason || 'El comprobante no parece ser válido.'}\n\nPor favor intenta enviar otro o avísanos si necesitas ayuda.`;
-        await ctx.reply(problema);
+        await this.replyAndRemember(ctx, problema);
         await this.registrarMensajeDelFlujo(ctx, problema);
         return;
       }
 
-      await ctx.reply('✅ ¡Comprobante verificado correctamente!');
+      await this.replyAndRemember(
+        ctx,
+        '✅ ¡Comprobante verificado correctamente!',
+      );
       await this.registrarMensajeDelFlujo(
         ctx,
         '✅ ¡Comprobante verificado correctamente!',
@@ -5534,7 +5591,8 @@ export class TelegramBookingUpdate {
           );
           const ack =
             '¡Listo mi amor, ya me llegó tu comprobante! Lo reviso y seguimos 😘';
-          await ctx.reply(ack);
+          const sent = await ctx.reply(ack);
+          this.rememberReplyMessage(ctx, sent);
           await this.recordDraftConversation(ctx, 'ia', ack);
           await this.persistSession(ctx);
         } else {
@@ -5585,7 +5643,8 @@ export class TelegramBookingUpdate {
     // Rechazar amablemente los audios (opción A de requerimientos)
     const ack =
       'Ay mor, discúlpame pero ahorita no puedo escuchar audios 😩. ¿Me lo escribes porfa? 😘';
-    await ctx.reply(ack);
+    const sent = await ctx.reply(ack);
+    this.rememberReplyMessage(ctx, sent);
     await this.recordDraftConversation(ctx, 'ia', ack);
     await this.recordDraftConversation(
       ctx,
@@ -5602,7 +5661,8 @@ export class TelegramBookingUpdate {
     // Rechazar amablemente los videos
     const ack =
       'Ay mi amor, el internet lo tengo malísimo y no me cargan los videos 😩. Mándame fotito mejor o cuéntame.';
-    await ctx.reply(ack);
+    const sent = await ctx.reply(ack);
+    this.rememberReplyMessage(ctx, sent);
     await this.recordDraftConversation(ctx, 'ia', ack);
     await this.recordDraftConversation(
       ctx,
@@ -6013,58 +6073,125 @@ export class TelegramBookingUpdate {
       return;
     }
 
-    const stars = '⭐'.repeat(rating);
-
-    if (rating >= 3) {
-      const client = await this.clientesRepository.findOne({
-        where: { telegramChatId: ctx.from!.id.toString() },
-      });
-      if (!client) {
-        await ctx.reply('No fue posible identificar al cliente.');
-        return;
-      }
-      await this.disciplineService.createClientRating(client.id, {
+    const client = await this.clientesRepository.findOne({
+      where: { telegramChatId: ctx.from!.id.toString() },
+    });
+    if (!client) {
+      await ctx.reply('No fue posible identificar al cliente.');
+      return;
+    }
+    const result = await this.disciplineService.createClientRatingIdempotent(
+      client.id,
+      {
         direction: 'client_to_employee',
         interactionId: servicioId,
         stars: rating,
-      });
-      servicio.calificacion = rating;
+      },
+    );
+    const savedStars = result.rating.stars;
+    if (result.created) {
+      servicio.calificacion = savedStars;
       await this.serviciosRepository.save(servicio);
-      /*
-       * El flujo del servicio termina aqui: calificar con 3 estrellas o mas es
-       * el caso normal, y hasta ahora esta rama era la UNICA que no limpiaba
-       * la sesion (la de calificacion baja si lo hacia, mas abajo). El cliente
-       * se quedaba con el contexto de la reserva vieja (empleada, ubicacion,
-       * paso) colgado para su siguiente mensaje, en vez de empezar de cero.
-       */
-      ctx.session = {};
-      await ctx.editMessageText(
-        `Muchas gracias por calificar con ${stars} el servicio de nuestra empleada. ¡Agradecemos tu preferencia!`,
-        Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              '⚠️ Reportar empleada',
-              `er_client_start:${servicioId}`,
-            ),
-          ],
-        ]),
-      );
-      await ctx.reply('¡Agradecemos tu preferencia!', Markup.removeKeyboard());
-    } else {
-      if (!ctx.session) {
-        ctx.session = {};
-      }
-      ctx.session.step = 'AWAITING_RATING_COMMENT';
-      ctx.session.servicioIdCalificacion = servicioId;
-      ctx.session.pendingRating = rating;
-
-      await ctx.editMessageText(
-        `Has calificado con ${stars} nuestro servicio.\n\n` +
-          `⚠️ *Comentario Obligatorio:*\n` +
-          `Lamentamos mucho tu insatisfacción. Por favor, escribe un comentario directamente en el chat explicándonos qué podemos mejorar:`,
-        { parse_mode: 'Markdown' },
-      );
     }
+
+    const actionRow = [
+      Markup.button.callback(
+        'VOLVER A CONTRATAR',
+        `rehire_service:${servicioId}`,
+      ),
+      Markup.button.callback('VER CATÁLOGO', 'post_service_catalog'),
+    ];
+    const reasonRows =
+      savedStars <= 3
+        ? [
+            [
+              Markup.button.callback(
+                'Trato',
+                `calificar_motivo:${servicioId}:trato`,
+              ),
+              Markup.button.callback(
+                'Puntualidad',
+                `calificar_motivo:${servicioId}:puntualidad`,
+              ),
+            ],
+            [
+              Markup.button.callback(
+                'Comunicación',
+                `calificar_motivo:${servicioId}:comunicacion`,
+              ),
+              Markup.button.callback(
+                'Otro',
+                `calificar_motivo:${servicioId}:otro`,
+              ),
+            ],
+          ]
+        : [];
+    await ctx.editMessageText(
+      savedStars <= 3
+        ? `Gracias por calificarnos con ${'⭐'.repeat(savedStars)}. Si quieres, puedes indicar el motivo:`
+        : `Gracias por calificarnos con ${'⭐'.repeat(savedStars)}.`,
+      Markup.inlineKeyboard([...reasonRows, actionRow]),
+    );
+  }
+
+  @Action(/^calificar_motivo:(.+):(trato|puntualidad|comunicacion|otro)$/)
+  async onCalificarMotivo(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery('Gracias por contarnos.');
+    const match = (ctx as any).match as RegExpMatchArray | undefined;
+    const telegramId = ctx.from?.id.toString();
+    if (!match || !telegramId) return;
+    const client = await this.clientesRepository.findOne({
+      where: { telegramChatId: telegramId },
+    });
+    if (!client) return;
+    await this.disciplineService.addClientRatingReason(
+      client.id,
+      match[1],
+      match[2] as 'trato' | 'puntualidad' | 'comunicacion' | 'otro',
+    );
+    await ctx.editMessageReplyMarkup(
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            'VOLVER A CONTRATAR',
+            `rehire_service:${match[1]}`,
+          ),
+          Markup.button.callback('VER CATÁLOGO', 'post_service_catalog'),
+        ],
+      ]).reply_markup,
+    );
+  }
+
+  @Action(/^rehire_service:(.+)$/)
+  async onRehireService(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery();
+    const serviceId = ((ctx as any).match as RegExpMatchArray | undefined)?.[1];
+    const telegramId = ctx.from?.id.toString();
+    if (!serviceId || !telegramId) return;
+    const service = await this.serviciosRepository.findOne({
+      where: { id: serviceId },
+      relations: { cliente: true },
+    });
+    if (
+      !service ||
+      service.estado !== 'finalizado' ||
+      service.cliente?.telegramChatId !== telegramId
+    ) {
+      await ctx.reply('No fue posible iniciar una nueva contratación.');
+      return;
+    }
+
+    // Se fuerza una sesión limpia: solo se conserva la intención de contratar
+    // a la misma empleada. Ningún dato operativo del servicio anterior viaja.
+    ctx.session = {};
+    await this.startHireSession(ctx, service.empleadaId);
+  }
+
+  @Action('post_service_catalog')
+  async onPostServiceCatalog(@Ctx() ctx: BotContext) {
+    await ctx.answerCbQuery();
+    ctx.session = {};
+    await this.showAvailableEmployeeCatalog(ctx);
   }
 
   @Action(/^g_rate:([0-9a-f]{8}):([0-9a-f]{8}):([1-5])$/)
@@ -6673,7 +6800,7 @@ export class TelegramBookingUpdate {
       const delayMs = 2000 + Math.floor(Math.random() * 1000);
       await new Promise((resolve) => setTimeout(resolve, delayMs));
 
-      await ctx.reply(priceMsg, {
+      await this.replyAndRemember(ctx, priceMsg, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
@@ -7453,6 +7580,16 @@ export class TelegramBookingUpdate {
 
   @On('text')
   async onMessage(@Ctx() ctx: BotContext, @Next() next: () => Promise<void>) {
+    if (
+      shouldResetClosedBookingOnMessage(
+        ctx.chat?.type,
+        ctx.session?.bookingStatus,
+      )
+    ) {
+      // Un mensaje real posterior pertenece a una intención nueva. El callback
+      // de estrellas no pasa por aquí, de modo que calificar no reactiva nada.
+      ctx.session = {};
+    }
     const pasoActual = (ctx.session as { step?: string } | undefined)?.step;
     if (pasoActual && TelegramBookingUpdate.PASOS_AJENOS.has(pasoActual)) {
       await next();
@@ -7925,7 +8062,7 @@ export class TelegramBookingUpdate {
       ctx.session.mixedTransferAmount = amount;
       ctx.session.step = 'AWAITING_PAYMENT_RECEIPT';
       const pedirMixto = `${await this.servicesService.bankTransferDetails()}\n\nEnvía una FOTO del comprobante por $${amount.toFixed(2)}. El resto y el transporte se pagarán en efectivo.`;
-      await ctx.reply(pedirMixto);
+      await this.replyAndRemember(ctx, pedirMixto);
       await this.registrarMensajeDelFlujo(ctx, pedirMixto);
       return;
     }
@@ -8518,7 +8655,10 @@ export class TelegramBookingUpdate {
             return;
           }
 
-          await this.recordConversation(activeService, 'cliente', text);
+          await this.recordConversation(activeService, 'cliente', text, {
+            messageId: ctx.message?.message_id,
+            chatId: telegramId,
+          });
 
           if (!activeService.telegramThreadId) {
             const clientName =
@@ -9224,7 +9364,8 @@ export class TelegramBookingUpdate {
     }
     const message =
       '¡Uy qué rico! Déjame ver qué amiguitas mías están disponibles para que armemos algo bien delicioso y te aviso en un momentito.';
-    await ctx.reply(message, Markup.removeKeyboard());
+    await this.replyAndRemember(ctx, message, Markup.removeKeyboard());
+    await this.recordDraftConversation(ctx, 'ia', message);
 
     let request;
     try {
@@ -9240,7 +9381,7 @@ export class TelegramBookingUpdate {
       // cliente que no hay modelos disponibles si sí las hay.
       const fallback =
         'Uy lindo, déjame checarlo bien y te confirmo en un momentico.';
-      await ctx.reply(fallback);
+      await this.replyAndRemember(ctx, fallback);
       await this.recordDraftConversation(ctx, 'ia', fallback);
       return;
     }
@@ -9361,6 +9502,7 @@ export class TelegramBookingUpdate {
     service: Servicios,
     sender: 'ia' | 'jefe' | 'cliente' | 'sistema',
     message: string,
+    telegram?: { messageId?: number; chatId?: string },
   ): Promise<void> {
     if (!service.clienteId) return;
     const saved = await this.conversationsRepository.save(
@@ -9371,6 +9513,11 @@ export class TelegramBookingUpdate {
         emisor: sender,
         mensaje: message,
         iaActiva: service.iaActiva,
+        telegramMessageId:
+          telegram?.messageId === undefined
+            ? null
+            : telegram.messageId.toString(),
+        telegramChatId: telegram?.chatId ?? null,
       }),
     );
     this.realtimeEventsService.emitToBoss(service.jefeId, {
@@ -9398,6 +9545,14 @@ export class TelegramBookingUpdate {
           select: { id: true, jefeId: true, jefeSecundarioId: true },
         })
       : null;
+    const captured =
+      sender === 'cliente'
+        ? {
+            messageId: ctx.message?.message_id,
+            chatId: telegramId,
+          }
+        : this.latestReplyMessage?.get(ctx);
+    if (sender !== 'cliente') this.latestReplyMessage?.delete(ctx);
     const saved = await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: client.id,
@@ -9408,6 +9563,11 @@ export class TelegramBookingUpdate {
         mensaje: message,
         iaActiva:
           ctx.session?.iaActiva !== false && !ctx.session?.humanTakeover,
+        telegramMessageId:
+          captured?.messageId === undefined
+            ? null
+            : captured.messageId.toString(),
+        telegramChatId: captured?.chatId || null,
       }),
     );
     const bossIds = [
@@ -9448,6 +9608,8 @@ export class TelegramBookingUpdate {
 
     const telegramId = ctx.from?.id?.toString();
     if (!telegramId || !mensaje.trim()) return;
+    const captured = this.latestReplyMessage?.get(ctx);
+    this.latestReplyMessage?.delete(ctx);
     try {
       const client = await this.clientesRepository.findOne({
         where: { telegramChatId: telegramId },
@@ -9462,6 +9624,11 @@ export class TelegramBookingUpdate {
           emisor: 'ia',
           mensaje,
           iaActiva: false,
+          telegramMessageId:
+            captured?.messageId === undefined
+              ? null
+              : captured.messageId.toString(),
+          telegramChatId: captured?.chatId || null,
         }),
       );
     } catch (err) {
@@ -9790,7 +9957,7 @@ export class TelegramBookingUpdate {
     const prompt = (
       loop.state.failureCount === 1 ? firstPrompts : secondPrompts
     )[key];
-    await ctx.reply(prompt);
+    await this.replyAndRemember(ctx, prompt);
     await this.recordDraftConversation(ctx, 'ia', prompt);
   }
 
@@ -9998,7 +10165,7 @@ export class TelegramBookingUpdate {
       if (session.bookingStatus === 'READY') {
         const waitingForBoss =
           'Tu solicitud está completa. Te confirmaré en cuanto quede coordinada.';
-        await ctx.reply(waitingForBoss);
+        await this.replyAndRemember(ctx, waitingForBoss);
         await this.registrarMensajeDelFlujo(ctx, waitingForBoss);
         return;
       }
@@ -10616,9 +10783,14 @@ export class TelegramBookingUpdate {
             if (photosToSend.length > 0) {
               const randomPhoto =
                 photosToSend[Math.floor(Math.random() * photosToSend.length)];
-              await ctx.telegram.sendPhoto(telegramId, randomPhoto.url, {
-                caption: cleanText || `Para ti con cariño... 🔥`,
-              });
+              const sent = await ctx.telegram.sendPhoto(
+                telegramId,
+                randomPhoto.url,
+                {
+                  caption: cleanText || `Para ti con cariño... 🔥`,
+                },
+              );
+              this.rememberReplyMessage(ctx, sent);
               session.fotosExclusivasEnviadas =
                 (session.fotosExclusivasEnviadas ?? 0) + 1;
               history.push({
