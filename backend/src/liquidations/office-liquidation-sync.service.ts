@@ -210,6 +210,14 @@ export class OfficeLiquidationSyncService {
       const cardParticipantExtras = participantExtras
         .filter((extra) => extra.metodoPago === 'tarjeta')
         .reduce((sum, extra) => sum + Number(extra.precioCobrado), 0);
+      const cardExtraItems = participantExtras
+        .filter((extra) => extra.metodoPago === 'tarjeta')
+        .map((extra) => ({
+          amount: Number(extra.precioCobrado),
+          companyCommission: Number(extra.companyCommissionSnapshot),
+          employeeNet: Number(extra.employeeNetSnapshot),
+          snapshotStatus: extra.financialSnapshotStatus,
+        }));
       const base = Number(participant.confirmedSubtotal);
       return {
         serviceId: service.id,
@@ -229,6 +237,9 @@ export class OfficeLiquidationSyncService {
         employeeCashDue: responsible ? employeeCashDue : 0,
         electronicExtraAmount: electronicParticipantExtras,
         cardExtraAmount: cardParticipantExtras,
+        cardExtraItems,
+        historicalServiceId: service.id,
+        excludedFromCut: false,
         transportExcess: 0,
         promotion: false,
         membershipAmount: 0,

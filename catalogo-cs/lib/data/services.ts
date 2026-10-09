@@ -12,6 +12,10 @@ function revalidateAdminViews() {
     revalidatePath("/admin/dashboard");
     revalidatePath("/admin/god-eye");
     revalidatePath("/admin/transport");
+    revalidatePath("/admin/servicios");
+    revalidatePath("/admin/servicios/papelera");
+    revalidatePath("/jefe/historial");
+    revalidatePath("/empleada/historial");
     revalidatePath("/admin");
   } catch {
     // ignore outside request context
@@ -45,10 +49,11 @@ export async function getServiceByIdAction(serviceId: string) {
   }
 }
 
-export async function deleteServiceAction(serviceId: string) {
+export async function deleteServiceAction(serviceId: string, reason: string) {
   try {
     await apiFetch(`/services/${serviceId}`, {
       method: "DELETE",
+      body: JSON.stringify({ reason }),
     });
     revalidateAdminViews();
     return { success: true };

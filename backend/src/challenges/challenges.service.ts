@@ -307,6 +307,7 @@ export class ChallengesService {
               `SELECT e.id, e.nombre_artistico AS name,
                  COALESCE((SELECT COUNT(*) FROM servicios s
                    WHERE s.empleada_id = e.id AND s.estado = 'finalizado'
+                     AND s.deleted_at IS NULL
                      AND s.hora_fin_servicio BETWEEN $2 AND $3), 0) AS value
                FROM empleadas e WHERE e.id = ANY($1::uuid[])`,
               [participantIds, windowStart, windowEnd],
@@ -334,6 +335,7 @@ export class ChallengesService {
             `SELECT e.id, e.nombre_artistico AS name,
                COALESCE((SELECT SUM(s.total_final) FROM servicios s
                  WHERE s.empleada_id = e.id AND s.estado = 'finalizado'
+                   AND s.deleted_at IS NULL
                    AND s.hora_fin_servicio BETWEEN $2 AND $3), 0) AS value
              FROM empleadas e WHERE e.id = ANY($1::uuid[])`,
             [participantIds, windowStart, windowEnd],

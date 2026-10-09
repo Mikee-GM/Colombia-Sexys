@@ -52,9 +52,7 @@ interface NavGroup {
 const navGroups: NavGroup[] = [
   {
     title: "Nucleo",
-    items: [
-      { label: "Centro de Mando", href: "/admin/dashboard", icon: Eye },
-    ],
+    items: [{ label: "Centro de Mando", href: "/admin/dashboard", icon: Eye }],
   },
   {
     /*
@@ -71,14 +69,27 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Dinero del Personal", href: "/admin/dinero", icon: Wallet },
       { label: "Liquidaciones", href: "/admin/liquidations", icon: CreditCard },
-      { label: "Cortes de Choferes", href: "/admin/driver-settlements", icon: Car },
-      { label: "Cuentas Bancarias", href: "/admin/bank-accounts", icon: Landmark },
+      {
+        label: "Cortes de Choferes",
+        href: "/admin/driver-settlements",
+        icon: Car,
+      },
+      {
+        label: "Cuentas Bancarias",
+        href: "/admin/bank-accounts",
+        icon: Landmark,
+      },
     ],
   },
   {
     title: "Operacion",
     items: [
       { label: "Servicios", href: "/admin/services", icon: Activity },
+      {
+        label: "Historial semanal",
+        href: "/admin/servicios",
+        icon: ClipboardList,
+      },
       {
         label: "Registros a Mano",
         href: "/admin/servicios-manuales",
@@ -119,7 +130,9 @@ interface AdminLayoutClientProps {
   children: React.ReactNode;
 }
 
-export default function AdminLayoutClient({ children }: AdminLayoutClientProps) {
+export default function AdminLayoutClient({
+  children,
+}: AdminLayoutClientProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [currentUser, setCurrentUser] = useState<{
@@ -151,7 +164,10 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
   };
 
   const isActive = (path: string) => {
-    return pathname === path || (path !== "/admin/dashboard" && pathname?.startsWith(path + "/"));
+    return (
+      pathname === path ||
+      (path !== "/admin/dashboard" && pathname?.startsWith(path + "/"))
+    );
   };
 
   const isLoginPage = pathname === "/admin";
@@ -169,7 +185,13 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
       <aside className="w-64 border-r border-zinc-800/80 bg-[#050505] flex flex-col hidden md:flex shrink-0 pt-[env(safe-area-inset-top)]">
         <div className="p-6 border-b border-zinc-800/80 flex flex-col items-center">
           <div className="w-12 h-12 relative mb-3">
-            <Image src="/logo-icono.webp" alt="Logo" fill sizes="48px" className="object-contain" />
+            <Image
+              src="/logo-icono.webp"
+              alt="Logo"
+              fill
+              sizes="48px"
+              className="object-contain"
+            />
           </div>
           <p className="text-[10px] font-bold tracking-[0.25em] text-[#C5A55A] uppercase">
             Panel Admin
@@ -189,12 +211,15 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all duration-200 ${active
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all duration-200 ${
+                      active
                         ? "text-black bg-[#C5A55A] shadow-md shadow-[#C5A55A]/20"
                         : "text-zinc-400 hover:text-white hover:bg-zinc-900/60"
-                      }`}
+                    }`}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 ${active ? "text-black" : "text-[#C5A55A]"}`} />
+                    <Icon
+                      className={`w-4 h-4 shrink-0 ${active ? "text-black" : "text-[#C5A55A]"}`}
+                    />
                     <span>{item.label}</span>
                   </Link>
                 );
@@ -215,7 +240,9 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
               </div>
               <div className="text-left truncate">
                 <p className="text-xs font-bold text-white truncate">
-                  {currentUser?.nombre ? `${currentUser.nombre} ${currentUser.apellido || ""}`.trim() : "Administrador"}
+                  {currentUser?.nombre
+                    ? `${currentUser.nombre} ${currentUser.apellido || ""}`.trim()
+                    : "Administrador"}
                 </p>
                 <p className="text-[10px] text-zinc-500 truncate font-mono">
                   {currentUser?.email || "admin@colombiasexys.com"}
@@ -244,14 +271,30 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
       <div className="md:hidden fixed top-0 inset-x-0 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] border-b border-zinc-800 bg-[#050505]/95 backdrop-blur-md z-40 flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 relative">
-            <Image src="/logo-icono.webp" alt="Logo" fill sizes="48px" className="object-contain" />
+            <Image
+              src="/logo-icono.webp"
+              alt="Logo"
+              fill
+              sizes="48px"
+              className="object-contain"
+            />
           </div>
           <span className="text-xs font-bold tracking-widest text-[#C5A55A] uppercase">
             Panel Admin
           </span>
         </div>
-        <button onClick={() => setMenuOpen(!menuOpen)} className="text-[#C5A55A] p-2">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="text-[#C5A55A] p-2"
+        >
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <line x1="3" y1="12" x2="21" y2="12" />
             <line x1="3" y1="6" x2="21" y2="6" />
             <line x1="3" y1="18" x2="21" y2="18" />
@@ -281,12 +324,15 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
                       key={item.href}
                       href={item.href}
                       onClick={() => setMenuOpen(false)}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-colors ${active
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-colors ${
+                        active
                           ? "text-black bg-[#C5A55A]"
                           : "text-zinc-400 hover:text-white bg-zinc-950/60 border border-zinc-900"
-                        }`}
+                      }`}
                     >
-                      <Icon className={`w-4 h-4 ${active ? "text-black" : "text-[#C5A55A]"}`} />
+                      <Icon
+                        className={`w-4 h-4 ${active ? "text-black" : "text-[#C5A55A]"}`}
+                      />
                       <span>{item.label}</span>
                     </Link>
                   );
@@ -326,9 +372,7 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto bg-black pt-[calc(4rem+env(safe-area-inset-top))] md:pt-0">
-        <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
-          {children}
-        </div>
+        <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">{children}</div>
       </main>
 
       {/* Modal de Edición de Perfil Propio */}

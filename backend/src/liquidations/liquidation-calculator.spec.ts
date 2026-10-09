@@ -12,6 +12,8 @@ function record(overrides: Partial<LiquidationRecord> = {}) {
     extraAmount: 0,
     electronicExtraAmount: 0,
     cardExtraAmount: 0,
+    cardExtraItems: [],
+    excludedFromCut: false,
     promotion: false,
     membershipAmount: 0,
     companyTransportExpense: 0,
@@ -179,6 +181,39 @@ describe('liquidation calculator', () => {
 
     expect(result.calculatedExtras).toBe(999);
     expect(result.cardExtraCommission).toBe(0);
+  });
+
+  it('respeta snapshots individuales para dos extras de 600', () => {
+    const result = calculateCut([
+      record({
+        extraAmount: 1200,
+        electronicExtraAmount: 1200,
+        cardExtraAmount: 1200,
+        cardExtraItems: [
+          {
+            amount: 600,
+            companyCommission: 0,
+            employeeNet: 600,
+            snapshotStatus: 'captured',
+          },
+          {
+            amount: 600,
+            companyCommission: 0,
+            employeeNet: 600,
+            snapshotStatus: 'captured',
+          },
+        ],
+      }),
+    ]);
+    expect(result.calculatedExtras).toBe(1200);
+    expect(result.cardExtraCommission).toBe(0);
+  });
+
+  it('excluye del corte un servicio enviado a papelera o anulado', () => {
+    const result = calculateCut([record({ excludedFromCut: true })]);
+    expect(result.count).toBe(0);
+    expect(result.salesTotal).toBe(0);
+    expect(result.employeeGrossPay).toBe(0);
   });
 
   it('respeta el porcentaje y el umbral configurados', () => {

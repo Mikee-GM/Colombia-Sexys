@@ -269,7 +269,7 @@ export type Trip = {
 
 export type ServiceParticipant = {
   id: string;
-  serviceId: string;
+  serviceId: string | null;
   employeeId: string;
   role: "responsable" | "participante";
   status: "reservada" | "pendiente_pago" | "activa" | "retirada" | "cancelada";

@@ -10,7 +10,12 @@ import { ColumnNumericTransformer } from '../../common/transformers/column-numer
 export class EmployeeCashObligation {
   @Column('uuid', { primary: true, default: () => 'gen_random_uuid()' })
   id: string;
-  @Column('uuid', { name: 'service_id', unique: true }) serviceId: string;
+  @Column('uuid', { name: 'service_id', nullable: true })
+  serviceId: string | null;
+  @Column('uuid', { name: 'historical_service_id', nullable: true })
+  historicalServiceId: string | null;
+  @Column('boolean', { name: 'administratively_excluded', default: false })
+  administrativelyExcluded: boolean;
   @Column('uuid', { name: 'employee_id' }) employeeId: string;
   @Column('numeric', {
     precision: 12,

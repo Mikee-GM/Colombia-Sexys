@@ -35,8 +35,14 @@ export class InteractionRating {
   @Column('uuid', { name: 'service_id', nullable: true })
   serviceId: string | null;
 
+  @Column('uuid', { name: 'historical_service_id', nullable: true })
+  historicalServiceId: string | null;
+
   @Column('uuid', { name: 'trip_id', nullable: true })
   tripId: string | null;
+
+  @Column('uuid', { name: 'historical_trip_id', nullable: true })
+  historicalTripId: string | null;
 
   @Column('uuid', { name: 'client_id', nullable: true })
   clientId: string | null;

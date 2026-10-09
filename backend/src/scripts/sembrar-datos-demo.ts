@@ -56,6 +56,10 @@
 
 import { AppDataSource } from '../data-source';
 import type { QueryRunner } from 'typeorm';
+import {
+  calculateCardExtraSnapshot,
+  EMPLOYEE_SERVICE_PERCENTAGE,
+} from '../services/service-financial-calculator';
 
 /** Prefijo de todos los ids sembrados. Es lo que hace exacta la limpieza. */
 const PREFIJO = 'deadbeef';
@@ -836,37 +840,47 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
   // INSERT y los rellena. Escribirlos a mano seria inventar cifras que no
   // corresponden a las reglas de la casa.
   // -------------------------------------------------------------------------
-  const servicioBase = (extra: Registro): Registro => ({
-    service_type: 'individual',
-    registro_manual: false,
-    metodo_pago: 'efectivo',
-    duracion_pactada_horas: 2,
-    ubicacion_cliente_lat: 20.5931,
-    ubicacion_cliente_lng: -100.3925,
-    precio_base_hora_pactado: 2500,
-    total_base: 0,
-    total_extras: 0,
-    total_final: 0,
-    total_paid: 0,
-    pending_balance: 0,
-    transport_fee_snapshot: 500,
-    manual_transport_adjustment: 0,
-    total_transporte: 0,
-    actual_transport_cost: 0,
-    estado_liquidacion: 'cerrada',
-    recordatorios_regreso: 0,
-    prorrogas_usadas: 0,
-    tipo_agenda: 'inmediato',
-    duracion_indefinida: false,
-    cobro_final_pendiente: false,
-    comprobante_pendiente: false,
-    notificacion_previa_enviada: false,
-    ia_activa: false,
-    notificacion_extension_enviada: false,
-    created_at: dias(-1),
-    updated_at: dias(-1),
-    ...extra,
-  });
+  const servicioBase = (extra: Registro): Registro => {
+    const row = {
+      service_type: 'individual',
+      registro_manual: false,
+      metodo_pago: 'efectivo',
+      duracion_pactada_horas: 2,
+      ubicacion_cliente_lat: 20.5931,
+      ubicacion_cliente_lng: -100.3925,
+      precio_base_hora_pactado: 2500,
+      total_base: 0,
+      total_extras: 0,
+      total_final: 0,
+      total_paid: 0,
+      pending_balance: 0,
+      transport_fee_snapshot: 500,
+      manual_transport_adjustment: 0,
+      total_transporte: 0,
+      actual_transport_cost: 0,
+      estado_liquidacion: 'cerrada',
+      recordatorios_regreso: 0,
+      prorrogas_usadas: 0,
+      tipo_agenda: 'inmediato',
+      duracion_indefinida: false,
+      cobro_final_pendiente: false,
+      comprobante_pendiente: false,
+      notificacion_previa_enviada: false,
+      ia_activa: false,
+      notificacion_extension_enviada: false,
+      created_at: dias(-1),
+      updated_at: dias(-1),
+      ...extra,
+    };
+    return {
+      ...row,
+      service_base_amount_snapshot:
+        Number(row.duracion_pactada_horas) *
+        Number(row.precio_base_hora_pactado),
+      employee_percentage_snapshot: EMPLOYEE_SERVICE_PERCENTAGE,
+      financial_snapshot_status: 'captured',
+    };
+  };
 
   await insertarVarias(qr, 'servicios', [
     servicioBase({
@@ -1051,8 +1065,31 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
     [SRV.finalizado, SRV.agendado],
   );
 
+  const extraServicio = (extra: Registro): Registro => {
+    const amount = Number(extra.precio_cobrado);
+    if (extra.metodo_pago === 'tarjeta') {
+      const snapshot = calculateCardExtraSnapshot(amount);
+      return {
+        ...extra,
+        company_percentage_snapshot: snapshot.companyPercentage,
+        commission_threshold_snapshot: snapshot.commissionThreshold,
+        company_commission_snapshot: snapshot.companyCommission,
+        employee_net_snapshot: snapshot.employeeNet,
+        financial_snapshot_status: snapshot.snapshotStatus,
+      };
+    }
+    return {
+      ...extra,
+      company_percentage_snapshot: 0,
+      commission_threshold_snapshot: null,
+      company_commission_snapshot: 0,
+      employee_net_snapshot: amount,
+      financial_snapshot_status: 'legacy_unverified',
+    };
+  };
+
   await insertarVarias(qr, 'extras_servicio', [
-    {
+    extraServicio({
       id: id(220),
       servicio_id: SRV.finalizado,
       extra_catalogo_id: id(180),
@@ -1060,8 +1097,8 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       precio_cobrado: 1500,
       metodo_pago: 'efectivo',
       registrado_at: horas(-70),
-    },
-    {
+    }),
+    extraServicio({
       id: id(221),
       servicio_id: SRV.finalizado,
       extra_catalogo_id: id(181),
@@ -1069,8 +1106,8 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       precio_cobrado: 900,
       metodo_pago: 'tarjeta',
       registrado_at: horas(-70),
-    },
-    {
+    }),
+    extraServicio({
       id: id(222),
       servicio_id: SRV.manual,
       extra_catalogo_id: id(180),
@@ -1078,7 +1115,7 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       precio_cobrado: 1500,
       metodo_pago: 'efectivo',
       registrado_at: horas(-143),
-    },
+    }),
   ]);
 
   await insertarVarias(qr, 'prorrogas', [
@@ -1106,6 +1143,9 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       servicio_id: SRV.finalizado,
       horas_agregadas: 1,
       monto_agregado: 2500,
+      employee_percentage_snapshot: EMPLOYEE_SERVICE_PERCENTAGE,
+      employee_expected_snapshot: 1500,
+      financial_snapshot_status: 'captured',
       aceptada_por: 'cliente',
       registrada_at: horas(-70),
     },

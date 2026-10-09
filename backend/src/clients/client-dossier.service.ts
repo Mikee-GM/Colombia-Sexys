@@ -229,7 +229,7 @@ export class ClientDossierService {
          MIN(created_at) AS "primerServicioAt",
          MAX(created_at) AS "ultimoServicioAt"
        FROM servicios
-       WHERE cliente_id = $1`,
+       WHERE cliente_id = $1 AND deleted_at IS NULL`,
       [clienteId],
     );
     const fila = filas[0];
@@ -238,8 +238,9 @@ export class ClientDossierService {
       `SELECT
          AVG(stars) FILTER (WHERE direction = 'client_to_employee')::float AS "queDio",
          AVG(stars) FILTER (WHERE direction = 'employee_to_client')::float AS "queRecibio"
-       FROM interaction_ratings
-       WHERE client_id = $1`,
+       FROM interaction_ratings rating
+       JOIN servicios service ON service.id = rating.service_id
+       WHERE rating.client_id = $1 AND service.deleted_at IS NULL`,
       [clienteId],
     );
 
@@ -270,6 +271,7 @@ export class ClientDossierService {
          COALESCE(SUM(total_final) FILTER (WHERE estado = 'finalizado'), 0)::float AS gasto
        FROM servicios
        WHERE cliente_id = $1
+         AND deleted_at IS NULL
          AND created_at >= date_trunc('month', now()) - make_interval(months => $3)
        GROUP BY 1
        ORDER BY 1`,
@@ -303,7 +305,7 @@ export class ClientDossierService {
          COUNT(*)::int AS servicios,
          COALESCE(SUM(total_final) FILTER (WHERE estado = 'finalizado'), 0)::float AS gasto
        FROM servicios
-       WHERE cliente_id = $1
+       WHERE cliente_id = $1 AND deleted_at IS NULL
        GROUP BY 1
        ORDER BY servicios DESC`,
       [clienteId],
@@ -321,7 +323,7 @@ export class ClientDossierService {
          COALESCE(SUM(s.total_final) FILTER (WHERE s.estado = 'finalizado'), 0)::float AS gasto
        FROM servicios s
        JOIN empleadas e ON e.id = s.empleada_id
-       WHERE s.cliente_id = $1
+       WHERE s.cliente_id = $1 AND s.deleted_at IS NULL
        GROUP BY e.id, e.nombre_artistico
        ORDER BY servicios DESC
        LIMIT 10`,
@@ -357,7 +359,7 @@ export class ClientDossierService {
          s.registro_manual AS "registroManual"
        FROM servicios s
        LEFT JOIN empleadas e ON e.id = s.empleada_id
-       WHERE s.cliente_id = $1
+       WHERE s.cliente_id = $1 AND s.deleted_at IS NULL
        ORDER BY fecha DESC
        LIMIT $2`,
       [clienteId, TOPE_DETALLE],

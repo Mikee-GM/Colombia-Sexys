@@ -11,14 +11,6 @@ import {
 } from "@/lib/actions/employee-portal";
 import { formatCurrency } from "@/lib/calculations";
 
-const METODOS = [
-  { id: "efectivo", etiqueta: "Efectivo" },
-  { id: "tarjeta", etiqueta: "Tarjeta" },
-  { id: "transferencia", etiqueta: "Transferencia" },
-] as const;
-
-type Metodo = (typeof METODOS)[number]["id"];
-
 /**
  * Lo elegido: un extra de su catalogo, o un precio escrito a mano.
  *
@@ -27,8 +19,7 @@ type Metodo = (typeof METODOS)[number]["id"];
  * lista.
  */
 type Seleccion =
-  | { tipo: "catalogo"; extra: ExtraDisponible }
-  | { tipo: "libre" };
+  { tipo: "catalogo"; extra: ExtraDisponible } | { tipo: "libre" };
 
 /**
  * Agregar un extra al servicio en curso.
@@ -59,7 +50,6 @@ export default function AgregarExtra({
   const [extras, setExtras] = useState<ExtraDisponible[] | null>(null);
   const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
   const [precioLibre, setPrecioLibre] = useState("");
-  const [metodo, setMetodo] = useState<Metodo>("efectivo");
   const [error, setError] = useState<string | null>(null);
   const [exito, setExito] = useState<string | null>(null);
   const [cargando, startTransition] = useTransition();
@@ -107,7 +97,7 @@ export default function AgregarExtra({
           ...(seleccion.tipo === "catalogo"
             ? { extraCatalogoId: seleccion.extra.id }
             : { precioCobrado: montoLibre }),
-          metodoPago: metodo,
+          metodoPago: "tarjeta",
         },
         token,
       );
@@ -148,6 +138,10 @@ export default function AgregarExtra({
   return (
     <div className="mt-3 space-y-3 rounded-lg border border-[#C5A55A]/30 bg-[#C5A55A]/[0.06] p-4">
       <p className="text-xs font-semibold text-white">Agregar un extra</p>
+      <p className="rounded-lg border border-[#C5A55A]/25 bg-black/30 px-3 py-2 text-[11px] leading-relaxed text-gray-300">
+        Registra únicamente extras cobrados con tarjeta. Los extras en efectivo
+        son íntegros para ti y no se capturan.
+      </p>
 
       {extras === null ? (
         <p className="text-xs text-gray-400">Cargando tu catalogo</p>
@@ -243,27 +237,9 @@ export default function AgregarExtra({
           )}
 
           {listoParaAgregar ? (
-            <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-wider text-gray-400">
-                Como lo paga el cliente
-              </p>
-              <div className="flex gap-1.5">
-                {METODOS.map((opcion) => (
-                  <button
-                    key={opcion.id}
-                    type="button"
-                    onClick={() => setMetodo(opcion.id)}
-                    className={`flex-1 rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                      metodo === opcion.id
-                        ? "border-[#C5A55A] bg-[#C5A55A] text-black"
-                        : "border-white/10 text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    {opcion.etiqueta}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#E8D5A3]">
+              Método: tarjeta
+            </p>
           ) : null}
         </>
       )}

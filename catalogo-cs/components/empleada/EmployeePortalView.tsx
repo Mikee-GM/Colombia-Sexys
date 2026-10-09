@@ -44,6 +44,7 @@ import {
   MessageCircle,
   Star,
   Trophy,
+  History,
 } from "lucide-react";
 
 interface EmployeePortalViewProps {
@@ -153,18 +154,23 @@ export default function EmployeePortalView({
                 <span className="flex items-center gap-1">
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      data.profile.disponible ? "bg-emerald-400 animate-pulse" : "bg-gray-500"
+                      data.profile.disponible
+                        ? "bg-emerald-400 animate-pulse"
+                        : "bg-gray-500"
                     }`}
                   />
                   {data.profile.disponible ? "Disponible" : "No disponible"}
                 </span>
                 <span>•</span>
-                <span>Tarifa: {formatCurrency(data.profile.precioBaseHora)}/hr</span>
+                <span>
+                  Tarifa: {formatCurrency(data.profile.precioBaseHora)}/hr
+                </span>
                 {(data.cashDelivery?.totalPending || 0) > 0 && (
                   <>
                     <span>•</span>
                     <span className="text-amber-300 font-semibold flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                      <Banknote size={13} /> Debe: {formatCurrency(data.cashDelivery?.totalPending || 0)}
+                      <Banknote size={13} /> Debe:{" "}
+                      {formatCurrency(data.cashDelivery?.totalPending || 0)}
                     </span>
                   </>
                 )}
@@ -182,7 +188,9 @@ export default function EmployeePortalView({
               <div className="text-sm sm:text-base font-bold text-[#E8D5A3] flex items-center justify-end gap-1">
                 <Trophy size={14} />
                 <span>#{data.ranking.myPosition}</span>
-                <span className="text-xs text-gray-500 font-normal">/ {data.ranking.totalModels}</span>
+                <span className="text-xs text-gray-500 font-normal">
+                  / {data.ranking.totalModels}
+                </span>
               </div>
             </div>
             {/* Solo con sesion propia: quien entra con el enlace del bot no
@@ -208,12 +216,45 @@ export default function EmployeePortalView({
 
         {/* NAVIGATION TABS */}
         <div className="max-w-4xl mx-auto mt-3 flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 border-t border-white/5 pt-2">
+          {workShift !== undefined && workShift !== null ? (
+            <Link
+              href="/empleada/historial"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-white/5 px-3.5 py-2 text-xs font-semibold text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <History size={14} /> Historial
+            </Link>
+          ) : null}
           {[
-            { id: "resumen", label: "Resumen", icono: <BarChart3 size={14} />, title: "Resumen" },
-            { id: "ranking", label: "Ranking", icono: <Trophy size={14} />, title: "Ranking Global" },
-            { id: "servicios", label: "Servicios", icono: <ClipboardList size={14} />, title: "Mis Servicios" },
-            { id: "reputacion", label: "Reseñas", icono: <Star size={14} />, title: "Reputación" },
-            { id: "fotos", label: "Mis Fotos", icono: <Camera size={14} />, title: "Fotos" },
+            {
+              id: "resumen",
+              label: "Resumen",
+              icono: <BarChart3 size={14} />,
+              title: "Resumen",
+            },
+            {
+              id: "ranking",
+              label: "Ranking",
+              icono: <Trophy size={14} />,
+              title: "Ranking Global",
+            },
+            {
+              id: "servicios",
+              label: "Servicios",
+              icono: <ClipboardList size={14} />,
+              title: "Mis Servicios",
+            },
+            {
+              id: "reputacion",
+              label: "Reseñas",
+              icono: <Star size={14} />,
+              title: "Reputación",
+            },
+            {
+              id: "fotos",
+              label: "Mis Fotos",
+              icono: <Camera size={14} />,
+              title: "Fotos",
+            },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -422,7 +463,8 @@ export default function EmployeePortalView({
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
                   <Info size={14} className="shrink-0" />
                   <span>
-                    Hay servicios con deducciones de transporte en estado provisional, en espera de confirmación de Uber por tu jefe.
+                    Hay servicios con deducciones de transporte en estado
+                    provisional, en espera de confirmación de Uber por tu jefe.
                   </span>
                 </div>
               )}
@@ -443,7 +485,9 @@ export default function EmployeePortalView({
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-mono font-bold text-[#C5A55A]">
-                                Servicio #{item.serviceId.slice(-6).toUpperCase()}
+                                {item.serviceId
+                                  ? `Servicio #${item.serviceId.slice(-6).toUpperCase()}`
+                                  : "Servicio histórico"}
                               </span>
                               <span className="text-gray-400">
                                 • {formatDate(item.serviceDate)}
@@ -456,11 +500,13 @@ export default function EmployeePortalView({
                             </div>
                             <div className="text-gray-400 text-[11px] mt-1 flex flex-wrap gap-x-3">
                               <span>
-                                Cobro cliente: {formatCurrency(item.customerTotal)}
+                                Cobro cliente:{" "}
+                                {formatCurrency(item.customerTotal)}
                               </span>
                               {item.uberDeduction > 0 && (
                                 <span className="text-emerald-400">
-                                  Deducción Uber: -{formatCurrency(item.uberDeduction)}
+                                  Deducción Uber: -
+                                  {formatCurrency(item.uberDeduction)}
                                 </span>
                               )}
                               {item.paidAmount > 0 && (
@@ -504,7 +550,13 @@ export default function EmployeePortalView({
                   </span>
                 </div>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Recibes el <strong className="text-white">{data.earnings.percentageRate}%</strong> del valor base pactado por cada hora de servicio, más el <strong className="text-white">100%</strong> de tus servicios extras realizados.
+                  Recibes el{" "}
+                  <strong className="text-white">
+                    {data.earnings.percentageRate}%
+                  </strong>{" "}
+                  del valor base pactado por cada hora de servicio, más el{" "}
+                  <strong className="text-white">100%</strong> de tus servicios
+                  extras realizados.
                 </p>
                 <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-gray-400">
                   <span>Tarifa por hora configurada:</span>
@@ -524,7 +576,8 @@ export default function EmployeePortalView({
                     className={`inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-semibold ${
                       data.profile.weeklyContentStatus === "al_dia"
                         ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                        : data.profile.weeklyContentStatus === "pendiente_revision"
+                        : data.profile.weeklyContentStatus ===
+                            "pendiente_revision"
                           ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
                           : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                     }`}
@@ -533,7 +586,8 @@ export default function EmployeePortalView({
                       <>
                         <Check size={12} /> Al Día
                       </>
-                    ) : data.profile.weeklyContentStatus === "pendiente_revision" ? (
+                    ) : data.profile.weeklyContentStatus ===
+                      "pendiente_revision" ? (
                       <>
                         <Clock size={12} /> En Revisión
                       </>
@@ -574,7 +628,8 @@ export default function EmployeePortalView({
                     ¡Posición #{data.ranking.myPosition} en el Ranking General!
                   </div>
                   <div className="text-xs text-gray-400">
-                    Entre {data.ranking.totalModels} modelos activas en la agencia
+                    Entre {data.ranking.totalModels} modelos activas en la
+                    agencia
                   </div>
                 </div>
               </div>
@@ -600,11 +655,13 @@ export default function EmployeePortalView({
                 Tabla de Clasificación Global
               </h2>
               <p className="text-xs sm:text-sm text-gray-400 max-w-lg mx-auto">
-                Tu posición se actualiza según tu volumen de servicios, calificaciones de clientes y cumplimiento. ¡Sigue brillando!
+                Tu posición se actualiza según tu volumen de servicios,
+                calificaciones de clientes y cumplimiento. ¡Sigue brillando!
               </p>
               <div className="pt-2">
                 <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#C5A55A]/20 text-[#E8D5A3] border border-[#C5A55A]/40 text-xs font-bold">
-                  Tu Puesto Actual: #{data.ranking.myPosition} de {data.ranking.totalModels} modelos
+                  Tu Puesto Actual: #{data.ranking.myPosition} de{" "}
+                  {data.ranking.totalModels} modelos
                 </span>
               </div>
             </div>
@@ -642,7 +699,13 @@ export default function EmployeePortalView({
                       </div>
 
                       <div className="flex-1 font-semibold text-sm">
-                        <span className={entry.isMe ? "text-[#E8D5A3] font-bold" : "text-gray-200"}>
+                        <span
+                          className={
+                            entry.isMe
+                              ? "text-[#E8D5A3] font-bold"
+                              : "text-gray-200"
+                          }
+                        >
                           {entry.nombreArtistico}
                         </span>
                         {entry.isMe && (
@@ -676,9 +739,12 @@ export default function EmployeePortalView({
             <div className="bg-[#141721] rounded-xl border border-white/5 overflow-hidden shadow-sm">
               <div className="p-4 border-b border-white/5 flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-white">Historial de Servicios</h3>
+                  <h3 className="text-sm font-bold text-white">
+                    Historial de Servicios
+                  </h3>
                   <p className="text-xs text-gray-400">
-                    Tus últimos servicios completados y el desglose de tu ganancia neta.
+                    Tus últimos servicios completados y el desglose de tu
+                    ganancia neta.
                   </p>
                 </div>
                 <span className="text-xs text-[#E8D5A3] font-semibold bg-[#C5A55A]/10 px-2.5 py-1 rounded-md border border-[#C5A55A]/20">
@@ -693,53 +759,57 @@ export default function EmployeePortalView({
               ) : (
                 <div className="divide-y divide-white/5">
                   {data.recentServices.map((service) => (
-                    <div key={service.id} className="p-4 hover:bg-white/[0.02] transition-colors">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-white">
-                            {formatDate(service.fecha)}
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-gray-300 font-medium">
-                            {service.duracionHoras} hrs
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-gray-300 capitalize">
-                            {service.metodoPago}
-                          </span>
+                    <div
+                      key={service.id}
+                      className="p-4 hover:bg-white/[0.02] transition-colors"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white">
+                              {formatDate(service.fecha)}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-gray-300 font-medium">
+                              {service.duracionHoras} hrs
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-white/10 text-gray-300 capitalize">
+                              {service.metodoPago}
+                            </span>
+                          </div>
+                          {service.extrasTotal > 0 && (
+                            <div className="text-xs text-amber-300 font-medium">
+                              + Extras incluidos:{" "}
+                              {formatCurrency(service.extrasTotal)}
+                            </div>
+                          )}
+                          {service.comentarioCliente && (
+                            <div className="text-xs text-gray-400 italic">
+                              &ldquo;{service.comentarioCliente}&rdquo;
+                            </div>
+                          )}
                         </div>
-                        {service.extrasTotal > 0 && (
-                          <div className="text-xs text-amber-300 font-medium">
-                            + Extras incluidos: {formatCurrency(service.extrasTotal)}
+
+                        <div className="text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5">
+                          <div className="text-[10px] uppercase tracking-wider text-gray-400">
+                            Tu Ganancia Neta
                           </div>
-                        )}
-                        {service.comentarioCliente && (
-                          <div className="text-xs text-gray-400 italic">
-                            &ldquo;{service.comentarioCliente}&rdquo;
+                          <div className="text-base font-bold text-emerald-400">
+                            {formatCurrency(service.gananciaNeta)}
                           </div>
-                        )}
+                        </div>
                       </div>
 
-                      <div className="text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5">
-                        <div className="text-[10px] uppercase tracking-wider text-gray-400">
-                          Tu Ganancia Neta
-                        </div>
-                        <div className="text-base font-bold text-emerald-400">
-                          {formatCurrency(service.gananciaNeta)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Si el cliente se portó mal, esto es lo que acaba
+                      {/* Si el cliente se portó mal, esto es lo que acaba
                         bloqueándolo. Antes solo se podía desde el chat. */}
-                    <div className="mt-3">
-                      <ReportarConducta
-                        servicioId={service.id}
-                        direction="employee_to_client"
-                        sujeto="al cliente"
-                        reportar={reportarConducta}
-                        token={token}
-                      />
-                    </div>
+                      <div className="mt-3">
+                        <ReportarConducta
+                          servicioId={service.id}
+                          direction="employee_to_client"
+                          sujeto="al cliente"
+                          reportar={reportarConducta}
+                          token={token}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -775,7 +845,9 @@ export default function EmployeePortalView({
                   <span>★</span>
                   <span>{data.reputation.ratingAverage.toFixed(1)}</span>
                 </div>
-                <div className="text-xs font-semibold text-white">Promedio General</div>
+                <div className="text-xs font-semibold text-white">
+                  Promedio General
+                </div>
                 <div className="text-[11px] text-gray-400">
                   {data.reputation.ratingCount} opiniones de clientes
                 </div>
@@ -785,15 +857,21 @@ export default function EmployeePortalView({
                 <div className="text-3xl font-extrabold text-emerald-400">
                   {(data.reputation.trustScore * 100).toFixed(0)}%
                 </div>
-                <div className="text-xs font-semibold text-white">Nivel de Confianza</div>
-                <div className="text-[11px] text-gray-400">Puntualidad y cumplimiento</div>
+                <div className="text-xs font-semibold text-white">
+                  Nivel de Confianza
+                </div>
+                <div className="text-[11px] text-gray-400">
+                  Puntualidad y cumplimiento
+                </div>
               </div>
 
               <div className="bg-[#141721] p-5 rounded-xl border border-white/5 text-center space-y-1 sm:col-span-1">
                 <div className="text-3xl font-extrabold text-[#E8D5A3]">
                   #{data.ranking.myPosition}
                 </div>
-                <div className="text-xs font-semibold text-white">Ranking del Equipo</div>
+                <div className="text-xs font-semibold text-white">
+                  Ranking del Equipo
+                </div>
                 <div className="text-[11px] text-gray-400">
                   De {data.ranking.totalModels} compañeras
                 </div>
@@ -803,9 +881,12 @@ export default function EmployeePortalView({
             {/* Muro de comentarios */}
             <div className="bg-[#141721] rounded-xl border border-white/5 overflow-hidden shadow-sm">
               <div className="p-4 border-b border-white/5">
-                <h3 className="text-sm font-bold text-white">Opiniones y Comentarios</h3>
+                <h3 className="text-sm font-bold text-white">
+                  Opiniones y Comentarios
+                </h3>
                 <p className="text-xs text-gray-400">
-                  Lo que los clientes han comentado tras finalizar sus servicios contigo.
+                  Lo que los clientes han comentado tras finalizar sus servicios
+                  contigo.
                 </p>
               </div>
 
@@ -816,14 +897,19 @@ export default function EmployeePortalView({
               ) : (
                 <div className="divide-y divide-white/5">
                   {data.reputation.reviews.map((rev) => (
-                    <div key={rev.id} className="p-4 space-y-1.5 hover:bg-white/[0.02] transition-colors">
+                    <div
+                      key={rev.id}
+                      className="p-4 space-y-1.5 hover:bg-white/[0.02] transition-colors"
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1 text-amber-300 text-sm">
                           {Array.from({ length: rev.estrellas }).map((_, i) => (
                             <span key={i}>★</span>
                           ))}
                         </div>
-                        <span className="text-[11px] text-gray-500">{formatDate(rev.fecha)}</span>
+                        <span className="text-[11px] text-gray-500">
+                          {formatDate(rev.fecha)}
+                        </span>
                       </div>
                       <p className="text-xs text-gray-300 leading-relaxed font-normal">
                         &ldquo;{rev.comentario}&rdquo;
@@ -850,7 +936,9 @@ export default function EmployeePortalView({
             <div className="bg-[#141721] p-5 rounded-xl border border-white/5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-white">Fotos en Catálogo Público</h3>
+                  <h3 className="text-sm font-bold text-white">
+                    Fotos en Catálogo Público
+                  </h3>
                   <p className="text-xs text-gray-400">
                     Fotos visibles para clientes en la web principal.
                   </p>
@@ -861,7 +949,9 @@ export default function EmployeePortalView({
               </div>
 
               {data.profile.publicPhotos.length === 0 ? (
-                <div className="text-xs text-gray-500 italic">No hay fotos públicas cargadas.</div>
+                <div className="text-xs text-gray-500 italic">
+                  No hay fotos públicas cargadas.
+                </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                   {data.profile.publicPhotos.map((url, idx) => (
@@ -886,9 +976,12 @@ export default function EmployeePortalView({
             <div className="bg-[#141721] p-5 rounded-xl border border-white/5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-white">Fotos Exclusivas para Clientes</h3>
+                  <h3 className="text-sm font-bold text-white">
+                    Fotos Exclusivas para Clientes
+                  </h3>
                   <p className="text-xs text-gray-400">
-                    Fotos privadas que la IA o el jefe pueden enviar por chat a clientes interesados.
+                    Fotos privadas que la IA o el jefe pueden enviar por chat a
+                    clientes interesados.
                   </p>
                 </div>
                 <span className="text-xs font-semibold px-2.5 py-1 rounded bg-purple-500/20 text-purple-300">

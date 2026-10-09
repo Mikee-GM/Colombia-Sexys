@@ -215,19 +215,28 @@ export default function ServiceDetailDialog({
   };
 
   const handleDeleteService = async () => {
+    const reason = window.prompt(
+      "Motivo para enviar el servicio a la papelera (mínimo 10 caracteres)",
+    );
+    if (!reason || reason.trim().length < 10) {
+      if (reason !== null) {
+        toast.error("Escribe un motivo de al menos 10 caracteres");
+      }
+      return;
+    }
     if (
       !confirm(
-        "¿Estás seguro de que deseas ELIMINAR este servicio de la base de datos? Esto destruirá el historial y no se puede deshacer.",
+        "El servicio se ocultará de operación, historial y cortes. ¿Continuar?",
       )
     )
       return;
     setPendingAction(true);
     try {
-      const res = await deleteServiceAction(service.id);
+      const res = await deleteServiceAction(service.id, reason.trim());
       if (!res.success) {
         throw new Error(res.error || "Error al eliminar");
       }
-      toast.success("Servicio eliminado correctamente");
+      toast.success("Servicio enviado a la papelera");
       onUpdated();
       onClose();
     } catch (err: any) {
@@ -542,9 +551,9 @@ export default function ServiceDetailDialog({
                         disabled={pendingAction}
                         onClick={handleDeleteService}
                         className="inline-flex items-center gap-2 rounded-xl border border-red-950 bg-red-950/20 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-red-500 hover:bg-red-900/60 transition-all disabled:opacity-50"
-                        title="Eliminar servicio de la base de datos (Destructivo)"
+                        title="Enviar servicio a la papelera"
                       >
-                        <X size={15} /> Borrar
+                        <X size={15} /> Papelera
                       </button>
                     </div>
                   )}

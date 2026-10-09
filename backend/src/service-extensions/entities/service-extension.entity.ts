@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { Servicios } from '../../services/entities/service.entity';
 
@@ -43,6 +43,30 @@ export class ExtensionesServicio {
   })
   @ApiProperty({ description: 'Monto Agregado', example: 1200.0 })
   montoAgregado: number;
+
+  @Column('numeric', {
+    name: 'employee_percentage_snapshot',
+    precision: 5,
+    scale: 2,
+    default: 60,
+    transformer: new ColumnNumericTransformer(),
+  })
+  employeePercentageSnapshot: number;
+
+  @Column('numeric', {
+    name: 'employee_expected_snapshot',
+    precision: 12,
+    scale: 2,
+    transformer: new ColumnNumericTransformer(),
+  })
+  employeeExpectedSnapshot: number;
+
+  @Column('varchar', {
+    name: 'financial_snapshot_status',
+    length: 24,
+    default: 'captured',
+  })
+  financialSnapshotStatus: 'captured' | 'legacy_backfill';
 
   @Column('enum', { name: 'aceptada_por', enum: ['cliente', 'empleada'] })
   @ApiProperty({
