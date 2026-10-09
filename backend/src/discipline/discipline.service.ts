@@ -140,11 +140,84 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     return this.persistRating(dto, interaction);
   }
 
+  /**
+   * Entrada idempotente para botones de Telegram. Un doble toque o un callback
+   * reintentado por Telegram devuelve la primera calificación y no duplica sus
+   * efectos disciplinarios.
+   */
+  async createClientRatingIdempotent(
+    clientId: string,
+    dto: CreateRatingDto,
+  ): Promise<{ rating: InteractionRating; created: boolean }> {
+    if (dto.direction !== 'client_to_employee') {
+      throw new ForbiddenException('Dirección de calificación no permitida');
+    }
+    const interaction = await this.resolveInteractionForPerson(
+      dto.direction,
+      dto.interactionId,
+      'client',
+      clientId,
+      dto.employeeId,
+    );
+    const where = {
+      direction: dto.direction,
+      serviceId: interaction.serviceId!,
+      employeeId: interaction.employeeId,
+    };
+    const existing = await this.ratings.findOne({ where });
+    if (existing) return { rating: existing, created: false };
+
+    try {
+      return {
+        rating: await this.persistRating(dto, interaction, {
+          allowMissingLowScoreComment: true,
+        }),
+        created: true,
+      };
+    } catch (error) {
+      if (!(error instanceof ConflictException)) throw error;
+      const raced = await this.ratings.findOne({ where });
+      if (!raced) throw error;
+      return { rating: raced, created: false };
+    }
+  }
+
+  async addClientRatingReason(
+    clientId: string,
+    serviceId: string,
+    reason: 'trato' | 'puntualidad' | 'comunicacion' | 'otro',
+  ): Promise<InteractionRating> {
+    const rating = await this.ratings.findOne({
+      where: {
+        direction: 'client_to_employee',
+        serviceId,
+        clientId,
+      },
+    });
+    if (!rating) throw new NotFoundException('Calificación no encontrada');
+    if (!rating.comment) {
+      const labels = {
+        trato: 'Trato',
+        puntualidad: 'Puntualidad',
+        comunicacion: 'Comunicación',
+        otro: 'Otro',
+      } as const;
+      rating.comment = labels[reason];
+      return this.ratings.save(rating);
+    }
+    return rating;
+  }
+
   private async persistRating(
     dto: CreateRatingDto,
     interaction: ResolvedInteraction,
+    options: { allowMissingLowScoreComment?: boolean } = {},
   ) {
-    if (dto.stars <= 2 && !dto.comment?.trim()) {
+    if (
+      dto.stars <= 2 &&
+      !dto.comment?.trim() &&
+      !options.allowMissingLowScoreComment
+    ) {
       throw new BadRequestException(
         'El comentario es obligatorio para una o dos estrellas',
       );
@@ -266,7 +339,9 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         serviceId: interaction.serviceId,
         tripId: interaction.tripId,
         category: 'otro',
-        description: (dto.comment || '').trim(),
+        description: (
+          dto.comment || 'Calificación baja sin comentario adicional'
+        ).trim(),
         priority: 'normal',
         history: [
           {

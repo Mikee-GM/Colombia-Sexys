@@ -94,9 +94,18 @@ export async function getJefeTodaySnapshot(): Promise<JefeTodaySnapshot> {
     (employee) =>
       employee.jefeId === jefe.id || employee.jefeSecundarioId === jefe.id,
   );
-  const withConversation = services.filter((service) =>
-    Boolean(service.clienteId),
-  );
+  const recentCutoff = Date.now() - 2 * 60 * 60 * 1000;
+  const withConversation = services.filter((service) => {
+    if (!service.clienteId) return false;
+    if (["pendiente", "agendado", "en_curso"].includes(service.estado)) {
+      return true;
+    }
+    if (service.estado !== "finalizado") return false;
+    const finishedAt = new Date(
+      service.horaFinServicio ?? service.updatedAt,
+    ).getTime();
+    return Number.isFinite(finishedAt) && finishedAt >= recentCutoff;
+  });
   const entries = await Promise.all(
     withConversation.map(
       async (service) =>

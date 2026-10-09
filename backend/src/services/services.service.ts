@@ -107,6 +107,7 @@ const DRIVER_REJECTION_FINE = 100;
 
 const SERVICES_DEFAULT_PAGE_SIZE = 200;
 const SERVICES_MAX_PAGE_SIZE = 500;
+const TELEGRAM_MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 export type EvidenceItem = {
   id: string;
@@ -342,6 +343,99 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         err,
       );
     }
+  }
+
+  /**
+   * Única comunicación de cierre al cliente.
+   *
+   * El bloqueo pesimista vuelve idempotente el efecto aun si dos caminos de
+   * cierre convergen al mismo tiempo. El mismo punto programa el borrado físico
+   * de los mensajes de esa contratación sin tocar el historial persistido.
+   */
+  private async sendPostServiceSurvey(servicioId: string): Promise<void> {
+    await this.serviciosRepository.manager.transaction(async (manager) => {
+      const services = manager.getRepository(Servicios);
+      const conversations = manager.getRepository(ConversacionesTelegram);
+      const servicio = await services.findOne({
+        where: { id: servicioId },
+        relations: { cliente: true },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!servicio || servicio.estado !== 'finalizado') return;
+
+      const finishedAt = servicio.horaFinServicio
+        ? new Date(servicio.horaFinServicio)
+        : new Date();
+      const deleteAt = new Date(
+        finishedAt.getTime() + TELEGRAM_MESSAGE_RETENTION_MS,
+      );
+      const scope = servicio.bookingSessionId
+        ? 'servicio_id = :serviceId OR booking_session_id = :bookingSessionId'
+        : 'servicio_id = :serviceId';
+      await conversations
+        .createQueryBuilder('conversation')
+        .update(ConversacionesTelegram)
+        .set({ deleteAt, deleteStatus: 'PENDING' })
+        .where('telegram_message_id IS NOT NULL')
+        .andWhere('telegram_chat_id IS NOT NULL')
+        .andWhere('delete_status IS NULL')
+        .andWhere(`(${scope})`, {
+          serviceId: servicio.id,
+          bookingSessionId: servicio.bookingSessionId,
+        })
+        .execute();
+
+      const chatId = servicio.cliente?.telegramChatId;
+      if (!chatId || servicio.telegramResumenDefinitivoId) return;
+
+      const keyboard = Markup.inlineKeyboard([
+        [1, 2, 3].map((rating) =>
+          Markup.button.callback(
+            `${'⭐'.repeat(rating)}`,
+            `calificar_servicio:${servicio.id}:${rating}`,
+          ),
+        ),
+        [4, 5].map((rating) =>
+          Markup.button.callback(
+            `${'⭐'.repeat(rating)}`,
+            `calificar_servicio:${servicio.id}:${rating}`,
+          ),
+        ),
+        [
+          Markup.button.callback(
+            'VOLVER A CONTRATAR',
+            `rehire_service:${servicio.id}`,
+          ),
+          Markup.button.callback('VER CATÁLOGO', 'post_service_catalog'),
+        ],
+      ]);
+      const text = 'Gracias por tu confianza 💕\n¿Cómo estuvo tu experiencia?';
+      const message = await this.bot.telegram.sendMessage(chatId, text, {
+        disable_notification: true,
+        ...keyboard,
+      });
+
+      servicio.telegramResumenDefinitivoId = message.message_id.toString();
+      await services.save(servicio);
+      await conversations.save(
+        conversations.create({
+          clienteId: servicio.clienteId!,
+          servicioId: servicio.id,
+          bookingSessionId: servicio.bookingSessionId,
+          intendedEmployeeId: servicio.empleadaId,
+          emisor: 'sistema',
+          mensaje: text,
+          iaActiva: false,
+          telegramMessageId: message.message_id.toString(),
+          telegramChatId: String(chatId),
+          deleteAt,
+          deleteStatus: 'PENDING',
+          deleteAttempts: 0,
+          lastDeleteError: null,
+          deletedFromTelegramAt: null,
+        }),
+      );
+    });
   }
 
   /**
@@ -5511,6 +5605,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     servicio.proximoRecordatorioRegresoAt = new Date(Date.now() + 5 * 60_000);
     await this.serviciosRepository.save(servicio);
 
+    // La encuesta nace del cierre común (empleada u oficina), no de un viaje
+    // posterior. Es best-effort: Telegram nunca puede revertir el servicio.
+    await this.sendPostServiceSurvey(servicio.id).catch((error) =>
+      this.logger.warn(
+        `El servicio ${servicio.id} cerró, pero no se pudo enviar o programar su encuesta: ${describeError(error)}`,
+      ),
+    );
+
     // El cierre del trabajo no cierra todavía el flujo operativo: primero hay
     // que resolver y completar el regreso. Las filas históricas sin estado
     // explícito ya se interpretan como `preparando_regreso` por compatibilidad.
@@ -6966,63 +7068,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relations: { cliente: true, empleada: { usuario: true } },
     });
     if (!servicio || servicio.estado !== 'finalizado') return;
-    const text =
-      `✅ *Total definitivo del servicio*\n\n` +
-      `• Servicio base: $${Number(servicio.totalBase).toFixed(2)}\n` +
-      `• Transporte: $${Number(servicio.totalTransporte).toFixed(2)}\n` +
-      `• *Total a pagar: $${Number(servicio.totalFinal).toFixed(2)}*\n\n` +
-      `Por favor, califica el servicio:`;
-    if (servicio.cliente?.telegramChatId) {
-      const keyboard = Markup.inlineKeyboard([
-        ...[1, 2, 3, 4, 5].map((rating) => [
-          Markup.button.callback(
-            `${rating} - ${'⭐'.repeat(rating)}`,
-            `calificar_servicio:${servicio.id}:${rating}`,
-          ),
-        ]),
-        [
-          Markup.button.callback(
-            '⚠️ Reportar empleada',
-            `er_client_start:${servicio.id}`,
-          ),
-        ],
-      ]);
-      try {
-        if (servicio.telegramResumenDefinitivoId) {
-          await this.bot.telegram.editMessageText(
-            servicio.cliente.telegramChatId,
-            Number(servicio.telegramResumenDefinitivoId),
-            undefined,
-            text,
-            { parse_mode: 'Markdown', ...keyboard },
-          );
-        } else {
-          const message = await this.bot.telegram.sendMessage(
-            servicio.cliente.telegramChatId,
-            text,
-            {
-              parse_mode: 'Markdown',
-              ...keyboard,
-            },
-          );
-          await this.serviciosRepository.update(servicio.id, {
-            telegramResumenDefinitivoId: message.message_id.toString(),
-          });
-        }
-      } catch {
-        const message = await this.bot.telegram.sendMessage(
-          servicio.cliente.telegramChatId,
-          text,
-          {
-            parse_mode: 'Markdown',
-            ...keyboard,
-          },
-        );
-        await this.serviciosRepository.update(servicio.id, {
-          telegramResumenDefinitivoId: message.message_id.toString(),
-        });
-      }
-    }
+    // Compatibilidad con los caminos que llegan aquí al cerrar el transporte:
+    // la encuesta ya debió salir al finalizar el servicio y este llamado solo
+    // la recupera si Telegram falló en aquel instante. Nunca la edita ni repite.
+    await this.sendPostServiceSurvey(servicio.id).catch((error) =>
+      this.logger.warn(
+        `No se pudo recuperar la encuesta del servicio ${servicio.id}: ${describeError(error)}`,
+      ),
+    );
 
     const employeeChatId = servicio.empleada?.usuario?.telegramChatId;
     if (employeeChatId) {

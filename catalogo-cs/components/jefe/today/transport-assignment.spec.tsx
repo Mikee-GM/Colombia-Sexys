@@ -134,6 +134,7 @@ function conversation(currentService: Service): JefeConversation {
     mode: "AI_ACTIVE",
     needsReply: false,
     unreadCount: 0,
+    chatState: "ACTIVE",
   };
 }
 

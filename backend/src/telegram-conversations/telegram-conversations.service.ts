@@ -930,7 +930,7 @@ export class TelegramConversationsService {
       throw new ConflictException('El cliente no tiene Telegram vinculado');
     }
 
-    await this.bot.telegram.sendMessage(clientChatId, message);
+    const sent = await this.bot.telegram.sendMessage(clientChatId, message);
     if (service.jefe?.grupoTelegramId && service.telegramThreadId) {
       await this.bot.telegram.sendMessage(
         service.jefe.grupoTelegramId,
@@ -938,7 +938,10 @@ export class TelegramConversationsService {
         { message_thread_id: Number(service.telegramThreadId) },
       );
     }
-    return this.record(service, 'jefe', message);
+    return this.record(service, 'jefe', message, {
+      messageId: sent?.message_id,
+      chatId: String(clientChatId),
+    });
   }
 
   async sendAdminMessage(
@@ -956,7 +959,7 @@ export class TelegramConversationsService {
       throw new ConflictException('El cliente no tiene Telegram vinculado');
     }
 
-    await this.bot.telegram.sendMessage(clientChatId, message);
+    const sent = await this.bot.telegram.sendMessage(clientChatId, message);
     if (service.jefe?.grupoTelegramId && service.telegramThreadId) {
       await this.bot.telegram.sendMessage(
         service.jefe.grupoTelegramId,
@@ -964,7 +967,10 @@ export class TelegramConversationsService {
         { message_thread_id: Number(service.telegramThreadId) },
       );
     }
-    return this.record(service, asIdentity, message);
+    return this.record(service, asIdentity, message, {
+      messageId: sent?.message_id,
+      chatId: String(clientChatId),
+    });
   }
 
   async sendAdminMessageToSession(
@@ -1001,7 +1007,7 @@ export class TelegramConversationsService {
       throw new ConflictException('El cliente no tiene Telegram vinculado');
     }
 
-    await this.bot.telegram.sendMessage(clientChatId, message);
+    const sent = await this.bot.telegram.sendMessage(clientChatId, message);
 
     // Guardar el mensaje en el historial
     const saved = await this.conversationsRepository.save(
@@ -1013,6 +1019,8 @@ export class TelegramConversationsService {
         emisor: asIdentity,
         mensaje: message,
         iaActiva: false,
+        telegramMessageId: sent?.message_id?.toString() ?? null,
+        telegramChatId: String(clientChatId),
       }),
     );
     this.emitPreServiceEvent(conversation.intendedEmployee, {
@@ -1137,6 +1145,7 @@ export class TelegramConversationsService {
     service: Servicios,
     sender: 'ia' | 'jefe' | 'cliente' | 'empleada',
     message: string,
+    telegram?: { messageId?: number; chatId: string },
   ) {
     // Sin cliente identificado no hay conversacion a la que pertenezca: pasa
     // en los servicios registrados a posteriori, que ademas no tienen chat.
@@ -1149,6 +1158,8 @@ export class TelegramConversationsService {
         emisor: sender as any,
         mensaje: message,
         iaActiva: service.iaActiva,
+        telegramMessageId: telegram?.messageId?.toString() ?? null,
+        telegramChatId: telegram?.chatId ?? null,
       }),
     );
     this.realtimeEvents.emitToBosses(
@@ -1409,7 +1420,10 @@ export class TelegramConversationsService {
       );
     }
 
-    await this.bot.telegram.sendMessage(cliente.telegramChatId, message);
+    const sent = await this.bot.telegram.sendMessage(
+      cliente.telegramChatId,
+      message,
+    );
 
     // Guardar el mensaje en el historial
     const saved = await this.conversationsRepository.save(
@@ -1421,6 +1435,8 @@ export class TelegramConversationsService {
         emisor: asIdentity,
         mensaje: message,
         iaActiva: false,
+        telegramMessageId: sent?.message_id?.toString() ?? null,
+        telegramChatId: String(cliente.telegramChatId),
       }),
     );
     this.emitPreServiceEvent(latest.intendedEmployee, {
