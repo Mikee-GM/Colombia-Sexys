@@ -104,6 +104,7 @@ const navGroups: NavGroup[] = [
   {
     title: "Control",
     items: [
+      { label: "Aplicación y avisos", href: "/admin/ajustes", icon: Settings },
       { label: "Fotos y Contenido", href: "/admin/fotos", icon: ImageIcon },
       { label: "Onboarding", href: "/admin/onboarding", icon: UserPlus },
       { label: "Reportes y Disciplina", href: "/admin/reports", icon: Scale },
@@ -160,7 +161,7 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
   }
 
   return (
-    <div className="flex min-h-screen bg-black text-white font-body overflow-hidden">
+    <div className="flex min-h-dvh bg-black text-white font-body overflow-hidden">
       <SessionKeeper />
       {/* Sidebar Desktop */}
       {/* En tableta instalada la barra de estado tambien se pinta encima

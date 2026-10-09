@@ -250,6 +250,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       url: string;
       tag?: string;
       requireInteraction?: boolean;
+      relatedEntityId?: string;
+      dedupeKey?: string;
     },
   ): Promise<void> {
     if (!usuarioId) return;
@@ -288,6 +290,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         url: '/empleada/portal',
         tag: `servicio-${servicio.id}`,
         requireInteraction: true,
+        relatedEntityId: servicio.id,
+        dedupeKey: `employee:new_service:${servicio.id}`,
       });
     } catch (err) {
       this.logger.error('Error enviando el aviso push a la empleada:', err);
@@ -2013,6 +2017,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       url: '/empleada/servicio',
       tag: `aceptacion-${servicio.id}`,
       requireInteraction: true,
+      relatedEntityId: servicio.id,
+      dedupeKey: `employee:service_waiting_employee_acceptance:${servicio.id}:event`,
     });
 
     const chatId = servicio.empleada?.usuario?.telegramChatId;
@@ -3404,6 +3410,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       cuerpo: `Se agregaron ${horas} hora${horas === 1 ? '' : 's'} al servicio.`,
       url: '/jefe',
       tag: `extension-${servicio.id}`,
+      relatedEntityId: servicio.id,
+      dedupeKey: `boss:service_extended:${servicio.id}:event`,
     });
     if (servicio.cliente?.telegramChatId) {
       try {
@@ -3487,6 +3495,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       url: '/jefe',
       tag: `panico-${servicio.id}`,
       requireInteraction: true,
+      relatedEntityId: servicio.id,
+      dedupeKey: `boss:SERVICE_PANIC_ACTIVATED:${servicio.id}:event`,
     });
     const bossChatId =
       servicio.jefe?.grupoTelegramId ?? servicio.jefe?.telegramChatId;
@@ -4295,6 +4305,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         url: '/chofer/portal',
         tag: `oferta-${viajeId}`,
         requireInteraction: true,
+        relatedEntityId: viajeId,
+        dedupeKey: `driver:trip_offered:${viaje.servicioId}:event`,
       });
     } catch (pushErr) {
       this.logger.error(
@@ -4362,6 +4374,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       url: '/jefe',
       tag: `sin-chofer-${viaje.id}`,
       requireInteraction: true,
+      relatedEntityId: viaje.id,
+      dedupeKey: `boss:no_drivers_available:${viaje.servicioId}:event`,
     });
 
     const topic = this.getServiceTopic(viaje.servicio);
@@ -4732,6 +4746,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           url: '/empleada/servicio',
           tag: `aceptacion-${service.id}`,
           requireInteraction: true,
+          relatedEntityId: service.id,
+          dedupeKey: `employee:employee_acceptance_reminder:${service.id}:event`,
         });
         if (service.empleada?.usuario?.telegramChatId) {
           try {
@@ -4770,6 +4786,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         url: '/jefe',
         tag: `aceptacion-${service.id}`,
         requireInteraction: true,
+        relatedEntityId: service.id,
+        dedupeKey: `boss:employee_acceptance_escalated:${service.id}:event`,
+      });
+      this.realtimeEventsService.emitToEmployee(service.empleadaId, {
+        type: 'employee_acceptance_escalated',
+        data: { serviceId: service.id, escalatedAt: now },
       });
       this.realtimeEventsService.emitToBoss(service.jefeId, {
         type: 'employee_acceptance_escalated',
@@ -4825,6 +4847,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           url: '/empleada/servicio',
           tag: `fin-proximo-${service.id}`,
           requireInteraction: true,
+          relatedEntityId: service.id,
+          dedupeKey: `employee:SERVICE_ENDING_SOON:${service.id}:event`,
         }),
         this.avisar(service.jefeId, {
           titulo: 'Prepara el transporte de regreso',
@@ -4832,6 +4856,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           url: '/jefe',
           tag: `fin-proximo-${service.id}`,
           requireInteraction: true,
+          relatedEntityId: service.id,
+          dedupeKey: `boss:SERVICE_ENDING_SOON:${service.id}:event`,
         }),
       ]);
       if (service.cliente?.telegramChatId) {
@@ -5942,6 +5968,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           url: '/jefe',
           tag: `regreso-${servicio.id}`,
           requireInteraction: true,
+          relatedEntityId: servicio.id,
+          dedupeKey: `boss:return_transport_escalated:${servicio.id}:event`,
         });
         this.realtimeEventsService.emitToBoss(servicio.jefeId, {
           type: 'return_transport_escalated',
@@ -6047,11 +6075,19 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         type: 'return_transport_selected',
         data: { serviceId: result.servicio.id, trip: result.trip },
       });
+      this.realtimeEventsService.emitToEmployee(result.servicio.empleadaId, {
+        type: 'return_transport_selected',
+        data: { serviceId: result.servicio.id, tripId: result.trip.id },
+      });
       return { trip: result.trip };
     }
     this.realtimeEventsService.emitToBoss(result.servicio.jefeId, {
       type: 'return_transport_selected',
       data: { serviceId: result.servicio.id, trip: result.trip },
+    });
+    this.realtimeEventsService.emitToEmployee(result.servicio.empleadaId, {
+      type: 'return_transport_selected',
+      data: { serviceId: result.servicio.id, tripId: result.trip.id },
     });
     const employee = await this.serviciosRepository.findOne({
       where: { id: result.servicio.id },
@@ -6744,6 +6780,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         url: '/empleada/servicio',
         tag: `transporte-${result.trip.id}`,
         requireInteraction: true,
+        relatedEntityId: result.trip.id,
+        dedupeKey: `employee:external_transport_assigned:${serviceId}:event`,
       });
     }
     const employee = await this.empleadasRepository.findOne({

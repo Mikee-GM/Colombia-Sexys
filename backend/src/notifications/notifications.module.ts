@@ -9,6 +9,10 @@ import { PushSubscriptionsService } from './push-subscriptions.service';
 import { WebPushProvider } from './web-push.provider';
 import { NotificationsBridge } from './notifications.bridge';
 import { UserPreferencesModule } from '../user-preferences/user-preferences.module';
+import { PushNotificationEvent } from './entities/push-notification-event.entity';
+import { Empleadas } from '../employees/entities/employee.entity';
+import { Choferes } from '../drivers/entities/driver.entity';
+import { Usuarios } from '../users/entities/user.entity';
 
 /**
  * La salida de avisos del sistema.
@@ -20,7 +24,14 @@ import { UserPreferencesModule } from '../user-preferences/user-preferences.modu
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PushSubscription, Servicios]),
+    TypeOrmModule.forFeature([
+      PushSubscription,
+      PushNotificationEvent,
+      Servicios,
+      Empleadas,
+      Choferes,
+      Usuarios,
+    ]),
     AuthModule,
     UserPreferencesModule,
   ],

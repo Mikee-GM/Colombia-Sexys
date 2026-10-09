@@ -95,7 +95,7 @@ export default function DriverPortalView({
         : "Sin cerrar";
 
   return (
-    <div className="min-h-screen bg-[#0B0D13] text-gray-100 flex flex-col font-sans selection:bg-[#C5A55A]/30">
+    <div className="min-h-dvh bg-[#0B0D13] text-gray-100 flex flex-col font-sans selection:bg-[#C5A55A]/30">
       {/* HEADER / HERO BAR */}
       {/* Igual que en el portal de la empleada: la barra de estado del
           telefono se pinta encima de la pagina y hay que dejarle su hueco. */}

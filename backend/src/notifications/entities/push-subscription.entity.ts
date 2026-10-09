@@ -47,11 +47,23 @@ export class PushSubscription {
   @Column('timestamptz', { name: 'creada_en', default: () => 'now()' })
   creadaEn: Date;
 
+  @Column('timestamptz', { name: 'actualizada_en', default: () => 'now()' })
+  actualizadaEn: Date;
+
+  @Column('timestamptz', { name: 'ultima_vista_en', default: () => 'now()' })
+  ultimaVistaEn: Date;
+
+  @Column('boolean', { name: 'habilitada', default: true })
+  habilitada: boolean;
+
   @Column('timestamptz', { name: 'ultimo_envio', nullable: true })
   ultimoEnvio: Date | null;
 
   @Column('smallint', { default: 0 })
   fallos: number;
+
+  @Column('timestamptz', { name: 'ultimo_fallo_en', nullable: true })
+  ultimoFalloEn: Date | null;
 
   @ManyToOne(() => Usuarios, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'usuario_id' })

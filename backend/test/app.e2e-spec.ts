@@ -333,6 +333,55 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     }
   });
 
+  it('mantiene suscripciones multidispositivo y deduplicacion en PostgreSQL real', async () => {
+    const columns = (await dataSource.query(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'push_subscriptions'`,
+    )) as Array<{ column_name: string }>;
+    expect(columns.map((row) => row.column_name)).toEqual(
+      expect.arrayContaining([
+        'actualizada_en',
+        'ultima_vista_en',
+        'habilitada',
+        'ultimo_fallo_en',
+      ]),
+    );
+
+    await dataSource.query(
+      `INSERT INTO push_subscriptions
+         (usuario_id, endpoint, p256dh, auth, user_agent)
+       VALUES
+         ($1, 'https://push.example/e2e-phone', 'p1', 'a1', 'Safari en iOS'),
+         ($1, 'https://push.example/e2e-laptop', 'p2', 'a2', 'Chrome en Windows')`,
+      [IDS.boss],
+    );
+    const [{ devices }] = (await dataSource.query(
+      `SELECT count(*)::int AS devices
+         FROM push_subscriptions
+        WHERE usuario_id = $1 AND habilitada = true`,
+      [IDS.boss],
+    )) as Array<{ devices: number }>;
+    expect(devices).toBe(2);
+
+    const eventId = '99999999-9999-4999-8999-999999999999';
+    await dataSource.query(
+      `INSERT INTO push_notification_events
+         (event_id, usuario_id, type, dedupe_key)
+       VALUES ($1, $2, 'service_started', 'e2e:service-started')`,
+      [eventId, IDS.boss],
+    );
+    await expect(
+      dataSource.query(
+        `INSERT INTO push_notification_events
+           (event_id, usuario_id, type, dedupe_key)
+         VALUES ($1, $2, 'service_started', 'e2e:service-started')`,
+        [eventId, IDS.boss],
+      ),
+    ).rejects.toThrow();
+  });
+
   it('recorre el golden path con transporte interno de ida y externo de regreso', async () => {
     await services.ofrecerAEmpleada(
       IDS.service,

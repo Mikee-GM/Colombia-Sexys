@@ -30,6 +30,18 @@ export async function pedirConSesion(
   url: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  const metodo = (init.method ?? "GET").toUpperCase();
+  if (
+    metodo !== "GET" &&
+    metodo !== "HEAD" &&
+    typeof navigator !== "undefined" &&
+    navigator.onLine === false
+  ) {
+    throw new Error(
+      "Sin conexión: la acción no se guardó ni se enviará automáticamente.",
+    );
+  }
+
   const opciones: RequestInit = {
     ...init,
     credentials: "same-origin",

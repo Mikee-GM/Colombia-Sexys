@@ -37,10 +37,10 @@ export default function PaginaDeAvisos({
           {volverTexto}
         </Link>
         <h1 className="mt-3 font-heading text-3xl font-semibold text-white">
-          Avisos
+          Aplicación y notificaciones
         </h1>
         <p className="mt-2 text-sm text-zinc-500">
-          Configura en qué dispositivos recibes avisos y cuáles quieres recibir.
+          Instala el panel y configura qué dispositivos y avisos operativos utilizas.
         </p>
       </div>
 

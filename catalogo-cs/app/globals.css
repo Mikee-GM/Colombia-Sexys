@@ -16,12 +16,27 @@
 /* Base global */
 html {
   scroll-behavior: smooth;
+  max-width: 100%;
+  min-height: 100%;
+  overflow-x: clip;
 }
 
 body {
   font-family: var(--font-body);
   background-color: #000000;
   color: #ffffff;
+  max-width: 100%;
+  min-height: 100dvh;
+  overflow-x: clip;
+  scroll-padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+input,
+select,
+textarea,
+button,
+a {
+  scroll-margin-bottom: calc(6rem + env(safe-area-inset-bottom));
 }
 
 /* Scrollbar personalizada */

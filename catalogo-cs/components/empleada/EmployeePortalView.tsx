@@ -109,7 +109,7 @@ export default function EmployeePortalView({
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0D13] text-gray-100 flex flex-col font-sans selection:bg-[#C5A55A]/30">
+    <div className="min-h-dvh bg-[#0B0D13] text-gray-100 flex flex-col font-sans selection:bg-[#C5A55A]/30">
       {/* HEADER / HERO BAR */}
       {/* Con la app instalada en la pantalla de inicio la pagina empieza
           debajo de la barra de estado del telefono, asi que el relleno de

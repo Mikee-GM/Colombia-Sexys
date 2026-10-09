@@ -15,7 +15,7 @@ module.exports = {
   rootDir: ".",
   testEnvironment: "node",
   testMatch: ["<rootDir>/**/*.spec.ts", "<rootDir>/**/*.spec.tsx"],
-  testPathIgnorePatterns: ["/node_modules/", "/.next/"],
+  testPathIgnorePatterns: ["/node_modules/", "/.next/", "/e2e/"],
   setupFiles: ["<rootDir>/jest.setup.ts"],
   transform: {
     "^.+\.tsx?$": ["ts-jest", { tsconfig: { jsx: "react-jsx" } }],

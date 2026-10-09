@@ -43,7 +43,7 @@ function suscripcionesDeMentira(destinos: PushSubscription[]) {
   const listarDe = jest.fn(() => Promise.resolve(destinos));
   const olvidar = jest.fn(() => Promise.resolve());
   const marcarEnvio = jest.fn(() => Promise.resolve());
-  const marcarFallo = jest.fn(() => Promise.resolve());
+  const marcarFallo = jest.fn(() => Promise.resolve(1));
   const suscripciones = {
     listarDe,
     olvidar,
@@ -69,8 +69,13 @@ function servicioCon(partes: Record<string, unknown>): NotificationsService {
   Object.assign(service, {
     logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
     servicios: serviciosVacio,
+    eventos: {
+      query: jest.fn().mockResolvedValue([{ id: 'evento-registrado' }]),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    },
     // Sin ajuste guardado se manda todo, que es el caso por defecto.
     preferences: { get: jest.fn().mockResolvedValue(null) },
+    usuarios: { find: jest.fn().mockResolvedValue([]) },
     ...partes,
   });
   return service;
@@ -94,8 +99,13 @@ describe('NotificationsService', () => {
       webPush: proveedor,
       suscripciones,
       servicios: serviciosVacio,
+      eventos: {
+        query: jest.fn().mockResolvedValue([{ id: 'evento-registrado' }]),
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+      },
       // Sin ajuste guardado se manda todo, que es el caso por defecto.
       preferences: { get: jest.fn().mockResolvedValue(null) },
+      usuarios: { find: jest.fn().mockResolvedValue([]) },
     });
 
     const enviados = await service.notificar('usuario-1', aviso);
@@ -120,8 +130,13 @@ describe('NotificationsService', () => {
       webPush: proveedor,
       suscripciones,
       servicios: serviciosVacio,
+      eventos: {
+        query: jest.fn().mockResolvedValue([{ id: 'evento-registrado' }]),
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+      },
       // Sin ajuste guardado se manda todo, que es el caso por defecto.
       preferences: { get: jest.fn().mockResolvedValue(null) },
+      usuarios: { find: jest.fn().mockResolvedValue([]) },
     });
 
     const enviados = await service.notificar('usuario-1', aviso);
@@ -148,8 +163,13 @@ describe('NotificationsService', () => {
       webPush: proveedor,
       suscripciones,
       servicios: serviciosVacio,
+      eventos: {
+        query: jest.fn().mockResolvedValue([{ id: 'evento-registrado' }]),
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+      },
       // Sin ajuste guardado se manda todo, que es el caso por defecto.
       preferences: { get: jest.fn().mockResolvedValue(null) },
+      usuarios: { find: jest.fn().mockResolvedValue([]) },
     });
 
     const enviados = await service.notificar('usuario-1', aviso);
@@ -157,6 +177,36 @@ describe('NotificationsService', () => {
     expect(enviados).toBe(0);
     expect(marcarFallo).toHaveBeenCalledWith('intermitente');
     expect(olvidar).not.toHaveBeenCalled();
+  });
+
+  it('avisa a administracion al tercer fallo sin entrar en recursion', async () => {
+    const { proveedor, enviar } = proveedorDeMentira({
+      'https://push.example/intermitente': {
+        estado: 'error',
+        motivo: 'timeout',
+      },
+    });
+    const { suscripciones, marcarFallo } = suscripcionesDeMentira([
+      destino('intermitente'),
+    ]);
+    marcarFallo.mockResolvedValue(3);
+    const service = servicioCon({
+      webPush: proveedor,
+      suscripciones,
+      usuarios: {
+        find: jest.fn().mockResolvedValue([{ id: 'admin-1' }]),
+      },
+    });
+
+    await expect(service.notificar('usuario-1', aviso)).resolves.toBe(0);
+
+    expect(enviar).toHaveBeenCalledTimes(2);
+    expect(enviar.mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        titulo: 'Error repetido de notificaciones',
+        url: '/admin/ajustes',
+      }),
+    );
   });
 
   it('sin claves VAPID no lanza ni consulta la base', async () => {
@@ -170,8 +220,13 @@ describe('NotificationsService', () => {
       webPush: proveedor,
       suscripciones,
       servicios: serviciosVacio,
+      eventos: {
+        query: jest.fn().mockResolvedValue([{ id: 'evento-registrado' }]),
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+      },
       // Sin ajuste guardado se manda todo, que es el caso por defecto.
       preferences: { get: jest.fn().mockResolvedValue(null) },
+      usuarios: { find: jest.fn().mockResolvedValue([]) },
     });
 
     await expect(service.notificar('usuario-1', aviso)).resolves.toBe(0);
@@ -194,7 +249,12 @@ describe('NotificationsService', () => {
       webPush: proveedor,
       suscripciones,
       servicios,
+      eventos: {
+        query: jest.fn().mockResolvedValue([{ id: 'evento-registrado' }]),
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+      },
       preferences: { get: jest.fn().mockResolvedValue(null) },
+      usuarios: { find: jest.fn().mockResolvedValue([]) },
     });
 
     await service.notificarJefeServicioPendiente('servicio-1');
@@ -262,5 +322,49 @@ describe('NotificationsService', () => {
     await service.notificar('usuario-1', { ...aviso, tipo: 'liquidacion' });
 
     expect(enviar).toHaveBeenCalledTimes(1);
+  });
+
+  it('deduplica de forma durable el mismo evento para el mismo usuario', async () => {
+    const { proveedor, enviar } = proveedorDeMentira({});
+    const { suscripciones } = suscripcionesDeMentira([destino('a')]);
+    const query = jest.fn().mockResolvedValue([]);
+    const service = servicioCon({
+      webPush: proveedor,
+      suscripciones,
+      eventos: { query, update: jest.fn() },
+    });
+
+    const enviados = await service.notificar('usuario-1', {
+      ...aviso,
+      dedupeKey: 'servicio:1:iniciado',
+    });
+
+    expect(enviados).toBe(0);
+    expect(enviar).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('ON CONFLICT (usuario_id, dedupe_key)'),
+      expect.arrayContaining(['usuario-1', 'servicio:1:iniciado']),
+    );
+  });
+
+  it('no expone la entidad relacionada y corrige una URL externa', async () => {
+    const { proveedor, enviar } = proveedorDeMentira({});
+    const { suscripciones } = suscripcionesDeMentira([destino('a')]);
+    const service = servicioCon({ webPush: proveedor, suscripciones });
+
+    await service.notificar('usuario-1', {
+      titulo: 'Se requiere tu atencion',
+      cuerpo: 'Abre la aplicacion',
+      url: 'https://example.test/private',
+      relatedEntityId: '11111111-1111-4111-8111-111111111111',
+      dedupeKey: 'seguro-1',
+    });
+
+    const payload = enviar.mock.calls[0][1];
+    expect(payload.url).toBe('/');
+    expect(payload).not.toHaveProperty('relatedEntityId');
+    expect(JSON.stringify(payload)).not.toContain(
+      '11111111-1111-4111-8111-111111111111',
+    );
   });
 });
