@@ -17,6 +17,7 @@ export class LiquidationsRepository {
     return this.records.find({
       where: {
         occurredAt: Between(startDate, endDate),
+        excludedFromCut: false,
         ...(employeeId ? { employeeId } : {}),
       },
       relations: {

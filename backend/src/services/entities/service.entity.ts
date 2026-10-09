@@ -196,6 +196,31 @@ export class Servicios {
   @ApiProperty({ description: 'Total Final', example: 1200.0 })
   totalFinal: number;
 
+  /** Importe original pactado, antes de extensiones, conservado historicamente. */
+  @Column('numeric', {
+    name: 'service_base_amount_snapshot',
+    precision: 12,
+    scale: 2,
+    transformer: new ColumnNumericTransformer(),
+  })
+  serviceBaseAmountSnapshot: number;
+
+  @Column('numeric', {
+    name: 'employee_percentage_snapshot',
+    precision: 5,
+    scale: 2,
+    default: 60,
+    transformer: new ColumnNumericTransformer(),
+  })
+  employeePercentageSnapshot: number;
+
+  @Column('varchar', {
+    name: 'financial_snapshot_status',
+    length: 24,
+    default: 'captured',
+  })
+  financialSnapshotStatus: 'captured' | 'legacy_backfill';
+
   @Column('numeric', {
     name: 'total_paid',
     precision: 12,
@@ -465,6 +490,43 @@ export class Servicios {
     example: '2026-07-09T12:00:00.000Z',
   })
   canceladoAt: Date | null;
+
+  @Column('timestamp with time zone', {
+    name: 'administrative_void_at',
+    nullable: true,
+  })
+  administrativeVoidAt: Date | null;
+
+  @Column('uuid', { name: 'administrative_void_by_user_id', nullable: true })
+  administrativeVoidByUserId: string | null;
+
+  @Column('text', { name: 'administrative_void_reason', nullable: true })
+  administrativeVoidReason: string | null;
+
+  @Column('boolean', {
+    name: 'administrative_review_required',
+    default: false,
+  })
+  administrativeReviewRequired: boolean;
+
+  @Column('timestamp with time zone', { name: 'deleted_at', nullable: true })
+  deletedAt: Date | null;
+
+  @Column('uuid', { name: 'deleted_by_user_id', nullable: true })
+  deletedByUserId: string | null;
+
+  @Column('text', { name: 'delete_reason', nullable: true })
+  deleteReason: string | null;
+
+  @Column('varchar', { name: 'previous_status', length: 30, nullable: true })
+  previousStatus: string | null;
+
+  @Column('varchar', {
+    name: 'previous_operational_state',
+    length: 60,
+    nullable: true,
+  })
+  previousOperationalState: string | null;
 
   /*
    * Cerrar un servicio es de la modelo. Cuando no puede --telefono muerto, sin

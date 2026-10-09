@@ -50,8 +50,11 @@ export class EmployeeReport {
   @ApiProperty()
   id: string;
 
-  @Column('uuid', { name: 'service_id' })
-  serviceId: string;
+  @Column('uuid', { name: 'service_id', nullable: true })
+  serviceId: string | null;
+
+  @Column('uuid', { name: 'historical_service_id', nullable: true })
+  historicalServiceId: string | null;
 
   @Column('uuid', { name: 'employee_id' })
   employeeId: string;
@@ -105,9 +108,9 @@ export class EmployeeReport {
   })
   updatedAt: Date;
 
-  @ManyToOne(() => Servicios, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => Servicios, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'service_id' })
-  service: Servicios;
+  service: Servicios | null;
 
   @ManyToOne(() => Empleadas, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'employee_id' })

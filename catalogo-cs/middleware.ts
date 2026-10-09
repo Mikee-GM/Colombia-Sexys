@@ -403,6 +403,7 @@ export const config = {
     "/admin/:path*",
     "/jefe/:path*",
     "/empleada/portal",
+    "/empleada/historial",
     "/empleada/servicio",
     "/empleada/ajustes",
     "/chofer/portal",

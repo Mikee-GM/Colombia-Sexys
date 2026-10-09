@@ -28,10 +28,12 @@ export class AddPortalServiceExtraDto {
   precioCobrado?: number;
 
   @ApiProperty({
-    description: 'Como paga el cliente este extra',
-    enum: ['tarjeta', 'transferencia', 'efectivo'],
-    example: 'efectivo',
+    description: 'Los extras operativos nuevos se registran solo con tarjeta',
+    enum: ['tarjeta'],
+    example: 'tarjeta',
   })
-  @IsIn(['tarjeta', 'transferencia', 'efectivo'])
-  metodoPago: 'tarjeta' | 'transferencia' | 'efectivo';
+  @IsIn(['tarjeta'], {
+    message: 'Registra unicamente extras cobrados con tarjeta',
+  })
+  metodoPago: 'tarjeta';
 }

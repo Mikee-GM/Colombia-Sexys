@@ -47,6 +47,10 @@ export class ConversacionesTelegram {
   })
   servicioId: string | null;
 
+  /** Conserva la referencia aun cuando el servicio se elimina definitivamente. */
+  @Column('uuid', { name: 'historical_service_id', nullable: true })
+  historicalServiceId: string | null;
+
   @Column('uuid', { name: 'booking_session_id', nullable: true })
   bookingSessionId: string | null;
 

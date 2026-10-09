@@ -58,7 +58,12 @@ export class LiquidationsService {
    */
   async getSettings(): Promise<LiquidationSetting> {
     const existing = await this.settings.findOneBy({ id: 1 });
-    if (existing) return existing;
+    if (existing) {
+      return this.settings.merge(existing, {
+        cardExtraCommissionPercentage: DEFAULT_CARD_EXTRA_COMMISSION.percentage,
+        cardExtraCommissionThreshold: DEFAULT_CARD_EXTRA_COMMISSION.threshold,
+      });
+    }
 
     return this.settings.create({
       id: 1,
@@ -69,21 +74,11 @@ export class LiquidationsService {
     });
   }
 
-  private async commissionPolicy(): Promise<CardExtraCommissionPolicy> {
-    const settings = await this.getSettings();
-    return {
-      percentage: Number(settings.cardExtraCommissionPercentage),
-      threshold: Number(settings.cardExtraCommissionThreshold),
-    };
+  private commissionPolicy(): CardExtraCommissionPolicy {
+    return DEFAULT_CARD_EXTRA_COMMISSION;
   }
 
-  /**
-   * Cambia la politica de comision. Solo admin: mueve el dinero de todos los
-   * cortes abiertos a la vez.
-   *
-   * Los cortes ya confirmados no se recalculan: su neto quedo congelado en
-   * `employee_weekly_settlements` cuando se confirmaron.
-   */
+  /** Conserva el contrato anterior, pero la regla financiera ya no es editable. */
   async updateSettings(dto: UpdateLiquidationSettingsDto, actor: Usuarios) {
     if (actor.rol !== 'admin') {
       throw new ForbiddenException(
@@ -91,16 +86,25 @@ export class LiquidationsService {
       );
     }
 
+    if (
+      (dto.cardExtraCommissionPercentage !== undefined &&
+        dto.cardExtraCommissionPercentage !==
+          DEFAULT_CARD_EXTRA_COMMISSION.percentage) ||
+      (dto.cardExtraCommissionThreshold !== undefined &&
+        dto.cardExtraCommissionThreshold !==
+          DEFAULT_CARD_EXTRA_COMMISSION.threshold)
+    ) {
+      throw new BadRequestException(
+        'La regla de extras es fija: 15% desde $1,000 por cada extra con tarjeta',
+      );
+    }
+
     const current = await this.getSettings();
     const updated = await this.settings.save(
       this.settings.merge(current, {
         id: 1,
-        ...(dto.cardExtraCommissionPercentage !== undefined
-          ? { cardExtraCommissionPercentage: dto.cardExtraCommissionPercentage }
-          : {}),
-        ...(dto.cardExtraCommissionThreshold !== undefined
-          ? { cardExtraCommissionThreshold: dto.cardExtraCommissionThreshold }
-          : {}),
+        cardExtraCommissionPercentage: DEFAULT_CARD_EXTRA_COMMISSION.percentage,
+        cardExtraCommissionThreshold: DEFAULT_CARD_EXTRA_COMMISSION.threshold,
         updatedByUserId: actor.id,
         updatedAt: new Date(),
       }),
@@ -179,7 +183,7 @@ export class LiquidationsService {
     }
     const employee = await this.assertEmployeeAccess(query.employeeId, actor);
     const records = await this.getRecords(query, actor);
-    const commission = await this.commissionPolicy();
+    const commission = this.commissionPolicy();
     const report = buildCutReport(records, commission);
     const weekStart = query.startDate.toISOString().slice(0, 10);
     const existing = await this.weeklySettlements.findOneBy({
@@ -191,6 +195,7 @@ export class LiquidationsService {
         employeeId: employee.id,
         status: 'pending',
         calculationStatus: 'ready',
+        administrativelyExcluded: false,
         serviceDate: LessThanOrEqual(query.endDate),
       },
     });
@@ -267,6 +272,7 @@ export class LiquidationsService {
           employeeId: In(employeeIds),
           status: 'pending',
           calculationStatus: 'ready',
+          administrativelyExcluded: false,
           serviceDate: LessThanOrEqual(query.endDate),
         },
       }),
@@ -294,7 +300,7 @@ export class LiquidationsService {
       recordsByEmployee.set(record.employeeId, bucket);
     }
 
-    const commission = await this.commissionPolicy();
+    const commission = this.commissionPolicy();
 
     return [...recordsByEmployee.entries()]
       .map(([employeeId, employeeRecords]) => {
@@ -350,7 +356,7 @@ export class LiquidationsService {
     const records = await this.getRecords(query, actor);
     const grossEmployeePay = calculateCut(
       records,
-      await this.commissionPolicy(),
+      this.commissionPolicy(),
     ).employeeGrossPay;
     const weekStart = query.startDate.toISOString().slice(0, 10);
     const weekEnd = query.endDate.toISOString().slice(0, 10);
@@ -369,6 +375,7 @@ export class LiquidationsService {
             employeeId: query.employeeId!,
             status: 'pending',
             calculationStatus: 'ready',
+            administrativelyExcluded: false,
             serviceDate: LessThanOrEqual(query.endDate),
           },
           order: { serviceDate: 'ASC', createdAt: 'ASC' },

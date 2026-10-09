@@ -35,6 +35,7 @@ import { Usuarios } from '../src/users/entities/user.entity';
 import { CreateServiceOperationsCore1810000000000 } from '../src/migrations/1810000000000-CreateServiceOperationsCore';
 
 const IDS = {
+  admin: '00000000-0000-4000-8000-000000000001',
   boss: '11111111-1111-4111-8111-111111111111',
   otherBoss: '11111111-1111-4111-8111-222222222222',
   employeeUser: '22222222-2222-4222-8222-222222222222',
@@ -200,13 +201,15 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
         ($2, 'otro-jefe-e2e@example.com', 'hash', 'jefe', 'Otro Jefe E2E', NULL, true, true, true),
         ($3, 'empleada-e2e@example.com', 'hash', 'empleada', 'Empleada E2E', NULL, true, true, true),
         ($4, 'otra-empleada-e2e@example.com', 'hash', 'empleada', 'Otra Empleada E2E', NULL, true, true, true),
-        ($5, 'chofer-e2e@example.com', 'hash', 'chofer', 'Chofer E2E', 9003, true, true, true)`,
+        ($5, 'chofer-e2e@example.com', 'hash', 'chofer', 'Chofer E2E', 9003, true, true, true),
+        ($6, 'admin-e2e@example.com', 'hash', 'admin', 'Admin E2E', NULL, true, true, true)`,
       [
         IDS.boss,
         IDS.otherBoss,
         IDS.employeeUser,
         IDS.otherEmployeeUser,
         IDS.driverUser,
+        IDS.admin,
       ],
     );
     await dataSource.query(
@@ -497,10 +500,19 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       false,
       350,
     );
+    await expect(
+      services.addServiceExtra({
+        servicioId: IDS.service,
+        extraCatalogoId: IDS.extra,
+        metodoPago: 'transferencia',
+        actorUserId: IDS.employeeUser,
+        precioCobrado: 80,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
     await services.addServiceExtra({
       servicioId: IDS.service,
       extraCatalogoId: IDS.extra,
-      metodoPago: 'transferencia',
+      metodoPago: 'tarjeta',
       actorUserId: IDS.employeeUser,
       precioCobrado: 80,
     });
@@ -526,7 +538,7 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       [IDS.service],
     );
     expect(Number(extra.precio_cobrado)).toBe(80);
-    expect(extra.metodo_pago).toBe('transferencia');
+    expect(extra.metodo_pago).toBe('tarjeta');
 
     await services.finishByEmployee(IDS.service, IDS.employeeUser);
     persisted = await service();
@@ -1100,6 +1112,145 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
 
       expect(Number((await service()).duracionPactadaHoras)).toBe(1);
       expect(await eventTypes()).toEqual([]);
+    });
+
+    it('protege el historial semanal por rol y equipo desde el servidor', async () => {
+      const employeeToken = await accessToken(IDS.employeeUser);
+      const otherEmployeeToken = await accessToken(IDS.otherEmployeeUser);
+      const bossToken = await accessToken(IDS.boss);
+      const otherBossToken = await accessToken(IDS.otherBoss);
+      const adminToken = await accessToken(IDS.admin);
+      const driverToken = await accessToken(IDS.driverUser);
+
+      const employeeHistory = await request(app!.getHttpServer())
+        .get(`${api}/service-history/weekly`)
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .expect(200);
+      expect(employeeHistory.body.rows).toEqual([
+        expect.objectContaining({
+          id: IDS.service,
+          employeeId: IDS.employee,
+        }),
+      ]);
+
+      const otherEmployeeHistory = await request(app!.getHttpServer())
+        .get(`${api}/service-history/weekly`)
+        .set('Authorization', `Bearer ${otherEmployeeToken}`)
+        .expect(200);
+      expect(otherEmployeeHistory.body.rows).toEqual([]);
+
+      const bossHistory = await request(app!.getHttpServer())
+        .get(`${api}/service-history/weekly`)
+        .set('Authorization', `Bearer ${bossToken}`)
+        .expect(200);
+      expect(bossHistory.body.rows).toEqual([
+        expect.objectContaining({ id: IDS.service }),
+      ]);
+
+      const otherBossHistory = await request(app!.getHttpServer())
+        .get(`${api}/service-history/weekly?employeeId=${IDS.employee}`)
+        .set('Authorization', `Bearer ${otherBossToken}`)
+        .expect(403);
+      expect(otherBossHistory.body.message).toBe(
+        'Esa empleada no pertenece a tu equipo',
+      );
+
+      const adminHistory = await request(app!.getHttpServer())
+        .get(`${api}/service-history/weekly`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(adminHistory.body.rows).toEqual([
+        expect.objectContaining({ id: IDS.service }),
+      ]);
+
+      await request(app!.getHttpServer())
+        .get(`${api}/service-history/weekly`)
+        .set('Authorization', `Bearer ${driverToken}`)
+        .expect(403);
+    });
+
+    it('ejecuta papelera, restauracion segura y borrado definitivo solo como admin', async () => {
+      const bossToken = await accessToken(IDS.boss);
+      const adminToken = await accessToken(IDS.admin);
+      const reason = 'Control administrativo E2E solicitado';
+
+      await request(app!.getHttpServer())
+        .delete(`${api}/admin/service-control/${IDS.service}`)
+        .set('Authorization', `Bearer ${bossToken}`)
+        .send({ reason })
+        .expect(403);
+      await request(app!.getHttpServer())
+        .delete(`${api}/admin/service-control/${IDS.service}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'corta' })
+        .expect(400);
+
+      await request(app!.getHttpServer())
+        .delete(`${api}/admin/service-control/${IDS.service}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason })
+        .expect(200);
+
+      const historyAfterDelete = await request(app!.getHttpServer())
+        .get(`${api}/service-history/weekly`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(historyAfterDelete.body.rows).toEqual([]);
+
+      const trash = await request(app!.getHttpServer())
+        .get(`${api}/service-history/trash`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(200);
+      expect(trash.body).toEqual([
+        expect.objectContaining({
+          id: IDS.service,
+          deleteReason: reason,
+        }),
+      ]);
+
+      await request(app!.getHttpServer())
+        .post(`${api}/admin/service-control/${IDS.service}/restore`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Restauracion segura para revision E2E' })
+        .expect(201);
+      expect(await service()).toMatchObject({
+        estado: 'cancelado',
+        operationalState: 'cancelado',
+        deletedAt: null,
+        administrativeReviewRequired: true,
+      });
+
+      await request(app!.getHttpServer())
+        .delete(`${api}/admin/service-control/${IDS.service}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Regreso controlado a papelera E2E' })
+        .expect(200);
+      await request(app!.getHttpServer())
+        .post(`${api}/admin/service-control/${IDS.service}/hard-delete`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason, confirmation: 'incorrecto' })
+        .expect(409);
+      await request(app!.getHttpServer())
+        .post(`${api}/admin/service-control/${IDS.service}/hard-delete`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason, confirmation: 'ELIMINAR' })
+        .expect(201);
+
+      await expect(
+        dataSource.getRepository(Servicios).findOneBy({ id: IDS.service }),
+      ).resolves.toBeNull();
+      const auditActions = (await dataSource.query(
+        `SELECT action FROM service_admin_audit
+          WHERE service_id = $1 ORDER BY created_at ASC`,
+        [IDS.service],
+      )) as Array<{ action: string }>;
+      expect(auditActions.map((entry) => entry.action)).toEqual([
+        'cancelled',
+        'soft_deleted',
+        'restored',
+        'soft_deleted',
+        'hard_deleted',
+      ]);
     });
   });
 

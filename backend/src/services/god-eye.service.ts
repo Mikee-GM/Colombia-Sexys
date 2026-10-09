@@ -99,7 +99,7 @@ export class GodEyeService {
     const [row]: OverviewMetricsRow[] = await this.dataSource.query(`
       SELECT
         (SELECT COUNT(*)::int FROM servicios
-          WHERE estado IN ('pendiente', 'en_curso')) AS active_services,
+          WHERE estado IN ('pendiente', 'en_curso') AND deleted_at IS NULL) AS active_services,
         (SELECT COUNT(*)::int FROM empleadas) AS employees_total,
         (SELECT COUNT(*)::int FROM empleadas WHERE disponible = true) AS employees_available,
         -- "En servicio" es estar atendiendo, no estar marcada como no
@@ -107,7 +107,7 @@ export class GodEyeService {
         -- esta inactiva y a la que no sale en el catalogo. El panel decia
         -- "N en servicio" contando a todas ellas.
         (SELECT COUNT(DISTINCT empleada_id)::int FROM servicios
-          WHERE estado = 'en_curso') AS employees_busy,
+          WHERE estado = 'en_curso' AND deleted_at IS NULL) AS employees_busy,
         (SELECT COUNT(*)::int FROM choferes) AS drivers_total,
         (SELECT COUNT(*)::int FROM choferes WHERE disponible = true) AS drivers_active,
         (SELECT COUNT(*)::int FROM payment_receipt_validations
@@ -115,7 +115,7 @@ export class GodEyeService {
         (SELECT COUNT(*)::int FROM interaction_ratings
           WHERE stars <= 2 AND created_at >= NOW() - INTERVAL '24 hours') AS recent_negative_ratings,
         (SELECT COALESCE(SUM(amount - paid_amount), 0)::numeric FROM employee_cash_obligations
-          WHERE status = 'pending') AS cash_in_street,
+          WHERE status = 'pending' AND administratively_excluded = false) AS cash_in_street,
         (SELECT COUNT(*)::int FROM disciplinary_sanctions
           WHERE status = 'active') AS active_sanctions,
         (SELECT COUNT(*)::int FROM interaction_ratings
@@ -127,10 +127,12 @@ export class GodEyeService {
           WHERE status IN ('esperando_jefe', 'seleccionando', 'reservada', 'esperando_pago')) AS pending_offers,
         (SELECT COALESCE(SUM(total_final), 0)::numeric FROM servicios
           WHERE estado = 'finalizado'
+            AND deleted_at IS NULL
             AND hora_fin_servicio AT TIME ZONE '${APP_TIME_ZONE}'
                 >= date_trunc('day', now() AT TIME ZONE '${APP_TIME_ZONE}')) AS revenue_today,
         (SELECT COALESCE(SUM(total_final), 0)::numeric FROM servicios
           WHERE estado = 'finalizado'
+            AND deleted_at IS NULL
             AND hora_fin_servicio AT TIME ZONE '${APP_TIME_ZONE}'
                 >= date_trunc('week', now() AT TIME ZONE '${APP_TIME_ZONE}')) AS revenue_week
     `);
@@ -218,7 +220,7 @@ export class GodEyeService {
       LEFT JOIN clientes c ON c.id = s.cliente_id
       LEFT JOIN empleadas e ON e.id = s.empleada_id
       LEFT JOIN usuarios u ON u.id = s.jefe_id
-      WHERE s.estado IN ('pendiente', 'en_curso')
+      WHERE s.estado IN ('pendiente', 'en_curso') AND s.deleted_at IS NULL
       ORDER BY s.created_at DESC
       LIMIT 25
     `);
@@ -411,7 +413,7 @@ export class GodEyeService {
             FROM servicios s
             LEFT JOIN clientes c ON c.id = s.cliente_id
             LEFT JOIN usuarios j ON j.id = s.jefe_id
-            WHERE s.empleada_id = $1
+            WHERE s.empleada_id = $1 AND s.deleted_at IS NULL
             ORDER BY s.created_at DESC
             LIMIT 25`,
           [id],
@@ -433,7 +435,7 @@ export class GodEyeService {
               status,
               created_at AS "createdAt"
             FROM employee_cash_obligations
-            WHERE employee_id = $1
+            WHERE employee_id = $1 AND administratively_excluded = false
             ORDER BY created_at DESC
             LIMIT 10`,
           [id],
@@ -709,7 +711,7 @@ export class GodEyeService {
           FROM viajes v
           LEFT JOIN servicios s ON s.id = v.servicio_id
           LEFT JOIN empleadas e ON e.id = s.empleada_id
-          WHERE v.chofer_id = $1
+          WHERE v.chofer_id = $1 AND s.deleted_at IS NULL
           ORDER BY v.hora_notificacion DESC
           LIMIT 10`,
           [id],
@@ -768,7 +770,7 @@ export class GodEyeService {
           FROM servicios s
           LEFT JOIN empleadas e ON e.id = s.empleada_id
           LEFT JOIN clientes c ON c.id = s.cliente_id
-          WHERE s.jefe_id = $1
+          WHERE s.jefe_id = $1 AND s.deleted_at IS NULL
           ORDER BY s.created_at DESC
           LIMIT 15`,
             [id],

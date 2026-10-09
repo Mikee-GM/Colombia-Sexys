@@ -75,7 +75,7 @@ export class SettlementsService {
     const allowed = await this.allowedEmployeeIds(actor);
     if (employeeId) await this.assertEmployeeAccess(employeeId, actor);
     const where = employeeId
-      ? { employeeId }
+      ? { employeeId, administrativelyExcluded: false }
       : allowed
         ? {
             employeeId: In(
@@ -83,8 +83,9 @@ export class SettlementsService {
                 ? allowed
                 : ['00000000-0000-0000-0000-000000000000'],
             ),
+            administrativelyExcluded: false,
           }
-        : {};
+        : { administrativelyExcluded: false };
     const rows = await this.obligations.find({
       where,
       order: { createdAt: 'ASC' },
@@ -116,7 +117,12 @@ export class SettlementsService {
     await this.assertEmployeeAccess(employeeId, actor);
     const resultado = await this.dataSource.transaction(async (manager) => {
       const pending = await manager.getRepository(EmployeeCashObligation).find({
-        where: { employeeId, status: 'pending', calculationStatus: 'ready' },
+        where: {
+          employeeId,
+          status: 'pending',
+          calculationStatus: 'ready',
+          administrativelyExcluded: false,
+        },
         order: { createdAt: 'ASC' },
         lock: { mode: 'pessimistic_write' },
       });

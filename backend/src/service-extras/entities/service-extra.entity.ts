@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { ExtrasCatalogo } from '../../catalog-extras/entities/catalog-extra.entity';
 import { Usuarios } from '../../users/entities/user.entity';
@@ -58,6 +58,48 @@ export class ExtrasServicio {
     example: 'tarjeta',
   })
   metodoPago: 'tarjeta' | 'transferencia' | 'efectivo';
+
+  @Column('numeric', {
+    name: 'company_percentage_snapshot',
+    precision: 5,
+    scale: 2,
+    default: 0,
+    transformer: new ColumnNumericTransformer(),
+  })
+  companyPercentageSnapshot: number;
+
+  @Column('numeric', {
+    name: 'commission_threshold_snapshot',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+    transformer: new ColumnNumericTransformer(),
+  })
+  commissionThresholdSnapshot: number | null;
+
+  @Column('numeric', {
+    name: 'company_commission_snapshot',
+    precision: 12,
+    scale: 2,
+    default: 0,
+    transformer: new ColumnNumericTransformer(),
+  })
+  companyCommissionSnapshot: number;
+
+  @Column('numeric', {
+    name: 'employee_net_snapshot',
+    precision: 12,
+    scale: 2,
+    transformer: new ColumnNumericTransformer(),
+  })
+  employeeNetSnapshot: number;
+
+  @Column('varchar', {
+    name: 'financial_snapshot_status',
+    length: 24,
+    default: 'captured',
+  })
+  financialSnapshotStatus: 'captured' | 'legacy_unverified';
 
   @Column('timestamp with time zone', {
     name: 'registrado_at',

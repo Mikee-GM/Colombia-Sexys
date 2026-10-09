@@ -810,7 +810,8 @@ export class EmployeesService {
       await this.dataSource.query(
         `SELECT empleada_id, COALESCE(SUM(total_final), 0) AS revenue
          FROM servicios
-         WHERE estado = 'finalizado' AND hora_fin_servicio >= now() - interval '90 days'
+         WHERE estado = 'finalizado' AND deleted_at IS NULL
+           AND hora_fin_servicio >= now() - interval '90 days'
            AND empleada_id = ANY($1::uuid[])
          GROUP BY empleada_id`,
         [ids],
@@ -957,6 +958,7 @@ export class EmployeesService {
       .select('s.empleadaId', 'empleadaId')
       .addSelect('COUNT(s.id)', 'count')
       .where('s.estado = :estado', { estado: 'finalizado' })
+      .andWhere('s.deletedAt IS NULL')
       .groupBy('s.empleadaId')
       .getRawMany();
 
@@ -1018,6 +1020,7 @@ export class EmployeesService {
       .leftJoinAndSelect('viajes.chofer', 'chofer')
       .leftJoinAndSelect('s.extrasServicios', 'extrasServicios')
       .where('s.empleadaId = :empleadaId', { empleadaId: empleada.id })
+      .andWhere('s.deletedAt IS NULL')
       .orderBy('s.horaInicioServicio', 'DESC')
       .getMany();
 
@@ -1259,7 +1262,11 @@ export class EmployeesService {
     const cashObligationEntities = await this.dataSource
       .getRepository(EmployeeCashObligation)
       .find({
-        where: { employeeId: empleada.id, status: 'pending' },
+        where: {
+          employeeId: empleada.id,
+          status: 'pending',
+          administrativelyExcluded: false,
+        },
         order: { createdAt: 'DESC' },
       });
 

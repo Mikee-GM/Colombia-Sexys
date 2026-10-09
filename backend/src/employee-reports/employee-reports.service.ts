@@ -390,10 +390,10 @@ export class EmployeeReportsService {
         COUNT(DISTINCT r.id) FILTER (WHERE r.status <> 'descartado' AND r.created_at >= now() - interval '90 days')::int AS "reports90Days",
         COUNT(DISTINCT r.id)::int AS "reportsHistorical",
         COUNT(DISTINCT p.id) FILTER (WHERE p.solicitada_at >= now() - interval '30 days')::int AS "extensions30Days",
-        COALESCE((SELECT SUM(s2.prorrogas_usadas)::int FROM servicios s2 WHERE s2.empleada_id = e.id ${historicalScope}), 0) AS "extensionsHistorical"
+        COALESCE((SELECT SUM(s2.prorrogas_usadas)::int FROM servicios s2 WHERE s2.empleada_id = e.id AND s2.deleted_at IS NULL ${historicalScope}), 0) AS "extensionsHistorical"
        FROM empleadas e
        LEFT JOIN employee_reports r ON r.employee_id = e.id ${reportScope}
-       LEFT JOIN servicios s ON s.empleada_id = e.id ${serviceScope}
+       LEFT JOIN servicios s ON s.empleada_id = e.id AND s.deleted_at IS NULL ${serviceScope}
        LEFT JOIN prorrogas p ON p.servicio_id = s.id
        ${employeeScope}
        GROUP BY e.id, e.nombre_artistico

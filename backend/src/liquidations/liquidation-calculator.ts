@@ -4,10 +4,8 @@ import { LiquidationRecord } from './entities/liquidation-record.entity';
 /**
  * Politica de comision sobre extras con tarjeta.
  *
- * Estos dos numeros estaban incrustados aqui. Ahora llegan desde
- * `liquidation_settings` para que administracion los cambie desde la pantalla
- * del corte, y los valores por defecto son los que tenia el codigo, de modo que
- * un calculo sin configuracion da exactamente el resultado de antes.
+ * La regla vigente es fija para los registros nuevos. El argumento opcional se
+ * conserva para poder interpretar registros historicos que no tienen snapshot.
  */
 export interface CardExtraCommissionPolicy {
   /** Porcentaje que retiene la empresa. 15 significa que la empleada cobra el 85%. */
@@ -89,6 +87,7 @@ export function calculateCut(
   let cardExtraCommission = 0;
 
   for (const record of records) {
+    if (record.excludedFromCut) continue;
     if (record.isFine) {
       finesTotal += toCents(record.fineAmount);
       continue;
@@ -164,8 +163,8 @@ export function calculateCut(
      * transferencia pese a no costarle nada a la empresa: eso era quedarse con
      * parte de algo que es integro de la empleada. Ahora la retencion se limita
      * a lo que si tiene un costo real, y tanto el porcentaje como el umbral
-     * salen de `liquidation_settings`, de modo que la regla se ve y se cambia
-     * desde la pantalla del corte en vez de estar escondida en el codigo.
+     * los registros nuevos guardan su porcentaje, umbral y neto al crearse para
+     * que un cambio futuro de politica no reescriba la historia.
      *
      * `cardExtrasTotal` y `cardExtraCommission` se devuelven aparte para que la
      * retencion sea visible en la hoja: el problema de la version anterior no
@@ -176,16 +175,38 @@ export function calculateCut(
      * separado en el registro: si alguno llegara descuadrado, la parte con
      * comision nunca puede exceder el total de extras de ese servicio.
      */
-    const cardExtra = Math.min(extra, toCents(record.cardExtraAmount));
-    const uncommissionedExtra = extra - cardExtra;
-    cardExtrasTotal += cardExtra;
-
-    if (cardExtra >= thresholdCents && cardExtra > 0) {
-      const employeeKeeps = Math.round(cardExtra * employeeShareOfCardExtras);
-      cardExtraCommission += cardExtra - employeeKeeps;
-      calculatedExtras += employeeKeeps + uncommissionedExtra;
+    const snapshotItems = Array.isArray(record.cardExtraItems)
+      ? record.cardExtraItems
+      : [];
+    if (snapshotItems.length > 0) {
+      const snapshottedCardTotal = snapshotItems.reduce(
+        (sum, item) => sum + toCents(item.amount),
+        0,
+      );
+      const snapshottedCommission = snapshotItems.reduce(
+        (sum, item) => sum + toCents(item.companyCommission),
+        0,
+      );
+      const snapshottedEmployeeNet = snapshotItems.reduce(
+        (sum, item) => sum + toCents(item.employeeNet),
+        0,
+      );
+      const uncommissionedExtra = Math.max(0, extra - snapshottedCardTotal);
+      cardExtrasTotal += snapshottedCardTotal;
+      cardExtraCommission += snapshottedCommission;
+      calculatedExtras += snapshottedEmployeeNet + uncommissionedExtra;
     } else {
-      calculatedExtras += extra;
+      // Compatibilidad para registros anteriores a los snapshots por extra.
+      const cardExtra = Math.min(extra, toCents(record.cardExtraAmount));
+      const uncommissionedExtra = extra - cardExtra;
+      cardExtrasTotal += cardExtra;
+      if (cardExtra >= thresholdCents && cardExtra > 0) {
+        const employeeKeeps = Math.round(cardExtra * employeeShareOfCardExtras);
+        cardExtraCommission += cardExtra - employeeKeeps;
+        calculatedExtras += employeeKeeps + uncommissionedExtra;
+      } else {
+        calculatedExtras += extra;
+      }
     }
 
     if (record.paymentMethod === 'efectivo') cashTotal += serviceTotal;
@@ -249,8 +270,10 @@ export function calculateCut(
      * cancelados-- y en la hoja de la empleada inflaba su cuenta de trabajo.
      * `rendimiento()` ya contaba asi; ahora lo hace un solo sitio.
      */
-    count: records.filter((record) => !record.isFine && !record.cancelled)
-      .length,
+    count: records.filter(
+      (record) =>
+        !record.excludedFromCut && !record.isFine && !record.cancelled,
+    ).length,
     totalCollected: fromCents(totalCollected),
     rawExtrasTotal: fromCents(rawExtrasTotal),
     netCompanyShare: fromCents(netCompanyShare),

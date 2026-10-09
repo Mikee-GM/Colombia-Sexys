@@ -66,6 +66,10 @@ import type { InlineKeyboardButton } from 'telegraf/types';
 import { ServiceOperationsService } from './operations/service-operations.service';
 import type { ServiceOperationAction } from './operations/service-operation-state';
 import { ExtensionesServicio } from '../service-extensions/entities/service-extension.entity';
+import {
+  calculateCardExtraSnapshot,
+  EMPLOYEE_SERVICE_PERCENTAGE,
+} from './service-financial-calculator';
 
 /**
  * Si una persona del equipo puede hacerse cargo de algo ahora.
@@ -862,14 +866,19 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       where:
         actor?.rol === 'jefe'
           ? [
-              { estado: 'pendiente', jefeId: actor.id },
-              { estado: 'pendiente', empleada: { jefeId: actor.id } },
+              { estado: 'pendiente', jefeId: actor.id, deletedAt: IsNull() },
+              {
+                estado: 'pendiente',
+                empleada: { jefeId: actor.id },
+                deletedAt: IsNull(),
+              },
               {
                 estado: 'pendiente',
                 empleada: { jefeSecundarioId: actor.id },
+                deletedAt: IsNull(),
               },
             ]
-          : { estado: 'pendiente' },
+          : { estado: 'pendiente', deletedAt: IsNull() },
       relations: {
         cliente: true,
         empleada: true,
@@ -905,11 +914,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       where:
         actor?.rol === 'jefe'
           ? [
-              { jefeId: actor.id },
-              { empleada: { jefeId: actor.id } },
-              { empleada: { jefeSecundarioId: actor.id } },
+              { jefeId: actor.id, deletedAt: IsNull() },
+              { empleada: { jefeId: actor.id }, deletedAt: IsNull() },
+              { empleada: { jefeSecundarioId: actor.id }, deletedAt: IsNull() },
             ]
-          : undefined,
+          : { deletedAt: IsNull() },
       relationLoadStrategy: 'query',
       relations: {
         cliente: true,
@@ -927,7 +936,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
   async findOne(id: string): Promise<Servicios> {
     const servicio = await this.serviciosRepository.findOne({
-      where: { id },
+      where: { id, deletedAt: IsNull() },
       relations: {
         cliente: true,
         empleada: true,
@@ -3467,6 +3476,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           servicioId,
           horasAgregadas: horas,
           montoAgregado: montoRegistrado,
+          employeePercentageSnapshot: EMPLOYEE_SERVICE_PERCENTAGE,
+          employeeExpectedSnapshot:
+            Math.round(montoRegistrado * EMPLOYEE_SERVICE_PERCENTAGE) / 100,
+          financialSnapshotStatus: 'captured',
           aceptadaPor: 'empleada',
         }),
       );
@@ -5278,6 +5291,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     precioCobrado?: number;
     forceByBoss?: boolean;
   }): Promise<AddServiceExtraResult> {
+    if (input.metodoPago !== 'tarjeta') {
+      throw new BadRequestException(
+        'Registra unicamente extras cobrados con tarjeta. Los extras en efectivo son integros para ti y no se capturan.',
+      );
+    }
     if (!input.extraCatalogoId && input.precioCobrado === undefined) {
       throw new BadRequestException(
         'Elige un extra del catálogo o escribe un precio',
@@ -5320,13 +5338,20 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     if (!actor) throw new ForbiddenException('Usuario no autorizado');
 
+    const chargedAmount = Number(input.precioCobrado ?? extra.precio);
+    const financialSnapshot = calculateCardExtraSnapshot(chargedAmount);
     await this.extrasServicioRepository.save(
       this.extrasServicioRepository.create({
         servicioId: servicio.id,
         extraCatalogoId: extra.id,
         participantId,
-        precioCobrado: input.precioCobrado ?? extra.precio,
+        precioCobrado: chargedAmount,
         metodoPago: input.metodoPago,
+        companyPercentageSnapshot: financialSnapshot.companyPercentage,
+        commissionThresholdSnapshot: financialSnapshot.commissionThreshold,
+        companyCommissionSnapshot: financialSnapshot.companyCommission,
+        employeeNetSnapshot: financialSnapshot.employeeNet,
+        financialSnapshotStatus: financialSnapshot.snapshotStatus,
         registradoPor: actor,
       }),
     );

@@ -185,7 +185,7 @@ describe('ServicesService extras de servicio', () => {
   });
 
   describe('addServiceExtra', () => {
-    const agregar = (metodoPago: any = 'efectivo') =>
+    const agregar = (metodoPago: any = 'tarjeta') =>
       service.addServiceExtra({
         servicioId: 'srv-1',
         extraCatalogoId: 'extra-1',
@@ -243,7 +243,7 @@ describe('ServicesService extras de servicio', () => {
       const resultado = await service.addServiceExtra({
         servicioId: 'srv-1',
         extraCatalogoId: 'extra-1',
-        metodoPago: 'efectivo',
+        metodoPago: 'tarjeta',
         actorUserId: USUARIO,
         precioCobrado: 1800,
       });
@@ -272,7 +272,7 @@ describe('ServicesService extras de servicio', () => {
 
       const resultado = await service.addServiceExtra({
         servicioId: 'srv-1',
-        metodoPago: 'efectivo',
+        metodoPago: 'tarjeta',
         actorUserId: USUARIO,
         precioCobrado: 1500,
       });
@@ -299,7 +299,7 @@ describe('ServicesService extras de servicio', () => {
 
       await service.addServiceExtra({
         servicioId: 'srv-1',
-        metodoPago: 'efectivo',
+        metodoPago: 'tarjeta',
         actorUserId: USUARIO,
         precioCobrado: 700,
       });
@@ -321,7 +321,7 @@ describe('ServicesService extras de servicio', () => {
       await expect(
         service.addServiceExtra({
           servicioId: 'srv-1',
-          metodoPago: 'efectivo',
+          metodoPago: 'tarjeta',
           actorUserId: USUARIO,
           precioCobrado: 0,
         }),
@@ -330,7 +330,7 @@ describe('ServicesService extras de servicio', () => {
       await expect(
         service.addServiceExtra({
           servicioId: 'srv-1',
-          metodoPago: 'efectivo',
+          metodoPago: 'tarjeta',
           actorUserId: USUARIO,
           precioCobrado: 10.999,
         }),
@@ -343,7 +343,7 @@ describe('ServicesService extras de servicio', () => {
       await expect(
         service.addServiceExtra({
           servicioId: 'srv-1',
-          metodoPago: 'efectivo',
+          metodoPago: 'tarjeta',
           actorUserId: USUARIO,
         }),
       ).rejects.toThrow(/Elige un extra/);
@@ -404,11 +404,21 @@ describe('ServicesService extras de servicio', () => {
         service.addServiceExtra({
           servicioId: 'srv-1',
           extraCatalogoId: 'extra-1',
-          metodoPago: 'efectivo',
+          metodoPago: 'tarjeta',
           actorUserId: 'otro-usuario',
         }),
       ).rejects.toThrow('No puedes modificar este servicio');
       expect(extrasServicioRepository.save).not.toHaveBeenCalled();
     });
+
+    it.each(['efectivo', 'transferencia'])(
+      'rechaza un extra nuevo pagado por %s',
+      async (metodoPago) => {
+        await expect(agregar(metodoPago)).rejects.toThrow(
+          /unicamente extras cobrados con tarjeta/,
+        );
+        expect(extrasServicioRepository.save).not.toHaveBeenCalled();
+      },
+    );
   });
 });

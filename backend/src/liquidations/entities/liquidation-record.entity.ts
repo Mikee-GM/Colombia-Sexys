@@ -30,6 +30,9 @@ export class LiquidationRecord {
   @Column('uuid', { name: 'service_id', nullable: true })
   serviceId: string | null;
 
+  @Column('uuid', { name: 'historical_service_id', nullable: true })
+  historicalServiceId: string | null;
+
   @Column('uuid', { name: 'employee_id' })
   employeeId: string;
 
@@ -155,6 +158,17 @@ export class LiquidationRecord {
     transformer: new ColumnNumericTransformer(),
   })
   cardExtraAmount: number;
+
+  @Column('jsonb', { name: 'card_extra_items', default: () => "'[]'::jsonb" })
+  cardExtraItems: Array<{
+    amount: number;
+    companyCommission: number;
+    employeeNet: number;
+    snapshotStatus: 'captured' | 'legacy_unverified';
+  }>;
+
+  @Column('boolean', { name: 'excluded_from_cut', default: false })
+  excludedFromCut: boolean;
 
   @Column('numeric', {
     name: 'transport_excess',

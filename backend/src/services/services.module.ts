@@ -27,6 +27,13 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { ServiceOperationsService } from './operations/service-operations.service';
 import { ServiceOperationEvent } from './operations/entities/service-operation-event.entity';
 import { ExtensionesServicio } from '../service-extensions/entities/service-extension.entity';
+import { ServiceAdminAudit } from './entities/service-admin-audit.entity';
+import { LiquidationRecord } from '../liquidations/entities/liquidation-record.entity';
+import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
+import { ServiceHistoryService } from './service-history.service';
+import { ServiceHistoryController } from './service-history.controller';
+import { AdminServiceLifecycleService } from './admin-service-lifecycle.service';
+import { AdminServiceLifecycleController } from './admin-service-lifecycle.controller';
 
 import { GodEyeService } from './god-eye.service';
 import { GodEyeController } from './god-eye.controller';
@@ -53,6 +60,9 @@ import { ServiceScheduleScheduler } from './service-schedule.scheduler';
       ServiceParticipant,
       ServiceOperationEvent,
       ExtensionesServicio,
+      ServiceAdminAudit,
+      LiquidationRecord,
+      EmployeeCashObligation,
     ]),
     forwardRef(() => TelegramModule),
     AiModule,
@@ -64,12 +74,19 @@ import { ServiceScheduleScheduler } from './service-schedule.scheduler';
     NotificationsModule,
     ExtensionsModule,
   ],
-  controllers: [ServicesController, GodEyeController],
+  controllers: [
+    ServicesController,
+    GodEyeController,
+    ServiceHistoryController,
+    AdminServiceLifecycleController,
+  ],
   providers: [
     ServicesService,
     ServiceOperationsService,
     GodEyeService,
     ServiceScheduleScheduler,
+    ServiceHistoryService,
+    AdminServiceLifecycleService,
   ],
   exports: [ServicesService, ServiceOperationsService, GodEyeService],
 })

@@ -95,7 +95,7 @@ export interface EmployeePortalReputation {
 
 export interface EmployeePortalCashObligationItem {
   id: string;
-  serviceId: string;
+  serviceId: string | null;
   amount: number;
   paidAmount: number;
   pendingAmount: number;

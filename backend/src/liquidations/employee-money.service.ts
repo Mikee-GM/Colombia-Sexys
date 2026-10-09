@@ -107,6 +107,7 @@ export class EmployeeMoneyService {
       where: {
         status: 'pending',
         calculationStatus: 'ready',
+        administrativelyExcluded: false,
         serviceDate: LessThanOrEqual(hasta),
         ...(employeeIds ? { employeeId: In(employeeIds) } : {}),
       },
@@ -374,7 +375,10 @@ export class EmployeeMoneyService {
     const cut = reporte.finalCut;
     const [obligaciones, abonos] = await Promise.all([
       this.obligations.find({
-        where: { employeeId: query.employeeId },
+        where: {
+          employeeId: query.employeeId,
+          administrativelyExcluded: false,
+        },
         order: { serviceDate: 'DESC' },
       }),
       this.cashPayments.find({

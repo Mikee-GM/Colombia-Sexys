@@ -55,13 +55,18 @@ import {
 import { SaveBankAccountDto } from './dto/bank-account.dto';
 import { ExtendServiceDto } from '../employees/dto/extend-service.dto';
 import { AddPortalServiceExtraDto } from '../employees/dto/portal-service-extra.dto';
+import { AdminServiceLifecycleService } from './admin-service-lifecycle.service';
+import { AdminServiceReasonDto } from './dto/admin-service-control.dto';
 
 @Controller('services')
 @ApiControllerDocs('services', true)
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin', 'jefe')
 export class ServicesController {
-  constructor(private readonly servicesService: ServicesService) {}
+  constructor(
+    private readonly servicesService: ServicesService,
+    private readonly adminServiceLifecycle: AdminServiceLifecycleService,
+  ) {}
 
   @Post()
   @ApiCreateDocs({
@@ -214,18 +219,16 @@ export class ServicesController {
     return this.servicesService.cambiarUbicacion(id, dto, req.user);
   }
 
-  /**
-   * Solo para lo que nunca llego a ocurrir; el servicio comprueba cual es.
-   *
-   * Reservado al admin porque es la unica operacion que destruye historial en
-   * vez de marcarlo. Cancelar, que es lo que hay que usar en el resto de los
-   * casos, sigue abierto al jefe.
-   */
+  /** Mueve el servicio a la papelera sin destruir su historial. */
   @Delete(':id')
   @Roles('admin')
   @ApiRemoveDocs({ tag: 'services', protected: true })
-  remove(@Param('id') id: string) {
-    return this.servicesService.remove(id);
+  remove(
+    @Param('id') id: string,
+    @Body() dto: AdminServiceReasonDto,
+    @Req() req: any,
+  ) {
+    return this.adminServiceLifecycle.softDelete(id, req.user, dto.reason);
   }
 
   @Post(':id/cancel')
