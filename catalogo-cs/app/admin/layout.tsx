@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   title: "Panel de Administracion -- Colombia Sexys",
   description: "Panel de gestion de modelos para Colombia Sexys.",
   robots: "noindex, nofollow",
+  manifest: "/manifest-admin.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Admin CS",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export default function AdminLayout({

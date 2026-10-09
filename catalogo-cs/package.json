@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "build:hostinger": "next build && node build-hostinger.js",
-    "test": "jest"
+    "test": "jest",
+    "test:mobile": "playwright test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.64.0",
     "@testing-library/react": "16.3.2",
     "@types/jest": "^30.0.0",
     "@types/node": "^20",

@@ -144,7 +144,7 @@ export default function ChatMonitorClient() {
       : activeChat?.mode !== "HUMAN_ACTIVE";
 
   return (
-    <div className="flex h-[calc(100vh-10rem)] min-h-[560px] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/50">
+    <div className="flex h-[calc(100dvh-10rem)] min-h-[24rem] overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/50">
       {/* Sidebar: Lista de Sesiones */}
       <div
         className={`${activeChat ? "hidden md:flex" : "flex"} w-full min-w-0 flex-col border-r border-zinc-800 bg-zinc-900/50 md:w-[320px] md:min-w-[280px]`}

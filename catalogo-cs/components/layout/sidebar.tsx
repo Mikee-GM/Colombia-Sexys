@@ -66,7 +66,7 @@ export default function Sidebar() {
     <aside
       className="
       w-[280px]
-      h-screen
+      h-dvh
       bg-[#111111]
       border-r
       border-zinc-800

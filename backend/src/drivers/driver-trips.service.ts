@@ -74,6 +74,8 @@ export class DriverTripsService {
       url: string;
       tag?: string;
       requireInteraction?: boolean;
+      relatedEntityId?: string;
+      dedupeKey?: string;
     },
   ): Promise<void> {
     if (!usuarioId) return;
@@ -217,7 +219,22 @@ export class DriverTripsService {
     trip: Viajes,
     chofer: Choferes | null,
   ): Promise<void> {
-    const chatId = trip.servicio?.empleada?.usuario?.telegramChatId;
+    const servicio = trip.servicio;
+    if (!servicio) return;
+
+    // Web Push es el canal operativo principal y no depende de que exista o
+    // responda un chat de Telegram. El evento posterior reutiliza esta clave.
+    await this.avisar(servicio.empleada?.usuarioId, {
+      titulo: 'Tu chofer va en camino',
+      cuerpo: 'Toca para ver los datos del coche.',
+      url: '/empleada/portal',
+      tag: `viaje-${trip.id}`,
+      requireInteraction: true,
+      relatedEntityId: servicio.id,
+      dedupeKey: `employee:trip_accepted:${servicio.id}:event`,
+    });
+
+    const chatId = servicio.empleada?.usuario?.telegramChatId;
     if (!chatId) return;
 
     const vehiculo = [
@@ -243,15 +260,6 @@ export class DriverTripsService {
       const enviado = await this.telegram.sendMessage(chatId, texto, {
         parseMode: 'Markdown',
       });
-      // Nivel 1: tiene que estar lista cuando el coche llegue.
-      await this.avisar(trip.servicio?.empleada?.usuarioId, {
-        titulo: 'Tu chofer va en camino',
-        cuerpo: 'Toca para ver los datos del coche.',
-        url: '/empleada/portal',
-        tag: `viaje-${trip.id}`,
-        requireInteraction: true,
-      });
-
       trip.telegramEmpleadaMsgChoferCaminoId = enviado.message_id.toString();
       await this.viajes.update(trip.id, {
         telegramEmpleadaMsgChoferCaminoId:
@@ -727,8 +735,22 @@ export class DriverTripsService {
     trip: Viajes,
     chofer: Choferes | null,
   ): Promise<void> {
-    const chatId = trip.servicio?.empleada?.usuario?.telegramChatId;
-    if (!chatId || !trip.servicio) return;
+    const servicio = trip.servicio;
+    if (!servicio) return;
+
+    await this.avisar(servicio.empleada?.usuarioId, {
+      titulo: 'Tu chofer ya llegó',
+      cuerpo: 'Está en el punto de recogida. Toca para ver sus datos.',
+      url: '/empleada/portal',
+      tag: `viaje-${trip.id}`,
+      requireInteraction: true,
+      relatedEntityId: servicio.id,
+      dedupeKey: `employee:trip_status_updated:${servicio.id}:driver_arrived`,
+    });
+    this.servicesService.startWaitTimeout(servicio.id, ESPERA_MS);
+
+    const chatId = servicio.empleada?.usuario?.telegramChatId;
+    if (!chatId) return;
 
     const vehiculo = [
       chofer?.vehiculoMarca ? `• *Marca:* ${chofer.vehiculoMarca}` : null,
@@ -762,17 +784,6 @@ export class DriverTripsService {
           ],
         ],
       });
-
-      // Nivel 1: desde aqui empieza a correr su margen de espera.
-      await this.avisar(trip.servicio?.empleada?.usuarioId, {
-        titulo: 'Tu chofer ya llegó',
-        cuerpo: 'Está en el punto de recogida. Toca para ver sus datos.',
-        url: '/empleada/portal',
-        tag: `viaje-${trip.id}`,
-        requireInteraction: true,
-      });
-
-      this.servicesService.startWaitTimeout(trip.servicio.id, ESPERA_MS);
 
       trip.telegramEmpleadaMsgChoferLlegadoId = enviado.message_id.toString();
       await this.viajes.update(trip.id, {

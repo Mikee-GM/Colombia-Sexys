@@ -53,13 +53,16 @@ describe('NotificationsBridge: avance del traslado', () => {
 
     await disparar(evento('employee_en_route'));
 
-    expect(notificar).toHaveBeenCalledWith('user-jefe', {
-      titulo: 'Traslado en marcha',
-      cuerpo: 'Una empleada ya va en camino. Toca para verlo.',
-      url: '/jefe',
-      tag: 'traslado-svc-1',
-      tipo: 'trip_status_updated',
-    });
+    expect(notificar).toHaveBeenCalledWith(
+      'user-jefe',
+      expect.objectContaining({
+        titulo: 'Traslado en marcha',
+        cuerpo: 'Una empleada ya va en camino. Toca para verlo.',
+        url: '/jefe',
+        tag: 'traslado-svc-1',
+        tipo: 'trip_status_updated',
+      }),
+    );
   });
 
   it('avisa cuando confirma que llegó', async () => {

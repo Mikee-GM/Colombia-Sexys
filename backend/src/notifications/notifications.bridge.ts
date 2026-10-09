@@ -1,7 +1,12 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import type { RealtimeMessage } from '../realtime/realtime.bus';
 import { NotificationsService } from './notifications.service';
+import { Empleadas } from '../employees/entities/employee.entity';
+import { Choferes } from '../drivers/entities/driver.entity';
+import { Usuarios } from '../users/entities/user.entity';
 
 /**
  * Un texto del aviso, fijo o derivado del evento.
@@ -20,6 +25,8 @@ type AvisoDeEvento = {
   url: string;
   /** Prefijo del `tag`, para que dos avisos del mismo asunto no se apilen. */
   asunto: string;
+  /** Los avisos urgentes no pueden apagarse desde preferencias. */
+  urgente?: boolean;
   /**
    * Cuando el evento solo justifica un aviso a veces.
    *
@@ -102,6 +109,95 @@ const AVISOS_DEL_JEFE: Record<string, AvisoDeEvento> = {
     url: '/jefe',
     asunto: 'cancelado',
   },
+  employee_accepted_service: {
+    titulo: 'Servicio aceptado',
+    cuerpo: 'Una empleada acepto un servicio. Toca para continuar.',
+    url: '/jefe',
+    asunto: 'aceptacion',
+  },
+  employee_rejected_service: {
+    titulo: 'Servicio rechazado',
+    cuerpo: 'Una empleada rechazo un servicio. Se requiere tu atencion.',
+    url: '/jefe',
+    asunto: 'rechazo',
+    urgente: true,
+  },
+  employee_acceptance_escalated: {
+    titulo: 'Servicio sin respuesta',
+    cuerpo: 'Se agoto el tiempo de respuesta. Se requiere tu atencion.',
+    url: '/jefe',
+    asunto: 'sin-respuesta',
+    urgente: true,
+  },
+  trip_accepted: {
+    titulo: 'Viaje aceptado',
+    cuerpo: 'Un chofer acepto el viaje. Toca para revisar el traslado.',
+    url: '/jefe',
+    asunto: 'viaje-aceptado',
+  },
+  external_transport_assigned: {
+    titulo: 'Transporte externo asignado',
+    cuerpo: 'El traslado externo quedo listo.',
+    url: '/jefe',
+    asunto: 'transporte-externo',
+  },
+  service_started: {
+    titulo: 'Servicio iniciado',
+    cuerpo: 'Un servicio de tu equipo acaba de iniciar.',
+    url: '/jefe',
+    asunto: 'inicio',
+  },
+  service_extended: {
+    titulo: 'Extension registrada',
+    cuerpo: 'Se registro una extension de tiempo en un servicio.',
+    url: '/jefe',
+    asunto: 'extension',
+  },
+  service_extra_added: {
+    titulo: 'Extra registrado',
+    cuerpo: 'Se registro un extra en un servicio.',
+    url: '/jefe',
+    asunto: 'extra',
+  },
+  SERVICE_PANIC_ACTIVATED: {
+    titulo: 'Alerta de seguridad',
+    cuerpo: 'Se requiere tu atencion inmediata dentro de la aplicacion.',
+    url: '/jefe',
+    asunto: 'panico',
+    urgente: true,
+  },
+  SERVICE_ENDING_SOON: {
+    titulo: 'Servicio por terminar',
+    cuerpo: 'Faltan aproximadamente 15 minutos. Toca para revisar.',
+    url: '/jefe',
+    asunto: 'fin-proximo',
+  },
+  service_fully_completed: {
+    titulo: 'Servicio finalizado',
+    cuerpo: 'Un servicio completo llego a su cierre operativo.',
+    url: '/jefe',
+    asunto: 'finalizado',
+  },
+  return_transport_selected: {
+    titulo: 'Transporte de regreso asignado',
+    cuerpo: 'El regreso quedo asignado. Toca para revisar.',
+    url: '/jefe',
+    asunto: 'regreso',
+  },
+  return_transport_escalated: {
+    titulo: 'Regreso requiere atencion',
+    cuerpo: 'Hay un regreso sin resolver. Se requiere tu atencion.',
+    url: '/jefe',
+    asunto: 'regreso-escalado',
+    urgente: true,
+  },
+  no_drivers_available: {
+    titulo: 'No hay chofer disponible',
+    cuerpo: 'Se requiere una alternativa de transporte.',
+    url: '/jefe',
+    asunto: 'sin-chofer',
+    urgente: true,
+  },
   /*
    * Los dos avisos del traslado que la modelo marca ella misma.
    *
@@ -137,6 +233,157 @@ const AVISOS_DEL_JEFE: Record<string, AvisoDeEvento> = {
   },
 };
 
+const AVISOS_DE_LA_EMPLEADA: Record<string, AvisoDeEvento> = {
+  service_waiting_employee_acceptance: {
+    titulo: 'Tienes un servicio por aceptar',
+    cuerpo: 'Revisa los datos y responde desde tu portal.',
+    url: '/empleada/servicio',
+    asunto: 'aceptacion',
+    urgente: true,
+  },
+  new_service: {
+    titulo: 'Tienes un nuevo servicio',
+    cuerpo: 'Entra a tu portal para revisarlo y responder.',
+    url: '/empleada/portal',
+    asunto: 'nuevo-servicio',
+    urgente: true,
+  },
+  employee_acceptance_reminder: {
+    titulo: 'Respuesta pendiente',
+    cuerpo: 'Tienes un servicio esperando tu respuesta.',
+    url: '/empleada/portal',
+    asunto: 'recordatorio-aceptacion',
+    urgente: true,
+  },
+  employee_acceptance_escalated: {
+    titulo: 'Ultimo aviso de aceptacion',
+    cuerpo: 'La coordinacion fue avisada. Revisa tu portal ahora.',
+    url: '/empleada/servicio',
+    asunto: 'aceptacion-final',
+    urgente: true,
+  },
+  service_cancelled: {
+    titulo: 'Servicio cancelado',
+    cuerpo: 'Un servicio asignado fue cancelado.',
+    url: '/empleada/portal',
+    asunto: 'cancelado',
+    urgente: true,
+  },
+  internal_transport_selected: {
+    titulo: 'Transporte interno seleccionado',
+    cuerpo: 'Se esta buscando un chofer para tu traslado.',
+    url: '/empleada/portal',
+    asunto: 'transporte-interno',
+  },
+  trip_accepted: {
+    titulo: 'Tu chofer va en camino',
+    cuerpo: 'Toca para ver los datos del coche.',
+    url: '/empleada/portal',
+    asunto: 'chofer-asignado',
+    urgente: true,
+  },
+  trip_status_updated: {
+    titulo: 'Tu chofer ya llego',
+    cuerpo: 'Esta en el punto de recogida. Revisa tu portal.',
+    url: '/empleada/portal',
+    asunto: 'avance-viaje',
+    urgente: true,
+    soloSi: (evento) => accionDelViaje(evento) === 'driver_arrived',
+  },
+  external_transport_assigned: {
+    titulo: 'Tu transporte esta listo',
+    cuerpo: 'Entra a tu portal para revisar el traslado.',
+    url: '/empleada/portal',
+    asunto: 'transporte-externo',
+    urgente: true,
+  },
+  SERVICE_ENDING_SOON: {
+    titulo: 'Servicio por terminar',
+    cuerpo: 'Faltan aproximadamente 15 minutos. Revisa tu portal.',
+    url: '/empleada/servicio',
+    asunto: 'fin-proximo',
+  },
+  service_started: {
+    titulo: 'Servicio iniciado',
+    cuerpo: 'El servicio quedo activo. Continua desde tu portal.',
+    url: '/empleada/servicio',
+    asunto: 'servicio-iniciado',
+    urgente: true,
+  },
+  return_transport_selected: {
+    titulo: 'Regreso asignado',
+    cuerpo: 'Tu transporte de regreso esta listo.',
+    url: '/empleada/portal',
+    asunto: 'regreso',
+    urgente: true,
+  },
+  SERVICE_PANIC_ACTIVATED: {
+    titulo: 'Alerta de seguridad activa',
+    cuerpo: 'La coordinacion fue notificada. Mantente en tu portal.',
+    url: '/empleada/servicio',
+    asunto: 'panico',
+    urgente: true,
+  },
+};
+
+const AVISOS_DEL_CHOFER: Record<string, AvisoDeEvento> = {
+  trip_offered: {
+    titulo: 'Tienes un viaje disponible',
+    cuerpo: 'Entra a tu portal para revisarlo antes de que expire.',
+    url: '/chofer/portal',
+    asunto: 'oferta-viaje',
+    urgente: true,
+  },
+  trip_accepted: {
+    titulo: 'Viaje asignado',
+    cuerpo: 'El viaje quedo a tu cargo. Revisa tu portal.',
+    url: '/chofer/servicio',
+    asunto: 'viaje-ganado',
+    urgente: true,
+  },
+  trip_offer_released: {
+    titulo: 'Viaje no disponible',
+    cuerpo: 'La oferta ya no esta disponible.',
+    url: '/chofer/portal',
+    asunto: 'oferta-cerrada',
+  },
+  trip_cancelled: {
+    titulo: 'Viaje cancelado',
+    cuerpo: 'Un viaje asignado fue cancelado.',
+    url: '/chofer/portal',
+    asunto: 'viaje-cancelado',
+    urgente: true,
+  },
+  SERVICE_PANIC_ACTIVATED: {
+    titulo: 'Alerta de seguridad',
+    cuerpo: 'Se requiere tu atencion dentro de la aplicacion.',
+    url: '/chofer/servicio',
+    asunto: 'panico',
+    urgente: true,
+  },
+};
+
+const AVISOS_DEL_ADMIN: Record<string, AvisoDeEvento> = {
+  SERVICE_PANIC_ACTIVATED: {
+    titulo: 'Alerta de seguridad',
+    cuerpo: 'Hay una alerta que requiere revision administrativa.',
+    url: '/admin/alerts',
+    asunto: 'panico-admin',
+  },
+  no_drivers_available: {
+    titulo: 'Fallo critico de transporte',
+    cuerpo: 'Un servicio no encontro chofer disponible.',
+    url: '/admin/services',
+    asunto: 'sin-chofer-admin',
+  },
+  return_transport_escalated: {
+    titulo: 'Servicio requiere intervencion',
+    cuerpo: 'Un regreso sigue sin resolverse.',
+    url: '/admin/services',
+    asunto: 'atorado-admin',
+  },
+};
+
 function datosDelEvento(evento: Record<string, unknown>): {
   action?: string;
   tripType?: string;
@@ -159,11 +406,10 @@ function accionDelViaje(evento: Record<string, unknown>): string | undefined {
  * forma visible. Un evento, en cambio, se emite en el punto donde el estado
  * cambia de verdad.
  *
- * Todo lo que sale de aqui es de nivel 2 --conviene enterarse, pero nada se
- * rompe si tarda-- y por eso viaja con su `tipo`, que es lo que hace que
- * `NotificationsService` consulte los ajustes de la persona antes de mandarlo.
- * Los de nivel 1 siguen enganchados en su sitio y no pasan por aqui: van sin
- * `tipo` y no deben poder apagarse.
+ * El catalogo incluye avisos opcionales y operativos. Los operativos se marcan
+ * como urgentes y no viajan con `tipo`, por lo que no pueden apagarse desde
+ * preferencias. La deduplicacion durable absorbe el caso en que un punto
+ * critico tambien tenga un envio directo de respaldo.
  */
 @Injectable()
 export class NotificationsBridge implements OnModuleInit {
@@ -172,6 +418,12 @@ export class NotificationsBridge implements OnModuleInit {
   constructor(
     private readonly realtime: RealtimeEventsService,
     private readonly notifications: NotificationsService,
+    @InjectRepository(Empleadas)
+    private readonly empleadas: Repository<Empleadas>,
+    @InjectRepository(Choferes)
+    private readonly choferes: Repository<Choferes>,
+    @InjectRepository(Usuarios)
+    private readonly usuarios: Repository<Usuarios>,
   ) {}
 
   onModuleInit(): void {
@@ -181,34 +433,100 @@ export class NotificationsBridge implements OnModuleInit {
   }
 
   private async alEvento(message: RealtimeMessage): Promise<void> {
-    // El jefe es el unico canal cuya clave ya es un id de usuario; los demas
-    // guardan el id de empleada o de chofer, que no sirve para avisar.
-    if (message.target !== 'boss' || !message.key) return;
-
     const tipo = (message.event as { type?: string } | undefined)?.type;
     if (!tipo) return;
 
-    const aviso = AVISOS_DEL_JEFE[tipo];
-    if (!aviso) return;
-    if (
-      aviso.soloSi &&
-      !aviso.soloSi(message.event as Record<string, unknown>)
-    ) {
-      return;
-    }
-
     try {
-      const evento = message.event as Record<string, unknown>;
-      await this.notifications.notificar(message.key, {
-        titulo: this.resolver(aviso.titulo, evento),
-        cuerpo: this.resolver(aviso.cuerpo, evento),
-        url: aviso.url,
-        tag: `${aviso.asunto}-${this.referencia(message.event)}`,
-        tipo,
-      });
+      await this.avisarDestinatario(message, tipo);
+      await this.avisarAdmins(message.event, tipo);
     } catch (err) {
       this.logger.error(`Error avisando del evento ${tipo}:`, err);
     }
+  }
+
+  private async avisarDestinatario(
+    message: RealtimeMessage,
+    tipo: string,
+  ): Promise<void> {
+    if (!message.key) return;
+
+    const catalogo = this.catalogoPara(message.target);
+    const aviso = catalogo?.[tipo];
+    if (!aviso) return;
+    const evento = message.event as Record<string, unknown>;
+    if (aviso.soloSi && !aviso.soloSi(evento)) return;
+
+    const usuarioId = await this.usuarioDe(message.target, message.key);
+    if (!usuarioId) return;
+    await this.enviar(usuarioId, tipo, aviso, evento, message.target);
+  }
+
+  /** Solo los eventos criticos del catalogo admin llegan a administradores. */
+  private async avisarAdmins(event: unknown, tipo: string): Promise<void> {
+    const aviso = AVISOS_DEL_ADMIN[tipo];
+    if (!aviso) return;
+    const evento = event as Record<string, unknown>;
+    if (aviso.soloSi && !aviso.soloSi(evento)) return;
+
+    const admins = await this.usuarios.find({
+      where: { rol: 'admin', activo: true },
+      select: { id: true },
+    });
+    await Promise.allSettled(
+      admins.map((admin) =>
+        this.enviar(admin.id, tipo, aviso, evento, 'admin'),
+      ),
+    );
+  }
+
+  private catalogoPara(
+    target: RealtimeMessage['target'],
+  ): Record<string, AvisoDeEvento> | null {
+    if (target === 'boss') return AVISOS_DEL_JEFE;
+    if (target === 'employee') return AVISOS_DE_LA_EMPLEADA;
+    if (target === 'driver') return AVISOS_DEL_CHOFER;
+    return null;
+  }
+
+  private async usuarioDe(
+    target: RealtimeMessage['target'],
+    key: string,
+  ): Promise<string | null> {
+    if (target === 'boss') return key;
+    if (target === 'employee') {
+      const empleada = await this.empleadas.findOne({
+        where: { id: key },
+        select: { usuarioId: true },
+      });
+      return empleada?.usuarioId ?? null;
+    }
+    if (target === 'driver') {
+      const chofer = await this.choferes.findOne({
+        where: { id: key },
+        select: { usuarioId: true },
+      });
+      return chofer?.usuarioId ?? null;
+    }
+    return null;
+  }
+
+  private async enviar(
+    usuarioId: string,
+    tipo: string,
+    aviso: AvisoDeEvento,
+    evento: Record<string, unknown>,
+    target: string,
+  ): Promise<void> {
+    const referencia = this.referencia(evento);
+    await this.notifications.notificar(usuarioId, {
+      titulo: this.resolver(aviso.titulo, evento),
+      cuerpo: this.resolver(aviso.cuerpo, evento),
+      url: aviso.url,
+      tag: `${aviso.asunto}-${referencia}`,
+      ...(aviso.urgente ? {} : { tipo }),
+      relatedEntityId: this.entidadRelacionada(evento),
+      dedupeKey: `${target}:${tipo}:${this.identidad(evento, referencia)}`,
+    });
   }
 
   /** El texto del aviso, ya sea fijo o derivado del evento. */
@@ -249,5 +567,47 @@ export class NotificationsBridge implements OnModuleInit {
       }
     }
     return 'general';
+  }
+
+  /** Identifica el suceso concreto; el `tag` puede agrupar varios sucesos. */
+  private identidad(event: unknown, referencia: string): string {
+    const data = (event as { data?: Record<string, unknown> } | undefined)
+      ?.data;
+    for (const clave of [
+      'eventId',
+      'messageId',
+      'extraId',
+      'extensionId',
+      'id',
+    ]) {
+      const valor = data?.[clave];
+      if (typeof valor === 'string' || typeof valor === 'number') {
+        return String(valor);
+      }
+    }
+    const valorVariante =
+      data?.action ?? data?.state ?? data?.status ?? data?.tripType ?? 'event';
+    const variante =
+      typeof valorVariante === 'string' || typeof valorVariante === 'number'
+        ? String(valorVariante)
+        : 'event';
+    return `${referencia}:${variante}`;
+  }
+
+  private entidadRelacionada(event: unknown): string | undefined {
+    const data = (event as { data?: Record<string, unknown> } | undefined)
+      ?.data;
+    for (const clave of ['serviceId', 'servicioId', 'tripId', 'requestId']) {
+      const valor = data?.[clave];
+      if (
+        typeof valor === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          valor,
+        )
+      ) {
+        return valor;
+      }
+    }
+    return undefined;
   }
 }

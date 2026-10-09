@@ -16,6 +16,7 @@ import { Usuarios } from '../users/entities/user.entity';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
 import { NotificationsService } from './notifications.service';
 import { PushSubscriptionsService } from './push-subscriptions.service';
+import type { PushDeviceStatus } from './push-subscriptions.service';
 import { WebPushProvider } from './web-push.provider';
 import { RegistrarSuscripcionDto } from './dto/registrar-suscripcion.dto';
 import { DarDeBajaDto } from './dto/dar-de-baja.dto';
@@ -56,6 +57,17 @@ export class NotificationsController {
     return {
       clavePublica: this.webPush.clavePublica(),
       activo: this.webPush.estaConfigurado(),
+    };
+  }
+
+  /** Estado de los dispositivos del usuario actual, sin exponer endpoints. */
+  @Get('estado')
+  async estado(
+    @GetUser() actor: Usuarios,
+  ): Promise<{ configured: boolean; devices: PushDeviceStatus[] }> {
+    return {
+      configured: this.webPush.estaConfigurado(),
+      devices: await this.suscripciones.estadoDe(actor.id),
     };
   }
 
@@ -130,6 +142,16 @@ export class NotificationsController {
     await this.suscripciones.darDeBaja(actor.id, dto.endpoint);
   }
 
+  /** Mantiene visible que este dispositivo sigue instalado y en uso. */
+  @Put('suscripciones/vista')
+  @HttpCode(204)
+  async marcarVista(
+    @Body() dto: DarDeBajaDto,
+    @GetUser() actor: Usuarios,
+  ): Promise<void> {
+    await this.suscripciones.marcarVista(actor.id, dto.endpoint);
+  }
+
   /**
    * Aviso de prueba a los dispositivos de quien llama.
    *
@@ -155,5 +177,6 @@ export class NotificationsController {
 export function portalDeRol(rol: string): string {
   if (rol === 'empleada') return '/empleada/portal';
   if (rol === 'chofer') return '/chofer/portal';
+  if (rol === 'admin') return '/admin/dashboard';
   return '/jefe';
 }

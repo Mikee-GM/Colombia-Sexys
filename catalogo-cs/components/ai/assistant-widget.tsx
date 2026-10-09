@@ -52,7 +52,7 @@ export default function AssistantWidget() {
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className="absolute right-0 top-0 h-screen w-full max-w-[420px] border-l border-zinc-800 bg-[#111111]"
+            className="absolute right-0 top-0 h-dvh w-full max-w-[420px] border-l border-zinc-800 bg-[#111111]"
           >
             <div className="border-b border-zinc-800 p-6">
               <div className="flex items-center gap-3">

@@ -89,7 +89,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] flex items-center justify-center px-4 relative overflow-hidden">
+    <div className="min-h-dvh bg-[#050505] flex items-center justify-center px-4 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] relative overflow-hidden">
       {/* Fondo decorativo */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-[radial-gradient(circle_at_center,rgba(197,165,90,0.04)_0%,transparent_60%)] pointer-events-none" />
 
