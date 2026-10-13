@@ -711,6 +711,10 @@ export function detectaInseguridad(message: string): boolean {
 }
 
 const CLIENTE_EN_FUGA_PATTERNS: RegExp[] = [
+  /\b(no|ya no) (me interesa|quiero|voy a contratar)\b/,
+  /\b(cancel(a|ar|o)|cancelo|me retiro|olvidalo|olvídalo)\b/,
+  /\b(no soy|no vivo|no estoy) de (aqui|aquí)\b/,
+  /\b(pense|pensé|crei|creí) que (estabas|estaba|atendias|atendías)\b/,
   /\bni\s?modo\b/,
   /\bsera (en |para )?(la |otra |otro )?(proxima|ocasion|dia|vez)\b/,
   /\botro dia (sera|te escribo|nos vemos|hablamos)\b/,

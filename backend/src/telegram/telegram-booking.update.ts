@@ -5162,6 +5162,7 @@ export class TelegramBookingUpdate {
   private async validarComprobanteDeReserva(
     ctx: BotContext,
     fileId: string,
+    background = false,
   ): Promise<void> {
     if (!ctx.session) return;
     const {
@@ -5193,9 +5194,11 @@ export class TelegramBookingUpdate {
     });
     if (!client || !empleada) return;
 
-    const processingMsg = await ctx.reply(
-      '🔍 Verificando comprobante, por favor espera un momento...',
-    );
+    const processingMsg = background
+      ? null
+      : await ctx.reply(
+          '🔍 Verificando comprobante, por favor espera un momento...',
+        );
 
     // Desde este punto ya tenemos el comprobante: nunca se le vuelve a pedir.
     ctx.session.comprobanteEnviado = true;
@@ -5264,9 +5267,11 @@ export class TelegramBookingUpdate {
         },
       );
 
-      await ctx.telegram
-        .deleteMessage(ctx.chat!.id, processingMsg.message_id)
-        .catch(() => {});
+      if (processingMsg) {
+        await ctx.telegram
+          .deleteMessage(ctx.chat!.id, processingMsg.message_id)
+          .catch(() => {});
+      }
 
       if (receipt.needsManualReview) {
         const enRevision =
@@ -5548,7 +5553,19 @@ export class TelegramBookingUpdate {
         return;
       }
 
-      await this.validarComprobanteDeReserva(ctx, fileId);
+      const acknowledgement =
+        'Recibí tu comprobante. Puedes continuar con la conversación; lo revisaré en segundo plano y te avisaremos del resultado.';
+      await this.replyAndRemember(ctx, acknowledgement);
+      await this.registrarMensajeDelFlujo(ctx, acknowledgement);
+      await this.persistSession(ctx);
+      void this.validarComprobanteDeReserva(ctx, fileId, true).catch(
+        (error) => {
+          this.logger.error(
+            'Error no controlado procesando comprobante en segundo plano:',
+            error,
+          );
+        },
+      );
       return;
     }
 

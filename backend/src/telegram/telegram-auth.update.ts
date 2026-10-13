@@ -135,6 +135,11 @@ export class TelegramAuthUpdate {
           session,
           activeDraft,
         );
+        await this.telegramConversationsService.recordPreServiceClientMessage(
+          activeDraft.id,
+          telegramId,
+          startText || '/start',
+        );
 
         // HUMAN_ACTIVE means the office owns the conversation. Hydrate the
         // session but do not let /start make the bot speak over the boss.

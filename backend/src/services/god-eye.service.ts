@@ -186,7 +186,7 @@ export class GodEyeService {
         s.created_at AS "createdAt",
         s.notas,
         c.id AS "clienteId",
-        c.nombre_telegram AS "clienteNombre",
+         COALESCE(c.nombre_telegram, s.cliente_nombre_libre) AS "clienteNombre",
         e.id AS "empleadaId",
         e.nombre_artistico AS "empleadaNombre",
         e.foto_perfil_url AS "empleadaFoto",

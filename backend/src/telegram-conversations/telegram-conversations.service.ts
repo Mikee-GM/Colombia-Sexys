@@ -1176,6 +1176,51 @@ export class TelegramConversationsService {
     return saved;
   }
 
+  /**
+   * Registra un nuevo contacto del cliente en una reserva aun no convertida en
+   * servicio. El primer /start tambien debe ser visible para el jefe: de lo
+   * contrario un borrador tomado por humanos puede quedar fuera de la bandeja
+   * hasta que el cliente vuelva a escribir otro mensaje.
+   */
+  async recordPreServiceClientMessage(
+    bookingSessionId: string,
+    clientTelegramId: string,
+    message: string,
+  ) {
+    const draft = this.bookingDraftRepository
+      ? await this.bookingDraftRepository.findOneBy({ id: bookingSessionId })
+      : null;
+    const client = await this.clientesRepository.findOne({
+      where: { telegramChatId: clientTelegramId },
+    });
+    if (!client || !message.trim()) return null;
+
+    const intendedEmployeeId = draft?.intendedEmployeeId ?? null;
+    const employee = intendedEmployeeId
+      ? await this.empleadasRepository.findOne({
+          where: { id: intendedEmployeeId },
+          select: { id: true, jefeId: true, jefeSecundarioId: true },
+        })
+      : null;
+    const saved = await this.conversationsRepository.save(
+      this.conversationsRepository.create({
+        clienteId: client.id,
+        servicioId: null,
+        bookingSessionId,
+        intendedEmployeeId,
+        emisor: 'cliente',
+        mensaje: message,
+        iaActiva: draft?.mode !== 'HUMAN_ACTIVE',
+        telegramChatId: clientTelegramId,
+      }),
+    );
+    this.emitPreServiceEvent(employee, {
+      type: 'chat_message',
+      data: saved,
+    });
+    return saved;
+  }
+
   private async getAuthorizedService(serviceId: string, actor: Usuarios) {
     const service = await this.servicesRepository.findOne({
       where: { id: serviceId },

@@ -152,7 +152,10 @@ export function buildJefeConversations(
       return {
         id: service.id,
         clientId,
-        clientName: service.cliente?.nombreTelegram?.trim() || "Cliente",
+        clientName:
+          service.cliente?.nombreTelegram?.trim() ||
+          service.clienteNombreLibre?.trim() ||
+          "Cliente",
         telegramId: service.cliente?.telegramChatId ?? null,
         employeeId: service.empleadaId,
         employeeName:
