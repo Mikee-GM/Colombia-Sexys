@@ -4200,7 +4200,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       // Quien cerro su jornada no vuelve a estar libre en un rato: no se le
       // ofrecen viajes hasta que la reabra.
       .andWhere('usuario.enJornada = :enJornada', { enJornada: true })
-      .andWhere('usuario.telegramChatId IS NOT NULL')
+      // El panel es el canal operativo principal; Telegram solo duplica el
+      // aviso y por eso no puede ser requisito para recibir una oferta.
       .andWhere('chofer.ubicacionLat IS NOT NULL')
       .andWhere('chofer.ubicacionLng IS NOT NULL')
       // Solo choferes que usan el app: los que tienen modoBot=false no
@@ -4367,7 +4368,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           messageText,
           {
             parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
+            // Telegram es solo una notificaciÃ³n secundaria; la operaciÃ³n se
+            // confirma exclusivamente desde el panel del chofer.
+            /*
               [
                 Markup.button.callback(
                   '🚗 Aceptar Viaje',
@@ -4379,6 +4382,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
                 ),
               ],
             ]),
+            */
           },
         );
         viaje.telegramChoferMsgOfertaId = sentMsg.message_id.toString();

@@ -52,15 +52,15 @@ export class CreateDriverDto {
   @MaxLength(255, { message: 'El nombre no puede superar los 255 caracteres' })
   readonly nombre: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Telefono de contacto del chofer',
     example: '+525512345678',
     maxLength: 30,
   })
   @IsString({ message: 'El teléfono debe ser una cadena de texto' })
-  @IsNotEmpty({ message: 'El teléfono es obligatorio' })
   @MaxLength(30, { message: 'El teléfono no puede superar los 30 caracteres' })
-  readonly telefono: string;
+  @IsOptional()
+  readonly telefono?: string;
 
   @ApiPropertyOptional({
     description: 'Indica si el chofer esta disponible',
