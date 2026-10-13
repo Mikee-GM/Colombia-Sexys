@@ -41,6 +41,7 @@ function viaje(overrides: Partial<Viajes> = {}): Viajes {
 
 function montar(trip: Viajes | null, afectadas = 1) {
   const update = jest.fn(() => Promise.resolve({ affected: 1 }));
+  const viajesFind = jest.fn<Promise<Viajes[]>, []>(() => Promise.resolve([]));
   const borrados: Array<{ chatId: string; messageId: number }> = [];
   const deleteMessage = jest.fn((chatId: string, messageId: number) => {
     borrados.push({ chatId, messageId });
@@ -89,7 +90,11 @@ function montar(trip: Viajes | null, afectadas = 1) {
     // inicializados de la clase, y varios caminos lo usan al tragarse un fallo.
     logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
     dataSource,
-    viajes: { findOne: jest.fn(() => Promise.resolve(trip)), update },
+    viajes: {
+      findOne: jest.fn(() => Promise.resolve(trip)),
+      find: viajesFind,
+      update,
+    },
     choferes: {
       findOne: jest.fn(() =>
         Promise.resolve({
@@ -133,6 +138,7 @@ function montar(trip: Viajes | null, afectadas = 1) {
     service,
     realtime: dependencias.realtime as Record<string, jest.Mock>,
     update,
+    viajesFind,
     enviados,
     borrados,
     startWaitTimeout,
@@ -324,6 +330,18 @@ describe('DriverTripsService.finalizarViaje', () => {
     // Vuelve a estar libre en cuanto suelta a la pasajera.
     expect(choferesUpdate).toHaveBeenCalledWith(CHOFER, { disponible: true });
     expect(syncDriverSettlement).toHaveBeenCalledWith('viaje-1');
+    expect(choferesUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('no libera al chofer si conserva otro viaje abierto', async () => {
+    const { service, choferesUpdate, viajesFind } = montar(
+      viaje({ estado: 'en_curso' }),
+    );
+    viajesFind.mockResolvedValueOnce([{ id: 'otro-viaje-abierto' } as Viajes]);
+
+    await service.finalizarViaje('viaje-1', CHOFER);
+
+    expect(choferesUpdate).not.toHaveBeenCalled();
   });
 
   it('en la ida espera el inicio explícito de la empleada', async () => {

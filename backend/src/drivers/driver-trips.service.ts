@@ -8,7 +8,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Not, Repository } from 'typeorm';
 import { Markup } from 'telegraf';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Choferes } from './entities/driver.entity';
@@ -84,6 +84,33 @@ export class DriverTripsService {
     } catch (err) {
       this.logger.error(`Error enviando el aviso push "${aviso.titulo}":`, err);
     }
+  }
+
+  /**
+   * Reconcilia la disponibilidad operativa despues de cerrar un viaje.
+   *
+   * `disponible` no debe quedar pegado en falso despues del ultimo viaje,
+   * pero tampoco se puede poner en true si el chofer conserva otro viaje
+   * abierto. Se consulta el estado persistido, no la entidad que traia el
+   * llamador, porque el cierre puede llegar casi al mismo tiempo que otra
+   * asignacion.
+   */
+  private async reconciliarDisponibilidad(choferId: string): Promise<void> {
+    const viajesAbiertos = await this.viajes.find({
+      where: {
+        choferId,
+        estado: Not(In(['finalizado', 'cancelado', 'rechazado'])),
+      },
+      select: { id: true },
+    });
+
+    if (viajesAbiertos.length > 0) return;
+
+    await this.choferes.update(choferId, { disponible: true });
+    this.realtime.emitToDriver(choferId, {
+      type: 'driver_availability_updated',
+      data: { disponible: true },
+    });
   }
 
   /**
@@ -431,15 +458,14 @@ export class DriverTripsService {
       `El chofer *${chofer?.nombre ?? ''}* ha dejado a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* en su destino y finalizó el viaje.`,
     );
 
+    await this.viajes.update(trip.id, {
+      estado: 'finalizado',
+      horaFinViaje: horaFin,
+    });
+    // El chofer vuelve a estar libre al terminar su ultimo viaje abierto.
+    await this.reconciliarDisponibilidad(choferId);
+
     const escrituras: Promise<unknown>[] = [];
-    escrituras.push(
-      this.viajes.update(trip.id, {
-        estado: 'finalizado',
-        horaFinViaje: horaFin,
-      }),
-    );
-    // El chofer vuelve a estar libre en cuanto suelta a la pasajera.
-    escrituras.push(this.choferes.update(choferId, { disponible: true }));
 
     if (trip.servicio) {
       const cambios: Partial<Servicios> = {};
