@@ -74,7 +74,7 @@ export default function ChoferesDashboard({
 
   const [showModal, setShowModal] = useState(false);
   const [nombre, setNombre] = useState("");
-  const [telefono, setTelefono] = useState("+52");
+  const [telefono, setTelefono] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [vehiculoMarca, setVehiculoMarca] = useState("");
@@ -289,7 +289,6 @@ export default function ChoferesDashboard({
                   <InputField
                     label="Telefono"
                     type="text"
-                    required
                     value={telefono}
                     onChange={(e) => setTelefono(formatPhoneNumber(e.target.value))}
                     placeholder="+52 55 1234 5678"

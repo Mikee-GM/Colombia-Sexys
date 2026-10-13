@@ -183,7 +183,7 @@ export class DriversService {
       const nuevoChofer = manager.create(Choferes, {
         usuarioId: usuarioGuardado.id,
         nombre,
-        telefono,
+        telefono: telefono || '',
         disponible: disponible ?? true,
         ubicacionLat: ubicacionLat ? Number(ubicacionLat) : null,
         ubicacionLng: ubicacionLng ? Number(ubicacionLng) : null,
