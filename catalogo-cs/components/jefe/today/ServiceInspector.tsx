@@ -578,7 +578,7 @@ export default function ServiceInspector({
         )}
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-3.5 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <ServiceStateSummary service={service} />
 
         <dl className="mt-4 divide-y divide-zinc-900 border-y border-zinc-900">
@@ -631,7 +631,7 @@ export default function ServiceInspector({
             <button
               type="button"
               onClick={() => setAccepting(true)}
-              className="mt-2 flex h-11 w-full items-center justify-center rounded-lg bg-[#C5A55A] px-3 text-[10px] font-bold uppercase tracking-[0.1em] text-black"
+              className="mt-2 flex min-h-12 w-full touch-manipulation items-center justify-center rounded-lg bg-[#C5A55A] px-3 py-3 text-center text-[10px] font-bold uppercase leading-4 tracking-[0.1em] text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
               CONFIRMAR Y ENVIAR A EMPLEADA
             </button>
@@ -639,7 +639,7 @@ export default function ServiceInspector({
             <button
               type="button"
               onClick={() => setTransportChoiceServiceId(service.id)}
-              className="mt-2 flex h-11 w-full items-center justify-center rounded-lg border border-[#C5A55A] px-3 text-[10px] font-bold uppercase tracking-[0.1em] text-[#C5A55A]"
+              className="mt-2 flex min-h-12 w-full touch-manipulation items-center justify-center rounded-lg border border-[#C5A55A] px-3 py-3 text-center text-[10px] font-bold uppercase leading-4 tracking-[0.1em] text-[#C5A55A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]"
             >
               ASIGNAR TRANSPORTE
             </button>

@@ -2372,7 +2372,7 @@ export function TransportPanel({
     await onRefresh();
   }
   return (
-    <section className="mt-6 space-y-4 border-t border-zinc-800 pt-6">
+    <section className="mt-6 min-w-0 space-y-4 border-t border-zinc-800 pt-6">
       <header>
         <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
           Transporte del servicio
@@ -2401,7 +2401,10 @@ export function TransportPanel({
             {transportChoicePrompt(assignment.tripType)}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <ActionButton onClick={() => setShowTransportChoice(true)}>
+            <ActionButton
+              onClick={() => setShowTransportChoice(true)}
+              className="min-h-12 w-full touch-manipulation sm:w-auto"
+            >
               Asignar transporte
             </ActionButton>
           </div>
@@ -2464,8 +2467,8 @@ export function TransportChoiceSheet({
     }
   }
   return (
-    <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/80 p-3 backdrop-blur-sm sm:items-center">
-      <section className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#090909] p-5 shadow-2xl">
+    <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/80 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-3">
+      <section className="max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-800 bg-[#090909] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[90dvh] sm:pb-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
@@ -2482,17 +2485,17 @@ export function TransportChoiceSheet({
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="rounded-xl border border-zinc-800 p-2 text-zinc-500 hover:text-white"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-800 p-2 text-zinc-500 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]"
           >
             <X size={18} />
           </button>
         </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             type="button"
             disabled={saving}
             onClick={chooseInternal}
-            className="min-h-14 rounded-xl bg-[#C5A55A] px-4 text-sm font-bold uppercase tracking-wider text-black disabled:opacity-50"
+            className="min-h-16 w-full touch-manipulation rounded-xl bg-[#C5A55A] px-4 py-4 text-center text-sm font-bold uppercase leading-5 tracking-wider text-black transition-colors hover:bg-[#d8b769] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50 sm:min-h-14"
           >
             Chofer interno
           </button>
@@ -2500,7 +2503,7 @@ export function TransportChoiceSheet({
             type="button"
             disabled={saving}
             onClick={onExternal}
-            className="min-h-14 rounded-xl border border-[#C5A55A] px-4 text-sm font-bold uppercase tracking-wider text-[#E8D5A3] disabled:opacity-50"
+            className="min-h-16 w-full touch-manipulation rounded-xl border border-[#C5A55A] px-4 py-4 text-center text-sm font-bold uppercase leading-5 tracking-wider text-[#E8D5A3] transition-colors hover:bg-[#C5A55A]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A] disabled:opacity-50 sm:min-h-14"
           >
             Uber / DiDi
           </button>
@@ -2571,20 +2574,20 @@ function TripCard({
     .join(" · ");
 
   return (
-    <article className="overflow-hidden rounded-xl border border-zinc-800 bg-black">
-      <header className="flex items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
-        <div className="flex items-center gap-2">
+    <article className="min-w-0 overflow-hidden rounded-xl border border-zinc-800 bg-black">
+      <header className="flex flex-col items-start gap-3 border-b border-zinc-800 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="rounded-lg bg-[#C5A55A]/10 p-2 text-[#C5A55A]">
             <Car size={17} />
           </span>
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold capitalize">Viaje de {trip.tipo}</p>
-            <p className="text-[10px] uppercase tracking-wider text-zinc-600">
+            <p className="truncate text-[10px] uppercase tracking-wider text-zinc-600">
               {externalAssigned ? trip.externalPlatform : trip.proveedorTransporte}
             </p>
           </div>
         </div>
-        <span className="rounded-full border border-zinc-800 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-400">
+        <span className="max-w-full rounded-full border border-zinc-800 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-400">
           {trip.estado}
         </span>
       </header>
@@ -3076,12 +3079,13 @@ function ExclusivePhotosPanel({
 function ActionButton({
   children,
   outline = false,
+  className = "",
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { outline?: boolean }) {
   return (
     <button
       {...props}
-      className={`inline-flex items-center gap-1 rounded-lg px-4 py-3 text-xs font-bold uppercase tracking-wider disabled:opacity-50 ${outline ? "border border-[#C5A55A] text-[#C5A55A]" : "bg-[#C5A55A] text-black"}`}
+      className={`inline-flex items-center gap-1 rounded-lg px-4 py-3 text-xs font-bold uppercase tracking-wider disabled:opacity-50 ${outline ? "border border-[#C5A55A] text-[#C5A55A]" : "bg-[#C5A55A] text-black"} ${className}`}
     >
       {children}
     </button>
