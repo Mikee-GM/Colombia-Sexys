@@ -2695,6 +2695,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           servicio.cliente.telegramChatId,
           clientMessage,
         );
+        // El cliente recibe este aviso por Telegram, pero tambien debe quedar
+        // en el historial que ve el jefe. Sin este registro la conversacion
+        // parecia saltarse directamente de la autorizacion al siguiente
+        // evento.
+        await this.recordAgencyMessage(servicio, clientMessage);
       } catch (telegramErr) {
         this.logger.error(
           `Error al enviar notificación de aceptación al cliente (chatId: ${servicio.cliente.telegramChatId}):`,

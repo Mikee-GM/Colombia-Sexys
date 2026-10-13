@@ -1617,6 +1617,35 @@ export class TelegramBookingUpdate {
   }
 
   /**
+   * Evita que una respuesta del modelo retroceda el formulario.
+   *
+   * Un cliente puede mandar dos mensajes cortos seguidos (por ejemplo
+   * "1 hr" y "bb"). Aunque se serialicen los updates, el segundo turno puede
+   * hacer que el modelo vuelva a preguntar por las horas. Una vez guardada la
+   * duración, esa pregunta contradice el estado real y rompe la continuidad.
+   */
+  private enforceBookingProgression(
+    text: string,
+    session: SessionData,
+  ): string {
+    if (!session.duracionPactadaHoras && !session.duracionIndefinida) {
+      return text;
+    }
+    const asksForDuration =
+      /\b(cu[aá]ntas?\s+horas?|cu[aá]nto\s+tiempo|qu[eé]\s+duraci[oó]n|no\s+alcanc[eé].{0,20}horas?)\b/i.test(
+        text,
+      );
+    if (!asksForDuration) return text;
+
+    this.logger.warn(
+      'La IA intentó volver a pedir la duración ya confirmada; se corrige al siguiente paso.',
+    );
+    return this.hasConfirmedLocation(session)
+      ? 'Perfecto mi cielo, ya tengo tu horita confirmada. ¿Cómo prefieres pagar, efectivo, tarjeta o transferencia?'
+      : 'Perfecto mi cielo, ya tengo tu horita confirmada. ¿Te paso los moteles o me mandas tu pin?';
+  }
+
+  /**
    * Aplica la cadencia de emojis sobre lo que sale hacia el cliente.
    *
    * El prompt pide "maximo 1 emoji cada 2 o 3 mensajes" desde siempre y el
@@ -5162,6 +5191,7 @@ export class TelegramBookingUpdate {
   private async validarComprobanteDeReserva(
     ctx: BotContext,
     fileId: string,
+    background = false,
   ): Promise<void> {
     if (!ctx.session) return;
     const {
@@ -5193,9 +5223,11 @@ export class TelegramBookingUpdate {
     });
     if (!client || !empleada) return;
 
-    const processingMsg = await ctx.reply(
-      '🔍 Verificando comprobante, por favor espera un momento...',
-    );
+    const processingMsg = background
+      ? null
+      : await ctx.reply(
+          '🔍 Verificando comprobante, por favor espera un momento...',
+        );
 
     // Desde este punto ya tenemos el comprobante: nunca se le vuelve a pedir.
     ctx.session.comprobanteEnviado = true;
@@ -5264,9 +5296,11 @@ export class TelegramBookingUpdate {
         },
       );
 
-      await ctx.telegram
-        .deleteMessage(ctx.chat!.id, processingMsg.message_id)
-        .catch(() => {});
+      if (processingMsg) {
+        await ctx.telegram
+          .deleteMessage(ctx.chat!.id, processingMsg.message_id)
+          .catch(() => {});
+      }
 
       if (receipt.needsManualReview) {
         const enRevision =
@@ -5548,7 +5582,19 @@ export class TelegramBookingUpdate {
         return;
       }
 
-      await this.validarComprobanteDeReserva(ctx, fileId);
+      const acknowledgement =
+        'Recibí tu comprobante. Puedes continuar con la conversación; lo revisaré en segundo plano y te avisaremos del resultado.';
+      await this.replyAndRemember(ctx, acknowledgement);
+      await this.registrarMensajeDelFlujo(ctx, acknowledgement);
+      await this.persistSession(ctx);
+      void this.validarComprobanteDeReserva(ctx, fileId, true).catch(
+        (error) => {
+          this.logger.error(
+            'Error no controlado procesando comprobante en segundo plano:',
+            error,
+          );
+        },
+      );
       return;
     }
 
@@ -10570,6 +10616,7 @@ export class TelegramBookingUpdate {
          * que si nombra un extra y no dice de que depende, se le añade aqui.
          */
         let cleanText = this.dressAiReply(responseText, session);
+        cleanText = this.enforceBookingProgression(cleanText, session);
         const nombresDeExtras = empleadaExtras.map((extra) => extra.nombre);
         if (faltaCondicionDeHigiene(cleanText, nombresDeExtras)) {
           const recordatorio = pickRecordatorioDeHigiene(

@@ -526,6 +526,13 @@ describe('detectaClienteEnFuga', () => {
     expect(detectaClienteEnFuga('a okey bueno nimodo')).toBe(true);
     expect(detectaClienteEnFuga('sera para la proxima entonces')).toBe(true);
     expect(detectaClienteEnFuga('gracias de todos modos')).toBe(true);
+    expect(
+      detectaClienteEnFuga(
+        'una hora pero pensé que estaba en Toluca, una disculpa',
+      ),
+    ).toBe(true);
+    expect(detectaClienteEnFuga('ya no me interesa, gracias')).toBe(true);
+    expect(detectaClienteEnFuga('quiero cancelar')).toBe(true);
   });
 
   it('no da por perdido a quien sigue negociando', () => {
