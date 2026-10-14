@@ -21,6 +21,12 @@ jest.mock("@/lib/actions/jefe-panel", () => ({
   assignInternalTransport: jest.fn().mockResolvedValue({ success: true }),
   assignExternalTransport: jest.fn().mockResolvedValue({ success: true }),
 }));
+jest.mock("@/lib/data/services", () => ({
+  getActiveLocationsAction: jest.fn().mockResolvedValue({
+    success: true,
+    data: [],
+  }),
+}));
 jest.mock("@/components/admin/evaluations/evaluation-history-sheet", () =>
   jest.fn(() => null),
 );
@@ -166,6 +172,20 @@ describe("asignación de transporte desde Hoy", () => {
       screen.getByRole("button", { name: "Chofer interno" }),
     ).toBeDefined();
     expect(screen.getByRole("button", { name: "Uber / DiDi" })).toBeDefined();
+  });
+
+  it("ofrece botones tactiles y de ancho completo para pantallas pequenas", () => {
+    renderPanel(service());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Asignar transporte" }),
+    );
+
+    for (const name of ["Chofer interno", "Uber / DiDi"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button.className).toContain("w-full");
+      expect(button.className).toContain("min-h-16");
+      expect(button.className).toContain("touch-manipulation");
+    }
   });
 
   it("elige chofer y llama assignInternalTransport con el servicio", async () => {
