@@ -14,20 +14,19 @@ export default async function ServicesPage() {
   if (!user) redirect("/admin");
 
   /*
-   * Las tres fuentes se piden en paralelo y se degradan por separado: si cae la
-   * lista de jefes o la de empleadas, la torre de control sigue mostrando los
-   * servicios, que es lo que no puede faltar.
+   * Solo las listas auxiliares son opcionales. Si falla la fuente principal,
+   * el límite de errores de la ruta permite reintentar sin mostrar ceros falsos.
    */
   const contexto = "la torre de control";
   const [services, employees, jefes] = await Promise.all([
-    optionalSource(getServices(), [], contexto),
+    getServices(),
     optionalSource(getEmployees(), [], contexto),
     optionalSource(getJefesAction(), [], contexto),
   ]);
 
   return (
     <OperacionClient
-      services={services ?? []}
+      services={services}
       employees={employees ?? []}
       jefes={jefes ?? []}
     />

@@ -928,7 +928,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         pagos: { receiptValidation: true },
         receiptValidations: true,
       },
-      order: { createdAt: 'DESC' },
+      // El desempate evita saltos entre páginas con la misma fecha de creación.
+      order: { createdAt: 'DESC', id: 'DESC' },
       take,
       skip,
     });

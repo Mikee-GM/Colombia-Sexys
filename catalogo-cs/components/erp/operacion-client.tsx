@@ -606,7 +606,7 @@ export default function OperacionClient({
                           </span>
                         ) : (
                           <span className="text-zinc-500">
-                            #{service.clienteId.slice(-4)}
+                            #{service.clienteId?.slice(-4) ?? "manual"}
                           </span>
                         )}
                       </Td>

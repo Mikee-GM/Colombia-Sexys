@@ -35,6 +35,34 @@ function MapFlyTo({ position, zoom }: { position: [number, number] | null; zoom?
   return null;
 }
 
+function MapResizeObserver() {
+  const map = useMap();
+
+  useEffect(() => {
+    const container = map.getContainer();
+    let frame: number | null = null;
+    const resize = () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        if (container.clientWidth && container.clientHeight) {
+          map.invalidateSize({ pan: false });
+        }
+      });
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(container);
+    resize();
+
+    return () => {
+      observer.disconnect();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [map]);
+
+  return null;
+}
+
 export default function LiveMap({ employees, drivers }: Props) {
   const [localDrivers, setLocalDrivers] = useState<Driver[]>(drivers);
   const [localEmployees, setLocalEmployees] = useState<Employee[]>(employees);
@@ -266,9 +294,9 @@ export default function LiveMap({ employees, drivers }: Props) {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-[620px] rounded-2xl border border-zinc-800 bg-[#080808] p-3 overflow-hidden shadow-2xl">
+    <div className="flex min-w-0 flex-col gap-3 rounded-2xl border border-zinc-800 bg-[#080808] p-3 shadow-2xl lg:h-[620px] lg:flex-row lg:gap-4 lg:overflow-hidden">
       {/* Panel Lateral de Búsqueda y Selección */}
-      <div className="w-full lg:w-80 shrink-0 flex flex-col bg-zinc-950/90 rounded-xl border border-zinc-800/80 p-3 overflow-hidden">
+      <div className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950/90 p-3 lg:w-80">
         {/* Encabezado del selector */}
         <div className="flex items-center justify-between pb-2 border-b border-zinc-800/60">
           <div className="flex items-center gap-2">
@@ -279,8 +307,9 @@ export default function LiveMap({ employees, drivers }: Props) {
           </div>
           {selectedUser && (
             <button
+              type="button"
               onClick={() => setSelectedUser(null)}
-              className="text-[11px] font-semibold text-[#C5A55A] hover:text-[#E8D5A3] transition-colors flex items-center gap-1"
+              className="flex min-h-11 items-center gap-1 text-[11px] font-semibold text-[#C5A55A] transition-colors hover:text-[#E8D5A3]"
             >
               <Eye className="h-3 w-3" />
               Ver todos
@@ -291,8 +320,10 @@ export default function LiveMap({ employees, drivers }: Props) {
         {/* Pestañas de tipo */}
         <div className="mt-2.5 flex gap-1 rounded-lg bg-zinc-900/90 p-1 text-xs">
           <button
+            type="button"
             onClick={() => setTypeFilter("all")}
-            className={`flex-1 rounded-md py-1 font-semibold transition-all ${
+            aria-pressed={typeFilter === "all"}
+            className={`min-h-11 flex-1 rounded-md py-1 font-semibold transition-all ${
               typeFilter === "all"
                 ? "bg-[#C5A55A] text-black font-bold shadow"
                 : "text-zinc-400 hover:text-white"
@@ -301,8 +332,10 @@ export default function LiveMap({ employees, drivers }: Props) {
             Todos
           </button>
           <button
+            type="button"
             onClick={() => setTypeFilter("employees")}
-            className={`flex-1 rounded-md py-1 font-semibold transition-all ${
+            aria-pressed={typeFilter === "employees"}
+            className={`min-h-11 flex-1 rounded-md py-1 font-semibold transition-all ${
               typeFilter === "employees"
                 ? "bg-[#C5A55A] text-black font-bold shadow"
                 : "text-zinc-400 hover:text-white"
@@ -311,8 +344,10 @@ export default function LiveMap({ employees, drivers }: Props) {
             Empleadas
           </button>
           <button
+            type="button"
             onClick={() => setTypeFilter("drivers")}
-            className={`flex-1 rounded-md py-1 font-semibold transition-all ${
+            aria-pressed={typeFilter === "drivers"}
+            className={`min-h-11 flex-1 rounded-md py-1 font-semibold transition-all ${
               typeFilter === "drivers"
                 ? "bg-[#C5A55A] text-black font-bold shadow"
                 : "text-zinc-400 hover:text-white"
@@ -328,14 +363,17 @@ export default function LiveMap({ employees, drivers }: Props) {
           <input
             type="text"
             placeholder="Buscar por nombre..."
+            aria-label="Buscar personas en el mapa"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900/70 py-1.5 pl-8 pr-8 text-xs text-zinc-200 placeholder-zinc-500 focus:border-[#C5A55A]/60 focus:outline-none transition-colors"
+            className="min-h-11 w-full rounded-xl border border-zinc-800 bg-zinc-900/70 py-1.5 pl-8 pr-12 text-base text-zinc-200 placeholder-zinc-500 focus:border-[#C5A55A]/60 focus:outline-none transition-colors sm:text-sm"
           />
           {searchQuery && (
             <button
+              type="button"
               onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-0.5"
+              aria-label="Limpiar búsqueda"
+              className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-zinc-500 hover:text-zinc-300"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -356,15 +394,17 @@ export default function LiveMap({ employees, drivers }: Props) {
         </div>
 
         {/* Lista interactiva */}
-        <div className="mt-2 flex-1 overflow-y-auto pr-1 flex flex-col gap-1.5">
+        <div className="mt-2 flex max-h-40 min-h-0 flex-col gap-1.5 overflow-y-auto overscroll-contain pr-1 lg:max-h-none lg:flex-1">
           {allUsersList.length > 0 ? (
             allUsersList.map((user) => {
               const isSelected = selectedUser?.id === user.id;
               return (
                 <button
+                  type="button"
                   key={`${user.type}-${user.id}`}
                   onClick={() => handleSelectUser(user)}
-                  className={`flex items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-all ${
+                  aria-pressed={isSelected}
+                  className={`flex min-h-11 shrink-0 items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-all ${
                     isSelected
                       ? "border border-[#C5A55A] bg-[#C5A55A]/15 text-white shadow-lg"
                       : "border border-zinc-900 bg-zinc-900/40 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200"
@@ -418,15 +458,15 @@ export default function LiveMap({ employees, drivers }: Props) {
       </div>
 
       {/* Contenedor del Mapa */}
-      <div className="flex-1 h-full relative rounded-xl overflow-hidden border border-zinc-800">
+      <div className="relative isolate h-[55dvh] min-h-[320px] w-full min-w-0 shrink-0 overflow-hidden rounded-xl border border-zinc-800 lg:h-full lg:min-h-0 lg:flex-1">
         {selectedUser && (
-          <div className="absolute top-3 left-3 z-[1000] bg-black/85 backdrop-blur-md border border-[#C5A55A]/60 px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-2.5">
+          <div className="absolute bottom-6 left-3 right-3 z-[1000] flex items-center gap-2.5 rounded-xl border border-[#C5A55A]/60 bg-black/85 px-3.5 py-2 shadow-xl backdrop-blur-md sm:right-auto sm:max-w-[calc(100%-5rem)]">
             <div
               className={`h-2.5 w-2.5 rounded-full ${
                 selectedUser.type === "employee" ? "bg-purple-500 animate-ping" : "bg-emerald-500 animate-ping"
               }`}
             />
-            <div className="text-xs">
+            <div className="min-w-0 flex-1 break-words text-xs">
               <span className="text-zinc-400 font-medium">Enfocando a: </span>
               <span className="text-white font-bold">{selectedUser.name}</span>
               {!selectedUser.position && (
@@ -434,9 +474,11 @@ export default function LiveMap({ employees, drivers }: Props) {
               )}
             </div>
             <button
+              type="button"
               onClick={() => setSelectedUser(null)}
-              className="ml-2 text-zinc-400 hover:text-white p-0.5"
+              className="ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-zinc-400 hover:text-white"
               title="Quitar filtro"
+              aria-label="Quitar filtro"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -452,6 +494,7 @@ export default function LiveMap({ employees, drivers }: Props) {
           }}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <MapResizeObserver />
 
           {/* Centrado suave automático cuando se selecciona un usuario */}
           <MapFlyTo position={selectedUser?.position ?? null} />

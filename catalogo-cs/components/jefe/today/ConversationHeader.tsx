@@ -22,11 +22,11 @@ export default function ConversationHeader({
 }) {
   const human = conversation.mode === "HUMAN_ACTIVE";
   return (
-    <header className="flex min-h-16 items-center gap-3 border-b border-zinc-800 bg-[#070707] px-3 py-2 sm:px-4">
+    <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-zinc-800 bg-[#070707] px-3 py-2 sm:px-4">
       <button
         type="button"
         onClick={onBack}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 md:hidden"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 focus-visible:outline-2 focus-visible:outline-[#C5A55A] lg:hidden"
         aria-label="Volver a conversaciones"
       >
         <ArrowLeft size={18} />
@@ -54,27 +54,30 @@ export default function ConversationHeader({
             : "conversación previa al servicio"}
         </p>
       </div>
-      <button
-        type="button"
-        onClick={onOpenService}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 hover:border-[#C5A55A] hover:text-[#C5A55A] xl:hidden"
-        aria-label="Ver servicio"
-      >
-        <ClipboardList size={16} />
-      </button>
-      <button
-        type="button"
-        onClick={onToggleMode}
-        disabled={changingMode}
-        className={`hidden h-10 shrink-0 items-center justify-center gap-2 rounded-lg px-3 text-[10px] font-bold uppercase tracking-[0.08em] disabled:opacity-50 sm:flex ${
-          human
-            ? "border border-zinc-700 text-zinc-300 hover:border-[#C5A55A]"
-            : "bg-[#C5A55A] text-black hover:bg-[#d8b769]"
-        }`}
-      >
-        {changingMode ? <Loader2 size={14} className="animate-spin" /> : null}
-        {human ? "Devolver a IA" : "Tomar conversacion"}
-      </button>
+      <div className="flex w-full gap-2 sm:w-auto">
+        <button
+          type="button"
+          onClick={onOpenService}
+          className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-zinc-800 px-3 text-xs font-semibold text-zinc-300 hover:border-[#C5A55A] hover:text-[#C5A55A] focus-visible:outline-2 focus-visible:outline-[#C5A55A] sm:flex-none xl:hidden"
+          aria-label="Ver servicio"
+        >
+          <ClipboardList size={16} />
+          Ver servicio
+        </button>
+        <button
+          type="button"
+          onClick={onToggleMode}
+          disabled={changingMode}
+          className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg px-3 text-[10px] font-bold uppercase tracking-[0.08em] focus-visible:outline-2 focus-visible:outline-[#C5A55A] disabled:opacity-50 sm:flex-none ${
+            human
+              ? "border border-zinc-700 text-zinc-300 hover:border-[#C5A55A]"
+              : "bg-[#C5A55A] text-black hover:bg-[#d8b769]"
+          }`}
+        >
+          {changingMode ? <Loader2 size={14} className="animate-spin" /> : null}
+          {human ? "Devolver a IA" : "Tomar conversacion"}
+        </button>
+      </div>
     </header>
   );
 }

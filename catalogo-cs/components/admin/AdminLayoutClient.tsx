@@ -68,7 +68,7 @@ const navGroups: NavGroup[] = [
     title: "Finanzas",
     items: [
       { label: "Dinero del Personal", href: "/admin/dinero", icon: Wallet },
-      { label: "Liquidaciones", href: "/admin/liquidations", icon: CreditCard },
+      { label: "Hoja de corte", href: "/admin/liquidations", icon: CreditCard },
       {
         label: "Cortes de Choferes",
         href: "/admin/driver-settlements",

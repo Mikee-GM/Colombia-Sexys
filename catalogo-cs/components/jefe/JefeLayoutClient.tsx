@@ -46,14 +46,14 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
    * al viewport real.
    */
   return (
-    <div className="min-h-dvh bg-black font-body text-white md:flex">
+    <div className="min-h-dvh bg-black font-body text-white lg:flex">
       <SessionKeeper />
       {/* El panel tambien se instala en el telefono, y alli una version vieja
           puede quedarse cargada dias. */}
       <ComprobarVersion />
       {/* Ver la nota del panel de admin: en tableta instalada la barra de
           estado se pinta encima del menu lateral. */}
-      <aside className="hidden w-64 shrink-0 border-r border-zinc-800 bg-[#050505] pt-[env(safe-area-inset-top)] md:flex md:flex-col">
+      <aside className="hidden w-64 shrink-0 border-r border-zinc-800 bg-[#050505] pt-[env(safe-area-inset-top)] lg:flex lg:flex-col">
         <div className="border-b border-zinc-800 p-7">
           <Image src="/logo-horizontal.webp" alt="Colombia Sexys" width={190} height={70} className="h-auto w-full" />
           <div className="mt-5 flex items-center justify-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
@@ -80,13 +80,13 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
         `env(safe-area-inset-bottom)` si tiene valor, la barra crece y volvia a
         tapar el final de la pagina.
       */}
-      <div className="min-w-0 flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
+      <div className="min-w-0 flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0">
         {/* En movil no habia ni marca ni salida fuera de la barra inferior.
             Esta cabecera da sitio a las dos y libera la sexta celda. */}
         {/* El relleno de arriba suma la barra de estado del telefono: sin
             el, con la app instalada, el logo y Cerrar sesion quedaban
             debajo de la hora del sistema y no se podian pulsar. */}
-        <header className="flex items-center justify-between border-b border-zinc-800 bg-[#050505] px-4 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top))] md:hidden">
+        <header className="flex items-center justify-between border-b border-zinc-800 bg-[#050505] px-4 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top))] lg:hidden">
           <Image src="/logo-horizontal.webp" alt="Colombia Sexys" width={140} height={52} className="h-7 w-auto" />
           <button onClick={signOut} aria-label="Cerrar sesión" className="flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-800 text-zinc-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]">
             <LogOut size={18} />
@@ -113,7 +113,7 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
        * El relleno inferior respeta el indicador del iPhone, que en la app
        * instalada se pinta encima de la barra.
        */}
-      <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 gap-0.5 border-t border-zinc-800 bg-[#050505]/95 px-1 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 gap-0.5 border-t border-zinc-800 bg-[#050505]/95 px-1 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
         {links.map(({ href, corto, icon: Icon }) => (
           <Link key={href} href={href} className={`flex h-[52px] flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold ${pathname === href ? "bg-[#C5A55A]/10 text-[#C5A55A]" : "text-zinc-500"}`}>
             <Icon size={20} /> {corto}

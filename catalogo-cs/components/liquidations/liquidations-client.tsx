@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   getLiquidationEmployees,
@@ -11,7 +11,8 @@ import {
   getEmployeeRankingPositions,
   getDriverRankingPositions,
 } from "@/app/admin/liquidations/actions";
-import { formatCurrency, getStartAndEndOfWeek } from "@/lib/calculations";
+import { formatCurrency, getStartAndEndOfWeek, getWeekStringFromDate } from "@/lib/calculations";
+import { getOperationalWeekPeriod, shiftOperationalWeek } from "@/lib/week-range";
 import PageHeader from "@/components/ui/page-header";
 import CutComparison from "./cut-comparison";
 import DebtManager from "./debt-manager";
@@ -30,11 +31,14 @@ type Mode = "empleada" | "chofer";
 
 export default function LiquidationsClient({
   isAdmin = false,
+  initialReference,
 }: {
   isAdmin?: boolean;
+  initialReference: string;
 }) {
   const [mode, setMode] = useState<Mode>("empleada");
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(() => new Date(initialReference));
+  const [driverDate, setDriverDate] = useState(() => new Date(initialReference));
   const [employees, setEmployees] = useState<LiquidationEmployee[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [report, setReport] = useState<LiquidationReport | null>(null);
@@ -42,14 +46,22 @@ export default function LiquidationsClient({
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [driverReport, setDriverReport] = useState<DriverLiquidationReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadingReport, setLoadingReport] = useState(false);
+  const [loadingEmployeeReport, setLoadingEmployeeReport] = useState(false);
+  const [loadingDriverReport, setLoadingDriverReport] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [employeeRanking, setEmployeeRanking] = useState<{ position: number; total: number } | null>(null);
   const [driverRanking, setDriverRanking] = useState<{ position: number; total: number } | null>(null);
+  const listRequest = useRef(0);
+  const employeeReportRequest = useRef(0);
+  const driverReportRequest = useRef(0);
+  const loadingReport = mode === "empleada" ? loadingEmployeeReport : loadingDriverReport;
 
-  const period = useMemo(() => getStartAndEndOfWeek(currentDate), [currentDate]);
+  const period = useMemo(() => getOperationalWeekPeriod(currentDate), [currentDate]);
+  // Los cortes de choferes conservan su criterio anterior hasta conciliar el historico.
+  const driverPeriod = useMemo(() => getStartAndEndOfWeek(driverDate), [driverDate]);
 
   const loadEmployees = useCallback(async () => {
+    const request = ++listRequest.current;
     setLoading(true);
     setReport(null);
     try {
@@ -57,95 +69,111 @@ export default function LiquidationsClient({
         period.start.toISOString(),
         period.end.toISOString(),
       );
+      if (request !== listRequest.current) return;
       setEmployees(data ?? []);
       setSelectedEmployeeId((current) =>
         data?.some((employee) => employee.id === current) ? current : "",
       );
     } catch (error) {
+      if (request !== listRequest.current) return;
       setEmployees([]);
       toast.error(error instanceof Error ? error.message : "No fue posible cargar las liquidaciones");
     } finally {
-      setLoading(false);
+      if (request === listRequest.current) setLoading(false);
     }
   }, [period]);
 
   const loadDrivers = useCallback(async () => {
+    const request = ++listRequest.current;
     setLoading(true);
     setDriverReport(null);
     try {
       const data = await getActiveDrivers(
-        period.start.toISOString().slice(0, 10),
-        period.end.toISOString().slice(0, 10),
+        driverPeriod.start.toISOString().slice(0, 10),
+        driverPeriod.end.toISOString().slice(0, 10),
       );
+      if (request !== listRequest.current) return;
       setDrivers(data ?? []);
       setSelectedDriverId((current) =>
         data?.some((driver) => driver.id === current) ? current : "",
       );
     } catch (error) {
+      if (request !== listRequest.current) return;
       setDrivers([]);
       toast.error(error instanceof Error ? error.message : "No fue posible cargar los choferes");
     } finally {
-      setLoading(false);
+      if (request === listRequest.current) setLoading(false);
     }
-  }, [period]);
+  }, [driverPeriod]);
 
   useEffect(() => {
     if (mode === "empleada") void loadEmployees();
     else void loadDrivers();
+    return () => { listRequest.current += 1; };
   }, [mode, loadEmployees, loadDrivers]);
 
   const refetchReport = useCallback(async () => {
     if (mode !== "empleada" || !selectedEmployeeId) return;
-    setLoadingReport(true);
+    const request = ++employeeReportRequest.current;
+    setReport(null);
+    setLoadingEmployeeReport(true);
     try {
       const data = await getLiquidationReport(
         period.start.toISOString(),
         period.end.toISOString(),
         selectedEmployeeId,
       );
+      if (request !== employeeReportRequest.current) return;
       setReport(data);
     } catch (error) {
+      if (request !== employeeReportRequest.current) return;
       setReport(null);
       toast.error(error instanceof Error ? error.message : "No fue posible calcular el corte");
     } finally {
-      setLoadingReport(false);
+      if (request === employeeReportRequest.current) setLoadingEmployeeReport(false);
     }
   }, [mode, period, selectedEmployeeId]);
 
   useEffect(() => {
     if (mode !== "empleada" || !selectedEmployeeId) {
       setReport(null);
+      setLoadingEmployeeReport(false);
       return;
     }
     void refetchReport();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, period, selectedEmployeeId]);
+    return () => { employeeReportRequest.current += 1; };
+  }, [mode, selectedEmployeeId, refetchReport]);
 
   const loadDriverReport = useCallback(() => {
     if (!selectedDriverId) {
       setDriverReport(null);
       return;
     }
-    setLoadingReport(true);
+    const request = ++driverReportRequest.current;
+    setDriverReport(null);
+    setLoadingDriverReport(true);
     getDriverReport(
-      period.start.toISOString().slice(0, 10),
-      period.end.toISOString().slice(0, 10),
+      driverPeriod.start.toISOString().slice(0, 10),
+      driverPeriod.end.toISOString().slice(0, 10),
       selectedDriverId,
     )
-      .then((data) => setDriverReport(data))
+      .then((data) => { if (request === driverReportRequest.current) setDriverReport(data); })
       .catch((error) => {
+        if (request !== driverReportRequest.current) return;
         setDriverReport(null);
         toast.error(error instanceof Error ? error.message : "No fue posible calcular la liquidación");
       })
-      .finally(() => setLoadingReport(false));
-  }, [period, selectedDriverId]);
+      .finally(() => { if (request === driverReportRequest.current) setLoadingDriverReport(false); });
+  }, [driverPeriod, selectedDriverId]);
 
   useEffect(() => {
     if (mode !== "chofer" || !selectedDriverId) {
       setDriverReport(null);
+      setLoadingDriverReport(false);
       return;
     }
     loadDriverReport();
+    return () => { driverReportRequest.current += 1; };
   }, [mode, selectedDriverId, loadDriverReport]);
 
   useEffect(() => {
@@ -162,7 +190,7 @@ export default function LiquidationsClient({
           match?.position != null ? { position: match.position, total: match.total } : null,
         );
       })
-      .catch(() => setEmployeeRanking(null));
+      .catch(() => { if (!cancelled) setEmployeeRanking(null); });
     return () => {
       cancelled = true;
     };
@@ -182,7 +210,7 @@ export default function LiquidationsClient({
           match?.position != null ? { position: match.position, total: match.total } : null,
         );
       })
-      .catch(() => setDriverRanking(null));
+      .catch(() => { if (!cancelled) setDriverRanking(null); });
     return () => {
       cancelled = true;
     };
@@ -219,18 +247,38 @@ export default function LiquidationsClient({
   );
   const selectedDriver = drivers.find((driver) => driver.id === selectedDriverId);
 
-  const changeWeek = (days: number) => {
-    setCurrentDate((current) => {
-      const next = new Date(current);
-      next.setDate(next.getDate() + days);
-      return next;
-    });
+  const confirmSelectedSettlement = async () => {
+    if (!selectedEmployee) return;
+    const request = employeeReportRequest.current;
+    setConfirming(true);
+    try {
+      await confirmWeeklySettlement(period.start.toISOString(), period.end.toISOString(), selectedEmployee.id);
+      const updated = await getLiquidationReport(period.start.toISOString(), period.end.toISOString(), selectedEmployee.id);
+      if (request === employeeReportRequest.current) setReport(updated);
+      toast.success("Liquidación semanal confirmada");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No fue posible confirmar la liquidación");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const changeWeek = (weeks: number) => {
+    if (mode === "chofer") {
+      setDriverDate((current) => {
+        const next = new Date(current);
+        next.setDate(next.getDate() + weeks * 7);
+        return next;
+      });
+      return;
+    }
+    setCurrentDate((current) => shiftOperationalWeek(current, weeks));
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="min-w-0 space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <PageHeader title="Liquidaciones (Cortes)" description="Gestión financiera unificada" />
+        <PageHeader title="Hoja de corte" description="Elige una semana y una persona para revisar sus registros y saldos." />
         {(loading || loadingReport) && (
           <span className="text-sm text-brand-gold animate-pulse">Actualizando...</span>
         )}
@@ -255,9 +303,9 @@ export default function LiquidationsClient({
 
       <div className="flex w-full justify-center">
         <WeekSelector
-          currentDate={currentDate}
-          onPrev={() => changeWeek(-7)}
-          onNext={() => changeWeek(7)}
+          period={mode === "empleada" ? period : { ...driverPeriod, weekLabel: getWeekStringFromDate(driverDate) }}
+          onPrev={() => changeWeek(-1)}
+          onNext={() => changeWeek(1)}
         />
       </div>
 
@@ -298,6 +346,7 @@ export default function LiquidationsClient({
 
           {report && selectedEmployee && (
             <div className="space-y-6">
+              <h2 className="font-serif text-2xl text-brand-gold">Corte de {selectedEmployee.name}</h2>
               <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <SettlementMetric label="Pago bruto semanal" value={report.weeklySettlement.grossEmployeePay} />
@@ -305,12 +354,12 @@ export default function LiquidationsClient({
                   <SettlementMetric label="Pago neto" value={report.weeklySettlement.netEmployeePay} />
                   <SettlementMetric label="Efectivo pendiente posterior" value={report.weeklySettlement.remainingCashDebt} />
                 </div>
-                <button type="button" disabled={confirming || report.weeklySettlement.status === "confirmed"} onClick={async () => { setConfirming(true); try { await confirmWeeklySettlement(period.start.toISOString(), period.end.toISOString(), selectedEmployee.id); setReport(await getLiquidationReport(period.start.toISOString(), period.end.toISOString(), selectedEmployee.id)); toast.success("Liquidación semanal confirmada"); } catch (error) { toast.error(error instanceof Error ? error.message : "No fue posible confirmar la liquidación"); } finally { setConfirming(false); } }} className="mt-5 w-full rounded-xl border border-brand-gold py-3 text-xs font-semibold uppercase tracking-wider text-brand-gold disabled:border-zinc-800 disabled:text-zinc-600">
+                <button type="button" disabled={confirming || report.weeklySettlement.status === "confirmed"} onClick={confirmSelectedSettlement} className="mt-5 w-full rounded-xl border border-brand-gold py-3 text-xs font-semibold uppercase tracking-wider text-brand-gold disabled:border-zinc-800 disabled:text-zinc-600">
                   {report.weeklySettlement.status === "confirmed" ? "Liquidación confirmada" : confirming ? "Confirmando" : "Confirmar liquidación semanal"}
                 </button>
               </section>
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <div className="space-y-6 lg:col-span-2">
+              <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-3">
+                <div className="min-w-0 space-y-6 xl:col-span-2">
                   <CutComparison
                     report={report}
                     isAdmin={isAdmin}
@@ -363,7 +412,7 @@ export default function LiquidationsClient({
           {driverReport && selectedDriver && (
             <DriverSettlementPanel
               report={driverReport}
-              period={period}
+              period={driverPeriod}
               onConfirmed={loadDriverReport}
               ranking={driverRanking}
             />

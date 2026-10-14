@@ -6,7 +6,7 @@ import { ErpPageHeader } from "@/components/erp/primitives";
 import CorteSemanal from "@/components/erp/corte-semanal";
 import LiquidationsClient from "@/components/liquidations/liquidations-client";
 import { getWeeklySummary } from "./actions";
-import { getOperationalWeek } from "@/lib/week-range";
+import { getOperationalWeekPeriod } from "@/lib/week-range";
 
 export const dynamic = "force-dynamic";
 
@@ -14,11 +14,12 @@ export default async function LiquidationsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/admin");
 
-  const { startDate, endDate } = getOperationalWeek();
+  const reference = new Date();
+  const { startDate, endDate, start, end } = getOperationalWeekPeriod(reference);
 
   // El corte de toda la semana; debajo queda el desglose por persona.
   const summary = await optionalSource(
-    getWeeklySummary(startDate, endDate),
+    getWeeklySummary(start.toISOString(), end.toISOString()),
     [],
     "el corte semanal",
   );
@@ -26,7 +27,7 @@ export default async function LiquidationsPage() {
   return (
     <div className="flex flex-col gap-6">
       <ErpPageHeader
-        title="Liquidaciones"
+        title="Hoja de corte semanal"
         description={`Corte semanal del ${startDate} al ${endDate}`}
       />
 
@@ -37,7 +38,10 @@ export default async function LiquidationsPage() {
       />
 
       <div className="border-t border-zinc-800 pt-6">
-        <LiquidationsClient isAdmin={user.rol === "admin"} />
+        <LiquidationsClient
+          isAdmin={user.rol === "admin"}
+          initialReference={reference.toISOString()}
+        />
       </div>
     </div>
   );

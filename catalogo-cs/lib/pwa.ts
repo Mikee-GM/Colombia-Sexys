@@ -1,5 +1,3 @@
-export const INSTALL_DISMISSAL_MS = 14 * 24 * 60 * 60 * 1000;
-
 export type PwaPlatform = "ios" | "android" | "desktop";
 
 export type PwaCapabilities = {
@@ -55,15 +53,6 @@ export function isStaffPath(pathname: string): boolean {
   return ["/jefe", "/empleada", "/chofer", "/admin"].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
-}
-
-export function shouldShowInstallPromotion(
-  capabilities: PwaCapabilities,
-  dismissedAt: number | null,
-  now = Date.now(),
-): boolean {
-  if (capabilities.installed) return false;
-  return dismissedAt === null || now - dismissedAt >= INSTALL_DISMISSAL_MS;
 }
 
 export function isSafeInternalPath(value: unknown, fallback = "/"): string {

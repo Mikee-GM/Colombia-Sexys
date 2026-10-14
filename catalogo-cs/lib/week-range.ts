@@ -1,4 +1,8 @@
-import { APP_TIME_ZONE } from "@/lib/locale";
+import {
+  APP_TIME_ZONE,
+  desdeHoraDelNegocio,
+  paraInputDeFechaHora,
+} from "@/lib/locale";
 
 /**
  * Semana operativa de lunes a domingo, en la hora del negocio.
@@ -27,6 +31,46 @@ export function getOperationalWeek(reference: Date = new Date()) {
     startDate: lunes.toISOString().slice(0, 10),
     endDate: domingo.toISOString().slice(0, 10),
   };
+}
+
+/** Limites inclusivos de dias de calendario, siempre en la zona del negocio. */
+export function getOperationalDateRange(startDate: string, endDate: string) {
+  const boundary = (date: string, time: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new RangeError("El periodo debe usar fechas de calendario validas");
+    }
+    const instant = desdeHoraDelNegocio(`${date}T${time}`);
+    if (!instant || paraInputDeFechaHora(instant).slice(0, 10) !== date) {
+      throw new RangeError("El periodo debe usar fechas de calendario validas");
+    }
+    return instant;
+  };
+  const start = boundary(startDate, "00:00:00");
+  const end = new Date(boundary(endDate, "23:59:59").getTime() + 999);
+  if (start > end) throw new RangeError("El inicio debe ser anterior al final");
+  return { start, end };
+}
+
+/** Fechas para APIs de calendario e instantes para APIs de fecha-hora. */
+export function getOperationalWeekPeriod(reference: Date) {
+  const dates = getOperationalWeek(reference);
+  const period = getOperationalDateRange(dates.startDate, dates.endDate);
+  const thursday = new Date(`${dates.startDate}T00:00:00Z`);
+  thursday.setUTCDate(thursday.getUTCDate() + 3);
+  const year = thursday.getUTCFullYear();
+  const week = Math.ceil(
+    ((thursday.getTime() - Date.UTC(year, 0, 1)) / 86_400_000 + 1) / 7,
+  );
+  return { ...dates, ...period, weekLabel: `${year}-W${week}` };
+}
+
+/** Navega semanas de calendario sin heredar la zona ni el DST del dispositivo. */
+export function shiftOperationalWeek(reference: Date, weeks: number) {
+  const { startDate } = getOperationalWeek(reference);
+  const next = new Date(`${startDate}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + weeks * 7);
+  const date = next.toISOString().slice(0, 10);
+  return getOperationalDateRange(date, date).start;
 }
 
 /**

@@ -140,7 +140,7 @@ export type Service = {
   id: string;
   serviceType?: "individual" | "grupal";
   empleadaId: string;
-  clienteId: string;
+  clienteId: string | null;
   /** Nombre capturado por el jefe cuando el cliente no tiene Telegram. */
   clienteNombreLibre?: string | null;
   jefeId: string;

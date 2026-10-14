@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { apiFetch } from "@/lib/api-server";
+import { ApiError, apiFetch } from "@/lib/api-server";
+import { isRedirectError } from "@/lib/auth";
 import type { Client, ConversationMessage, Service } from "@/lib/types";
 import type { CancellationReason } from "@/lib/cancellation-reasons";
 import { asList } from "@/lib/paginated";
@@ -22,12 +23,42 @@ function revalidateAdminViews() {
   }
 }
 
-export async function getServices() {
-  return apiFetch<Service[]>("/services");
+/**
+ * Los filtros y los totales administrativos se calculan sobre la lista completa.
+ * El backend limita cada lectura a 500 registros: no confundir una página con
+ * todo el histórico ni mostrar resultados parciales si falla alguna lectura.
+ */
+export async function getServices(): Promise<Service[]> {
+  const pageSize = 500;
+  const services: Service[] = [];
+  const seenIds = new Set<string>();
+
+  while (true) {
+    const page = await apiFetch<Service[]>(
+      `/services?limit=${pageSize}&offset=${services.length}`,
+    );
+    if (!Array.isArray(page) || page.length > pageSize) {
+      throw new Error("El servidor no devolvió una lista de servicios válida");
+    }
+    for (const service of page) {
+      if (typeof service?.id !== "string" || !service.id) {
+        throw new Error("El servidor no devolvió una lista de servicios válida");
+      }
+      if (seenIds.has(service.id)) {
+        // También detiene una API que ignore offset y repita la primera página.
+        throw new Error(
+          "La lista de servicios cambió durante la lectura. Vuelve a intentarlo.",
+        );
+      }
+      seenIds.add(service.id);
+      services.push(service);
+    }
+    if (page.length < pageSize) return services;
+  }
 }
 
 export async function getServicesAction() {
-  return apiFetch<Service[]>("/services");
+  return getServices();
 }
 
 export async function getPendingServices() {
@@ -39,8 +70,10 @@ export async function getServiceByIdAction(serviceId: string) {
     const data = await apiFetch<Service>(`/services/${serviceId}`);
     return { success: true, data };
   } catch (error) {
+    if (isRedirectError(error)) throw error;
     return {
       success: false,
+      status: error instanceof ApiError ? error.status : undefined,
       error:
         error instanceof Error
           ? error.message
