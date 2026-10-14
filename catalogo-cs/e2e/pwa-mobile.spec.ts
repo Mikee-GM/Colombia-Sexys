@@ -1,4 +1,4 @@
-import { devices, expect, test } from '@playwright/test';
+import { devices, expect, test, type Page } from '@playwright/test';
 
 const viewports = [
   { width: 320, height: 568 },
@@ -17,6 +17,43 @@ const viewports = [
   { width: 1366, height: 768 },
   { width: 1920, height: 1080 },
 ];
+
+async function openHydratedAdmin(page: Page, reload = false) {
+  const hydrated = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/api/version',
+  );
+  await (reload ? page.reload() : page.goto('/admin'));
+  expect((await hydrated).ok()).toBeTruthy();
+}
+
+async function dispatchInstallEvent(page: Page) {
+  return page.evaluate(async () => {
+    const installWindow = window as Window & { __installPromptCalls?: number };
+    const event = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
+      prompt: () => Promise<void>;
+      userChoice: Promise<{ outcome: string }>;
+    };
+    event.prompt = async () => {
+      installWindow.__installPromptCalls = (installWindow.__installPromptCalls ?? 0) + 1;
+    };
+    event.userChoice = Promise.resolve({ outcome: 'accepted' });
+    window.dispatchEvent(event);
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    return {
+      defaultPrevented: event.defaultPrevented,
+      promptCalls: installWindow.__installPromptCalls ?? 0,
+    };
+  });
+}
+
+async function expectNoAutomaticInstallationUi(page: Page) {
+  await expect(page.getByText('Instala la aplicación', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /instalar aplicación|ver instrucciones/i })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Instala la aplicación' })).toHaveCount(0);
+  await expect(page.getByText('1. Abre esta página en Safari.')).toHaveCount(0);
+}
 
 test('admin exposes an installable manifest with stable identity and icons', async ({ page, request }) => {
   await page.goto('/admin');
@@ -43,37 +80,36 @@ test('admin exposes an installable manifest with stable identity and icons', asy
   );
 });
 
-test('Android install action invokes the captured native prompt', async ({ page }) => {
+test('Android install events stay captured without automatic prompts or banners', async ({ page }) => {
   await page.setViewportSize({ width: 384, height: 848 });
-  await page.goto('/admin');
-  await page.evaluate(() => {
-    const event = new Event('beforeinstallprompt', { cancelable: true }) as Event & {
-      prompt: () => Promise<void>;
-      userChoice: Promise<{ outcome: string }>;
-    };
-    event.prompt = async () => {
-      (window as Window & { __installPromptCalled?: boolean }).__installPromptCalled = true;
-    };
-    event.userChoice = Promise.resolve({ outcome: 'accepted' });
-    window.dispatchEvent(event);
-  });
-
-  await page.getByRole('button', { name: /instalar aplicación/i }).click();
-  await expect
-    .poll(() => page.evaluate(() => Boolean((window as Window & { __installPromptCalled?: boolean }).__installPromptCalled)))
-    .toBe(true);
+  await openHydratedAdmin(page);
+  await expectNoAutomaticInstallationUi(page);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    expect(await dispatchInstallEvent(page)).toEqual({ defaultPrevented: true, promptCalls: 0 });
+    await expectNoAutomaticInstallationUi(page);
+  }
+  await openHydratedAdmin(page, true);
+  await expectNoAutomaticInstallationUi(page);
+  expect(await dispatchInstallEvent(page)).toEqual({ defaultPrevented: true, promptCalls: 0 });
+  await expectNoAutomaticInstallationUi(page);
 });
 
-test('iPhone shows Safari installation instructions instead of a synthetic permission prompt', async ({ browser }) => {
+test('iPhone never opens the installation guide automatically, including after reload', async ({ browser }) => {
   const context = await browser.newContext({
     ...devices['iPhone 13'],
     locale: 'es-MX',
   });
   const page = await context.newPage();
-  await page.goto('/admin');
-  await page.getByRole('button', { name: /ver instrucciones/i }).click();
-  await expect(page.getByText('1. Abre esta página en Safari.')).toBeVisible();
-  await expect(page.getByText('4. Activa Abrir como app web.')).toBeVisible();
+  await openHydratedAdmin(page);
+  await expectNoAutomaticInstallationUi(page);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    expect(await dispatchInstallEvent(page)).toEqual({ defaultPrevented: true, promptCalls: 0 });
+    await expectNoAutomaticInstallationUi(page);
+  }
+  await openHydratedAdmin(page, true);
+  await expectNoAutomaticInstallationUi(page);
+  expect(await dispatchInstallEvent(page)).toEqual({ defaultPrevented: true, promptCalls: 0 });
+  await expectNoAutomaticInstallationUi(page);
   await context.close();
 });
 

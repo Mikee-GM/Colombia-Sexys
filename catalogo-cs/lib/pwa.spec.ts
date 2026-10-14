@@ -1,9 +1,7 @@
 import {
-  INSTALL_DISMISSAL_MS,
   detectPwaCapabilities,
   isSafeInternalPath,
   isStaffPath,
-  shouldShowInstallPromotion,
 } from './pwa';
 
 describe('PWA capabilities', () => {
@@ -20,19 +18,6 @@ describe('PWA capabilities', () => {
       serviceWorkerSupported: true,
       pushSupported: true,
     });
-  });
-
-  it('keeps the install dismissal for fourteen days', () => {
-    const capabilities = detectPwaCapabilities('Android', false);
-    const now = Date.now();
-    expect(shouldShowInstallPromotion(capabilities, now, now)).toBe(false);
-    expect(
-      shouldShowInstallPromotion(
-        capabilities,
-        now - INSTALL_DISMISSAL_MS,
-        now,
-      ),
-    ).toBe(true);
   });
 
   it('activates only on staff routes', () => {

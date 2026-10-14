@@ -10,12 +10,11 @@ import {
   useState,
 } from "react";
 import { usePathname } from "next/navigation";
-import { BellRing, Download, RefreshCw, Share2, WifiOff, X } from "lucide-react";
+import { BellRing, RefreshCw, Share2, WifiOff, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   capabilitiesFromBrowser,
   isStaffPath,
-  shouldShowInstallPromotion,
   type PwaCapabilities,
 } from "@/lib/pwa";
 
@@ -34,7 +33,6 @@ type PwaContextValue = {
 };
 
 const PwaContext = createContext<PwaContextValue | null>(null);
-const DISMISSED_KEY = "cs:pwa-install-dismissed-at";
 const DATABASE = "cs-pwa";
 
 export function usePwa(): PwaContextValue | null {
@@ -69,7 +67,6 @@ export default function PwaProvider({ children }: { children: React.ReactNode })
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
-  const [promotionVisible, setPromotionVisible] = useState(false);
   const [online, setOnline] = useState(true);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -86,26 +83,15 @@ export default function PwaProvider({ children }: { children: React.ReactNode })
     const next = capabilitiesFromBrowser();
     setCapabilities(next);
     setOnline(navigator.onLine);
-    const dismissedValue = Number.parseInt(
-      window.localStorage.getItem(DISMISSED_KEY) ?? "",
-      10,
-    );
-    setPromotionVisible(
-      shouldShowInstallPromotion(
-        next,
-        Number.isFinite(dismissedValue) ? dismissedValue : null,
-      ),
-    );
     void refreshLastNotification();
 
     const beforeInstall = (event: Event) => {
+      // Solo ofrecer la instalación cuando se solicite desde Ajustes.
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
-      setPromotionVisible(!next.installed);
     };
     const installed = () => {
       setInstallPrompt(null);
-      setPromotionVisible(false);
       setCapabilities(capabilitiesFromBrowser());
     };
     const connected = () => setOnline(true);
@@ -202,14 +188,8 @@ export default function PwaProvider({ children }: { children: React.ReactNode })
     await installPrompt.prompt();
     const choice = await installPrompt.userChoice;
     setInstallPrompt(null);
-    if (choice.outcome === "accepted") setPromotionVisible(false);
     return choice.outcome === "accepted";
   }, [installPrompt]);
-
-  const dismissPromotion = useCallback(() => {
-    window.localStorage.setItem(DISMISSED_KEY, String(Date.now()));
-    setPromotionVisible(false);
-  }, []);
 
   const applyUpdate = useCallback(async () => {
     setUpdating(true);
@@ -264,32 +244,6 @@ export default function PwaProvider({ children }: { children: React.ReactNode })
             className="min-h-11 rounded-lg bg-[#C5A55A] px-4 text-xs font-bold uppercase tracking-wider text-black"
           >
             Actualizar
-          </button>
-        </div>
-      )}
-      {staff && promotionVisible && capabilities && (
-        <div className="fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[90] mx-auto max-w-md rounded-xl border border-zinc-700 bg-zinc-950 p-4 shadow-2xl">
-          <button
-            type="button"
-            aria-label="Recordar después"
-            onClick={dismissPromotion}
-            className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center text-zinc-500"
-          >
-            <X size={18} />
-          </button>
-          <div className="pr-10">
-            <p className="text-sm font-semibold text-white">Instala la aplicación</p>
-            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-              Accede al panel como app y habilita avisos operativos en este dispositivo.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => void promptInstall()}
-            className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#C5A55A] px-4 text-xs font-bold uppercase tracking-wider text-black"
-          >
-            <Download size={16} />
-            {installPrompt ? "Instalar aplicación" : "Ver instrucciones"}
           </button>
         </div>
       )}

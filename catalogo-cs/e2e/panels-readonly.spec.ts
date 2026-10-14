@@ -4,9 +4,6 @@ async function prepare(context: BrowserContext, role: 'admin' | 'jefe') {
   await context.addCookies([{
     name: 'access_token', value: `fixture-${role}`, url: 'http://127.0.0.1:3111',
   }]);
-  await context.addInitScript(() => {
-    localStorage.setItem('cs:pwa-install-dismissed-at', String(Date.now()));
-  });
   await context.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.hostname.endsWith('tile.openstreetmap.org')) {

@@ -1,7 +1,7 @@
 /** @jest-environment jsdom */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import PwaProvider from './PwaProvider';
+import PwaProvider, { usePwa } from './PwaProvider';
 
 jest.mock('next/navigation', () => ({ usePathname: () => '/jefe' }));
 jest.mock('sonner', () => ({ toast: Object.assign(jest.fn(), { error: jest.fn(), success: jest.fn() }) }));
@@ -10,6 +10,22 @@ type InstallEvent = Event & {
   prompt: jest.Mock<Promise<void>, []>;
   userChoice: Promise<{ outcome: 'accepted' }>;
 };
+
+function ManualInstallActions() {
+  const pwa = usePwa();
+  return (
+    <button type="button" onClick={() => void pwa?.promptInstall()}>
+      Instalar desde Ajustes
+    </button>
+  );
+}
+
+function createInstallEvent(): InstallEvent {
+  const event = new Event('beforeinstallprompt', { cancelable: true }) as InstallEvent;
+  event.prompt = jest.fn().mockResolvedValue(undefined);
+  event.userChoice = Promise.resolve({ outcome: 'accepted' });
+  return event;
+}
 
 const registration = {
   waiting: null,
@@ -65,25 +81,67 @@ describe('PwaProvider', () => {
 
   it('uses the native Android install prompt only after a click', async () => {
     prepareBrowser('Mozilla/5.0 (Linux; Android 14) Chrome/124');
-    render(<PwaProvider><main>Panel</main></PwaProvider>);
-    const installEvent = new Event('beforeinstallprompt') as InstallEvent;
-    installEvent.prompt = jest.fn().mockResolvedValue(undefined);
-    installEvent.userChoice = Promise.resolve({ outcome: 'accepted' });
+    render(<PwaProvider><ManualInstallActions /></PwaProvider>);
+    const installEvent = createInstallEvent();
 
     act(() => window.dispatchEvent(installEvent));
-    fireEvent.click(await screen.findByRole('button', { name: /instalar aplicaci/i }));
+    expect(installEvent.defaultPrevented).toBe(true);
+    expect(installEvent.prompt).not.toHaveBeenCalled();
+    expect(screen.queryByText('Instala la aplicación')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Instalar desde Ajustes' }));
 
     await waitFor(() => expect(installEvent.prompt).toHaveBeenCalledTimes(1));
   });
 
-  it('shows the complete iOS Safari installation guide', async () => {
+  it('shows the iOS Safari installation guide only after an explicit request', async () => {
     prepareBrowser('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)');
-    render(<PwaProvider><main>Panel</main></PwaProvider>);
+    render(<PwaProvider><ManualInstallActions /></PwaProvider>);
 
-    fireEvent.click(await screen.findByRole('button', { name: /ver instrucciones/i }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByText('Instala la aplicación')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Instalar desde Ajustes' }));
 
     expect(await screen.findByText('1. Abre esta página en Safari.')).not.toBeNull();
     expect(screen.getByText('4. Activa Abrir como app web.')).not.toBeNull();
+  });
+
+  it.each([
+    'Mozilla/5.0 (Linux; Android 14) Chrome/124',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)',
+    'Mozilla/5.0 (Windows NT 10.0) Chrome/124',
+  ])('never promotes installation on load, repeated events or remount: %s', async (userAgent) => {
+    prepareBrowser(userAgent);
+    const mounted = render(<PwaProvider><main>Panel</main></PwaProvider>);
+    await waitFor(() => expect(navigator.serviceWorker.register).toHaveBeenCalled());
+    expect(screen.queryByText('Instala la aplicación')).toBeNull();
+
+    for (let index = 0; index < 2; index += 1) {
+      const event = createInstallEvent();
+      act(() => window.dispatchEvent(event));
+      expect(event.defaultPrevented).toBe(true);
+      expect(event.prompt).not.toHaveBeenCalled();
+      expect(screen.queryByText('Instala la aplicación')).toBeNull();
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Recordar después' })).toBeNull();
+    }
+
+    mounted.unmount();
+    render(<PwaProvider><main>Panel</main></PwaProvider>);
+    expect(screen.queryByText('Instala la aplicación')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('preserves the available-version notice', async () => {
+    prepareBrowser('Mozilla/5.0 (Linux; Android 14) Chrome/124');
+    render(<PwaProvider><main>Panel</main></PwaProvider>);
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+    jest.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: 'build-two' }),
+    } as Response);
+    act(() => window.dispatchEvent(new Event('focus')));
+    expect(await screen.findByRole('button', { name: 'Actualizar' })).not.toBeNull();
+    expect(screen.queryByText('Instala la aplicación')).toBeNull();
   });
 
   it('blocks all staff interaction while offline', async () => {
