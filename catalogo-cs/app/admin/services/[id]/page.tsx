@@ -20,7 +20,13 @@ export default async function ServicioDetallePage({
   const { id } = await params;
   const result = await getServiceByIdAction(id);
 
-  if (!result.success || !result.data) notFound();
+  if (!result.success) {
+    if (result.status === 404) notFound();
+    throw new Error(result.error || "No se pudo cargar el detalle del servicio");
+  }
+  if (!result.data) {
+    throw new Error("El servidor no devolvió el detalle del servicio");
+  }
 
   /*
    * Las modelos son para poder reasignar. Se degrada a lista vacia si la

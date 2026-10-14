@@ -486,7 +486,7 @@ export default function ServicioDetalle({
 
               <PersonCell
                 name={service.cliente?.nombreTelegram ?? "Cliente"}
-                meta={`Cliente ${service.clienteId.slice(-6).toUpperCase()}`}
+                meta={`Cliente ${service.clienteId?.slice(-6).toUpperCase() ?? "MANUAL"}`}
               />
 
               <div className="h-px bg-zinc-800" />

@@ -122,6 +122,9 @@ function service(overrides: Partial<Service> = {}): Service {
 }
 
 function conversation(currentService: Service): JefeConversation {
+  if (!currentService.clienteId) {
+    throw new Error("La conversación de prueba requiere un cliente vinculado");
+  }
   return {
     id: currentService.id,
     clientId: currentService.clienteId,

@@ -310,7 +310,7 @@ export default function TodayWorkspace({
         workShift={workShift}
         onCreateService={() => setCreatingService(true)}
       />
-      <div className="relative flex h-[calc(100dvh-11.5rem)] min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-black md:h-[calc(100dvh-5rem)] md:min-h-[620px]">
+      <div className="relative flex h-[calc(100dvh-11.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-black lg:h-[calc(100dvh-5rem)] lg:min-h-[620px]">
         <EmployeeTabStrip
           items={employeeNavigation}
           selectedId={selectedEmployeeId}
@@ -318,7 +318,7 @@ export default function TodayWorkspace({
         />
         <div className="relative min-h-0 flex-1 xl:grid xl:grid-cols-[minmax(260px,0.78fr)_minmax(420px,1.55fr)_minmax(285px,0.9fr)]">
           <div
-            className={`${view === "inbox" ? "block" : "hidden"} h-full min-h-0 md:block md:w-[310px] xl:w-auto`}
+            className={`${view === "inbox" ? "block" : "hidden"} h-full min-h-0 lg:block lg:w-[310px] xl:w-auto`}
           >
             <ConversationInbox
               sections={sections}
@@ -337,7 +337,7 @@ export default function TodayWorkspace({
           </div>
 
           <div
-            className={`${view === "chat" ? "block" : "hidden"} h-full min-h-0 min-w-0 md:absolute md:inset-y-0 md:left-[310px] md:right-0 md:block xl:static`}
+            className={`${view === "chat" ? "block" : "hidden"} h-full min-h-0 min-w-0 lg:absolute lg:inset-y-0 lg:left-[310px] lg:right-0 lg:block xl:static`}
           >
             <ConversationWorkspace
               conversation={selected}
@@ -353,7 +353,7 @@ export default function TodayWorkspace({
           </div>
 
           <div
-            className={`${view === "service" ? "fixed inset-0 z-30 block h-[100dvh]" : "hidden"} min-h-0 border-l border-zinc-800 bg-black md:absolute md:inset-y-0 md:left-auto md:h-full md:w-[380px] md:shadow-2xl xl:static xl:block xl:h-full xl:w-auto xl:shadow-none`}
+            className={`${view === "service" ? "fixed inset-0 z-[60] block h-[100dvh]" : "hidden"} min-h-0 border-l border-zinc-800 bg-black lg:absolute lg:inset-y-0 lg:left-auto lg:z-30 lg:h-full lg:w-[380px] lg:shadow-2xl xl:static xl:z-auto xl:block xl:h-full xl:w-auto xl:shadow-none`}
           >
             <ServiceInspector
               key={selected?.id ?? "empty"}

@@ -130,7 +130,7 @@ export function buildJefeConversations(
   }
 
   const serviceConversations = services
-    .filter((service) => {
+    .filter((service): service is Service & { clienteId: string } => {
       if (!service.clienteId) return false;
       if (chatDisplayState(service) === "ARCHIVED") return false;
       return (

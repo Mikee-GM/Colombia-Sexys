@@ -26,6 +26,14 @@ type ApiFetchOptions = RequestInit & {
   next?: NextFetchRequestConfig;
 };
 
+/** Conserva el estado HTTP para distinguir un registro ausente de un fallo. */
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   { authenticated = true, headers, cache, next, ...options }: ApiFetchOptions = {},
@@ -84,7 +92,7 @@ export async function apiFetch<T>(
       // Keep the generic message when the backend returns no JSON body.
     }
 
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
 
   if (response.status === 204) {

@@ -14,8 +14,10 @@
 module.exports = {
   rootDir: ".",
   testEnvironment: "node",
-  testMatch: ["<rootDir>/**/*.spec.ts", "<rootDir>/**/*.spec.tsx"],
+  // Evita exclusiones de glob en worktrees dentro de directorios ocultos.
+  testRegex: "\\.spec\\.tsx?$",
   testPathIgnorePatterns: ["/node_modules/", "/.next/", "/e2e/"],
+  modulePathIgnorePatterns: ["[/\\\\]\\.next[/\\\\]"],
   setupFiles: ["<rootDir>/jest.setup.ts"],
   transform: {
     "^.+\.tsx?$": ["ts-jest", { tsconfig: { jsx: "react-jsx" } }],

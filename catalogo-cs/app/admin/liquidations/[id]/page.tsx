@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { optionalSource } from "@/lib/optional-source";
 import { getLiquidationReport } from "../actions";
 import { getEmployeeTransferReceipts } from "@/lib/actions/evidence";
-import { getOperationalWeek } from "@/lib/week-range";
+import { getOperationalDateRange, getOperationalWeek } from "@/lib/week-range";
 import LiquidacionEmpleada from "@/components/erp/liquidacion-empleada";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +28,12 @@ export default async function LiquidacionEmpleadaPage({
   const semana = getOperationalWeek();
   const startDate = start ?? semana.startDate;
   const endDate = end ?? semana.endDate;
+  let period;
+  try {
+    period = getOperationalDateRange(startDate, endDate);
+  } catch {
+    notFound();
+  }
 
   /*
    * Un corte que no existe termina en 404, pero una sesion caida tiene que
@@ -36,7 +42,7 @@ export default async function LiquidacionEmpleadaPage({
    */
   const [report, comprobantes] = await Promise.all([
     optionalSource(
-      getLiquidationReport(startDate, endDate, id),
+      getLiquidationReport(period.start.toISOString(), period.end.toISOString(), id),
       null,
       "el corte de la empleada",
     ),

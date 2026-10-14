@@ -236,14 +236,13 @@ export default function ServiceInspector({
     return (
       <aside className="flex h-full min-h-0 flex-col bg-black">
         <header
-          className="sticky top-0 z-10 flex min-h-16 items-center gap-3 border-b border-zinc-800 bg-black px-3 py-2.5"
-          style={{ paddingTop: "env(safe-area-inset-top)" }}
+          className="sticky top-0 z-10 flex min-h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-black px-3 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] lg:pt-2.5"
         >
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 xl:hidden"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 xl:hidden"
               aria-label="Volver al chat"
             >
               <ArrowLeft size={18} />
@@ -258,7 +257,7 @@ export default function ServiceInspector({
             </h2>
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto scroll-pb-32 p-3.5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-pb-32 p-3.5 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           <section className="rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/5 p-3">
             <p className="text-xs font-semibold text-[#E8D5A3]">
               Servicio todavía no creado
@@ -547,12 +546,12 @@ export default function ServiceInspector({
 
   return (
     <aside className="flex h-full min-h-0 flex-col bg-black">
-      <header className="sticky top-0 z-10 flex min-h-16 items-center gap-3 border-b border-zinc-800 bg-black px-3 py-2.5">
+      <header className="sticky top-0 z-10 flex min-h-16 shrink-0 items-center gap-3 border-b border-zinc-800 bg-black px-3 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] lg:pt-2.5">
         {onClose && (
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 xl:hidden"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-900 xl:hidden"
             aria-label="Volver al chat"
           >
             <ArrowLeft size={18} />

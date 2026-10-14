@@ -1,6 +1,7 @@
 import { formatCurrency, formatDateTime } from "@/lib/calculations";
+import { buildCutComparisonRows } from "./cut-comparison-model";
 import LiquidationRecordEditor from "./liquidation-record-editor";
-import type { LiquidationRecord, LiquidationReport } from "./types";
+import type { CutResult, LiquidationRecord, LiquidationReport } from "./types";
 
 interface Props {
   report: LiquidationReport;
@@ -9,11 +10,64 @@ interface Props {
   onRecordUpdated?: () => void;
 }
 
-function SourceBadge({ role }: { role: LiquidationRecord["sourceRole"] }) {
+function CutTotals({ label, cut }: { label: string; cut: CutResult }) {
   return (
-    <span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${role === 'admin' || role === 'jefe' ? 'border-brand-gold/50 bg-brand-gold/10 text-brand-gold' : 'border-blue-900/50 bg-blue-900/30 text-blue-400'}`}>
-      {role === "admin" || role === "jefe" ? "Oficina" : "Empleada"}
-    </span>
+    <section className="min-w-0 rounded-2xl border border-zinc-800 bg-black/30 p-4" aria-label={`Totales de ${label.toLowerCase()}`}>
+      <h3 className="font-serif text-xl text-brand-gold">{label}</h3>
+      <dl className="mt-3 space-y-2 text-sm">
+        <Amount label="Total registrado" value={cut.salesTotal} />
+        <Amount label="Efectivo" value={cut.cashTotal} />
+        <Amount label="Pago bruto" value={cut.employeeGrossPay} />
+        <Amount label={cut.direction === "employee_owes_company" ? "Debe a oficina" : cut.direction === "company_owes_employee" ? "Pagar a empleada" : "Corte saldado"} value={Math.abs(cut.result)} />
+      </dl>
+    </section>
+  );
+}
+
+function Amount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex flex-wrap justify-between gap-x-3 gap-y-1">
+      <dt className="text-zinc-400">{label}</dt>
+      <dd className="font-medium tabular-nums text-zinc-100">{formatCurrency(value)}</dd>
+    </div>
+  );
+}
+
+function RecordDetail({
+  record,
+  editable,
+  locked,
+  onUpdated,
+}: {
+  record: LiquidationRecord;
+  editable: boolean;
+  locked: boolean;
+  onUpdated: () => void;
+}) {
+  return (
+    <div className="min-w-0 space-y-3 rounded-xl border border-zinc-800 bg-black/20 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs capitalize text-zinc-300">{record.isFine ? "Multa" : record.paymentMethod}</span>
+        {record.cancelled && <span className="rounded border border-red-900 px-2 py-1 text-xs text-red-300">Cancelado</span>}
+      </div>
+      <p className="break-words text-xs text-zinc-400">{record.place || "Sin lugar registrado"}</p>
+      <dl className="space-y-2 text-xs">
+        {record.isFine ? <Amount label="Multa" value={record.fineAmount} /> : (
+          <>
+            <Amount label="Servicio" value={record.serviceTotal} />
+            <Amount label="Efectivo" value={record.cashAmount} />
+            <Amount label="Extras" value={record.extraAmount} />
+            <Amount label="Transporte" value={Number(record.companyTransportExpense) + Number(record.transportExcess)} />
+          </>
+        )}
+      </dl>
+      {editable && (
+        <details className="border-t border-zinc-800 pt-2">
+          <summary className="min-h-11 cursor-pointer py-3 text-xs font-semibold text-brand-gold">Revisar registro de oficina</summary>
+          <LiquidationRecordEditor record={record} locked={locked} onUpdated={onUpdated} />
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -23,148 +77,65 @@ export default function CutComparison({
   locked = false,
   onRecordUpdated = () => {},
 }: Props) {
-  // En el nuevo sistema, los registros se hacen en conjunto.
-  // Unificamos y ordenamos cronológicamente.
-  const allRecords = [...(report.officeRecords || [])].sort(
-    (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
-  );
-
-  const fines = allRecords.filter((r) => r.isFine);
-  const regularServices = allRecords.filter((r) => !r.isFine);
+  const rows = buildCutComparisonRows(report);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <section className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950/80 backdrop-blur-xl shadow-2xl">
-        <header className="border-b border-zinc-800/80 p-5 sm:p-6 bg-gradient-to-r from-zinc-900/50 to-zinc-950/50">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-serif text-xl font-bold text-zinc-100 flex items-center gap-2">
-                <span className="h-6 w-1 rounded-full bg-brand-gold"></span>
-                Historial de Servicios
-              </h2>
-              <p className="mt-1 text-sm text-zinc-400 font-medium">
-                Desglose detallado de los servicios realizados en la semana.
-              </p>
-            </div>
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] uppercase font-bold text-zinc-500 mb-1">Total Semanal</span>
-              <span className="w-fit rounded-full border border-brand-gold/30 bg-brand-gold/10 px-4 py-1.5 text-sm font-black text-brand-gold shadow-[0_0_15px_rgba(197,165,90,0.15)]">
-                {formatCurrency(report.finalCut.result)}
+    <section className="min-w-0 space-y-5 rounded-3xl border border-zinc-800 bg-zinc-950 p-4 sm:p-6" aria-label="Comparación del corte">
+      <header>
+        <h2 className="font-serif text-2xl text-zinc-100">Oficina y empleada</h2>
+        <p className="mt-1 text-sm text-zinc-400">Compara lo registrado por ambas partes en la semana seleccionada.</p>
+      </header>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <CutTotals label="Oficina" cut={report.officeCut} />
+        <CutTotals label="Empleada" cut={report.employeeCut} />
+      </div>
+
+      <div className={`rounded-xl border p-4 text-sm ${report.discrepancy.exists ? "border-amber-800/60 bg-amber-950/20 text-amber-200" : "border-zinc-800 text-zinc-300"}`} role="status">
+        {report.discrepancy.exists ? (
+          <>
+            <p className="font-semibold">{report.serviceDiscrepancies.length} registros por revisar</p>
+            <p className="mt-1">Diferencia reportada (oficina menos empleada): {formatCurrency(report.discrepancy.difference)}.</p>
+          </>
+        ) : <p>Sin diferencias de total reportadas entre registros vinculados.</p>}
+        <p className="mt-2 text-xs text-zinc-400">Los ajustes independientes se muestran por separado. El corte final conserva el cálculo de oficina.</p>
+      </div>
+
+      <div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 px-4 text-xs font-semibold uppercase tracking-wide text-zinc-400 lg:grid" aria-hidden="true">
+        <span>Registro de oficina</span>
+        <span>Registro de empleada</span>
+      </div>
+      <div className="space-y-4">
+        {rows.length === 0 && <p className="py-6 text-center text-sm text-zinc-400">No hay registros en este periodo.</p>}
+        {rows.map((row) => (
+          <article key={row.key} className="min-w-0 rounded-2xl border border-zinc-800 p-3 sm:p-4" aria-label={row.serviceId ? `Registro ${row.serviceId.slice(0, 8)}` : "Ajuste independiente"}>
+            <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-zinc-200">{row.serviceId ? `Registro ${row.serviceId.slice(0, 8).toUpperCase()}` : "Ajuste independiente"}</h3>
+                <p className="mt-1 text-xs text-zinc-400">{formatDateTime(row.occurredAt)}</p>
+              </div>
+              <span className={`rounded-lg border px-2 py-1 text-xs ${row.discrepancy ? "border-amber-800/60 text-amber-200" : "border-zinc-700 text-zinc-400"}`}>
+                {!row.serviceId ? "Sin vínculo a servicio" : row.discrepancy ? "Por revisar" : row.office.length && row.employee.length ? "Sin diferencia reportada" : "Sin contraparte"}
               </span>
-            </div>
-          </div>
-        </header>
-
-        <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-black/40 text-zinc-400 text-[10px] uppercase tracking-wider">
-                <th className="p-4 font-semibold border-b border-zinc-800/50 whitespace-nowrap">Fecha / Hora</th>
-                <th className="p-4 font-semibold border-b border-zinc-800/50 whitespace-nowrap">Registro</th>
-                <th className="p-4 font-semibold border-b border-zinc-800/50 hidden sm:table-cell">Lugar</th>
-                <th className="p-4 font-semibold border-b border-zinc-800/50">Método</th>
-                <th className="p-4 font-semibold border-b border-zinc-800/50 text-right">Servicio</th>
-                <th className="p-4 font-semibold border-b border-zinc-800/50 text-right">Extra</th>
-                <th className="p-4 font-semibold border-b border-zinc-800/50 text-right">Transporte</th>
-                {isAdmin && <th className="p-4 font-semibold border-b border-zinc-800/50 text-center">Acción</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/40">
-              {regularServices.length === 0 ? (
-                <tr>
-                  <td colSpan={isAdmin ? 8 : 7} className="p-10 text-center">
-                    <p className="text-zinc-500 text-sm italic">No hay servicios registrados en este periodo.</p>
-                  </td>
-                </tr>
-              ) : (
-                regularServices.map((record) => {
-                  const transport = Number(record.companyTransportExpense) + Number(record.transportExcess);
-                  const isCancelled = record.cancelled;
-
-                  return (
-                    <tr 
-                      key={record.id} 
-                      className={`transition-colors hover:bg-zinc-900/40 ${isCancelled ? 'opacity-50 grayscale' : ''}`}
-                    >
-                      <td className="p-4 whitespace-nowrap text-zinc-300 font-medium">
-                        {formatDateTime(record.occurredAt)}
-                        {isCancelled && <span className="ml-2 rounded border border-red-800 bg-red-950 px-1.5 py-0.5 text-[9px] text-red-400 font-bold uppercase">Cancelado</span>}
-                      </td>
-                      <td className="p-4 whitespace-nowrap">
-                        <SourceBadge role={record.sourceRole} />
-                      </td>
-                      <td className="p-4 text-zinc-400 capitalize hidden sm:table-cell max-w-[150px] truncate">
-                        {record.place || "-"}
-                      </td>
-                      <td className="p-4 text-zinc-300 capitalize text-[11px] font-semibold">
-                        {record.paymentMethod}
-                      </td>
-                      <td className="p-4 text-right font-bold text-zinc-100">
-                        {formatCurrency(record.serviceTotal)}
-                      </td>
-                      <td className="p-4 text-right">
-                        {record.extraAmount > 0 ? (
-                          <span className="text-emerald-400 font-medium">+{formatCurrency(record.extraAmount)}</span>
-                        ) : (
-                          <span className="text-zinc-600">-</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        {transport > 0 ? (
-                          <span className="text-red-400 font-medium">-{formatCurrency(transport)}</span>
-                        ) : (
-                          <span className="text-zinc-600">-</span>
-                        )}
-                      </td>
-                      {isAdmin && (
-                        <td className="p-4 text-center">
-                          <div className="scale-75 origin-center inline-block">
-                            <LiquidationRecordEditor
-                              record={record}
-                              locked={locked}
-                              onUpdated={onRecordUpdated}
-                            />
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {fines.length > 0 && (
-        <section className="rounded-2xl border border-red-900/40 bg-red-950/10 overflow-hidden shadow-lg animate-in fade-in slide-in-from-bottom-4">
-           <div className="bg-red-950/40 p-4 border-b border-red-900/30 flex items-center gap-3">
-             <span className="h-5 w-1 rounded-full bg-red-500"></span>
-             <div>
-               <h3 className="text-red-400 font-bold uppercase tracking-wider text-sm">Multas Aplicadas ({fines.length})</h3>
-               <p className="text-xs text-red-400/60 mt-0.5">Estas multas se descuentan del pago de la empleada.</p>
-             </div>
-           </div>
-           <div className="p-5 grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-             {fines.map(m => (
-                <div key={m.id} className="rounded-xl bg-black/40 border border-red-900/30 p-4 flex flex-col justify-between hover:border-red-500/50 transition-colors">
-                  <div>
-                    <div className="flex justify-between items-center mb-2">
-                       <span className="text-[10px] font-bold uppercase text-zinc-500">{formatDateTime(m.occurredAt)}</span>
-                       <span className="text-lg font-black text-red-500">-{formatCurrency(m.fineAmount)}</span>
-                    </div>
-                    <p className="text-sm italic text-zinc-300">{m.place || 'Sanción monetaria'}</p>
-                  </div>
-                  {isAdmin && (
-                    <div className="mt-4 pt-3 border-t border-red-900/20 text-right">
-                       <LiquidationRecordEditor record={m} locked={locked} onUpdated={onRecordUpdated} />
-                    </div>
-                  )}
+            </header>
+            {row.discrepancy && (
+              <p className="mb-3 text-xs text-amber-200">
+                {row.discrepancy.officeTotal === null ? "Falta registro de oficina." : row.discrepancy.employeeTotal === null ? "Falta registro de empleada." : `Diferencia de total: ${formatCurrency(row.discrepancy.difference)} (oficina menos empleada).`}
+              </p>
+            )}
+            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+              {(["office", "employee"] as const).map((side) => (
+                <div key={side} className="min-w-0 space-y-2">
+                  <h4 className="text-xs font-semibold text-brand-gold lg:sr-only">{side === "office" ? "Oficina" : "Empleada"}</h4>
+                  {row[side].length ? row[side].map((record) => (
+                    <RecordDetail key={record.id} record={record} editable={isAdmin && side === "office"} locked={locked} onUpdated={onRecordUpdated} />
+                  )) : <p className="rounded-xl border border-dashed border-zinc-800 p-4 text-sm text-zinc-500">Sin registro</p>}
                 </div>
-             ))}
-           </div>
-        </section>
-      )}
-    </div>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
