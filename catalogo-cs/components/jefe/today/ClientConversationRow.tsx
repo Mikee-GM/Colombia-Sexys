@@ -27,6 +27,21 @@ export default function ClientConversationRow({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const employeeNames = Array.from(
+    new Set(
+      group.conversations
+        .map((conversation) => conversation.employeeName.trim())
+        .filter(Boolean),
+    ),
+  );
+  const orderedEmployeeNames = [
+    group.latest.employeeName || "Sin asignar",
+    ...employeeNames.filter((name) => name !== group.latest.employeeName),
+  ];
+  const visibleEmployees = orderedEmployeeNames.slice(0, 2);
+  const additionalEmployees = Math.max(orderedEmployeeNames.length - 2, 0);
+  const employeeContext = `Con ${visibleEmployees.join(" · ")}`;
+
   return (
     <button
       type="button"
@@ -42,6 +57,17 @@ export default function ClientConversationRow({
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold text-zinc-100">
           {group.clientName}
+        </span>
+        <span
+          className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full border border-[#C5A55A]/30 bg-[#C5A55A]/10 px-2 py-0.5 text-[10px] font-semibold text-[#E8D5A3]"
+          title={`Modelos: ${orderedEmployeeNames.join(", ")}`}
+        >
+          <span className="truncate">{employeeContext}</span>
+          {additionalEmployees > 0 && (
+            <span className="shrink-0 text-[#C5A55A]">
+              +{additionalEmployees}
+            </span>
+          )}
         </span>
         <span className="mt-1 block truncate text-xs text-zinc-400">
           {group.latest.lastMessage}

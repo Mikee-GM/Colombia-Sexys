@@ -27,6 +27,26 @@ async function noHorizontalOverflow(page: Page) {
   expect(widths.content).toBeLessThanOrEqual(widths.viewport + 1);
 }
 
+test('boss has a dedicated active-services workspace with explicit client and model context', async ({ page, context }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await prepare(context, 'jefe');
+  await context.addCookies([{
+    name: 'access_token', value: 'fixture-jefe-services', url: 'http://127.0.0.1:3111',
+  }]);
+
+  for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto('/jefe/servicios');
+    await expect(page.getByRole('heading', { name: 'Servicios activos' })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('heading', { name: 'Cliente Activo QA' })).toBeVisible();
+    await expect(page.getByText('Modelo: Persona QA 01', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Servicios/ }).first()).toHaveAttribute('href', '/jefe/servicios');
+    await noHorizontalOverflow(page);
+  }
+  expect(pageErrors).toEqual([]);
+});
+
 test('map remains usable with a long directory on phone, tablet and desktop', async ({ page, context }, testInfo) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -141,6 +161,7 @@ test('client inbox keeps contexts separate and shows private photos and location
     await expect(inbox).toBeVisible({ timeout: 60_000 });
     await expect(inbox.getByRole('button', { name: 'Abrir conversaciones de Cliente QA A', exact: true })).toHaveCount(1);
     await expect(inbox.getByRole('button', { name: 'Abrir conversaciones de Cliente QA B', exact: true })).toHaveCount(1);
+    await expect(inbox.getByText('Con Persona QA 01 · Persona QA 02', { exact: true })).toBeVisible();
     await noHorizontalOverflow(page);
     await inbox.getByRole('button', { name: 'Abrir conversaciones de Cliente QA A', exact: true }).click();
 

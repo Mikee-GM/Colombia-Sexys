@@ -116,6 +116,8 @@ it("muestra una sola fila por cliente y permite navegar ida y vuelta desde la ba
   const inbox = screen.getByRole("complementary", { name: "Conversaciones" });
   expect(within(inbox).getAllByRole("button")).toHaveLength(2);
   expect(within(inbox).getByText("2 conversaciones")).toBeDefined();
+  expect(within(inbox).getByText("Con Contexto A · Contexto B")).toBeDefined();
+  expect(within(inbox).getByText("Con Contexto C")).toBeDefined();
   expect(screen.queryByRole("tablist")).toBeNull();
   fireEvent.click(
     within(inbox).getByRole("button", {

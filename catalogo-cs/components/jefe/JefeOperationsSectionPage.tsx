@@ -9,6 +9,7 @@ import {
 } from "@/lib/actions/jefe-panel";
 
 export type JefeOperationsSection =
+  | "activos"
   | "equipo"
   | "efectivo"
   | "historial"
