@@ -71,6 +71,26 @@ const inboxThreads = [
   ]),
 ];
 
+const activeService = {
+  id: 'fixture-active-service', serviceType: 'individual',
+  empleadaId: employees[0].id, clienteId: 'fixture-active-client',
+  clienteNombreLibre: null, jefeId: 'fixture-jefe', metodoPago: 'efectivo',
+  duracionPactadaHoras: '1', duracionFinalHoras: null,
+  ubicacionClienteLat: '20.5888', ubicacionClienteLng: '-100.3899',
+  precioBaseHoraPactado: '2500', totalBase: '2500', totalExtras: '0',
+  totalFinal: '2500', horaInicioServicio: new Date().toISOString(),
+  horaFinServicio: null, horaLlegadaCasa: null, prorrogasUsadas: 0,
+  estado: 'en_curso', operationalState: 'en_curso', notas: null,
+  notasJefe: null, iaActiva: true, calificacion: null,
+  comentariosCalificacion: null, servicioPrevioId: null,
+  horaInicioEstimada: null, tipoAgenda: 'inmediato',
+  createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  calculationStatus: 'ready', pendingReason: null, customerTotal: 2500,
+  uberDeduction: 0, viajes: [],
+  cliente: { id: 'fixture-active-client', telegramChatId: '10001', nombreTelegram: 'Cliente Activo QA' },
+  empleada: employees[0],
+};
+
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1:4311');
   if (request.method !== 'GET') {
@@ -101,7 +121,7 @@ const server = http.createServer((request, response) => {
     '/health': { ok: true },
     '/api/v1/auth/me': { id: `fixture-${role}`, rol: role, nombre: 'Cuenta QA', email: 'qa@example.test' },
     '/api/v1/employees': employees,
-    '/api/v1/services': [],
+    '/api/v1/services': request.headers.cookie?.includes('fixture-jefe-services') ? [activeService] : [],
     '/api/v1/telegram-conversations/pre-service': request.headers.cookie?.includes('fixture-jefe-inbox') ? inboxThreads : [],
     '/api/v1/liquidations/employees': [{
       id: employees[0].id, userId: 'fixture-user', name: 'Persona QA 01', active: true,

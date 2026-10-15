@@ -118,7 +118,7 @@ export default function TeamOperations({
   initialCashSummary: CashObligationSummary;
   initialGroupRequests: GroupServiceRequest[];
   tabInicial?: "grupos";
-  fixedTab?: "equipo" | "grupos" | "historial" | "efectivo";
+  fixedTab?: "activos" | "equipo" | "grupos" | "historial" | "efectivo";
 }) {
   const [employees, setEmployees] = useState(initialEmployees);
   const [services, setServices] = useState(initialServices);
@@ -545,12 +545,14 @@ export default function TeamOperations({
       En pantalla ancha sobra sitio y se quedan.
     */}
       <header className="mb-4 flex items-center justify-between gap-4 sm:mb-7">
-        <div className="hidden sm:block">
+        <div className={fixedTab === "activos" ? "block" : "hidden sm:block"}>
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.25em] text-[#C5A55A]">
             {fixedTab ? "Gestión" : "Operación diaria"}
           </p>
           <h1 className="font-heading text-4xl font-semibold sm:text-5xl">
-            {fixedTab === "equipo"
+            {fixedTab === "activos"
+              ? "Servicios activos"
+              : fixedTab === "equipo"
               ? "Equipo"
               : fixedTab === "efectivo"
                 ? "Caja"
@@ -561,7 +563,9 @@ export default function TeamOperations({
                     : "Mi equipo"}
           </h1>
           <p className="mt-2 text-sm text-zinc-500">
-            {fixedTab
+            {fixedTab === "activos"
+              ? "Aceptados, agendados y en curso, con todos sus controles en un solo lugar."
+              : fixedTab
               ? "Esta función sigue disponible fuera de la mesa de trabajo Hoy."
               : "Disponibilidad, servicios, transporte y conversaciones de tu equipo."}
           </p>
@@ -1354,8 +1358,14 @@ function ServiceCard({
    */
   const sinEmpezar = pendiente || service.estado === "agendado";
 
+  const clientName =
+    service.cliente?.nombreTelegram ||
+    service.clienteNombreLibre ||
+    "Cliente sin nombre";
+  const employeeName =
+    service.empleada?.nombreArtistico || "Empleada sin asignar";
   const datos: Array<[string, string]> = [
-    ["Cliente", service.cliente?.nombreTelegram || "Cliente"],
+    ["Cliente", clientName],
     ["Duración", `${service.duracionPactadaHoras} horas`],
     ["Pago", service.metodoPago.toUpperCase()],
   ];
@@ -1383,8 +1393,11 @@ function ServiceCard({
             Servicio {service.id.slice(-6).toUpperCase()}
           </p>
           <h2 className="mt-1 truncate font-heading text-xl font-semibold sm:text-2xl">
-            {service.empleada?.nombreArtistico || "Empleada asignada"}
+            {clientName}
           </h2>
+          <p className="mt-1 truncate text-xs font-semibold text-[#E8D5A3]">
+            Modelo: {employeeName}
+          </p>
         </div>
         <ServiceStatusBadge status={service.estado} />
       </div>

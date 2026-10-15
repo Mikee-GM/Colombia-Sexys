@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ClipboardList, FileWarning, LayoutGrid, LogOut, MapPinned, ShieldCheck, Trophy } from "lucide-react";
+import { BriefcaseBusiness, ClipboardList, FileWarning, LayoutGrid, LogOut, MapPinned, ShieldCheck, Trophy } from "lucide-react";
 import { logoutAction } from "@/lib/actions/auth";
 import SessionKeeper from "@/components/auth/session-keeper";
 import ComprobarVersion from "@/components/ui/ComprobarVersion";
@@ -19,6 +19,7 @@ const links = [
    * pestañas obligaba a mirar dos veces para saber donde estabas.
    */
   { href: "/jefe", label: "Hoy", corto: "Hoy", icon: LayoutGrid },
+  { href: "/jefe/servicios", label: "Servicios activos", corto: "Servicios", icon: BriefcaseBusiness },
   { href: "/jefe/mapa", label: "Mapa", corto: "Mapa", icon: MapPinned },
   { href: "/jefe/reportes", label: "Reportes", corto: "Reportes", icon: FileWarning },
   { href: "/jefe/servicios-manuales", label: "Registros a mano", corto: "Registros", icon: ClipboardList },
@@ -102,21 +103,12 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
           {children}
         </main>
       </div>
-      {/*
-       * Cinco destinos en cinco columnas, una sola fila.
-       *
-       * Antes habia seis hijos --los cinco enlaces mas Salir-- en una rejilla
-       * de cinco columnas, asi que Salir caia a una segunda fila que el
-       * contenido no tenia reservada y la barra tapaba el final de la pagina.
-       * Salir no es un destino al que se navega: se ha ido a la cabecera.
-       *
-       * El relleno inferior respeta el indicador del iPhone, que en la app
-       * instalada se pinta encima de la barra.
-       */}
-      <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 gap-0.5 border-t border-zinc-800 bg-[#050505]/95 px-1 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+      {/* Los seis destinos son acciones reales. Se mantienen en una sola fila
+          con etiquetas cortas; Cerrar sesión permanece en la cabecera. */}
+      <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-6 gap-0.5 border-t border-zinc-800 bg-[#050505]/95 px-1 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
         {links.map(({ href, corto, icon: Icon }) => (
-          <Link key={href} href={href} className={`flex h-[52px] flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold ${pathname === href ? "bg-[#C5A55A]/10 text-[#C5A55A]" : "text-zinc-500"}`}>
-            <Icon size={20} /> {corto}
+          <Link key={href} href={href} className={`flex h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-0.5 text-[9px] font-semibold ${pathname === href ? "bg-[#C5A55A]/10 text-[#C5A55A]" : "text-zinc-500"}`}>
+            <Icon size={19} /> <span className="max-w-full truncate">{corto}</span>
           </Link>
         ))}
       </nav>
