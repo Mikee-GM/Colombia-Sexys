@@ -42,9 +42,10 @@ export default function ConversationComposer({
             }}
             rows={1}
             maxLength={4000}
+            aria-label="Mensaje"
             placeholder="Escribe como jefe"
             disabled={sending}
-            className="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-zinc-800 bg-black px-3.5 py-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#C5A55A] disabled:opacity-50"
+            className="min-h-11 max-h-32 min-w-0 flex-1 resize-y rounded-xl border border-zinc-800 bg-black px-3.5 py-3 text-base text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-[#C5A55A] disabled:opacity-50 sm:text-sm"
           />
           <button
             type="button"

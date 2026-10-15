@@ -27,4 +27,18 @@ describe('TelegramBookingUpdate booking progression', () => {
 
     expect(result).toContain('Cómo prefieres pagar');
   });
+
+  it('suaviza la respuesta brusca observada sin cambiar la regla comercial', () => {
+    const update = Object.create(TelegramBookingUpdate.prototype) as any;
+    update.logger = { warn: jest.fn() };
+
+    const result = update.dressAiReply(
+      'En una hora es solo una relación completa, no las que quieras. Si buscas más, contratas más tiempo.',
+    );
+
+    expect(result).toContain('una relación completa');
+    expect(result).toContain('podemos ver cuánto tiempo te acomoda');
+    expect(result).not.toContain('no las que quieras');
+    expect(result).not.toContain('contratas más tiempo');
+  });
 });

@@ -375,6 +375,21 @@ export type GroupServiceRequest = {
   service?: Service | null;
 };
 
+export type ConversationAttachment =
+  | {
+      type: "photo";
+      url: string;
+      width?: number;
+      height?: number;
+    }
+  | {
+      type: "location";
+      latitude: number;
+      longitude: number;
+      title?: string;
+      address?: string;
+    };
+
 export type ConversationMessage = {
   id: string;
   clienteId: string;
@@ -384,6 +399,7 @@ export type ConversationMessage = {
   intendedEmployeeId?: string | null;
   emisor: "ia" | "jefe" | "cliente" | "sistema";
   mensaje: string;
+  attachment?: ConversationAttachment | null;
   iaActiva?: boolean;
   enviadoAt: string;
 };

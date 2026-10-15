@@ -1,6 +1,7 @@
 import { Bot, CircleUserRound, ShieldCheck } from "lucide-react";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { ConversationMessage } from "@/lib/types";
+import ConversationAttachment from "./ConversationAttachment";
 
 const PRESENTATION = {
   cliente: {
@@ -52,7 +53,7 @@ export default function ConversationMessages({
           const Icon = style.icon;
           return (
             <div key={message.id} className={`flex ${style.wrapper}`}>
-              <div className={`max-w-[86%] rounded-2xl px-3.5 py-2.5 sm:max-w-[72%] ${style.bubble}`}>
+              <div className={`min-w-0 max-w-[86%] rounded-2xl px-3.5 py-2.5 sm:max-w-[72%] ${style.bubble}`}>
                 <div className="mb-1 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.1em] opacity-60">
                   <Icon size={10} />
                   <span>{style.label}</span>
@@ -64,7 +65,11 @@ export default function ConversationMessages({
                     })}
                   </time>
                 </div>
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                <ConversationAttachment
+                  messageId={message.id}
+                  attachment={message.attachment}
+                />
+                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                   {message.mensaje}
                 </p>
               </div>

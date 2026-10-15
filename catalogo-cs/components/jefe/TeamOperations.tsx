@@ -2467,7 +2467,7 @@ export function TransportChoiceSheet({
     }
   }
   return (
-    <div className="fixed inset-0 z-[75] flex items-end justify-center bg-black/80 p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:items-center sm:p-3">
+    <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm">
       <section className="max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-800 bg-[#090909] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[90dvh] sm:pb-5">
         <div className="flex items-start justify-between gap-4">
           <div>

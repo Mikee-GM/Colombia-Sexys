@@ -21,9 +21,50 @@ import {
   pickArrivalTimeReply,
   pickDeflection,
   sanitizeAiReply,
+  shouldAdvanceBookingAfterMessage,
+  softenCommercialTone,
   stripControlMarkers,
   trimChatHistory,
 } from './ai-guardrails';
+
+describe('softenCommercialTone', () => {
+  it('conserva la regla comercial sin regañar al cliente', () => {
+    expect(
+      softenCommercialTone(
+        'En una hora es solo una relación completa, no las que quieras. Si buscas más, contratas más tiempo.',
+      ),
+    ).toBe(
+      'En una hora es solo una relación completa, no son repeticiones ilimitadas. Si te gustaría repetir, podemos ver cuánto tiempo te acomoda.',
+    );
+  });
+
+  it('no modifica una respuesta cordial', () => {
+    const reply =
+      'En una hora es una relación completa. Si quieres repetir, podemos ver más tiempo.';
+    expect(softenCommercialTone(reply)).toBe(reply);
+  });
+});
+
+describe('shouldAdvanceBookingAfterMessage', () => {
+  it.each(['1 hr', '2 horas bb', 'efectivo', 'Montecarlo'])(
+    'avanza después de una respuesta de formulario: %s',
+    (message) => {
+      expect(shouldAdvanceBookingAfterMessage(message, true)).toBe(true);
+    },
+  );
+
+  it.each([
+    'por 2 cuánto sería?',
+    'en una hora se puede repetir?',
+    'qué incluye por 2 horas',
+  ])('responde la duda sin añadir otra pregunta: %s', (message) => {
+    expect(shouldAdvanceBookingAfterMessage(message, true)).toBe(false);
+  });
+
+  it('no avanza cuando el parser no encontró un dato', () => {
+    expect(shouldAdvanceBookingAfterMessage('hola bb', false)).toBe(false);
+  });
+});
 
 describe('stripControlMarkers', () => {
   it('borra del mensaje del cliente las marcas que el backend ejecuta', () => {

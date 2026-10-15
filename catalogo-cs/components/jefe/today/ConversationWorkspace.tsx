@@ -3,10 +3,12 @@ import { MessageCircle } from "lucide-react";
 import ConversationComposer from "./ConversationComposer";
 import ConversationHeader from "./ConversationHeader";
 import ConversationMessages from "./ConversationMessages";
+import ClientConversationSelector from "./ClientConversationSelector";
 import type { JefeConversation } from "./today-model";
 
 export default function ConversationWorkspace({
   conversation,
+  clientConversations,
   text,
   sending,
   changingMode,
@@ -15,8 +17,10 @@ export default function ConversationWorkspace({
   onToggleMode,
   onBack,
   onOpenService,
+  onSelectConversation,
 }: {
   conversation: JefeConversation | null;
+  clientConversations: JefeConversation[];
   text: string;
   sending: boolean;
   changingMode: boolean;
@@ -25,6 +29,7 @@ export default function ConversationWorkspace({
   onToggleMode: () => void;
   onBack: () => void;
   onOpenService: () => void;
+  onSelectConversation: (conversationId: string) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -56,6 +61,11 @@ export default function ConversationWorkspace({
         onBack={onBack}
         onOpenService={onOpenService}
         onToggleMode={onToggleMode}
+      />
+      <ClientConversationSelector
+        conversations={clientConversations}
+        selectedId={conversation.id}
+        onSelect={onSelectConversation}
       />
       <ConversationMessages messages={conversation.messages} endRef={endRef} />
       <ConversationComposer

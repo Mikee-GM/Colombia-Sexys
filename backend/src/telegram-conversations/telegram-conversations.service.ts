@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectBot } from 'nestjs-telegraf';
-import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import { Context, Telegraf } from 'telegraf';
 import { ConversacionesTelegram } from './entities/telegram-conversation.entity';
 import { Servicios } from '../services/entities/service.entity';
@@ -754,21 +754,99 @@ export class TelegramConversationsService {
     requestedLimit = 50,
   ) {
     await this.getAuthorizedService(serviceId, actor);
-    const limit = Math.min(Math.max(requestedLimit || 50, 1), 100);
-    const messages = await this.conversationsRepository.find({
-      where: {
-        servicioId: serviceId,
-        ...(cursor ? { enviadoAt: LessThan(new Date(cursor)) } : {}),
-      },
-      order: { enviadoAt: 'DESC' },
-      take: limit + 1,
-    });
+    if (!Number.isInteger(requestedLimit) || requestedLimit < 1) {
+      throw new BadRequestException('El límite del historial no es válido');
+    }
+    const limit = Math.min(requestedLimit, 100);
+    const boundary = cursor ? this.parseServiceHistoryCursor(cursor) : null;
+    const query = this.conversationsRepository
+      .createQueryBuilder('conversation')
+      .where('conversation.servicioId = :serviceId', { serviceId });
+
+    if (boundary?.id) {
+      // Date pierde los microsegundos de PostgreSQL. Recuperamos la fecha
+      // exacta del mensaje persistido, siempre dentro del servicio autorizado.
+      const anchor = await this.conversationsRepository
+        .createQueryBuilder('cursorMessage')
+        .select('CAST(cursorMessage.enviadoAt AS text)', 'timestamp')
+        .where('cursorMessage.id = :cursorId', { cursorId: boundary.id })
+        .andWhere('cursorMessage.servicioId = :serviceId', { serviceId })
+        .getRawOne<{ timestamp: string }>();
+      if (
+        !anchor ||
+        new Date(anchor.timestamp).toISOString() !== boundary.timestamp
+      ) {
+        throw new BadRequestException('El cursor del historial no es válido');
+      }
+      query.andWhere(
+        '(conversation.enviadoAt < :cursorTimestamp OR (conversation.enviadoAt = :cursorTimestamp AND conversation.id < :cursorId))',
+        { cursorTimestamp: anchor.timestamp, cursorId: boundary.id },
+      );
+    } else if (boundary) {
+      // Compatibilidad con los cursores de fecha emitidos anteriormente.
+      query.andWhere('conversation.enviadoAt < :cursorTimestamp', {
+        cursorTimestamp: boundary.timestamp,
+      });
+    }
+
+    const messages = await query
+      .orderBy('conversation.enviadoAt', 'DESC')
+      .addOrderBy('conversation.id', 'DESC')
+      .take(limit + 1)
+      .getMany();
     const hasMore = messages.length > limit;
     const page = messages.slice(0, limit).reverse();
+    const oldest = page[0];
     return {
       messages: page,
-      nextCursor: hasMore ? page[0]?.enviadoAt.toISOString() : null,
+      nextCursor:
+        hasMore && oldest
+          ? `v1.${Buffer.from(
+              JSON.stringify({
+                timestamp: oldest.enviadoAt.toISOString(),
+                id: oldest.id,
+              }),
+            ).toString('base64url')}`
+          : null,
     };
+  }
+
+  private parseServiceHistoryCursor(cursor: string): {
+    timestamp: string;
+    id: string | null;
+  } {
+    const isTimestamp = (value: unknown): boolean =>
+      typeof value === 'string' &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
+      Number.isFinite(Date.parse(value)) &&
+      new Date(value).toISOString() === value;
+
+    if (isTimestamp(cursor)) return { timestamp: cursor, id: null };
+    if (/^v1\.[A-Za-z0-9_-]{1,512}$/.test(cursor)) {
+      let value: unknown;
+      try {
+        value = JSON.parse(
+          Buffer.from(cursor.slice(3), 'base64url').toString(),
+        );
+      } catch {
+        throw new BadRequestException('El cursor del historial no es válido');
+      }
+      if (
+        value &&
+        typeof value === 'object' &&
+        'timestamp' in value &&
+        typeof value.timestamp === 'string' &&
+        isTimestamp(value.timestamp) &&
+        'id' in value &&
+        typeof value.id === 'string' &&
+        /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(
+          value.id,
+        )
+      ) {
+        return { timestamp: value.timestamp, id: value.id };
+      }
+    }
+    throw new BadRequestException('El cursor del historial no es válido');
   }
 
   /**
@@ -1219,6 +1297,27 @@ export class TelegramConversationsService {
       data: saved,
     });
     return saved;
+  }
+
+  /** Media reads use exactly the same service/session ownership as history. */
+  async assertMessageReadAccess(
+    message: ConversacionesTelegram,
+    actor: Usuarios,
+  ): Promise<void> {
+    if (message.servicioId) {
+      await this.getAuthorizedService(message.servicioId, actor);
+      return;
+    }
+    if (message.bookingSessionId) {
+      await this.getAuthorizedPreServiceConversation(
+        message.bookingSessionId,
+        actor,
+      );
+      return;
+    }
+    if (actor.rol !== 'admin') {
+      throw new ForbiddenException('No puedes acceder a esta conversación');
+    }
   }
 
   private async getAuthorizedService(serviceId: string, actor: Usuarios) {

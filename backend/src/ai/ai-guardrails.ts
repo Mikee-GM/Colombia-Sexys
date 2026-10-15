@@ -390,6 +390,46 @@ export function sanitizeAiReply(reply: string): string {
     .trim();
 }
 
+/**
+ * Suaviza formulaciones comerciales que convierten una regla válida en un
+ * regaño. No inventa condiciones ni cambia precios: únicamente reemplaza las
+ * frases bruscas que ya se observaron en conversaciones reales.
+ *
+ * Este último filtro es deliberadamente pequeño. El prompt sigue siendo la
+ * fuente del tono, pero la cortesía de lo que llega al cliente no puede quedar
+ * exclusivamente a criterio de un modelo probabilístico.
+ */
+export function softenCommercialTone(reply: string): string {
+  return reply
+    .replace(/\bno\s+las\s+que\s+quieras\b/gi, 'no son repeticiones ilimitadas')
+    .replace(
+      /\bsi\s+(?:buscas|quieres)\s+m[aá]s,?\s+(?:contratas|tienes\s+que\s+contratar|necesitas\s+contratar|debes\s+contratar)\s+m[aá]s\s+tiempo\b[.!]?/gi,
+      'Si te gustaría repetir, podemos ver cuánto tiempo te acomoda.',
+    )
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([.!?,;])/g, '$1')
+    .trim();
+}
+
+/**
+ * Un dato reconocido permite avanzar al siguiente campo solo cuando el turno
+ * fue una respuesta breve. Si el dato venía dentro de una pregunta comercial
+ * ("por 2 cuánto sería"), se contesta esa duda y se termina ahí.
+ */
+export function shouldAdvanceBookingAfterMessage(
+  message: string,
+  parsedBookingData: boolean,
+): boolean {
+  if (!parsedBookingData) return false;
+  const normalized = normalizeForMatch(message);
+  return !(
+    message.includes('?') ||
+    /\b(cuanto|cuantos|cuantas|que|cual|como|donde|se puede|incluye|manejas|tienes)\b/.test(
+      normalized,
+    )
+  );
+}
+
 const OWN_PHOTOS_PATTERN =
   /\b(fotos?|foticos?|imagen|imagenes|selfie|pack|videos?|verte|mostrarte|muestrame|ensename|mandame algo)\b/;
 
