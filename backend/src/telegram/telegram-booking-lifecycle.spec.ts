@@ -1,9 +1,11 @@
 import {
   DEFAULT_LOOP_BREAKER_MAX_FAILURES,
+  BOOKING_INACTIVITY_TTL_MS,
   detectGlobalBookingIntent,
   isBookingStale,
   nextMissingRequirement,
   registerLoopFailure,
+  shouldExpireUncontractedBooking,
   transitionBookingStatus,
 } from './telegram-booking-lifecycle';
 
@@ -65,11 +67,33 @@ describe('telegram booking lifecycle', () => {
   });
 
   it('detecta solicitudes viejas sin borrar su historial', () => {
-    const old = new Date(Date.now() - 7 * 60 * 60 * 1000);
-    expect(isBookingStale(old, Date.now(), 6 * 60 * 60 * 1000)).toBe(true);
-    expect(isBookingStale(new Date(), Date.now(), 6 * 60 * 60 * 1000)).toBe(
-      false,
-    );
+    const old = new Date(Date.now() - BOOKING_INACTIVITY_TTL_MS - 1);
+    expect(isBookingStale(old)).toBe(true);
+    expect(isBookingStale(new Date())).toBe(false);
+  });
+
+  it('reinicia únicamente drafts privados sin actividad durante una hora', () => {
+    const now = Date.now();
+    const base = {
+      chatType: 'private',
+      status: 'COLLECTING' as const,
+      lastInteractionAt: new Date(now - BOOKING_INACTIVITY_TTL_MS - 1),
+      now,
+    };
+
+    expect(shouldExpireUncontractedBooking(base)).toBe(true);
+    expect(
+      shouldExpireUncontractedBooking({ ...base, hasCreatedService: true }),
+    ).toBe(false);
+    expect(
+      shouldExpireUncontractedBooking({ ...base, humanTakeover: true }),
+    ).toBe(false);
+    expect(
+      shouldExpireUncontractedBooking({
+        ...base,
+        lastInteractionAt: new Date(now - BOOKING_INACTIVITY_TTL_MS + 1),
+      }),
+    ).toBe(false);
   });
 
   it('entrega al humano tras tres mensajes no interpretables en el mismo paso', () => {

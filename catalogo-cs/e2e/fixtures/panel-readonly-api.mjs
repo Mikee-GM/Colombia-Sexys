@@ -33,6 +33,44 @@ const cut = (amount) => ({
   cardExtrasTotal: 0, cardExtraCommission: 0,
 });
 
+// Historial neutral para probar el panel, sin iniciar ni modificar operaciones.
+const photoMessageId = '11111111-1111-4111-8111-111111111111';
+const inboxPhotoPath = `/telegram-conversations/messages/${photoMessageId}/photo`;
+const inboxTimestamp = '2026-10-14T18:00:00.000Z';
+const inboxMessage = (id, sessionId, clientId, mensaje, attachment) => ({
+  id, clienteId: clientId, servicioId: null, bookingSessionId: sessionId,
+  emisor: 'cliente', mensaje, iaActiva: false, enviadoAt: inboxTimestamp,
+  ...(attachment ? { attachment } : {}),
+});
+const inboxThread = (sessionId, clientId, name, employeeIndex, messages) => ({
+  conversationId: `session:${sessionId}`, bookingSessionId: sessionId,
+  client: { id: clientId, name, telegramId: null },
+  intendedEmployee: { id: employees[employeeIndex].id, name: employees[employeeIndex].nombreArtistico },
+  service: null, messages, mode: 'HUMAN_ACTIVE', needsReply: true,
+  lastMessage: messages.at(-1).mensaje, lastAt: inboxTimestamp, createdAt: inboxTimestamp,
+  bookingData: {
+    durationHours: null, openEndedDuration: false, paymentMethod: null,
+    locationName: null, locationAddress: null, locationNotes: null,
+  },
+});
+const inboxThreads = [
+  inboxThread('fixture-thread-a', 'fixture-client-a', 'Cliente QA A', 0, [
+    inboxMessage(photoMessageId, 'fixture-thread-a', 'fixture-client-a', 'Foto de referencia QA', {
+      type: 'photo', url: `/api${inboxPhotoPath}`, width: 1, height: 1,
+    }),
+    inboxMessage('fixture-location', 'fixture-thread-a', 'fixture-client-a', 'Ubicación compartida QA', {
+      type: 'location', latitude: 20.5888, longitude: -100.3899,
+      title: 'Punto de referencia QA',
+    }),
+  ]),
+  inboxThread('fixture-thread-b', 'fixture-client-a', 'Cliente QA A', 1, [
+    inboxMessage('fixture-context-b', 'fixture-thread-b', 'fixture-client-a', 'Mensaje exclusivo del contexto B'),
+  ]),
+  inboxThread('fixture-thread-c', 'fixture-client-b', 'Cliente QA B', 2, [
+    inboxMessage('fixture-client-b-message', 'fixture-thread-c', 'fixture-client-b', 'Mensaje exclusivo del cliente B'),
+  ]),
+];
+
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1:4311');
   if (request.method !== 'GET') {
@@ -42,6 +80,15 @@ const server = http.createServer((request, response) => {
   if (url.pathname.includes('/realtime/sse')) {
     response.writeHead(200, { 'Content-Type': 'text/event-stream' });
     response.write(': fixture\n\n');
+    return;
+  }
+  if (url.pathname === `/api/v1${inboxPhotoPath}`) {
+    if (!request.headers.cookie?.includes('fixture-jefe-inbox')) {
+      response.writeHead(403).end();
+      return;
+    }
+    response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, no-store' });
+    response.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'));
     return;
   }
   if (url.pathname === '/api/v1/services' && request.headers.cookie?.includes('fixture-admin-error')) {
@@ -55,6 +102,7 @@ const server = http.createServer((request, response) => {
     '/api/v1/auth/me': { id: `fixture-${role}`, rol: role, nombre: 'Cuenta QA', email: 'qa@example.test' },
     '/api/v1/employees': employees,
     '/api/v1/services': [],
+    '/api/v1/telegram-conversations/pre-service': request.headers.cookie?.includes('fixture-jefe-inbox') ? inboxThreads : [],
     '/api/v1/liquidations/employees': [{
       id: employees[0].id, userId: 'fixture-user', name: 'Persona QA 01', active: true,
       bosses: [{ id: 'fixture-jefe', name: 'Equipo QA' }],

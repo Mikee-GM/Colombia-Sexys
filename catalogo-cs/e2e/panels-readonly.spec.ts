@@ -119,3 +119,63 @@ test('accounting week stays consistent across device timezones', async ({ browse
   expect(labels[3]).toBe(labels[1]);
   expect(labels[5]).toBe(labels[1]);
 });
+
+test('client inbox keeps contexts separate and shows private photos and locations on all screen sizes', async ({ page, context }, testInfo) => {
+  const errors: string[] = [];
+  const externalRequests: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('request', (request) => {
+    if (!['127.0.0.1', 'localhost'].includes(new URL(request.url()).hostname)) {
+      externalRequests.push(request.url());
+    }
+  });
+  await prepare(context, 'jefe');
+  await context.addCookies([{
+    name: 'access_token', value: 'fixture-jefe-inbox', url: 'http://127.0.0.1:3111',
+  }]);
+
+  for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto('/jefe');
+    const inbox = page.getByRole('complementary', { name: 'Conversaciones', exact: true });
+    await expect(inbox).toBeVisible({ timeout: 60_000 });
+    await expect(inbox.getByRole('button', { name: 'Abrir conversaciones de Cliente QA A', exact: true })).toHaveCount(1);
+    await expect(inbox.getByRole('button', { name: 'Abrir conversaciones de Cliente QA B', exact: true })).toHaveCount(1);
+    await noHorizontalOverflow(page);
+    await inbox.getByRole('button', { name: 'Abrir conversaciones de Cliente QA A', exact: true }).click();
+
+    const selector = page.getByRole('combobox', { name: 'Conversación de este cliente' });
+    await expect(selector).toBeVisible();
+    await expect(selector.locator('option')).toHaveCount(2);
+    await selector.selectOption('session:fixture-thread-a');
+    await expect(page.getByText('Foto de referencia QA', { exact: true })).toBeVisible();
+    const photo = page.getByRole('img', { name: 'Foto adjunta al mensaje' });
+    await expect(photo).toBeVisible();
+    await expect(photo).toHaveAttribute('src', /\/api\/telegram-conversations\/messages\/11111111-1111-4111-8111-111111111111\/photo$/);
+    await expect.poll(() => photo.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+    const mapLink = page.locator('a[href^="https://www.google.com/maps/"]');
+    await expect(mapLink).toHaveAttribute('href', /20\.5888.*-100\.3899/);
+    await mapLink.scrollIntoViewIfNeeded();
+    await expect(mapLink).toBeVisible();
+    await noHorizontalOverflow(page);
+    if (viewport.width === 390) {
+      await page.screenshot({ path: testInfo.outputPath('client-inbox-media-mobile.png') });
+    }
+
+    await selector.selectOption('session:fixture-thread-b');
+    await expect(page.getByText('Mensaje exclusivo del contexto B', { exact: true }).last()).toBeVisible();
+    await expect(photo).toHaveCount(0);
+    await expect(mapLink).toHaveCount(0);
+    await expect(page.getByText('Foto de referencia QA', { exact: true })).toHaveCount(0);
+
+    if (viewport.width < 1024) {
+      await page.getByRole('button', { name: 'Volver a conversaciones', exact: true }).click();
+    }
+    await inbox.getByRole('button', { name: 'Abrir conversaciones de Cliente QA B', exact: true }).click();
+    await expect(selector).toHaveCount(0);
+    await expect(page.getByText('Mensaje exclusivo del cliente B', { exact: true }).last()).toBeVisible();
+    await noHorizontalOverflow(page);
+  }
+  expect(errors).toEqual([]);
+  expect(externalRequests).toEqual([]);
+});

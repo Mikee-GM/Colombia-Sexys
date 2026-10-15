@@ -4,6 +4,7 @@ import { Clientes } from '../../clients/entities/client.entity';
 import { Servicios } from '../../services/entities/service.entity';
 import { GroupServiceRequest } from '../../group-services/entities/group-service-request.entity';
 import { Empleadas } from '../../employees/entities/employee.entity';
+import type { ConversationAttachment } from '../telegram-conversation-attachment';
 
 export const TELEGRAM_DELETE_STATUSES = [
   'PENDING',
@@ -106,6 +107,13 @@ export class ConversacionesTelegram {
   @Column('text', { name: 'mensaje' })
   @ApiProperty({ description: 'Mensaje', example: 'Ejemplo' })
   mensaje: string;
+
+  @Column('jsonb', { name: 'attachment', nullable: true })
+  attachment: ConversationAttachment | null;
+
+  /** Private transport identifier: never selected by history/list endpoints. */
+  @Column('text', { name: 'photo_file_id', nullable: true, select: false })
+  photoFileId: string | null;
 
   @Column('boolean', { name: 'ia_activa', default: () => 'true' })
   @ApiProperty({ description: 'Ia Activa', example: true })

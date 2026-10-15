@@ -66,6 +66,8 @@ import {
   pickDeflection,
   PROHIBITED_REPLIES,
   sanitizeAiReply,
+  shouldAdvanceBookingAfterMessage,
+  softenCommercialTone,
   stripControlMarkers,
   stripFrontDeskOffer,
   faltaCondicionDeHigiene,
@@ -78,6 +80,7 @@ import { clientMessages } from './client-messages';
 import { AiMessageService } from '../ai/ai-message.service';
 import { ConversacionesTelegram } from '../telegram-conversations/entities/telegram-conversation.entity';
 import { TelegramConversationsService } from '../telegram-conversations/telegram-conversations.service';
+import { extractConversationAttachment } from '../telegram-conversations/telegram-conversation-attachment';
 import { EmployeeReportsService } from '../employee-reports/employee-reports.service';
 import { ReportCategory } from '../employee-reports/entities/employee-report.entity';
 import {
@@ -113,11 +116,13 @@ import { TelegramOnboardingService } from './telegram-onboarding.service';
 import { EmployeeOnboardingService } from '../employee-onboarding/employee-onboarding.service';
 import {
   DEFAULT_LOOP_BREAKER_MAX_FAILURES,
+  BOOKING_INACTIVITY_TTL_MS,
   detectGlobalBookingIntent,
   isBookingStale,
   normalizeBookingText,
   nextMissingRequirement,
   registerLoopFailure,
+  shouldExpireUncontractedBooking,
   transitionBookingStatus,
   type BookingStatus,
   type GlobalBookingIntent,
@@ -220,6 +225,8 @@ interface SessionData {
   bookingFailureCount?: number;
   bookingLastStep?: string;
   bookingStaleSince?: string;
+  /** Último mensaje real del cliente dentro de este intento de reserva. */
+  bookingLastInteractionAt?: string;
   bookingConfirmationPending?: boolean;
   bookingServiceId?: string;
   bookingDraftVersion?: number;
@@ -923,7 +930,7 @@ export class TelegramBookingUpdate {
    * alla, la disponibilidad y el animo del cliente ya no son los mismos y
    * conviene arrancar limpio.
    */
-  private static readonly VENTANA_REINGRESO_MS = 6 * 60 * 60 * 1000;
+  private static readonly VENTANA_REINGRESO_MS = BOOKING_INACTIVITY_TTL_MS;
 
   /**
    * Aplazamientos seguidos de la IA antes de pasarle la conversacion al jefe.
@@ -1596,7 +1603,7 @@ export class TelegramBookingUpdate {
      * que existe y el modelo la pone sola. Se resuelve como los enlaces, los
      * telefonos y la cadencia de emojis, donde no depende de que colabore.
      */
-    const saneado = sanitizeAiReply(responseText || '');
+    const saneado = softenCommercialTone(sanitizeAiReply(responseText || ''));
     const cleaned = stripFrontDeskOffer(saneado);
     if (cleaned !== saneado) {
       this.logger.warn(
@@ -2778,8 +2785,10 @@ export class TelegramBookingUpdate {
      * cambiar de modelo, o pasado el plazo, se empieza de cero como antes.
      */
     const sesionPrevia = sesionPreviaInicial;
-    const abiertaHace = sesionPrevia?.hireStartedAt
-      ? Date.now() - new Date(sesionPrevia.hireStartedAt).getTime()
+    const ultimaInteraccion =
+      sesionPrevia?.bookingLastInteractionAt ?? sesionPrevia?.hireStartedAt;
+    const abiertaHace = ultimaInteraccion
+      ? Date.now() - new Date(ultimaInteraccion).getTime()
       : Number.POSITIVE_INFINITY;
     const statusPrevio =
       sesionPrevia?.bookingStatus ??
@@ -2798,7 +2807,7 @@ export class TelegramBookingUpdate {
     const esRancia =
       statusPrevio === 'COLLECTING' &&
       isBookingStale(
-        sesionPrevia?.hireStartedAt,
+        ultimaInteraccion,
         Date.now(),
         TelegramBookingUpdate.VENTANA_REINGRESO_MS,
       );
@@ -2816,6 +2825,7 @@ export class TelegramBookingUpdate {
       sesionPrevia.bookingStatus = 'COLLECTING';
       sesionPrevia.bookingLastIntent = 'CHANGE_EMPLOYEE';
       sesionPrevia.hireStartedAt = new Date().toISOString();
+      sesionPrevia.bookingLastInteractionAt = new Date().toISOString();
       sesionPrevia.selectedEmployeeBusy = Boolean(activeService);
       sesionPrevia.waitingForBusyChoice = Boolean(activeService);
       sesionPrevia.trioSelectedEmployeeId = undefined;
@@ -2842,22 +2852,15 @@ export class TelegramBookingUpdate {
       sesionPrevia?.bookingSessionId &&
       sesionPrevia.empleadaId === empleadaId
     ) {
-      sesionPrevia.bookingStatus = 'STALE_PENDING';
+      sesionPrevia.bookingStatus = 'ABANDONED';
       sesionPrevia.bookingStaleSince = new Date().toISOString();
-      await this.persistSession(ctx);
-      await ctx.reply(
-        `Veo que dejamos pendiente una solicitud con ${empleada.nombreArtistico}. ¿Quieres continuarla o empezar un servicio nuevo?`,
-        Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              'Continuar solicitud',
-              `resume_session:${empleada.id}`,
-            ),
-          ],
-          [Markup.button.callback('Empezar servicio nuevo', 'restart_booking')],
-        ]),
+      sesionPrevia.bookingLastIntent = 'RESTART_BOOKING';
+      await this.recordDraftConversation(
+        ctx,
+        'sistema',
+        'La solicitud se cerró tras una hora sin actividad.',
       );
-      return;
+      await this.persistSession(ctx);
     }
 
     if (
@@ -2929,6 +2932,7 @@ export class TelegramBookingUpdate {
       sesionPrevia.selectedEmployeeBusy = false;
       sesionPrevia.waitingForBusyChoice = false;
       sesionPrevia.hireStartedAt = new Date().toISOString();
+      sesionPrevia.bookingLastInteractionAt = new Date().toISOString();
 
       if (isPreServiceHumanTakeover(sesionPrevia)) {
         await this.persistSession(ctx);
@@ -2955,6 +2959,7 @@ export class TelegramBookingUpdate {
       bookingSessionId: randomUUID(),
       bookingStatus: 'COLLECTING',
       hireStartedAt: new Date().toISOString(),
+      bookingLastInteractionAt: new Date().toISOString(),
       selectedEmployeeBusy: Boolean(activeService),
       waitingForBusyChoice: Boolean(activeService),
     };
@@ -7626,6 +7631,42 @@ export class TelegramBookingUpdate {
 
   @On('text')
   async onMessage(@Ctx() ctx: BotContext, @Next() next: () => Promise<void>) {
+    const currentSession = ctx.session;
+    const lastInteractionAt =
+      currentSession?.bookingLastInteractionAt ?? currentSession?.hireStartedAt;
+    if (
+      currentSession?.bookingSessionId &&
+      currentSession.empleadaId &&
+      shouldExpireUncontractedBooking({
+        chatType: ctx.chat?.type,
+        status: currentSession.bookingStatus ?? 'COLLECTING',
+        lastInteractionAt,
+        hasCreatedService: Boolean(
+          currentSession.bookingServiceId ||
+          currentSession.servicioPendienteComprobanteId,
+        ),
+        humanTakeover: isPreServiceHumanTakeover(currentSession),
+      })
+    ) {
+      currentSession.bookingStatus = 'ABANDONED';
+      currentSession.bookingLastIntent = 'RESTART_BOOKING';
+      await this.recordDraftConversation(
+        ctx,
+        'sistema',
+        'La solicitud se cerró tras una hora sin actividad.',
+      ).catch((error) =>
+        this.logger.warn(
+          `No se pudo registrar el cierre de la solicitud inactiva: ${describeError(error)}`,
+        ),
+      );
+      await this.persistSession(ctx).catch((error) =>
+        this.logger.warn(
+          `No se pudo persistir el cierre de la solicitud inactiva: ${describeError(error)}`,
+        ),
+      );
+      ctx.session = undefined;
+    }
+
     if (
       shouldResetClosedBookingOnMessage(
         ctx.chat?.type,
@@ -7635,6 +7676,9 @@ export class TelegramBookingUpdate {
       // Un mensaje real posterior pertenece a una intención nueva. El callback
       // de estrellas no pasa por aquí, de modo que calificar no reactiva nada.
       ctx.session = {};
+    }
+    if (ctx.chat?.type === 'private' && ctx.session?.bookingSessionId) {
+      ctx.session.bookingLastInteractionAt = new Date().toISOString();
     }
     const pasoActual = (ctx.session as { step?: string } | undefined)?.step;
     if (pasoActual && TelegramBookingUpdate.PASOS_AJENOS.has(pasoActual)) {
@@ -9599,6 +9643,45 @@ export class TelegramBookingUpdate {
           }
         : this.latestReplyMessage?.get(ctx);
     if (sender !== 'cliente') this.latestReplyMessage?.delete(ctx);
+    // The generic history middleware may have captured a photo before the
+    // existing debounce records its textual description. Enrich that row;
+    // do not add a second copy of the same incoming Telegram message.
+    if (
+      sender === 'cliente' &&
+      captured?.messageId !== undefined &&
+      extractConversationAttachment(ctx.message, 'pending')
+    ) {
+      const previous = await this.conversationsRepository.findOne({
+        where: {
+          clienteId: client.id,
+          bookingSessionId,
+          telegramChatId: telegramId,
+          telegramMessageId: String(captured.messageId),
+          emisor: 'cliente',
+        },
+      });
+      if (previous?.attachment) {
+        const text = previous.mensaje.includes(message)
+          ? previous.mensaje
+          : `${previous.mensaje}\n${message}`;
+        await this.conversationsRepository.update(previous.id, {
+          mensaje: text,
+        });
+        this.realtimeEventsService.emitToBosses(
+          [intendedEmployee?.jefeId, intendedEmployee?.jefeSecundarioId],
+          {
+            type: 'chat_message_updated',
+            data: {
+              id: previous.id,
+              clienteId: client.id,
+              servicioId: previous.servicioId,
+              bookingSessionId,
+            },
+          },
+        );
+        return;
+      }
+    }
     const saved = await this.conversationsRepository.save(
       this.conversationsRepository.create({
         clienteId: client.id,
@@ -10512,8 +10595,14 @@ export class TelegramBookingUpdate {
        */
       const clienteInseguro = detectaInseguridad(userMessage);
       const clienteSeEstaYendo = detectaClienteEnFuga(userMessage);
+      const puedeAvanzarFormulario = shouldAdvanceBookingAfterMessage(
+        userMessage,
+        parserUnderstoodMessage,
+      );
       const faltaPorCerrar =
-        clienteInseguro || clienteSeEstaYendo ? null : datoQueFalta;
+        clienteInseguro || clienteSeEstaYendo || !puedeAvanzarFormulario
+          ? null
+          : datoQueFalta;
 
       const generalPrompt = getHireSystemPrompt({
         nombreArtistico: empleada.nombreArtistico,

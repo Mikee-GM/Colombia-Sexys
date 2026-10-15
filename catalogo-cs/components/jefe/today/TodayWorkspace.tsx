@@ -18,20 +18,21 @@ import {
 } from "@/hooks/useJefeRealtime";
 import ConversationInbox from "./ConversationInbox";
 import ConversationWorkspace from "./ConversationWorkspace";
-import EmployeeTabStrip from "./EmployeeTabStrip";
 import TodayHeader from "./TodayHeader";
 import {
-  buildEmployeeNavigation,
   buildJefeConversations,
-  buildOperationSections,
-  conversationsForEmployee,
   markConversationRead,
   mergeRealtimeMessage,
   shouldRefreshTodayWorkspace,
   updateConversationMode,
-  type EmployeeTabId,
   type JefeConversation,
 } from "./today-model";
+import {
+  buildClientConversationGroups,
+  conversationForClient,
+  reconcileConversationDrafts,
+  type ClientConversationGroup,
+} from "./client-inbox-model";
 
 type MobileView = "inbox" | "chat" | "service";
 
@@ -55,17 +56,6 @@ function preserveTransientState(
   }));
 }
 
-function firstConversationId(
-  conversations: JefeConversation[],
-  employeeId: EmployeeTabId,
-) {
-  const sections = buildOperationSections(
-    conversationsForEmployee(conversations, employeeId),
-    employeeId === "all" ? "radar" : "employee",
-  );
-  return sections[0]?.conversations[0]?.id ?? null;
-}
-
 export default function TodayWorkspace({
   initialSnapshot,
   workShift,
@@ -87,71 +77,122 @@ export default function TodayWorkspace({
       initialSnapshot.messagesByService,
       initialSnapshot.preServiceConversations,
     );
-    return firstConversationId(initialConversations, "all");
+    return (
+      buildClientConversationGroups(initialConversations)[0]?.latest.id ?? null
+    );
   });
-  const [selectedEmployeeId, setSelectedEmployeeId] =
-    useState<EmployeeTabId>("all");
   const [view, setView] = useState<MobileView>("inbox");
   const [search, setSearch] = useState("");
-  const [text, setText] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const previousConversations = useRef(conversations);
+  const text = selectedId ? (drafts[selectedId] ?? "") : "";
   const [sending, setSending] = useState(false);
   const [changingMode, setChangingMode] = useState(false);
   const [creatingService, setCreatingService] = useState(false);
+  const [refreshError, setRefreshError] = useState(false);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selectionByEmployee = useRef(new Map<EmployeeTabId, string>());
+  const refreshInFlight = useRef(false);
+  const refreshQueued = useRef(false);
+  const refreshRequest = useRef(0);
+  const activityRevision = useRef(0);
+  const mounted = useRef(true);
+  const selectionByClient = useRef(new Map<string, string>());
+  const selectedContext = useRef<{
+    clientId: string;
+    bookingSessionId: string | null;
+  } | null>(null);
 
   const selected =
     conversations.find((conversation) => conversation.id === selectedId) ??
     null;
-  const employeeNavigation = useMemo(
-    () => buildEmployeeNavigation(employees, conversations),
-    [employees, conversations],
+  const clientGroups = useMemo(
+    () => buildClientConversationGroups(conversations),
+    [conversations],
   );
-  const employeeConversations = useMemo(
-    () => conversationsForEmployee(conversations, selectedEmployeeId),
-    [conversations, selectedEmployeeId],
+  const visibleClientGroups = useMemo(
+    () => buildClientConversationGroups(conversations, search),
+    [conversations, search],
   );
-  const sections = useMemo(
-    () =>
-      buildOperationSections(
-        employeeConversations,
-        selectedEmployeeId === "all" ? "radar" : "employee",
-        search,
-      ),
-    [employeeConversations, search, selectedEmployeeId],
-  );
-  const selectedEmployee = employeeNavigation.find(
-    (employee) => employee.id === selectedEmployeeId,
+  const selectedClient = clientGroups.find((group) =>
+    group.conversations.some((thread) => thread.id === selectedId),
   );
 
-  useEffect(
-    () => () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    },
-    [],
-  );
+  function setText(value: string) {
+    if (!selectedId) return;
+    setDrafts((current) => ({ ...current, [selectedId]: value }));
+  }
 
   useEffect(() => {
-    if (
-      selectedId &&
-      employeeConversations.some(
-        (conversation) => conversation.id === selectedId,
-      )
-    ) {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      refreshRequest.current += 1;
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      refreshTimer.current = null;
+      refreshQueued.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const previous = previousConversations.current;
+    previousConversations.current = conversations;
+    setDrafts((current) =>
+      reconcileConversationDrafts(current, previous, conversations),
+    );
+  }, [conversations]);
+
+  useEffect(() => {
+    if (selected && selectedClient) {
+      selectedContext.current = {
+        clientId: selected.clientId,
+        bookingSessionId: selected.bookingSessionId,
+      };
+      selectionByClient.current.set(selectedClient.id, selected.id);
       return;
     }
-    const remembered = selectionByEmployee.current.get(selectedEmployeeId);
-    const next = employeeConversations.find(
-      (conversation) => conversation.id === remembered,
+    const previous = selectedContext.current;
+    const matches = previous?.bookingSessionId
+      ? conversations.filter(
+          (thread) =>
+            thread.clientId === previous.clientId &&
+            thread.bookingSessionId === previous.bookingSessionId,
+        )
+      : [];
+    const linked = matches.length === 1 ? matches[0] : null;
+    const previousClient = clientGroups.find((group) =>
+      group.conversations.some(
+        (thread) => thread.clientId === previous?.clientId,
+      ),
     );
     setSelectedId(
-      next?.id ?? firstConversationId(conversations, selectedEmployeeId),
+      linked?.id ??
+        previousClient?.latest.id ??
+        clientGroups[0]?.latest.id ??
+        null,
     );
-  }, [conversations, employeeConversations, selectedEmployeeId, selectedId]);
+  }, [clientGroups, conversations, selected, selectedClient]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async function refreshSnapshot() {
+    if (!mounted.current) return;
+    if (refreshInFlight.current) {
+      refreshQueued.current = true;
+      return;
+    }
+    if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    refreshTimer.current = null;
+    refreshInFlight.current = true;
+    refreshQueued.current = false;
+    const request = ++refreshRequest.current;
+    const revision = activityRevision.current;
     try {
       const snapshot = await getJefeTodaySnapshot();
+      if (!mounted.current || request !== refreshRequest.current) return;
+      // No reemplazar eventos recientes con una lectura iniciada antes de
+      // recibirlos. Releer respeta también eliminaciones y permisos actuales.
+      if (revision !== activityRevision.current) {
+        refreshQueued.current = true;
+        return;
+      }
       setEmployees(snapshot.employees);
       setConversations((current) =>
         preserveTransientState(
@@ -163,12 +204,27 @@ export default function TodayWorkspace({
           current,
         ),
       );
+      setRefreshError(false);
     } catch {
-      // Los eventos siguientes volveran a intentar la reconciliacion.
+      if (mounted.current && request === refreshRequest.current) {
+        setRefreshError(true);
+      }
+    } finally {
+      refreshInFlight.current = false;
+      if (mounted.current && refreshQueued.current) {
+        // Una sola reconciliación diferida: las ráfagas SSE no deben crear
+        // consultas paralelas ni un bucle inmediato de lecturas completas.
+        if (refreshTimer.current) clearTimeout(refreshTimer.current);
+        refreshTimer.current = setTimeout(() => {
+          refreshTimer.current = null;
+          void refreshSnapshot();
+        }, 500);
+      }
     }
   }, []);
 
   const scheduleRefresh = useCallback(() => {
+    activityRevision.current += 1;
     if (refreshTimer.current) return;
     refreshTimer.current = setTimeout(() => {
       refreshTimer.current = null;
@@ -180,6 +236,7 @@ export default function TodayWorkspace({
     (event: JefeRealtimeEvent) => {
       if (event.type === "chat_message" && event.data) {
         const message = event.data as ConversationMessage;
+        activityRevision.current += 1;
         setConversations((current) => {
           const belongs = current.some(
             (conversation) =>
@@ -194,6 +251,7 @@ export default function TodayWorkspace({
       }
 
       if (event.type === "conversation_mode_changed" && event.data) {
+        activityRevision.current += 1;
         const data = event.data as {
           bookingSessionId?: string;
           clientId?: string;
@@ -218,37 +276,24 @@ export default function TodayWorkspace({
   useJefeRealtime({ onEvent: handleRealtime, onConnected: scheduleRefresh });
 
   function selectConversation(conversationId: string) {
-    setSelectedId(conversationId);
-    selectionByEmployee.current.set(selectedEmployeeId, conversationId);
     const conversation = conversations.find(
       (item) => item.id === conversationId,
     );
-    if (conversation?.employeeId) {
-      selectionByEmployee.current.set(conversation.employeeId, conversationId);
-    }
+    if (!conversation) return;
+    setSelectedId(conversationId);
     setConversations((current) =>
       markConversationRead(current, conversationId),
     );
-    setText("");
     setView("chat");
   }
 
-  function selectEmployee(employeeId: EmployeeTabId) {
-    if (employeeId === selectedEmployeeId) return;
-    if (selectedId) {
-      selectionByEmployee.current.set(selectedEmployeeId, selectedId);
-    }
-    const scoped = conversationsForEmployee(conversations, employeeId);
-    const remembered = selectionByEmployee.current.get(employeeId);
-    const next = scoped.find(
-      (conversation) =>
-        conversation.id === remembered || conversation.id === selectedId,
-    );
-    setSelectedEmployeeId(employeeId);
-    setSelectedId(next?.id ?? firstConversationId(conversations, employeeId));
-    setSearch("");
-    setText("");
-    setView("inbox");
+  function selectClient(group: ClientConversationGroup) {
+    const remembered = group.conversations.some(
+      (thread) => thread.id === selectedId,
+    )
+      ? selectedId
+      : selectionByClient.current.get(group.id);
+    selectConversation(conversationForClient(group, remembered));
   }
 
   async function toggleMode() {
@@ -263,6 +308,7 @@ export default function TodayWorkspace({
         iaActiva,
       });
       if (!result.success) return toast.error(result.error);
+      activityRevision.current += 1;
       setConversations((current) =>
         updateConversationMode(
           current,
@@ -295,7 +341,12 @@ export default function TodayWorkspace({
         message: value,
       });
       if (!result.success) return toast.error(result.error);
-      setText("");
+      activityRevision.current += 1;
+      setDrafts((current) =>
+        current[selected.id] === text
+          ? { ...current, [selected.id]: "" }
+          : current,
+      );
       setConversations((current) =>
         mergeRealtimeMessage(current, result.data, selected.id),
       );
@@ -311,28 +362,35 @@ export default function TodayWorkspace({
         onCreateService={() => setCreatingService(true)}
       />
       <div className="relative flex h-[calc(100dvh-11.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-800 bg-black lg:h-[calc(100dvh-5rem)] lg:min-h-[620px]">
-        <EmployeeTabStrip
-          items={employeeNavigation}
-          selectedId={selectedEmployeeId}
-          onSelect={selectEmployee}
-        />
+        {refreshError && (
+          <div
+            role="alert"
+            className="m-3 mb-0 flex shrink-0 flex-wrap items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-100"
+          >
+            <p className="min-w-0 flex-1">
+              No se pudo actualizar el historial. Los datos visibles pueden
+              estar desactualizados.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="min-h-11 rounded-lg border border-amber-500/40 px-4 font-semibold focus-visible:outline-2 focus-visible:outline-amber-300"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
         <div className="relative min-h-0 flex-1 xl:grid xl:grid-cols-[minmax(260px,0.78fr)_minmax(420px,1.55fr)_minmax(285px,0.9fr)]">
           <div
             className={`${view === "inbox" ? "block" : "hidden"} h-full min-h-0 lg:block lg:w-[310px] xl:w-auto`}
           >
             <ConversationInbox
-              sections={sections}
-              radar={selectedEmployeeId === "all" && !search.trim()}
-              title={
-                selectedEmployeeId === "all"
-                  ? "Radar operacional"
-                  : (selectedEmployee?.name ?? "Conversaciones")
-              }
-              total={employeeConversations.length}
+              groups={visibleClientGroups}
+              total={clientGroups.length}
               search={search}
               selectedId={selectedId}
               onSearch={setSearch}
-              onSelect={selectConversation}
+              onSelect={selectClient}
             />
           </div>
 
@@ -341,6 +399,7 @@ export default function TodayWorkspace({
           >
             <ConversationWorkspace
               conversation={selected}
+              clientConversations={selectedClient?.conversations ?? []}
               text={text}
               sending={sending}
               changingMode={changingMode}
@@ -349,6 +408,7 @@ export default function TodayWorkspace({
               onToggleMode={toggleMode}
               onBack={() => setView("inbox")}
               onOpenService={() => setView("service")}
+              onSelectConversation={selectConversation}
             />
           </div>
 

@@ -84,16 +84,18 @@ describe('TelegramBookingUpdate.startHireSession al reentrar', () => {
     );
   });
 
-  it('pide resolver una contratación previa cuando ya está rancia', async () => {
-    ctx.session = sesionNegociada(9 * 60 * 60 * 1000);
+  it('abre una contratación limpia tras una hora de inactividad', async () => {
+    ctx.session = sesionNegociada(61 * 60 * 1000);
 
     await update.startHireSession(ctx, EMPLEADA_ID);
 
-    expect(ctx.session.bookingSessionId).toBe('draft-1');
-    expect(ctx.session.bookingStatus).toBe('STALE_PENDING');
-    expect(ctx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('continuarla o empezar'),
+    expect(ctx.session.bookingSessionId).not.toBe('draft-1');
+    expect(ctx.session.bookingStatus).toBe('COLLECTING');
+    expect(ctx.session.duracionPactadaHoras).toBeUndefined();
+    expect(update.recordDraftConversation).toHaveBeenCalledWith(
       expect.anything(),
+      'sistema',
+      expect.stringContaining('una hora sin actividad'),
     );
   });
 

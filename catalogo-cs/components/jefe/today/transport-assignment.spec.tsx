@@ -189,6 +189,11 @@ describe("asignación de transporte desde Hoy", () => {
       expect(button.className).toContain("min-h-16");
       expect(button.className).toContain("touch-manipulation");
     }
+    const sheet = screen.getByRole("button", { name: "Chofer interno" }).closest("section");
+    expect(sheet?.parentElement?.classList.contains("items-center")).toBe(true);
+    expect(sheet?.parentElement?.classList.contains("items-end")).toBe(false);
+    expect(sheet?.parentElement?.className).not.toContain("pb-[calc(4.5rem");
+    expect(sheet?.classList.contains("overflow-y-auto")).toBe(true);
   });
 
   it("elige chofer y llama assignInternalTransport con el servicio", async () => {
@@ -215,6 +220,12 @@ describe("asignación de transporte desde Hoy", () => {
     expect(screen.getByText("Asignar transporte externo")).toBeDefined();
     expect(screen.getByText("Link compartido del viaje")).toBeDefined();
     expect(screen.getByText("Costo")).toBeDefined();
+    const sheet = screen.getByRole("dialog", { name: "Asignar transporte externo" });
+    expect(sheet.parentElement?.classList.contains("items-center")).toBe(true);
+    expect(sheet.parentElement?.classList.contains("items-end")).toBe(false);
+    expect(sheet.classList.contains("max-w-md")).toBe(true);
+    expect(sheet.classList.contains("overflow-y-auto")).toBe(true);
+    expect(sheet.className).toContain("max-h-[calc(100dvh-");
   });
 
   it("muestra Viaje de ida al crear un externo sin viaje previo", () => {

@@ -11,6 +11,8 @@ import { CustomerBookingSession } from './entities/customer-booking-session.enti
 import { Empleadas } from '../employees/entities/employee.entity';
 import { ServicesModule } from '../services/services.module';
 import { TelegramMessageDeletionScheduler } from './telegram-message-deletion.scheduler';
+import { TelegramConversationPhotoController } from './telegram-conversation-photo.controller';
+import { TelegramConversationPhotoService } from './telegram-conversation-photo.service';
 
 @Module({
   imports: [
@@ -25,8 +27,15 @@ import { TelegramMessageDeletionScheduler } from './telegram-message-deletion.sc
     forwardRef(() => TelegramModule),
     forwardRef(() => ServicesModule),
   ],
-  controllers: [TelegramConversationsController],
-  providers: [TelegramConversationsService, TelegramMessageDeletionScheduler],
+  controllers: [
+    TelegramConversationsController,
+    TelegramConversationPhotoController,
+  ],
+  providers: [
+    TelegramConversationsService,
+    TelegramMessageDeletionScheduler,
+    TelegramConversationPhotoService,
+  ],
   exports: [TelegramConversationsService],
 })
 export class TelegramConversationsModule {}

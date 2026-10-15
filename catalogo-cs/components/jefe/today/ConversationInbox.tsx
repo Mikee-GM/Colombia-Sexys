@@ -1,29 +1,27 @@
 import { Search } from "lucide-react";
-import AllOperationsRadar from "./AllOperationsRadar";
-import EmployeeOperationSections from "./EmployeeOperationSections";
-import type { OperationSection } from "./today-model";
+import ClientConversationRow from "./ClientConversationRow";
+import type { ClientConversationGroup } from "./client-inbox-model";
 
 export default function ConversationInbox({
-  sections,
-  radar,
-  title,
+  groups,
   total,
   search,
   selectedId,
   onSearch,
   onSelect,
 }: {
-  sections: OperationSection[];
-  radar: boolean;
-  title: string;
+  groups: ClientConversationGroup[];
   total: number;
   search: string;
   selectedId: string | null;
   onSearch: (value: string) => void;
-  onSelect: (conversationId: string) => void;
+  onSelect: (group: ClientConversationGroup) => void;
 }) {
   return (
-    <aside className="flex h-full min-h-0 min-w-0 flex-col bg-black" aria-label="Conversaciones">
+    <aside
+      className="flex h-full min-h-0 min-w-0 flex-col bg-black"
+      aria-label="Conversaciones"
+    >
       <header className="border-b border-zinc-800 px-3 py-3">
         <div className="flex items-baseline justify-between gap-3">
           <div>
@@ -31,7 +29,7 @@ export default function ConversationInbox({
               Bandeja
             </p>
             <h1 className="font-heading text-2xl font-semibold text-white">
-              {title}
+              Clientes
             </h1>
           </div>
           <span className="text-xs tabular-nums text-zinc-500">{total}</span>
@@ -42,30 +40,27 @@ export default function ConversationInbox({
           <input
             value={search}
             onChange={(event) => onSearch(event.target.value)}
-            placeholder="Cliente, empleada o mensaje"
-            className="min-w-0 flex-1 bg-transparent text-xs text-zinc-200 outline-none placeholder:text-zinc-600"
+            placeholder="Cliente, modelo o mensaje"
+            className="min-w-0 flex-1 bg-transparent text-base text-zinc-200 outline-none placeholder:text-zinc-600 sm:text-xs"
           />
         </label>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {sections.length > 0 ? (
-          radar ? (
-            <AllOperationsRadar
-              sections={sections}
-              selectedId={selectedId}
-              onSelect={onSelect}
+        {groups.length > 0 ? (
+          groups.map((group) => (
+            <ClientConversationRow
+              key={group.id}
+              group={group}
+              selected={group.conversations.some(
+                (thread) => thread.id === selectedId,
+              )}
+              onSelect={() => onSelect(group)}
             />
-          ) : (
-            <EmployeeOperationSections
-              sections={sections}
-              selectedId={selectedId}
-              onSelect={onSelect}
-            />
-          )
+          ))
         ) : (
           <div className="px-6 py-16 text-center">
             <p className="text-sm font-medium text-zinc-300">
-              No hay operaciones en esta vista
+              No hay conversaciones en esta vista
             </p>
             <p className="mt-2 text-xs leading-relaxed text-zinc-600">
               Solo aparecen conversaciones y servicios autorizados para tu

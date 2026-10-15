@@ -24,10 +24,7 @@ import { ServicesModule } from '../services/services.module';
 import { DriversModule } from '../drivers/drivers.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { TelegramSession } from './entities/telegram-session.entity';
-import {
-  buildSessionKey,
-  type SessionKeyContext,
-} from './telegram-session.key';
+import { buildSessionKey } from './telegram-session.key';
 import { AiModule } from '../ai/ai.module';
 import { Viajes } from '../trips/entities/trip.entity';
 
@@ -58,6 +55,10 @@ import { TeamChannelModule } from '../team-channel/team-channel.module';
 import { isDummyTelegramToken } from './telegram-transport';
 import { TelegramConversationsModule } from '../telegram-conversations/telegram-conversations.module';
 import { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
+import {
+  TelegramMediaCaptureModule,
+  TelegramMediaCaptureService,
+} from '../telegram-conversations/telegram-media-capture.service';
 
 @Module({
   imports: [
@@ -99,10 +100,15 @@ import { CustomerBookingSession } from '../telegram-conversations/entities/custo
     forwardRef(() => TeamChannelModule),
     forwardRef(() => TelegramConversationsModule),
     TelegrafModule.forRootAsync({
-      imports: [ConfigModule, TypeOrmModule.forFeature([TelegramSession])],
+      imports: [
+        ConfigModule,
+        TypeOrmModule.forFeature([TelegramSession]),
+        TelegramMediaCaptureModule,
+      ],
       useFactory: (
         configService: ConfigService,
         sessionRepository: Repository<TelegramSession>,
+        mediaCapture: TelegramMediaCaptureService,
       ) => {
         const token = configService.get<string>('TELEGRAM_BOT_TOKEN');
         if (!token) {
@@ -133,10 +139,15 @@ import { CustomerBookingSession } from '../telegram-conversations/entities/custo
               getSessionKey as (ctx: unknown) => string | undefined,
             ),
             session({ getSessionKey, store }),
+            mediaCapture.middleware(),
           ],
         };
       },
-      inject: [ConfigService, getRepositoryToken(TelegramSession)],
+      inject: [
+        ConfigService,
+        getRepositoryToken(TelegramSession),
+        TelegramMediaCaptureService,
+      ],
     }),
   ],
   providers: [

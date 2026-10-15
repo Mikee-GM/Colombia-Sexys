@@ -2,6 +2,7 @@
 
 import { apiFetch } from "@/lib/api-server";
 import { getCurrentUser, isRedirectError } from "@/lib/auth";
+import { getServices } from "@/lib/data/services";
 import type {
   CashObligationSummary,
   ConversationMessage,
@@ -85,7 +86,7 @@ export async function getJefeTodaySnapshot(): Promise<JefeTodaySnapshot> {
   const jefe = await requireJefe();
   const [allEmployees, services, preServiceConversations] = await Promise.all([
     apiFetch<Employee[]>("/employees"),
-    apiFetch<Service[]>("/services"),
+    getServices(),
     apiFetch<PreServiceConversation[]>(
       "/telegram-conversations/pre-service?limit=100",
     ),

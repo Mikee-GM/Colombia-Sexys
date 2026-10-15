@@ -194,8 +194,11 @@ describe('AI Prompts Generation (prompts.ts)', () => {
         faltaPorCerrar: 'horas',
       });
 
-      expect(prompt).toContain('TODAVÍA NO SABES CUÁNTAS HORAS');
-      expect(prompt).toContain('NO aplica la regla de no repetir preguntas');
+      expect(prompt).toContain('todavía falta la duración');
+      expect(prompt).toContain('no insistas');
+      expect(prompt).not.toContain(
+        'Aquí NO aplica la regla de no repetir preguntas',
+      );
     });
 
     it('habilita preguntar el pago cuando solo falta eso', () => {
@@ -206,7 +209,7 @@ describe('AI Prompts Generation (prompts.ts)', () => {
         faltaPorCerrar: 'pago',
       });
 
-      expect(prompt).toContain('TODAVÍA NO SABES CÓMO VA A PAGAR');
+      expect(prompt).toContain('todavía falta el pago');
     });
   });
 

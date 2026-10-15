@@ -1,5 +1,11 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { TelegramConversationsService } from './telegram-conversations.service';
+import type { Usuarios } from '../users/entities/user.entity';
+import type { ConversacionesTelegram } from './entities/telegram-conversation.entity';
 
 describe('TelegramConversationsService', () => {
   const queryBuilder = {
@@ -12,8 +18,12 @@ describe('TelegramConversationsService', () => {
     groupBy: jest.fn().mockReturnThis(),
     addGroupBy: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
     limit: jest.fn().mockReturnThis(),
     getRawMany: jest.fn(),
+    getRawOne: jest.fn(),
+    getMany: jest.fn(),
   };
   const sessionQueryBuilder = {
     where: jest.fn().mockReturnThis(),
@@ -65,6 +75,8 @@ describe('TelegramConversationsService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     queryBuilder.getRawMany.mockResolvedValue([]);
+    queryBuilder.getRawOne.mockResolvedValue(undefined);
+    queryBuilder.getMany.mockResolvedValue([]);
     sessionQueryBuilder.getMany.mockResolvedValue([]);
     conversations.find.mockResolvedValue([]);
     conversations.findOne.mockResolvedValue(null);
@@ -427,6 +439,195 @@ describe('TelegramConversationsService', () => {
         50,
       ),
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(conversations.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  describe('paginación del historial de lectura', () => {
+    const actor = { id: 'boss-1', rol: 'jefe' } as Usuarios;
+    const timestamp = '2026-10-14T12:00:00.000Z';
+    const historyMessage = (index: number): ConversacionesTelegram =>
+      ({
+        id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        servicioId: 'service-1',
+        enviadoAt: new Date(timestamp),
+      }) as ConversacionesTelegram;
+    const cursorFor = (id: string, date = timestamp): string =>
+      `v1.${Buffer.from(JSON.stringify({ timestamp: date, id })).toString('base64url')}`;
+
+    beforeEach(() => {
+      services.findOne.mockResolvedValue({
+        id: 'service-1',
+        jefeId: actor.id,
+        empleada: { jefeId: actor.id },
+      });
+    });
+
+    it('ordena por fecha e id y emite un cursor compuesto en el borde', async () => {
+      const rows = [3, 2, 1].map(historyMessage);
+      queryBuilder.getMany.mockResolvedValue(rows);
+
+      const result = await subject.findByService(
+        'service-1',
+        actor,
+        undefined,
+        2,
+      );
+
+      expect(result.messages.map((message) => message.id)).toEqual([
+        historyMessage(2).id,
+        historyMessage(3).id,
+      ]);
+      expect(result.nextCursor).toBe(cursorFor(historyMessage(2).id));
+      expect(queryBuilder.orderBy).toHaveBeenCalledWith(
+        'conversation.enviadoAt',
+        'DESC',
+      );
+      expect(queryBuilder.addOrderBy).toHaveBeenCalledWith(
+        'conversation.id',
+        'DESC',
+      );
+      expect(queryBuilder.take).toHaveBeenCalledWith(3);
+    });
+
+    it('recorre varias páginas con empates sin repetir ni saltar ids', async () => {
+      queryBuilder.getMany
+        .mockResolvedValueOnce([6, 5, 4].map(historyMessage))
+        .mockResolvedValueOnce([4, 3, 2].map(historyMessage))
+        .mockResolvedValueOnce([2, 1].map(historyMessage));
+      queryBuilder.getRawOne.mockResolvedValue({ timestamp });
+      const collected: ConversacionesTelegram[] = [];
+      let cursor: string | null = null;
+      do {
+        const page = await subject.findByService(
+          'service-1',
+          actor,
+          cursor ?? undefined,
+          2,
+        );
+        collected.unshift(...page.messages);
+        cursor = page.nextCursor;
+      } while (cursor);
+
+      expect(collected.map((message) => message.id)).toEqual(
+        [1, 2, 3, 4, 5, 6].map((index) => historyMessage(index).id),
+      );
+      for (const index of [5, 3]) {
+        expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+          '(conversation.enviadoAt < :cursorTimestamp OR (conversation.enviadoAt = :cursorTimestamp AND conversation.id < :cursorId))',
+          { cursorTimestamp: timestamp, cursorId: historyMessage(index).id },
+        );
+      }
+      expect(queryBuilder.getMany).toHaveBeenCalledTimes(3);
+    });
+
+    it('usa los microsegundos persistidos y no la fecha truncada de JavaScript', async () => {
+      const exactTimestamp = '2026-10-14 12:00:00.000456+00';
+      const anchorId = historyMessage(2).id;
+      queryBuilder.getRawOne.mockResolvedValue({ timestamp: exactTimestamp });
+
+      await subject.findByService('service-1', actor, cursorFor(anchorId), 2);
+
+      expect(queryBuilder.select).toHaveBeenCalledWith(
+        'CAST(cursorMessage.enviadoAt AS text)',
+        'timestamp',
+      );
+      expect(queryBuilder.where).toHaveBeenCalledWith(
+        'cursorMessage.id = :cursorId',
+        { cursorId: anchorId },
+      );
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        'cursorMessage.servicioId = :serviceId',
+        { serviceId: 'service-1' },
+      );
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        '(conversation.enviadoAt < :cursorTimestamp OR (conversation.enviadoAt = :cursorTimestamp AND conversation.id < :cursorId))',
+        { cursorTimestamp: exactTimestamp, cursorId: anchorId },
+      );
+    });
+
+    it('acepta el cursor ISO anterior y responde con el cursor nuevo', async () => {
+      queryBuilder.getMany.mockResolvedValue([2, 1].map(historyMessage));
+
+      const result = await subject.findByService(
+        'service-1',
+        actor,
+        timestamp,
+        1,
+      );
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+        'conversation.enviadoAt < :cursorTimestamp',
+        { cursorTimestamp: timestamp },
+      );
+      expect(queryBuilder.getRawOne).not.toHaveBeenCalled();
+      expect(result.nextCursor).toBe(cursorFor(historyMessage(2).id));
+    });
+
+    it('devuelve cursor nulo al terminar y conserva el límite máximo de 100', async () => {
+      await expect(
+        subject.findByService('service-1', actor, undefined, 500),
+      ).resolves.toEqual({ messages: [], nextCursor: null });
+      expect(queryBuilder.take).toHaveBeenCalledWith(101);
+    });
+
+    it.each([
+      'no-es-fecha',
+      '2026-02-30T12:00:00.000Z',
+      'v2.e30',
+      'v1.e30',
+      'v1.bm90LWpzb24',
+      cursorFor("' OR true --"),
+      cursorFor(historyMessage(1).id, 'ayer'),
+    ])(
+      'rechaza el cursor inválido %s antes de consultar mensajes',
+      async (cursor) => {
+        await expect(
+          subject.findByService('service-1', actor, cursor),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(conversations.createQueryBuilder).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+      'rechaza el límite inválido %s',
+      async (limit) => {
+        await expect(
+          subject.findByService('service-1', actor, undefined, limit),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(conversations.createQueryBuilder).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([undefined, { timestamp: '2026-10-14T11:59:59.000Z' }])(
+      'rechaza ancla ausente, de otro servicio o con fecha distinta',
+      async (anchor) => {
+        queryBuilder.getRawOne.mockResolvedValue(anchor);
+
+        await expect(
+          subject.findByService(
+            'service-1',
+            actor,
+            cursorFor(historyMessage(1).id),
+          ),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+          'cursorMessage.servicioId = :serviceId',
+          { serviceId: 'service-1' },
+        );
+        expect(queryBuilder.getMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('comprueba autorización antes de interpretar el cursor', async () => {
+      await expect(
+        subject.findByService(
+          'service-1',
+          { id: 'boss-other', rol: 'jefe' } as Usuarios,
+          'cursor-invalido',
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(conversations.createQueryBuilder).not.toHaveBeenCalled();
+    });
   });
 
   /*

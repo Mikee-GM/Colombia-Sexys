@@ -56,6 +56,7 @@ export interface LoopBreakerState {
 }
 
 export const DEFAULT_LOOP_BREAKER_MAX_FAILURES = 3;
+export const BOOKING_INACTIVITY_TTL_MS = 60 * 60 * 1000;
 
 export const TERMINAL_BOOKING_STATUSES: readonly BookingStatus[] = [
   'SERVICE_CREATED',
@@ -245,11 +246,28 @@ export function transitionBookingStatus(
 export function isBookingStale(
   lastInteractionAt: Date | string | undefined,
   now = Date.now(),
-  ttlMs = 6 * 60 * 60 * 1000,
+  ttlMs = BOOKING_INACTIVITY_TTL_MS,
 ): boolean {
   if (!lastInteractionAt) return false;
   const timestamp = new Date(lastInteractionAt).getTime();
   return Number.isFinite(timestamp) && now - timestamp >= ttlMs;
+}
+
+export function shouldExpireUncontractedBooking(params: {
+  chatType?: string;
+  status?: BookingStatus;
+  lastInteractionAt?: Date | string;
+  hasCreatedService?: boolean;
+  humanTakeover?: boolean;
+  now?: number;
+}): boolean {
+  return Boolean(
+    params.chatType === 'private' &&
+    canConsumeBookingMessage(params.status) &&
+    !params.hasCreatedService &&
+    !params.humanTakeover &&
+    isBookingStale(params.lastInteractionAt, params.now),
+  );
 }
 
 export function registerLoopFailure(
