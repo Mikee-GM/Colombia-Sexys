@@ -992,6 +992,11 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
   ) {
     await this.dataSource.transaction(async (manager) => {
       const service = await this.lockGroupService(manager, serviceId, actor);
+      if (service.metodoPago === 'transferencia' && !dto.receiptValidationId) {
+        throw new ConflictException(
+          'La transferencia requiere un CEP confirmado',
+        );
+      }
       let receipt: PaymentReceiptValidations | null = null;
       if (dto.receiptValidationId) {
         receipt = await manager.findOneBy(PaymentReceiptValidations, {
@@ -1001,12 +1006,26 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           throw new NotFoundException(
             'Validación de comprobante no encontrada',
           );
-        if (!receipt.esComprobante || receipt.estado !== 'APROBADO') {
-          throw new ConflictException('El comprobante no está aprobado');
+        if (receipt.servicioId !== serviceId)
+          throw new ConflictException('El CEP pertenece a otro servicio');
+        if (receipt.estado === 'PAGO_REGISTRADO')
+          throw new ConflictException(
+            'Este comprobante ya se aplicó al servicio',
+          );
+        if (
+          !receipt.pagoConfirmadoAt ||
+          receipt.pagoConfirmacionFuente !== 'cep'
+        ) {
+          throw new ConflictException('El pago requiere confirmación con CEP');
         }
+        if (Math.abs(Number(receipt.monto) - Number(dto.amount)) > 0.009)
+          throw new ConflictException(
+            'El monto del pago no coincide con el CEP confirmado',
+          );
       }
-      const fingerprint =
-        dto.fingerprint?.trim() || this.receiptFingerprint(receipt) || null;
+      const fingerprint = receipt
+        ? this.receiptFingerprint(receipt)
+        : dto.fingerprint?.trim() || null;
       try {
         await manager.save(
           ServicePayment,
@@ -1027,6 +1046,10 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           );
         }
         throw error;
+      }
+      if (receipt) {
+        receipt.estado = 'PAGO_REGISTRADO';
+        await manager.save(PaymentReceiptValidations, receipt);
       }
       await manager.query(
         `UPDATE servicios SET total_paid = total_paid WHERE id = $1`,
@@ -1065,7 +1088,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     reason?: string,
   ) {
     let serviceId = '';
-    let amount = 0;
     await this.dataSource.transaction(async (manager) => {
       const validation = await manager.findOneBy(PaymentReceiptValidations, {
         id: validationId,
@@ -1078,7 +1100,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           'Este comprobante no está asociado a un servicio grupal',
         );
       serviceId = validation.servicioId;
-      amount = Number(validation.monto ?? 0);
       await this.lockGroupService(manager, serviceId, actor);
       validation.revisadoPorUserId = actor.id;
       validation.revisadoAt = new Date();
@@ -1101,16 +1122,8 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       );
     });
 
-    if (decision === 'aprobado') {
-      return this.registerPayment(
-        serviceId,
-        { amount, receiptValidationId: validationId },
-        actor,
-      );
-    }
-
     const result = await this.findService(serviceId, actor);
-    if (result.cliente?.telegramChatId) {
+    if (decision === 'rechazado' && result.cliente?.telegramChatId) {
       await this.bot.telegram
         .sendMessage(
           result.cliente.telegramChatId,

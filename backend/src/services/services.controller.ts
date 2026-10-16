@@ -53,6 +53,7 @@ import {
   ApiUpdateDocs,
 } from '../common/swagger/api-docs.decorators';
 import { SaveBankAccountDto } from './dto/bank-account.dto';
+import { ConfirmReceiptCepDto } from './dto/confirm-receipt-cep.dto';
 import { ExtendServiceDto } from '../employees/dto/extend-service.dto';
 import { AddPortalServiceExtraDto } from '../employees/dto/portal-service-extra.dto';
 import { AdminServiceLifecycleService } from './admin-service-lifecycle.service';
@@ -93,6 +94,11 @@ export class ServicesController {
   @Roles('admin')
   bankAccounts() {
     return this.servicesService.findBankAccounts();
+  }
+
+  @Get('receipt-bank-accounts')
+  receiptBankAccounts() {
+    return this.servicesService.findActiveReceiptBankAccounts();
   }
 
   @Post('bank-accounts')
@@ -155,6 +161,19 @@ export class ServicesController {
       from,
       to,
     });
+  }
+
+  @Patch('receipts/:validationId/confirm-cep')
+  confirmReceiptWithCep(
+    @Param('validationId', ParseUUIDPipe) validationId: string,
+    @Body() dto: ConfirmReceiptCepDto,
+    @Req() req: any,
+  ) {
+    return this.servicesService.confirmReceiptWithCep(
+      validationId,
+      dto,
+      req.user,
+    );
   }
 
   @Get(':id')

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { getEvidence, reviewGroupReceipt } from "@/lib/actions/evidence";
 import { formatCurrency } from "@/lib/calculations";
 import type { EvidenceItem, EvidencePage } from "@/lib/types";
+import ReceiptVerification from "@/components/services/receipt-verification";
 
 const inputClass =
   "rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none focus:border-[#C5A55A]";
@@ -62,7 +63,8 @@ export default function EvidenceClient({ initialPage }: { initialPage: EvidenceP
             <option value="">Todos</option>
             <option value="ALMACENADA">Almacenada</option>
             <option value="PROCESANDO">Procesando</option>
-            <option value="APROBADO">Aprobado</option>
+            <option value="APROBADO">Foto analizada</option>
+            <option value="PAGO_REGISTRADO">Pago registrado</option>
             <option value="PENDIENTE_REVISION">Pendiente de revisión</option>
             <option value="RECHAZADO">Rechazado</option>
             <option value="ERROR_VALIDACION">Error de validación</option>
@@ -106,12 +108,12 @@ function EvidenceCard({
 }) {
   const Icon = item.kind === "uber" ? ImageIcon : FileCheck2;
   const canReview =
-    item.kind === "transferencia" && item.status === "PENDIENTE_REVISION" && Boolean(item.serviceId);
+    item.kind === "transferencia" && item.serviceType === "grupal" && item.status === "PENDIENTE_REVISION" && Boolean(item.serviceId);
 
   async function review(decision: "aprobado" | "rechazado") {
     try {
       await reviewGroupReceipt(item.id, decision);
-      toast.success(decision === "aprobado" ? "Comprobante aprobado" : "Comprobante rechazado");
+      toast.success(decision === "aprobado" ? "Foto revisada; falta confirmar el pago" : "Comprobante rechazado");
       onReviewed();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo revisar el comprobante");
@@ -136,6 +138,27 @@ function EvidenceCard({
         {item.amount != null && <p>Monto: {formatCurrency(item.amount)}</p>}
         {item.observations && <p className="line-clamp-2 text-zinc-400">{item.observations}</p>}
       </div>
+      {item.kind === "transferencia" && (
+        <div className="mt-4">
+          <ReceiptVerification
+            receipt={{
+              id: item.id,
+              serviceId: item.serviceId,
+              serviceType: item.serviceType,
+              status: item.status,
+              amount: item.amount,
+              expectedAmount: item.expectedAmount,
+              originBank: item.originBank,
+              destinationBank: item.destinationBank,
+              destinationAccount: item.destinationAccount,
+              trackingKey: item.trackingKey,
+              transferDate: item.transferDate,
+              paymentConfirmedAt: item.paymentConfirmedAt,
+            }}
+            onConfirmed={onReviewed}
+          />
+        </div>
+      )}
       <div className="mt-5 flex flex-wrap gap-3">
         <a href={item.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-[#C5A55A]">
           Abrir imagen <ExternalLink size={14} />

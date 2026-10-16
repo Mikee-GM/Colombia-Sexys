@@ -314,13 +314,13 @@ describe('TelegramBookingUpdate.registrarComprobanteEnServicio', () => {
     update.logger = { warn: jest.fn(), error: jest.fn() };
   });
 
-  it('levanta la marca de pago pendiente y enlaza la validacion', async () => {
+  it('enlaza la foto sin marcar como recibido el dinero', async () => {
     await expect(
       update.registrarComprobanteEnServicio('srv-1', 'val-1'),
     ).resolves.toBe(true);
 
-    expect(servicio.comprobantePendiente).toBe(false);
-    expect(update.serviciosRepository.save).toHaveBeenCalledWith(servicio);
+    expect(servicio.comprobantePendiente).toBe(true);
+    expect(update.serviciosRepository.save).not.toHaveBeenCalled();
     expect(
       update.paymentReceiptValidationsRepository.update,
     ).toHaveBeenCalledWith('val-1', { servicioId: 'srv-1' });
@@ -331,7 +331,7 @@ describe('TelegramBookingUpdate.registrarComprobanteEnServicio', () => {
 
     expect(update.bot.telegram.sendMessage).toHaveBeenCalledWith(
       '-100',
-      expect.stringContaining('Pago recibido'),
+      expect.stringContaining('Comprobante recibido'),
       { message_thread_id: 77 },
     );
   });

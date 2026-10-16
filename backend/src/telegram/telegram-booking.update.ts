@@ -522,7 +522,11 @@ export function validateReceiptAnalysis(
 
   const amount = parseReceiptAmount(analysis?.amount ?? analysis?.monto);
   if (!amount) {
-    return { valid: false, reason: 'No se pudo leer el monto transferido.' };
+    return {
+      valid: false,
+      needsManualReview: true,
+      reason: 'La foto no muestra un monto legible; se conserva para revisión.',
+    };
   }
   if (amount + 0.009 < expectedAmount) {
     return {
@@ -537,6 +541,7 @@ export function validateReceiptAnalysis(
     return {
       valid: false,
       amount,
+      needsManualReview: true,
       reason: 'No hay cuentas de transferencia activas configuradas.',
     };
   }
@@ -604,11 +609,15 @@ export function validateReceiptAnalysis(
   }
 
   if (!strongMatch && !weakMatch) {
+    const missingDestination =
+      extractedNumbers.length === 0 && !extractedHolder;
     return {
       valid: false,
       amount,
-      reason:
-        'La cuenta, CLABE, últimos cuatro o titular del comprobante no coincide con una cuenta autorizada.',
+      needsManualReview: missingDestination,
+      reason: missingDestination
+        ? 'La foto no muestra la cuenta beneficiaria; se conserva para revisión.'
+        : 'La cuenta, CLABE, últimos cuatro o titular del comprobante no coincide con una cuenta autorizada.',
     };
   }
   if (!strongMatch) {
@@ -1016,6 +1025,7 @@ export class TelegramBookingUpdate {
     fileId: string,
     clientName?: string | null,
     serviceId?: string,
+    purpose: 'reserva' | 'final' | 'grupal' = 'reserva',
   ): Promise<{ validation: PaymentReceiptValidations; sourceUrl: string }> {
     const fileUrl = await ctx.telegram.getFileLink(fileId);
     const evidence = await this.uploadService.uploadEvidenceFromUrl({
@@ -1034,6 +1044,7 @@ export class TelegramBookingUpdate {
         esComprobante: false,
         estado: 'PROCESANDO',
         servicioId: serviceId,
+        tipoCobro: purpose,
       }),
     );
     return { validation, sourceUrl: fileUrl.href };
@@ -1048,7 +1059,7 @@ export class TelegramBookingUpdate {
       reason?: string;
       needsManualReview?: boolean;
     },
-    extra?: { jefeId?: string; draftPayload?: any },
+    extra?: { jefeId?: string; draftPayload?: any; expectedAmount?: number },
   ): Promise<PaymentReceiptValidations> {
     Object.assign(validation, {
       esComprobante: Boolean(analysis?.valid ?? analysis?.esComprobante),
@@ -1060,6 +1071,7 @@ export class TelegramBookingUpdate {
       monto:
         result.amount ??
         parseReceiptAmount(analysis?.amount ?? analysis?.monto),
+      montoEsperado: extra?.expectedAmount,
       fechaTransferencia:
         analysis?.transferDate ?? analysis?.fechaTransferencia,
       horaTransferencia: analysis?.transferTime ?? analysis?.horaTransferencia,
@@ -1100,8 +1112,7 @@ export class TelegramBookingUpdate {
    *
    * Cuando la reserva se cierra antes de cobrar, el servicio ya existe y el
    * jefe ya lo tiene delante: la foto que llega despues no debe dar de alta uno
-   * nuevo, solo levantar la marca de pago pendiente y avisar en el mismo hilo
-   * donde el jefe esta decidiendo.
+   * nuevo ni confirmar el dinero. Solo enlaza la evidencia y avisa al jefe.
    *
    * Devuelve `false` si el servicio ya no esta o ya no espera comprobante, para
    * que quien llama siga por el camino de siempre.
@@ -1117,8 +1128,6 @@ export class TelegramBookingUpdate {
     if (!servicio) return false;
     if (['cancelado', 'finalizado'].includes(servicio.estado)) return false;
 
-    servicio.comprobantePendiente = false;
-    await this.serviciosRepository.save(servicio);
     await this.paymentReceiptValidationsRepository
       .update(validationId, { servicioId })
       .catch((err) =>
@@ -1141,7 +1150,7 @@ export class TelegramBookingUpdate {
       if (destino) {
         await this.bot.telegram.sendMessage(
           destino,
-          `Pago recibido: el cliente ${servicio.cliente?.nombreTelegram || ''} ya mandó el comprobante de este servicio y quedó verificado.`.replace(
+          `Comprobante recibido: el cliente ${servicio.cliente?.nombreTelegram || ''} envió una captura. El pago sigue pendiente hasta comprobar el CEP.`.replace(
             /\s+/g,
             ' ',
           ),
@@ -5271,6 +5280,7 @@ export class TelegramBookingUpdate {
         receipt,
         {
           jefeId: jefe?.id,
+          expectedAmount: expectedTransferAmount,
           draftPayload: receipt.needsManualReview
             ? {
                 clientId: client.id,
@@ -5361,17 +5371,17 @@ export class TelegramBookingUpdate {
 
       await this.replyAndRemember(
         ctx,
-        '✅ ¡Comprobante verificado correctamente!',
+        'Recibí tu comprobante. Estamos confirmando la transferencia y te avisaremos.',
       );
       await this.registrarMensajeDelFlujo(
         ctx,
-        '✅ ¡Comprobante verificado correctamente!',
+        'Recibí tu comprobante. Estamos confirmando la transferencia y te avisaremos.',
       );
 
       /*
        * La reserva ya suele estar cerrada a estas alturas: se cierra al elegir
-       * transferencia, sin esperar la foto. Entonces esto solo levanta la marca
-       * de pago pendiente. Solo se crea el servicio aqui si por lo que sea no
+       * transferencia, sin esperar la foto. Esto solo enlaza la evidencia;
+       * el pago sigue pendiente hasta consultar el CEP. Se crea el servicio si no
        * llego a cerrarse antes.
        */
       const servicioEnEspera = ctx.session?.servicioPendienteComprobanteId;
@@ -5484,6 +5494,7 @@ export class TelegramBookingUpdate {
           fileId,
           groupRequest.client.nombreTelegram,
           groupRequest.service.id,
+          'grupal',
         );
         validation = stored.validation;
         const analysis = await this.aiMessageService.analyzeReceipt(
@@ -5498,7 +5509,7 @@ export class TelegramBookingUpdate {
           validation,
           analysis,
           receipt,
-          { jefeId: groupRequest.bossId },
+          { jefeId: groupRequest.bossId, expectedAmount: pending },
         );
         await ctx.telegram
           .deleteMessage(ctx.chat!.id, processing.message_id)
@@ -5527,24 +5538,9 @@ export class TelegramBookingUpdate {
           );
           return;
         }
-        const amount = receipt.amount;
-        const updated = await this.groupServicesService.registerPayment(
-          groupRequest.service.id,
-          {
-            amount,
-            receiptValidationId: validation.id,
-          },
-          { id: groupRequest.bossId, rol: 'jefe' },
+        await ctx.reply(
+          'Recibí tu comprobante. Estamos confirmando la transferencia y te avisaremos.',
         );
-        if (Number(updated.pendingBalance) > 0.009) {
-          await ctx.reply(
-            `Comprobante aprobado por $${amount.toFixed(2)}. Saldo pendiente: $${Number(updated.pendingBalance).toFixed(2)}.`,
-          );
-        } else {
-          await ctx.reply(
-            '¡Comprobante aprobado mi amor! Ya seguimos con lo demás.',
-          );
-        }
       } catch (error: any) {
         await this.markReceiptValidationError(validation, error);
         await ctx.telegram
@@ -5751,6 +5747,7 @@ export class TelegramBookingUpdate {
         fileId,
         servicio.cliente?.nombreTelegram,
         servicio.id,
+        'final',
       );
       validation = stored.validation;
       const analysis = await this.aiMessageService.analyzeReceipt(
@@ -5768,7 +5765,7 @@ export class TelegramBookingUpdate {
         validation,
         analysis,
         receipt,
-        { jefeId: jefe?.id },
+        { jefeId: jefe?.id, expectedAmount: expected },
       );
 
       await ctx.telegram
@@ -5784,21 +5781,7 @@ export class TelegramBookingUpdate {
           await ctx.telegram
             .sendMessage(
               target,
-              `Comprobante del cobro final (servicio de duración abierta) en revisión manual.\nServicio: ${servicio.id}\nTotal esperado: $${expected.toFixed(2)}\nMotivo: ${receipt.reason}`,
-              {
-                ...Markup.inlineKeyboard([
-                  [
-                    Markup.button.callback(
-                      '🟢 Aprobar',
-                      `receipt_autorizar:${validation.id}:1`,
-                    ),
-                    Markup.button.callback(
-                      '🔴 Rechazar',
-                      `receipt_autorizar:${validation.id}:0`,
-                    ),
-                  ],
-                ]),
-              },
+              `Comprobante del cobro final (servicio de duración abierta) en revisión manual.\nServicio: ${servicio.id}\nTotal esperado: $${expected.toFixed(2)}\nMotivo: ${receipt.reason}\nRevisa la foto y confirma el CEP desde el panel; esta notificación no confirma el pago.`,
             )
             .catch(() => undefined);
         }
@@ -5812,17 +5795,14 @@ export class TelegramBookingUpdate {
         return;
       }
 
-      // El cierre del cobro vive en ServicesService: es lo que decide despues
-      // el estado de liquidacion del servicio, y no puede quedarse aqui.
-      await this.servicesService.marcarCobroFinalRecibido(servicio.id);
       await ctx.reply(
-        '✅ ¡Comprobante verificado, todo quedó pagado! Gracias mi amor 😘',
+        'Recibí tu comprobante. El pago sigue pendiente hasta confirmar la transferencia.',
       );
       if (target) {
         await ctx.telegram
           .sendMessage(
             target,
-            `Cobro final del servicio ${servicio.id} verificado por $${expected.toFixed(2)}.`,
+            `Comprobante del cobro final del servicio ${servicio.id} analizado por $${expected.toFixed(2)}. Confirma el CEP antes de marcarlo como pagado.`,
           )
           .catch(() => undefined);
       }
@@ -6999,7 +6979,10 @@ export class TelegramBookingUpdate {
         estado: 'pendiente',
         notas: combinedNotes,
         clienteTelegramId: telegramId,
-        comprobantePendiente: esperaComprobante,
+        comprobantePendiente:
+          esperaComprobante ||
+          metodoPago === 'transferencia' ||
+          metodoPago === 'mixto',
         iaActiva: false,
         presetLocationId: reserva.presetLocationId,
         locationNameSnapshot: reserva.locationNameSnapshot,
@@ -7415,7 +7398,7 @@ export class TelegramBookingUpdate {
 
     /*
      * La reserva pudo cerrarse antes de cobrar: entonces el servicio ya existe
-     * y aprobar el comprobante solo le levanta la marca de pago pendiente.
+     * y aprobar la imagen solo enlaza la evidencia sin confirmar el dinero.
      * Crear otro aqui dejaria al cliente con dos servicios y a la empleada
      * doblemente reservada.
      */
@@ -7429,7 +7412,7 @@ export class TelegramBookingUpdate {
           await ctx.telegram
             .sendMessage(
               validation.chatId,
-              '✅ ¡Tu comprobante quedó verificado! Ya seguimos con todo.',
+              'Recibí tu comprobante. Estamos confirmando la transferencia.',
             )
             .catch(() => undefined);
         }
