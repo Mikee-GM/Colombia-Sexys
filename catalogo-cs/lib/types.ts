@@ -302,6 +302,14 @@ export type PaymentReceiptValidation = {
   telegramFileId?: string | null;
   estado?: string | null;
   monto?: number | null;
+  montoEsperado?: number | null;
+  bancoOrigen?: string | null;
+  bancoDestino?: string | null;
+  cuentaDestino?: string | null;
+  clabe?: string | null;
+  idSpei?: string | null;
+  fechaTransferencia?: string | null;
+  pagoConfirmadoAt?: string | null;
   observaciones?: string | null;
   clienteTelegram?: string | null;
   createdAt: string;
@@ -318,6 +326,14 @@ export type EvidenceItem = {
   tripType?: "ida" | "regreso";
   clientName?: string | null;
   amount?: number | null;
+  expectedAmount?: number | null;
+  originBank?: string | null;
+  destinationBank?: string | null;
+  destinationAccount?: string | null;
+  trackingKey?: string | null;
+  transferDate?: string | null;
+  paymentConfirmedAt?: string | null;
+  serviceType?: "individual" | "grupal" | null;
   observations?: string | null;
 };
 

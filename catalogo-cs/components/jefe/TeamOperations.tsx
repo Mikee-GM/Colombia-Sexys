@@ -57,6 +57,7 @@ import GaleriaFotos from "@/components/erp/galeria-fotos";
 import CerrarPorOficina from "@/components/services/cerrar-por-oficina";
 import ReasignarModelo from "@/components/services/reasignar-modelo";
 import ManualServiceControls from "@/components/jefe/ManualServiceControls";
+import ReceiptVerification from "@/components/services/receipt-verification";
 import { type CancellationReason } from "@/lib/cancellation-reasons";
 import {
   cancelJefeService,
@@ -1883,6 +1884,27 @@ function ReceiptEvidenceList({ service }: { service: Service }) {
             {(receipt.estado ?? "sin estado").replaceAll("_", " ")}
             <ExternalLink size={12} />
           </a>
+        ))}
+      </div>
+      <div className="mt-3 space-y-3">
+        {receipts.map((receipt) => (
+          <ReceiptVerification
+            key={receipt.id}
+            receipt={{
+              id: receipt.id,
+              serviceId: service.id,
+              serviceType: service.serviceType,
+              status: receipt.estado,
+              amount: receipt.monto,
+              expectedAmount: receipt.montoEsperado,
+              originBank: receipt.bancoOrigen,
+              destinationBank: receipt.bancoDestino,
+              destinationAccount: receipt.clabe || receipt.cuentaDestino,
+              trackingKey: receipt.idSpei,
+              transferDate: receipt.fechaTransferencia,
+              paymentConfirmedAt: receipt.pagoConfirmadoAt,
+            }}
+          />
         ))}
       </div>
     </div>

@@ -294,6 +294,7 @@ export class AiProviderService {
     const systemPrompt = `Eres un auditor financiero especializado en comprobantes bancarios mexicanos.
 No eres un OCR. No eres un chatbot. Tu única función es inspeccionar la imagen y devolver un JSON perfectamente estructurado.
 El monto esperado a pagar es ${expectedAmount}.
+Extrae únicamente datos visibles en la imagen. Si una clave de rastreo, fecha, banco, cuenta o monto no se distinguen, devuelve null para ese campo; no los inventes a partir del monto esperado. Una imagen no prueba que el dinero se haya acreditado.
 
 Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa null):
 {

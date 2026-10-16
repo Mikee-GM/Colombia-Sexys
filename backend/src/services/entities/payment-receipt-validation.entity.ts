@@ -121,6 +121,22 @@ export class PaymentReceiptValidations {
   monto?: number;
 
   @Column({
+    name: 'monto_esperado',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
+  @ApiPropertyOptional({ description: 'Importe que se esperaba transferir' })
+  montoEsperado?: number;
+
+  @Column({ name: 'tipo_cobro', type: 'varchar', length: 20, nullable: true })
+  @ApiPropertyOptional({
+    description: 'Etapa del cobro: reserva, final o grupal',
+  })
+  tipoCobro?: 'reserva' | 'final' | 'grupal';
+
+  @Column({
     name: 'fecha_transferencia',
     type: 'varchar',
     length: 50,
@@ -219,6 +235,25 @@ export class PaymentReceiptValidations {
   @Column({ name: 'revisado_at', type: 'timestamptz', nullable: true })
   @ApiPropertyOptional({ description: 'Fecha/hora de la revisión manual' })
   revisadoAt?: Date;
+
+  @Column({ name: 'pago_confirmado_at', type: 'timestamptz', nullable: true })
+  @ApiPropertyOptional({ description: 'Confirmación manual del abono con CEP' })
+  pagoConfirmadoAt?: Date;
+
+  @Column({ name: 'pago_confirmado_por_user_id', type: 'uuid', nullable: true })
+  @ApiPropertyOptional({ description: 'Usuario que comprobó el CEP' })
+  pagoConfirmadoPorUserId?: string;
+
+  @Column({
+    name: 'pago_confirmacion_fuente',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+  })
+  @ApiPropertyOptional({
+    description: 'Fuente utilizada para confirmar el abono',
+  })
+  pagoConfirmacionFuente?: 'cep';
 
   @Column({ name: 'draft_payload', type: 'jsonb', nullable: true })
   @ApiPropertyOptional({

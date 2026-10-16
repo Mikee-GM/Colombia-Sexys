@@ -1,7 +1,49 @@
 "use server";
 
 import { apiFetch } from "@/lib/api-server";
-import type { EvidencePage } from "@/lib/types";
+import type { EvidencePage, PaymentReceiptValidation } from "@/lib/types";
+
+export type ReceiptBankAccount = {
+  id: string;
+  banco: string;
+  titular: string;
+  alias?: string | null;
+  cuenta?: string | null;
+  clabe?: string | null;
+};
+
+export type ConfirmReceiptCepInput = {
+  claveRastreo: string;
+  fechaTransferencia: string;
+  bancoOrigen: string;
+  cuentaDestinoId: string;
+  monto: number;
+};
+
+export async function getReceiptBankAccounts(): Promise<ReceiptBankAccount[]> {
+  return apiFetch<ReceiptBankAccount[]>("/services/receipt-bank-accounts");
+}
+
+export async function confirmReceiptCep(
+  validationId: string,
+  input: ConfirmReceiptCepInput,
+): Promise<PaymentReceiptValidation> {
+  return apiFetch<PaymentReceiptValidation>(
+    `/services/receipts/${validationId}/confirm-cep`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
+}
+
+export async function applyConfirmedGroupReceipt(
+  serviceId: string,
+  validationId: string,
+  amount: number,
+) {
+  return apiFetch(`/group-services/services/${serviceId}/payments`, {
+    method: "POST",
+    body: JSON.stringify({ amount, receiptValidationId: validationId }),
+  });
+}
 
 export async function getEvidence(params?: {
   kind?: "uber" | "transferencia";

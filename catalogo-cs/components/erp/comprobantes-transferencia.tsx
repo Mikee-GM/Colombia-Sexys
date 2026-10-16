@@ -35,6 +35,7 @@ export type ComprobanteTransferencia = {
 
 const ESTADO_TONE: Record<string, BadgeTone> = {
   APROBADO: "green",
+  PAGO_REGISTRADO: "green",
   PENDIENTE_REVISION: "amber",
   RECHAZADO: "red",
   CUENTA_NO_AUTORIZADA: "red",
@@ -55,6 +56,8 @@ function fechaHora(iso: string) {
 }
 
 function etiquetaEstado(estado?: string | null) {
+  if (estado === "APROBADO") return "foto analizada";
+  if (estado === "PAGO_REGISTRADO") return "pago registrado";
   return estado ? estado.replaceAll("_", " ").toLowerCase() : "sin estado";
 }
 

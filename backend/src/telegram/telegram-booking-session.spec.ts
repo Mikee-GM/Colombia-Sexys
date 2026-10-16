@@ -192,6 +192,16 @@ describe('Telegram booking session input parsing', () => {
     expect(result.reason).toContain('no coincide');
   });
 
+  it('conserva la foto para revisión si no se leen monto ni cuenta', () => {
+    const result = validateReceiptAnalysis(
+      { esComprobante: true, bancoOrigen: 'Banco de prueba' },
+      1000,
+      [{ activa: true, cuenta: '0000000000000000', titular: 'Prueba' } as any],
+    );
+    expect(result.valid).toBe(false);
+    expect(result.needsManualReview).toBe(true);
+  });
+
   it('permite estructurar correctamente una sesión con humanTakeover y control de jefe', () => {
     const session: any = {
       humanTakeover: true,

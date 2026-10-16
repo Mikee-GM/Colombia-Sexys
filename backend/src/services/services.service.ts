@@ -46,6 +46,7 @@ import { explicarFaltaDeChoferes } from '../drivers/diagnostico-de-reparto';
 import { momentoDeTurno, sqlTurnoVigente } from '../drivers/turno-vigente';
 import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entity';
 import { SaveBankAccountDto } from './dto/bank-account.dto';
+import { ConfirmReceiptCepDto } from './dto/confirm-receipt-cep.dto';
 import { CancelServiceDto } from './dto/cancel-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ChangeServiceLocationDto } from './dto/change-service-location.dto';
@@ -125,6 +126,14 @@ export type EvidenceItem = {
   clientName?: string | null;
   amount?: number | null;
   observations?: string | null;
+  expectedAmount?: number | null;
+  originBank?: string | null;
+  destinationBank?: string | null;
+  destinationAccount?: string | null;
+  trackingKey?: string | null;
+  transferDate?: string | null;
+  paymentConfirmedAt?: string | null;
+  serviceType?: 'individual' | 'grupal' | null;
 };
 
 /**
@@ -1052,6 +1061,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             receipt.clienteTelegram ??
             null,
           amount: receipt.monto == null ? null : Number(receipt.monto),
+          expectedAmount:
+            receipt.montoEsperado == null
+              ? null
+              : Number(receipt.montoEsperado),
+          originBank: receipt.bancoOrigen ?? null,
+          destinationBank: receipt.bancoDestino ?? null,
+          destinationAccount: receipt.clabe ?? receipt.cuentaDestino ?? null,
+          trackingKey: receipt.idSpei ?? null,
+          transferDate: receipt.fechaTransferencia ?? null,
+          paymentConfirmedAt: receipt.pagoConfirmadoAt?.toISOString() ?? null,
+          serviceType: receipt.servicio?.serviceType ?? null,
           observations: receipt.observaciones ?? null,
         })),
       );
@@ -1167,6 +1187,143 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return this.bankAccountsRepository.find({
       order: { activa: 'DESC', banco: 'ASC', titular: 'ASC' },
     });
+  }
+
+  async findActiveReceiptBankAccounts(): Promise<AuthorizedBankAccounts[]> {
+    return this.bankAccountsRepository.find({
+      where: { activa: true },
+      order: { banco: 'ASC', titular: 'ASC' },
+    });
+  }
+
+  /**
+   * El operador consultó un CEP en Banxico y contrastó sus datos. La IA solo
+   * lee la foto: nunca debe quitar por sí misma las marcas de cobro pendiente.
+   */
+  async confirmReceiptWithCep(
+    validationId: string,
+    dto: ConfirmReceiptCepDto,
+    actor: Usuarios,
+  ): Promise<PaymentReceiptValidations> {
+    const key = dto.claveRastreo.trim().toUpperCase();
+    const originBank = dto.bancoOrigen.trim();
+    const date = new Date(`${dto.fechaTransferencia}T12:00:00Z`);
+    if (
+      !originBank ||
+      Number.isNaN(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== dto.fechaTransferencia
+    ) {
+      throw new BadRequestException('Datos del CEP incompletos o inválidos');
+    }
+
+    try {
+      const confirmed =
+        await this.paymentReceiptValidationsRepository.manager.transaction(
+          async (manager) => {
+            const receipt = await manager
+              .getRepository(PaymentReceiptValidations)
+              .findOne({
+                where: { id: validationId },
+                lock: { mode: 'pessimistic_write' },
+              });
+            if (!receipt)
+              throw new NotFoundException('Comprobante no encontrado');
+            if (!receipt.servicioId)
+              throw new ConflictException(
+                'El comprobante aún no está vinculado a un servicio',
+              );
+            if (receipt.pagoConfirmadoAt)
+              throw new ConflictException('Este pago ya fue confirmado');
+            if (
+              !['APROBADO', 'PENDIENTE_REVISION'].includes(receipt.estado ?? '')
+            )
+              throw new ConflictException(
+                'La foto debe terminar su revisión antes de confirmar el CEP',
+              );
+
+            const service = await manager.getRepository(Servicios).findOne({
+              where: { id: receipt.servicioId },
+              relations: { empleada: true },
+            });
+            if (!service || service.estado === 'cancelado')
+              throw new ConflictException(
+                'El servicio no admite confirmación de pago',
+              );
+            this.assertActorCanManageService(service, actor);
+            if (
+              service.metodoPago !== 'transferencia' &&
+              service.metodoPago !== 'mixto'
+            )
+              throw new ConflictException('El servicio no usa transferencia');
+
+            const account = await manager
+              .getRepository(AuthorizedBankAccounts)
+              .findOneBy({
+                id: dto.cuentaDestinoId,
+                activa: true,
+              });
+            if (!account || (!account.clabe && !account.cuenta))
+              throw new BadRequestException(
+                'Cuenta beneficiaria no autorizada',
+              );
+            const expected = Number(receipt.montoEsperado ?? 0);
+            if (!Number.isFinite(expected) || expected <= 0)
+              throw new ConflictException(
+                'El comprobante no tiene un monto esperado; requiere revisión administrativa',
+              );
+            if (Math.abs(dto.monto - expected) > 0.009)
+              throw new BadRequestException(
+                `El monto del CEP debe coincidir con $${expected.toFixed(2)}`,
+              );
+
+            // La misma acción humana resuelve la revisión de imagen pendiente;
+            // no puede quedar un botón de rechazo activo tras confirmar el pago.
+            if (receipt.estado === 'PENDIENTE_REVISION')
+              receipt.estado = 'APROBADO';
+            receipt.idSpei = key;
+            receipt.fechaTransferencia = dto.fechaTransferencia;
+            receipt.bancoOrigen = originBank;
+            receipt.bancoDestino = account.banco;
+            receipt.cuentaDestino = account.cuenta;
+            receipt.clabe = account.clabe;
+            receipt.monto = dto.monto;
+            receipt.pagoConfirmadoAt = new Date();
+            receipt.pagoConfirmadoPorUserId = actor.id;
+            receipt.pagoConfirmacionFuente = 'cep';
+            await manager
+              .getRepository(PaymentReceiptValidations)
+              .save(receipt);
+
+            if (service.serviceType !== 'grupal') {
+              if (
+                receipt.tipoCobro === 'reserva' &&
+                service.comprobantePendiente
+              ) {
+                service.comprobantePendiente = false;
+                await manager.getRepository(Servicios).save(service);
+              } else if (
+                receipt.tipoCobro === 'final' &&
+                service.cobroFinalPendiente
+              ) {
+                service.cobroFinalPendiente = false;
+                await manager.getRepository(Servicios).save(service);
+              }
+            }
+            return receipt;
+          },
+        );
+      return confirmed;
+    } catch (error: unknown) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === '23505'
+      ) {
+        throw new ConflictException('Esta clave SPEI ya confirmó otro pago');
+      }
+      throw error;
+    }
   }
 
   async createBankAccount(

@@ -41,6 +41,7 @@ import {
   operationStateForService,
 } from "./today-model";
 import ServiceStateSummary from "./ServiceStateSummary";
+import ReceiptVerification from "@/components/services/receipt-verification";
 
 function paymentLabel(value: Service["metodoPago"]) {
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -621,6 +622,39 @@ export default function ServiceInspector({
             </dd>
           </div>
         </dl>
+
+        {(service.metodoPago === "transferencia" || service.metodoPago === "mixto") && (
+          <section className="mt-4 space-y-2">
+            <h3 className="text-xs font-semibold text-[#E8D5A3]">Transferencia</h3>
+            {service.comprobantePendiente && (
+              <p className="rounded-lg border border-amber-800/50 bg-amber-950/20 p-3 text-xs text-amber-200">
+                Pago pendiente de confirmación. La foto del comprobante no acredita el abono.
+              </p>
+            )}
+            {(service.receiptValidations ?? [])
+              .filter((receipt) => receipt.imageUrl)
+              .map((receipt) => (
+                <ReceiptVerification
+                  key={receipt.id}
+                  receipt={{
+                    id: receipt.id,
+                    serviceId: service.id,
+                    serviceType: service.serviceType,
+                    status: receipt.estado,
+                    amount: receipt.monto,
+                    expectedAmount: receipt.montoEsperado,
+                    originBank: receipt.bancoOrigen,
+                    destinationBank: receipt.bancoDestino,
+                    destinationAccount: receipt.clabe || receipt.cuentaDestino,
+                    trackingKey: receipt.idSpei,
+                    transferDate: receipt.fechaTransferencia,
+                    paymentConfirmedAt: receipt.pagoConfirmadoAt,
+                  }}
+                  onConfirmed={() => void onRefresh()}
+                />
+              ))}
+          </section>
+        )}
 
         <section className="mt-4 border-l-2 border-[#C5A55A] pl-3">
           <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#C5A55A]">
